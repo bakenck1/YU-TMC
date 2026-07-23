@@ -14,7 +14,9 @@ const SECTION_TITLES: Record<string, string> = {
 
 export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   const pathname = usePathname();
-  const title = SECTION_TITLES[pathname] ?? "YU Inventory";
+  const title = pathname.startsWith("/items/")
+    ? "Список ТМЦ / Карточка ТМЦ"
+    : SECTION_TITLES[pathname] ?? "YU Inventory";
 
   return (
     <header className="flex items-center justify-between border-b border-black/5 bg-white px-4 py-3 md:px-6">

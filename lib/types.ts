@@ -17,6 +17,14 @@ export interface InventoryItem {
   responsible: string;
   status: ItemStatus;
   photoColor: string;
+  qrCode?: string;
+  itemType?: string;
+  brandModel?: string;
+  updatedAt?: string;
+  quantity?: number;
+  price?: number;
+  displayStatus?: string;
+  photo?: string;
 }
 
 export interface Room {
