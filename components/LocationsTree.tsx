@@ -4,9 +4,11 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, DoorOpen, LayersIcon, MapPin } from "lucide-react";
 import type { Building } from "@/lib/types";
+import { useAppSettings } from "./AppSettingsProvider";
 
 function FloorAccordion({ floor }: { floor: Building["floors"][number] }) {
   const [open, setOpen] = useState(false);
+  const { t } = useAppSettings();
 
   return (
     <div className="rounded-xl border border-black/5">
@@ -43,7 +45,7 @@ function FloorAccordion({ floor }: { floor: Building["floors"][number] }) {
                     {room.name}
                   </span>
                   <span className="rounded-full bg-accent-light px-2 py-0.5 text-xs font-medium text-accent-dark">
-                    {room.itemCount} ед.
+                    {room.itemCount} {t("common.unitShort")}
                   </span>
                 </li>
               ))}
@@ -57,6 +59,7 @@ function FloorAccordion({ floor }: { floor: Building["floors"][number] }) {
 
 function BuildingCard({ building }: { building: Building }) {
   const [open, setOpen] = useState(false);
+  const { t } = useAppSettings();
 
   return (
     <div className="rounded-2xl border border-black/5 bg-white p-4">
@@ -76,7 +79,7 @@ function BuildingCard({ building }: { building: Building }) {
         </div>
         <div className="flex items-center gap-3">
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600">
-            {building.itemCount} ед.
+            {building.itemCount} {t("common.unitShort")}
           </span>
           <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.15 }}>
             <ChevronDown className="h-4 w-4 text-zinc-400" />

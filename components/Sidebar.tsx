@@ -15,20 +15,22 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useAppSettings } from "./AppSettingsProvider";
+import type { TranslationKey } from "@/lib/i18n";
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: LucideIcon;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Главная", icon: LayoutDashboard },
-  { href: "/items", label: "Список ТМЦ", icon: Boxes },
-  { href: "/locations", label: "Локации", icon: MapPin },
-  { href: "/analytics", label: "Аналитика", icon: BarChart3 },
-  { href: "/users", label: "Пользователи", icon: Users },
-  { href: "/settings", label: "Настройки", icon: Settings },
+  { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
+  { href: "/items", labelKey: "nav.items", icon: Boxes },
+  { href: "/locations", labelKey: "nav.locations", icon: MapPin },
+  { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
+  { href: "/users", labelKey: "nav.users", icon: Users },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -49,6 +51,7 @@ function NavLink({
   active: boolean;
   onClick?: () => void;
 }) {
+  const { t } = useAppSettings();
   const Icon = item.icon;
   return (
     <Link
@@ -80,7 +83,7 @@ function NavLink({
             transition={{ duration: 0.15 }}
             className={`overflow-hidden whitespace-nowrap ${active ? "text-accent-dark" : ""}`}
           >
-            {item.label}
+            {t(item.labelKey)}
           </motion.span>
         )}
       </AnimatePresence>
@@ -100,6 +103,7 @@ function SidebarContent({
   showCollapseToggle: boolean;
 }) {
   const pathname = usePathname();
+  const { settings, t } = useAppSettings();
 
   return (
     <div className="flex h-full flex-col bg-white">
@@ -116,7 +120,7 @@ function SidebarContent({
               transition={{ duration: 0.15 }}
               className="overflow-hidden whitespace-nowrap text-sm font-semibold text-zinc-800"
             >
-              YU Inventory
+              {settings.organizationName}
             </motion.span>
           )}
         </AnimatePresence>
@@ -150,7 +154,7 @@ function SidebarContent({
                 transition={{ duration: 0.15 }}
                 className="overflow-hidden whitespace-nowrap"
               >
-                Выход
+                {t("nav.logout")}
               </motion.span>
             )}
           </AnimatePresence>

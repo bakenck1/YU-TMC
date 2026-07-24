@@ -120,16 +120,16 @@ export const buildings: Building[] = [
 ];
 
 export const users: AppUser[] = [
-  { id: "1", fullName: "Demo Administrator", role: "Админ", email: "admin@example.test", addedAt: "2023-09-01" },
-  { id: "2", fullName: "Demo Warehouse 1", role: "Кладовщик", email: "warehouse1@example.test", addedAt: "2023-09-15" },
-  { id: "3", fullName: "Demo Warehouse 2", role: "Кладовщик", email: "warehouse2@example.test", addedAt: "2023-10-02" },
-  { id: "4", fullName: "Demo Employee 1", role: "Сотрудник", email: "employee1@example.test", addedAt: "2023-10-20" },
-  { id: "5", fullName: "Demo Employee 2", role: "Сотрудник", email: "employee2@example.test", addedAt: "2023-11-05" },
-  { id: "6", fullName: "Demo Employee 3", role: "Сотрудник", email: "employee3@example.test", addedAt: "2024-01-12" },
-  { id: "7", fullName: "Demo Warehouse 3", role: "Кладовщик", email: "warehouse3@example.test", addedAt: "2024-02-28" },
-  { id: "8", fullName: "Demo Employee 4", role: "Сотрудник", email: "employee4@example.test", addedAt: "2024-03-14" },
-  { id: "9", fullName: "Demo Employee 5", role: "Сотрудник", email: "employee5@example.test", addedAt: "2024-05-30" },
-  { id: "10", fullName: "Demo Administrator 2", role: "Админ", email: "admin2@example.test", addedAt: "2024-06-18" },
+  { id: "1", code: "USR-001", fullName: "Demo Administrator", role: "Админ", email: "admin@example.test", phone: "—", addedAt: "2023-09-01", emailVerified: true, active: true },
+  { id: "2", code: "USR-002", fullName: "Demo Warehouse 1", role: "Кладовщик", email: "warehouse1@example.test", phone: "—", addedAt: "2023-09-15", emailVerified: true, active: true },
+  { id: "3", code: "USR-003", fullName: "Demo Warehouse 2", role: "Кладовщик", email: "warehouse2@example.test", phone: "—", addedAt: "2023-10-02", emailVerified: true, active: true },
+  { id: "4", code: "USR-004", fullName: "Demo Employee 1", role: "Сотрудник", email: "employee1@example.test", phone: "—", addedAt: "2023-10-20", emailVerified: true, active: true },
+  { id: "5", code: "USR-005", fullName: "Demo Employee 2", role: "Сотрудник", email: "employee2@example.test", phone: "—", addedAt: "2023-11-05", emailVerified: true, active: true },
+  { id: "6", code: "USR-006", fullName: "Demo Employee 3", role: "Сотрудник", email: "employee3@example.test", phone: "—", addedAt: "2024-01-12", emailVerified: true, active: true },
+  { id: "7", code: "USR-007", fullName: "Demo Warehouse 3", role: "Кладовщик", email: "warehouse3@example.test", phone: "—", addedAt: "2024-02-28", emailVerified: true, active: true },
+  { id: "8", code: "USR-008", fullName: "Demo Employee 4", role: "Сотрудник", email: "employee4@example.test", phone: "—", addedAt: "2024-03-14", emailVerified: false, active: true },
+  { id: "9", code: "USR-009", fullName: "Demo Employee 5", role: "Сотрудник", email: "employee5@example.test", phone: "—", addedAt: "2024-05-30", emailVerified: false, active: true },
+  { id: "10", code: "USR-010", fullName: "Demo Administrator 2", role: "Админ", email: "admin2@example.test", phone: "—", addedAt: "2024-06-18", emailVerified: true, active: true },
 ];
 
 export const categoryDistribution = [

@@ -47,12 +47,17 @@ export interface Building {
   floors: Floor[];
 }
 
-export type UserRole = "Админ" | "Кладовщик" | "Сотрудник";
+export type UserRole = "Админ" | "Владелец" | "Кладовщик" | "Сотрудник";
 
 export interface AppUser {
   id: string;
+  code: string;
   fullName: string;
   role: UserRole;
   email: string;
+  phone: string;
   addedAt: string;
+  emailVerified: boolean;
+  active: boolean;
+  invitationSent?: boolean;
 }

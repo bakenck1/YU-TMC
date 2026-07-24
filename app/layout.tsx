@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AppShell from "@/components/AppShell";
+import AppSettingsProvider from "@/components/AppSettingsProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "YU Inventory",
-  description: "Система учёта материально-технических ценностей университета",
+  description: "Университеттің тауарлық-материалдық құндылықтарын есепке алу жүйесі",
 };
 
 export default function RootLayout({
@@ -25,11 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="ru"
+      lang="kk"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full">
-        <AppShell>{children}</AppShell>
+        <AppSettingsProvider>
+          <AppShell>{children}</AppShell>
+        </AppSettingsProvider>
       </body>
     </html>
   );

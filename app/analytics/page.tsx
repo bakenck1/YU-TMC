@@ -1,24 +1,51 @@
 import AnalyticsCharts, {
   type AnalyticsDashboardData,
   type ChartDatum,
+  type AnalyticsRecord,
 } from "@/components/AnalyticsCharts";
 import { items } from "@/lib/data";
 import type { InventoryItem } from "@/lib/types";
 
 const INVENTORY_TARGET = 1140;
 
+function toAnalyticsRecord(item: InventoryItem): AnalyticsRecord {
+  return {
+    id: item.id,
+    name: item.name,
+    qrCode: item.qrCode ?? item.inventoryNumber ?? "",
+    itemType: item.itemType ?? item.name,
+    brandModel: item.brandModel ?? "",
+    location: item.location,
+    responsible: item.responsible,
+    quantity: item.quantity ?? 1,
+    price: item.price ?? 0,
+  };
+}
+
 function countBy(
   source: InventoryItem[],
   selector: (item: InventoryItem) => string,
 ): ChartDatum[] {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, ChartDatum>();
 
   source.forEach((item) => {
     const name = selector(item).trim() || "Не указано";
-    counts.set(name, (counts.get(name) ?? 0) + 1);
+    const current = counts.get(name);
+
+    if (current) {
+      current.value += item.quantity ?? 1;
+      current.records.push(toAnalyticsRecord(item));
+      return;
+    }
+
+    counts.set(name, {
+      name,
+      value: item.quantity ?? 1,
+      records: [toAnalyticsRecord(item)],
+    });
   });
 
-  return Array.from(counts, ([name, value]) => ({ name, value })).sort(
+  return Array.from(counts.values()).sort(
     (a, b) => b.value - a.value,
   );
 }
@@ -28,7 +55,8 @@ function topWithOther(data: ChartDatum[], limit = 7): ChartDatum[] {
 
   const top = data.slice(0, limit);
   const other = data.slice(limit).reduce((sum, entry) => sum + entry.value, 0);
-  return [...top, { name: "Остальные", value: other }];
+  const otherRecords = data.slice(limit).flatMap((entry) => entry.records);
+  return [...top, { name: "Остальные", value: other, records: otherRecords }];
 }
 
 function brandName(item: InventoryItem) {
@@ -73,14 +101,26 @@ function statusName(item: InventoryItem) {
 }
 
 function valueByType(): ChartDatum[] {
-  const totals = new Map<string, number>();
+  const totals = new Map<string, ChartDatum>();
 
   items.forEach((item) => {
     const type = item.itemType?.trim() || "Без типа";
-    totals.set(type, (totals.get(type) ?? 0) + (item.price ?? 0));
+    const current = totals.get(type);
+
+    if (current) {
+      current.value += item.price ?? 0;
+      current.records.push(toAnalyticsRecord(item));
+      return;
+    }
+
+    totals.set(type, {
+      name: type,
+      value: item.price ?? 0,
+      records: [toAnalyticsRecord(item)],
+    });
   });
 
-  return Array.from(totals, ([name, value]) => ({ name, value }))
+  return Array.from(totals.values())
     .filter((entry) => entry.value > 0)
     .sort((a, b) => b.value - a.value);
 }
@@ -109,7 +149,9 @@ export default function AnalyticsPage() {
     valueByType: valueByType(),
     responsibles: topWithOther(
       countBy(
-        items.filter((item) => item.responsible.trim()),
+        items.filter(
+          (item) => item.responsible.trim() && item.responsible !== "-",
+        ),
         (item) => item.responsible,
       ),
       6,
