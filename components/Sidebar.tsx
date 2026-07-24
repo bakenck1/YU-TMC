@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
@@ -9,6 +10,7 @@ import {
   ChevronLeft,
   LayoutDashboard,
   LogOut,
+  LoaderCircle,
   MapPin,
   Settings,
   Users,
@@ -16,7 +18,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
+import { useAuth } from "./AuthProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import { canAccessPath } from "@/lib/security/authorization";
 
 interface NavItem {
   href: string;
@@ -104,6 +108,25 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const { settings, t } = useAppSettings();
+  const { user, loading: authLoading, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutFailed, setLogoutFailed] = useState(false);
+  const visibleItems = user
+    ? NAV_ITEMS.filter((item) => canAccessPath(user.role, item.href))
+    : [];
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutFailed(false);
+    try {
+      await logout();
+      window.location.replace("/login");
+    } catch {
+      setLogoutFailed(true);
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col bg-white">
@@ -127,24 +150,44 @@ function SidebarContent({
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            collapsed={collapsed}
-            active={pathname === item.href}
-            onClick={onNavigate}
-          />
-        ))}
+        {authLoading ? (
+          <div className="space-y-2 px-1" aria-hidden="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-10 animate-pulse rounded-xl bg-zinc-100"
+              />
+            ))}
+          </div>
+        ) : (
+          visibleItems.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              collapsed={collapsed}
+              active={
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+              }
+              onClick={onNavigate}
+            />
+          ))
+        )}
       </nav>
 
       <div className="border-t border-black/5 px-3 py-3">
-        <Link
-          href="/login"
-          onClick={onNavigate}
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-600"
         >
-          <LogOut className="h-5 w-5 shrink-0 text-zinc-400 group-hover:text-red-500" />
+          {loggingOut ? (
+            <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-zinc-400" />
+          ) : (
+            <LogOut className="h-5 w-5 shrink-0 text-zinc-400 group-hover:text-red-500" />
+          )}
           <AnimatePresence initial={false}>
             {!collapsed && (
               <motion.span
@@ -158,7 +201,12 @@ function SidebarContent({
               </motion.span>
             )}
           </AnimatePresence>
-        </Link>
+        </button>
+        {logoutFailed && !collapsed ? (
+          <p className="px-3 pb-1 text-xs leading-5 text-red-600">
+            {t("auth.logoutFailed")}
+          </p>
+        ) : null}
       </div>
 
       {showCollapseToggle && onToggleCollapsed ? (

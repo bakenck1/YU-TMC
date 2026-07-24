@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# runtime authentication state
+/.data/auth-credentials.json
+/.data/session-secret
+
 # vercel
 .vercel
 

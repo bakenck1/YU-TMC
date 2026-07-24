@@ -11,6 +11,8 @@ import {
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
+import { canAccessPath } from "@/lib/security/authorization";
+import { sessionFromRequest } from "@/lib/security/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +49,19 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const apiLimit = consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
+  const session = sessionFromRequest(request);
+  if (!session) {
+    return Response.json(
+      { error: "unauthorized" },
+      { status: 401, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+  if (!canAccessPath(session.role, "/settings")) {
+    return Response.json(
+      { error: "forbidden" },
+      { status: 403, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
 
   try {
     const patch = (await request.json()) as Partial<AppSettings>;

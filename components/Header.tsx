@@ -3,7 +3,9 @@
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
+import { useAuth } from "./AuthProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import type { AuthRole } from "@/lib/security/authorization";
 
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
@@ -14,9 +16,26 @@ const SECTION_TITLES: Record<string, TranslationKey> = {
   "/settings": "nav.settings",
 };
 
+const ROLE_LABELS: Record<AuthRole, TranslationKey> = {
+  admin: "auth.roleAdmin",
+  owner: "auth.roleOwner",
+  warehouse: "auth.roleWarehouse",
+  employee: "auth.roleEmployee",
+};
+
+function initials(name: string, email: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const value =
+    parts.length > 1
+      ? `${parts[0][0]}${parts[1][0]}`
+      : parts[0]?.slice(0, 2) || email.slice(0, 2);
+  return value.toLocaleUpperCase();
+}
+
 export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   const pathname = usePathname();
   const { settings, t } = useAppSettings();
+  const { user, loading } = useAuth();
   const title = pathname.startsWith("/items/")
     ? `${t("nav.items")} / ${t("nav.itemCard")}`
     : SECTION_TITLES[pathname]
@@ -38,11 +57,15 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
 
       <div className="flex items-center gap-3">
         <div className="hidden text-right sm:block">
-          <p className="text-sm font-medium text-zinc-800">{t("header.userName")}</p>
-          <p className="text-xs text-zinc-400">{t("header.userRole")}</p>
+          <p className="max-w-56 truncate text-sm font-medium text-zinc-800">
+            {loading ? "…" : user?.name ?? "—"}
+          </p>
+          <p className="text-xs text-zinc-400">
+            {user ? t(ROLE_LABELS[user.role]) : "—"}
+          </p>
         </div>
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
-          {t("header.userInitials")}
+          {user ? initials(user.name, user.email) : "YU"}
         </div>
       </div>
     </header>

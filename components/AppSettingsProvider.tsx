@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlertCircle, CheckCircle2, LoaderCircle, X } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   DEFAULT_APP_SETTINGS,
   isAppSettings,
@@ -72,7 +73,30 @@ function saveLocalSettings(settings: AppSettings) {
   }
 }
 
-function InitialLoading({ language }: { language: AppLanguage }) {
+function InitialLoading({
+  language,
+  authPage,
+}: {
+  language: AppLanguage;
+  authPage: boolean;
+}) {
+  if (authPage) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-background"
+        aria-busy="true"
+        aria-label={translate(language, "common.loading")}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-base font-bold text-white">
+            YU
+          </div>
+          <LoaderCircle className="h-6 w-6 animate-spin text-emerald-600" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex h-screen bg-background"
@@ -98,6 +122,7 @@ function InitialLoading({ language }: { language: AppLanguage }) {
 }
 
 export default function AppSettingsProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [notificationLoading, setNotificationLoading] = useState<NotificationKey[]>([]);
@@ -286,7 +311,19 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
     ],
   );
 
-  if (loading) return <InitialLoading language={settings.language} />;
+  if (loading) {
+    return (
+      <InitialLoading
+        language={settings.language}
+        authPage={[
+          "/login",
+          "/register",
+          "/forgot-password",
+          "/reset-password",
+        ].includes(pathname)}
+      />
+    );
+  }
 
   return (
     <AppSettingsContext.Provider value={contextValue}>

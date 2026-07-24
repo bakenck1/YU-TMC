@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  getConfiguredUser,
   isPasswordLoginConfigured,
   verifyPasswordCredentials,
 } from "@/lib/security/credentials";
@@ -18,6 +19,7 @@ import {
 import {
   createSessionToken,
   isSessionConfigured,
+  REMEMBERED_SESSION_TTL_SECONDS,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
 } from "@/lib/security/session";
@@ -53,7 +55,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const credentials = body as { email?: unknown; password?: unknown };
+  const credentials = body as {
+    email?: unknown;
+    password?: unknown;
+    rememberMe?: unknown;
+  };
   if (typeof credentials.email !== "string" || typeof credentials.password !== "string") {
     return Response.json(
       { error: "invalid_request" },
@@ -63,6 +69,7 @@ export async function POST(request: Request) {
 
   const email = normalizeEmail(credentials.email);
   const password = credentials.password;
+  const rememberMe = credentials.rememberMe === true;
   if (!validEmail(email) || password.length < 1 || password.length > 1024) {
     return Response.json(
       { error: "invalid_credentials" },
@@ -73,6 +80,13 @@ export async function POST(request: Request) {
   const emailLimit = checkFailedLoginLimit(email);
   if (!emailLimit.allowed) {
     return rateLimitedResponse(emailLimit, "too_many_login_attempts");
+  }
+
+  if (!(await isPasswordLoginConfigured()) || !isSessionConfigured()) {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
   }
 
   const authenticated = await verifyPasswordCredentials(email, password);
@@ -88,26 +102,42 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isPasswordLoginConfigured() || !isSessionConfigured()) {
+  const configuredUser = await getConfiguredUser();
+  if (!configuredUser) {
     return Response.json(
       { error: "authentication_not_configured" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
     );
   }
 
+  if (configuredUser.blocked) {
+    return Response.json(
+      { error: "user_blocked" },
+      { status: 403, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+
   clearFailedLogins(email);
+  const user = {
+    email: configuredUser.email,
+    name: configuredUser.name,
+    role: configuredUser.role,
+  };
+  const ttlSeconds = rememberMe
+    ? REMEMBERED_SESSION_TTL_SECONDS
+    : SESSION_TTL_SECONDS;
   const response = NextResponse.json(
-    { authenticated: true },
+    { authenticated: true, user },
     { headers: rateLimitHeaders(apiLimit) },
   );
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
-    value: createSessionToken(email),
+    value: createSessionToken(user, ttlSeconds),
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    maxAge: SESSION_TTL_SECONDS,
+    ...(rememberMe ? { maxAge: ttlSeconds } : {}),
   });
   return response;
 }
