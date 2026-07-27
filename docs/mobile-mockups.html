@@ -1,0 +1,2110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Yessenov University</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --navy: #002060;
+      --navy-dark: #001640;
+      --navy-soft: #e9eef9;
+      --ink: #172033;
+      --muted: #687289;
+      --line: #dfe4ed;
+      --surface: #ffffff;
+      --canvas: #eef1f6;
+      --good: #147a4b;
+      --good-soft: #e7f7ef;
+      --warn: #9a5b00;
+      --warn-soft: #fff4db;
+      --bad: #b3261e;
+      --bad-soft: #ffebe9;
+      --focus: #ffb000;
+      --device-width: 375px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+
+    button, select, input, textarea {
+      font: inherit;
+    }
+
+    button, select, input[type="checkbox"] {
+      min-height: 44px;
+    }
+
+    button, select, input, textarea {
+      border-radius: 12px;
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .lab {
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+      min-height: 100dvh;
+    }
+
+    .controls {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100dvh;
+      overflow: auto;
+      padding: 24px;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--navy);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.15;
+    }
+
+    .intro {
+      margin: 8px 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .control {
+      display: grid;
+      gap: 7px;
+      margin: 0 0 15px;
+    }
+
+    .control label,
+    .control legend {
+      color: #3d475b;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    select {
+      width: 100%;
+      border: 1px solid #bdc5d2;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .viewport-options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .viewport-options button {
+      border: 1px solid #bdc5d2;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .viewport-options button[aria-pressed="true"] {
+      border-color: var(--navy);
+      background: var(--navy);
+      color: #fff;
+    }
+
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 4px 0 18px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .checkbox input {
+      width: 22px;
+      min-height: 22px;
+      height: 22px;
+      accent-color: var(--navy);
+    }
+
+    .acceptance {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .acceptance h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .acceptance ul {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding-left: 19px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .stage {
+      min-width: 0;
+      display: grid;
+      place-items: start center;
+      padding: 32px 20px 64px;
+      overflow: auto;
+    }
+
+    .device-wrap {
+      width: calc(var(--device-width) + 16px);
+      min-width: calc(var(--device-width) + 16px);
+    }
+
+    .device-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 2px 10px;
+      color: #556074;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .device {
+      box-sizing: content-box;
+      width: var(--device-width);
+      height: min(760px, calc(100dvh - 104px));
+      min-height: 568px;
+      overflow: hidden;
+      border: 8px solid #172033;
+      border-radius: 32px;
+      background: #f8f9fc;
+      box-shadow: 0 26px 70px rgba(22, 32, 51, .2);
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+    }
+
+    .phone {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      background: #f7f8fb;
+    }
+
+    .phone.keyboard-open {
+      grid-template-rows: auto minmax(0, 1fr) auto 196px;
+    }
+
+    .phone-header {
+      padding: max(12px, env(safe-area-inset-top)) 14px 12px;
+      background: var(--navy);
+      color: #fff;
+    }
+
+    .statusbar {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 11px;
+      opacity: .85;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .12);
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .toolbar h2 {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+      font-size: 17px;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .badge-dot {
+      position: relative;
+    }
+
+    .badge-dot::after {
+      content: "3";
+      position: absolute;
+      top: 3px;
+      right: 2px;
+      min-width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      padding: 0 4px;
+      border: 2px solid var(--navy);
+      border-radius: 10px;
+      background: #ffcf56;
+      color: #2d2100;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .phone-body {
+      min-width: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 14px 14px 22px;
+    }
+
+    .phone-footer {
+      display: grid;
+      gap: 8px;
+      padding: 10px 14px max(12px, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, .98);
+    }
+
+    .keyboard-preview {
+      display: none;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 5px;
+      align-content: center;
+      padding: 12px 8px max(10px, env(safe-area-inset-bottom));
+      border-top: 1px solid #abb3c0;
+      background: #cbd0d8;
+    }
+
+    .phone.keyboard-open .keyboard-preview {
+      display: grid;
+    }
+
+    .keyboard-key {
+      height: 32px;
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, .15);
+    }
+
+    .keyboard-key.wide {
+      grid-column: span 5;
+    }
+
+    .stack { display: grid; gap: 12px; }
+    .row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .between { justify-content: space-between; }
+    .grow { min-width: 0; flex: 1; }
+
+    .section-title {
+      margin: 3px 0 0;
+      font-size: 15px;
+      line-height: 1.3;
+    }
+
+    .muted {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .card {
+      min-width: 0;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 3px 12px rgba(23, 32, 51, .04);
+      overflow-wrap: anywhere;
+    }
+
+    .card h3 {
+      margin: 0 0 5px;
+      font-size: 15px;
+      line-height: 1.3;
+    }
+
+    .card p { margin: 0; }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      min-height: 28px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--navy-soft);
+      color: var(--navy);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .chip.good { background: var(--good-soft); color: var(--good); }
+    .chip.warn { background: var(--warn-soft); color: var(--warn); }
+    .chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+    .notice {
+      padding: 12px;
+      border: 1px solid #d8b35b;
+      border-radius: 14px;
+      background: var(--warn-soft);
+      color: #684000;
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .notice.error {
+      border-color: #efaaa5;
+      background: var(--bad-soft);
+      color: #7b1914;
+    }
+
+    .notice.info {
+      border-color: #aabbe1;
+      background: var(--navy-soft);
+      color: #18366f;
+    }
+
+    .notice.good {
+      border-color: #8ed1ae;
+      background: var(--good-soft);
+      color: #0c623a;
+    }
+
+    .button {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--navy);
+      padding: 10px 14px;
+      background: var(--navy);
+      color: #fff;
+      font-weight: 800;
+      line-height: 1.25;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+
+    .button.secondary {
+      background: #fff;
+      color: var(--navy);
+    }
+
+    .button.danger {
+      border-color: var(--bad);
+      background: #fff;
+      color: var(--bad);
+    }
+
+    .button:disabled {
+      border-color: #b8bfcc;
+      background: #d7dbe3;
+      color: #626b7a;
+      cursor: not-allowed;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #b8c0ce;
+      padding: 11px 12px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .field textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .field [aria-invalid="true"] { border-color: var(--bad); }
+
+    .field-error {
+      margin: 0;
+      color: var(--bad);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .segmented button {
+      min-width: 0;
+      border: 1px solid #b8c0ce;
+      padding: 8px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .segmented button.active {
+      border-color: var(--navy);
+      background: var(--navy-soft);
+      color: var(--navy);
+    }
+
+    .camera {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      overflow: hidden;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 30% 24%, rgba(255,255,255,.12), transparent 28%),
+        linear-gradient(145deg, #27354c, #0c1424);
+      color: #fff;
+    }
+
+    .camera::before {
+      content: "";
+      width: 178px;
+      height: 178px;
+      border: 3px solid #ffcf56;
+      border-radius: 20px;
+      box-shadow: 0 0 0 999px rgba(0, 0, 0, .18);
+    }
+
+    .camera-copy {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .progress {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e1e5ed;
+    }
+
+    .progress > span {
+      display: block;
+      width: 64%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--navy);
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .result-grid button {
+      min-width: 0;
+      min-height: 56px;
+      border: 1px solid #bdc5d2;
+      padding: 9px;
+      background: #fff;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .result-grid button.active {
+      border: 2px solid var(--navy);
+      background: var(--navy-soft);
+      color: var(--navy);
+    }
+
+    .skeleton {
+      height: 14px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #e6e9ef 20%, #f6f7f9 45%, #e6e9ef 70%);
+      background-size: 220% 100%;
+      animation: shimmer 1.2s infinite linear;
+    }
+
+    .skeleton.short { width: 58%; }
+    .skeleton.tall { height: 76px; }
+
+    @keyframes shimmer {
+      to { background-position: -220% 0; }
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 300px;
+      padding: 28px 12px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      display: grid;
+      place-items: center;
+      width: 68px;
+      height: 68px;
+      margin-bottom: 14px;
+      border-radius: 22px;
+      background: var(--navy-soft);
+      color: var(--navy);
+      font-size: 30px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--line);
+    }
+
+    .notification-list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .notification-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      margin-top: 8px;
+      color: var(--navy);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 760px) {
+      .lab { display: block; }
+      .controls {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .stage { justify-content: start; overflow-x: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="lab">
+    <aside class="controls" aria-labelledby="lab-title">
+      <p class="eyebrow" data-copy="lab.eyebrow"></p>
+      <h1 id="lab-title" data-copy="lab.title"></h1>
+      <p class="intro" data-copy="lab.intro"></p>
+
+      <div class="control">
+        <label for="screen" data-copy="control.screen"></label>
+        <select id="screen"></select>
+      </div>
+      <div class="control">
+        <label for="state" data-copy="control.state"></label>
+        <select id="state"></select>
+      </div>
+      <div class="control">
+        <label for="role" data-copy="control.role"></label>
+        <select id="role"></select>
+      </div>
+      <div class="control">
+        <label for="language" data-copy="control.language"></label>
+        <select id="language">
+          <option value="ru">Русский</option>
+          <option value="kk">Қазақша</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="control">
+        <span id="viewport-label" data-copy="control.viewport"></span>
+        <div class="viewport-options" aria-labelledby="viewport-label">
+          <button type="button" data-width="320">320</button>
+          <button type="button" data-width="375">375</button>
+          <button type="button" data-width="430">430</button>
+        </div>
+      </div>
+      <label class="checkbox">
+        <input id="long-copy" type="checkbox">
+        <span data-copy="control.long"></span>
+      </label>
+      <label class="checkbox">
+        <input id="keyboard-open" type="checkbox">
+        <span data-copy="control.keyboard"></span>
+      </label>
+
+      <section class="acceptance">
+        <h2 data-copy="accept.title"></h2>
+        <ul>
+          <li data-copy="accept.overflow"></li>
+          <li data-copy="accept.touch"></li>
+          <li data-copy="accept.locale"></li>
+          <li data-copy="accept.keyboard"></li>
+          <li data-copy="accept.privacy"></li>
+          <li data-copy="accept.a11y"></li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="stage">
+      <div class="device-wrap">
+        <div class="device-label">
+          <span id="device-summary"></span>
+          <span data-copy="lab.prototype"></span>
+        </div>
+        <div class="device">
+          <div id="app" aria-live="polite"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const copy = {
+      ru: {
+        "lab.eyebrow": "Yessenov University",
+        "lab.title": "Мобильные QR-макеты",
+        "lab.intro": "Интерактивная проверка ключевых потоков. Это прототип без API, камеры и сохранения данных.",
+        "lab.prototype": "Прототип · без API",
+        "control.screen": "Экран",
+        "control.state": "Состояние",
+        "control.role": "Роль",
+        "control.language": "Язык",
+        "control.viewport": "Ширина устройства",
+        "control.long": "Проверить длинные данные",
+        "control.keyboard": "Показать экранную клавиатуру",
+        "accept.title": "Что проверяем",
+        "accept.overflow": "Нет горизонтальной прокрутки и обрезанных CTA на 320 px.",
+        "accept.touch": "Touch targets не меньше 44×44.",
+        "accept.locale": "Все тексты переключаются целиком, без грамматических фрагментов.",
+        "accept.keyboard": "Экранная клавиатура уменьшает область прокрутки, но оставляет CTA доступным.",
+        "accept.privacy": "Скрытые ответственные, комментарии и причины не попадают в preview.",
+        "accept.a11y": "Фокус виден, ошибки связаны с полями, статусы не только цветом.",
+        "screen.inspections": "Проверки техника",
+        "screen.create": "Новая проверка",
+        "screen.context": "Корпус и кабинет",
+        "screen.scanner": "QR-сканер",
+        "screen.resolver": "Результат QR",
+        "screen.result": "Результат предмета",
+        "screen.newItem": "Новый предмет",
+        "screen.summary": "Завершение проверки",
+        "screen.responsibility": "Ответственность и передача",
+        "screen.notifications": "Уведомления и решения",
+        "role.warehouse": "Техник",
+        "role.employee": "Сотрудник",
+        "role.admin": "Администратор",
+        "role.owner": "Владелец",
+        "state.loading": "Загрузка",
+        "state.empty": "Пусто",
+        "state.active": "Активные данные",
+        "state.offline": "Нет сети",
+        "state.error": "Ошибка",
+        "state.default": "Обычное",
+        "state.validation": "Ошибки полей",
+        "state.submitting": "Отправка",
+        "state.success": "Успех",
+        "state.select": "Выбор",
+        "state.emptyRoom": "Пустой кабинет",
+        "state.mismatch": "Неверный контекст",
+        "state.progress": "Прогресс",
+        "state.duplicate": "Дубль",
+        "state.start": "До запуска",
+        "state.pending": "Запрос разрешения",
+        "state.denied": "Камера запрещена",
+        "state.unavailable": "Камера недоступна",
+        "state.camera": "Камера активна",
+        "state.manual": "Ручной ввод",
+        "state.resolving": "Распознавание",
+        "state.building": "Распознан корпус",
+        "state.room": "Распознан кабинет",
+        "state.item": "Распознан предмет",
+        "state.invalid": "Неверный формат",
+        "state.unknown": "Код не найден",
+        "state.unissued": "Код не выпускался",
+        "state.ambiguous": "Код неоднозначен",
+        "state.revoked": "Код отозван",
+        "state.inactive": "Объект неактивен",
+        "state.wrongContext": "Не тот контекст",
+        "state.notAccessible": "Объект недоступен",
+        "state.moved": "Перемещён",
+        "state.missing": "Отсутствует",
+        "state.photoError": "Ошибка фото",
+        "state.conflict": "Конфликт версии",
+        "state.saved": "Сохранено",
+        "state.form": "Форма",
+        "state.blocked": "Завершение заблокировано",
+        "state.confirmed": "Подтверждена",
+        "state.awaiting": "Ожидает решений",
+        "state.readonly": "Только просмотр",
+        "state.disputed": "Нужна перепроверка",
+        "state.free": "Свободный предмет",
+        "state.occupied": "Занят другим",
+        "state.requested": "Передача запрошена",
+        "state.existing": "Активная передача",
+        "state.confirm": "Подтверждение передачи",
+        "state.rejected": "Передача отклонена",
+        "state.feed": "Лента",
+        "state.decisions": "Рабочая очередь",
+        "state.disputeForm": "Форма спора",
+        "state.stale": "Устаревшее действие",
+        "state.adminReason": "Решение администратора",
+        "state.adminConflict": "Конкурентное решение",
+        "common.back": "Назад",
+        "common.notifications": "Уведомления: 3 непрочитанных",
+        "common.retry": "Повторить",
+        "common.cancel": "Отмена",
+        "common.continue": "Продолжить",
+        "common.save": "Сохранить",
+        "common.saving": "Сохранение…",
+        "common.scan": "Сканировать QR",
+        "common.manual": "Ввести код вручную",
+        "common.close": "Закрыть",
+        "common.refresh": "Обновить данные",
+        "common.loading": "Загрузка данных…",
+        "common.offline": "Нет подключения к интернету. Данные не сохранены.",
+        "common.serverError": "Не удалось загрузить данные. Ваш прогресс сохранён на сервере.",
+        "common.required": "Обязательное поле.",
+        "common.noAccess": "Этот раздел недоступен для вашей роли.",
+        "common.noAccessHint": "Вернитесь на главную или обратитесь к администратору.",
+        "common.openHome": "На главную",
+        "common.adminReason": "Причина административного действия",
+        "common.adminReasonHint": "Причина обязательна, сохраняется в аудите и не показывается в уведомлении.",
+        "data.item": "Проектор Epson EB-X06",
+        "data.itemLong": "Мультимедийный интерактивный проектор для учебной аудитории с дополнительным комплектом креплений и кабелей",
+        "data.building": "Главный корпус",
+        "data.room": "Кабинет 302",
+        "data.inventory": "TMP-2026-000042",
+        "data.date": "27 июля, 14:35",
+        "inspections.title": "Мои проверки",
+        "inspections.empty": "Проверок пока нет",
+        "inspections.emptyHint": "Создайте проверку и начните с выбора корпуса и кабинета.",
+        "inspections.create": "Создать проверку",
+        "inspections.active": "Инвентаризация учебных кабинетов",
+        "inspections.progress": "2 из 4 кабинетов осмотрено",
+        "inspections.draft": "Черновик",
+        "inspections.confirmed": "Подтверждена",
+        "inspections.completedName": "Проверка лабораторного корпуса",
+        "create.title": "Новая проверка",
+        "create.label": "Название проверки",
+        "create.placeholder": "Например, проверка корпуса № 1",
+        "create.error": "Введите название — от 2 до 120 символов.",
+        "create.serverError": "Не удалось создать проверку. Название осталось в форме — повторите попытку.",
+        "create.technician": "Назначенный техник",
+        "create.technicianPlaceholder": "Выберите активного техника",
+        "create.adminHint": "Администратор создаёт проверку для выбранного техника, но не назначает ответственного за всю проверку.",
+        "create.submit": "Создать проверку",
+        "create.success": "Проверка создана. Теперь выберите корпус и кабинет.",
+        "context.title": "Выбор кабинета",
+        "context.building": "Корпус",
+        "context.room": "Кабинет",
+        "context.choose": "Выбрать из списка",
+        "context.scanBuilding": "Сканировать корпус",
+        "context.scanRoom": "Сканировать кабинет",
+        "context.empty": "В кабинете нет предметов в исходном списке.",
+        "context.emptyAction": "Отметить кабинет осмотренным",
+        "context.mismatch": "Этот кабинет относится к другому корпусу. Текущий выбор сохранён.",
+        "context.duplicate": "Кабинет уже добавлен в проверку. Исходный список не изменён.",
+        "context.progress": "Осмотрено 8 из 12 предметов",
+        "scanner.title": "Сканирование QR",
+        "scanner.startTitle": "Камера запускается только по вашему действию",
+        "scanner.startHint": "Можно продолжить вручную, если камера недоступна.",
+        "scanner.start": "Включить камеру",
+        "scanner.pending": "Разрешите доступ к камере в системном диалоге.",
+        "scanner.denied": "Доступ к камере запрещён",
+        "scanner.deniedHint": "Разрешите камеру в настройках браузера или введите код вручную.",
+        "scanner.unavailable": "На этом устройстве камера недоступна.",
+        "scanner.aim": "Поместите QR-код внутрь рамки",
+        "scanner.codeLabel": "Данные QR-кода",
+        "scanner.codePlaceholder": "YUQ1:… или ранее нанесённый код",
+        "scanner.resolve": "Проверить код",
+        "scanner.resolving": "Проверяем код на сервере…",
+        "scanner.offline": "Для распознавания нужен интернет. Код не сохранён в очередь.",
+        "scanner.duplicate": "Этот код уже считан. Открываем существующий результат.",
+        "resolver.title": "Результат сканирования",
+        "resolver.building": "Распознан корпус. Теперь выберите или отсканируйте кабинет.",
+        "resolver.room": "Распознан кабинет. Можно переходить к предметам.",
+        "resolver.item": "Предмет найден. Проверьте данные и укажите результат.",
+        "resolver.invalid": "Формат QR-кода не поддерживается.",
+        "resolver.unknown": "Код не найден. Проверьте ввод или создайте новый предмет в выбранном кабинете.",
+        "resolver.unissued": "Системный код не выпускался. Не используйте его для создания объекта.",
+        "resolver.ambiguous": "Код связан с несколькими объектами. Обратитесь к администратору.",
+        "resolver.revoked": "Код отозван и больше не действует.",
+        "resolver.inactive": "Объект неактивен. Изменение недоступно.",
+        "resolver.wrongContext": "Сначала выберите правильный корпус и кабинет.",
+        "resolver.notAccessible": "Объект недоступен или код больше не действует.",
+        "resolver.open": "Открыть карточку",
+        "resolver.createItem": "Создать новый предмет",
+        "result.title": "Результат предмета",
+        "result.registryRoom": "По реестру: кабинет 302",
+        "result.actualRoom": "Фактически: кабинет 305",
+        "result.choose": "Выберите результат",
+        "result.present": "На месте",
+        "result.missing": "Отсутствует",
+        "result.moved": "Перемещён",
+        "result.broken": "Неисправен",
+        "result.unknown": "Не удалось определить",
+        "result.comment": "Комментарий",
+        "result.commentPlaceholder": "Добавьте пояснение",
+        "result.photo": "Добавить фотографию",
+        "result.movedWarning": "Предмет найден в другом кабинете. Реестр не изменится автоматически.",
+        "result.missingHint": "Отсутствующий предмет отмечается из списка кабинета без сканирования.",
+        "result.photoError": "Фотографию не удалось обработать. Выберите JPEG, PNG или WebP до 10 МБ.",
+        "result.conflict": "Результат уже изменён на другом устройстве. Обновите данные; введённый комментарий сохранён в форме.",
+        "result.saved": "Результат сохранён и добавлен в текущий кабинет.",
+        "new.title": "Новый предмет",
+        "new.hint": "Предмет будет создан в реестре без ответственного.",
+        "new.name": "Название",
+        "new.numberType": "Тип инвентарного номера",
+        "new.official": "Официальный",
+        "new.temporary": "Временный",
+        "new.number": "Инвентарный номер",
+        "new.tmp": "Номер будет создан автоматически: TMP-2026-…",
+        "new.result": "Результат нового предмета",
+        "new.validation": "Заполните название и выберите допустимый результат.",
+        "new.photoError": "Загрузка фотографии истекла. Форма сохранена; выберите файл повторно.",
+        "new.submit": "Создать и добавить в проверку",
+        "new.successTemporary": "Предмет создан с временным номером и добавлен в проверку.",
+        "new.successOfficial": "Предмет создан с официальным номером и добавлен в проверку.",
+        "summary.title": "Завершение проверки",
+        "summary.progress": "Готово 19 из 24 предметов",
+        "summary.unprocessed": "Осталось обработать 5 предметов в двух кабинетах.",
+        "summary.blocked": "Завершение недоступно: не все кабинеты явно осмотрены.",
+        "summary.complete": "Завершить проверку",
+        "summary.confirmed": "Проверка подтверждена: проблемных результатов нет.",
+        "summary.awaiting": "Проверка ожидает решений по 3 предметам.",
+        "summary.readonly": "Обычное редактирование завершённой проверки заблокировано.",
+        "summary.disputed": "Ответственный оспорил результат. Перепроверьте только этот предмет.",
+        "summary.recheck": "Открыть повторную проверку",
+        "responsibility.title": "Ответственность",
+        "responsibility.free": "У предмета нет ответственного.",
+        "responsibility.accept": "Принять ответственность",
+        "responsibility.occupied": "Предмет закреплён за другим сотрудником.",
+        "responsibility.hidden": "Имя текущего ответственного скрыто.",
+        "responsibility.request": "Запросить передачу",
+        "responsibility.requested": "Запрос отправлен. До решения предмет остаётся у текущего ответственного.",
+        "responsibility.existing": "По предмету уже ожидается передача. Второй запрос создать нельзя.",
+        "responsibility.confirm": "Подтвердить передачу предмета этому сотруднику?",
+        "responsibility.confirmAction": "Подтвердить передачу",
+        "responsibility.reject": "Отклонить",
+        "responsibility.rejected": "Передача отклонена. Ответственный не изменился.",
+        "responsibility.conflict": "Предмет уже принял другой сотрудник. Карточка обновлена.",
+        "responsibility.adminHint": "Административное изменение не заменяет обычный процесс передачи и требует причины.",
+        "responsibility.adminEmployee": "Новый ответственный сотрудник",
+        "responsibility.adminApply": "Применить административное изменение",
+        "notifications.title": "Уведомления",
+        "notifications.empty": "Новых уведомлений нет",
+        "notifications.emptyHint": "Ожидающие действия всё равно доступны в рабочих очередях.",
+        "notifications.transfer": "Ожидается ваше решение по передаче предмета.",
+        "notifications.decision": "Подтвердите или оспорьте результат проверки предмета.",
+        "notifications.recheck": "Результат оспорен. Требуется повторная проверка предмета.",
+        "notifications.adminQueue": "Новое решение ожидает администратора.",
+        "notifications.review": "Открыть решение",
+        "notifications.open": "Открыть",
+        "notifications.transferConfirmed": "Передача предмета подтверждена.",
+        "notifications.transferRejected": "Запрос на передачу отклонён.",
+        "notifications.transferCancelled": "Запрос на передачу отменён инициатором.",
+        "notifications.transferOverridden": "Передача предмета изменена администратором.",
+        "notifications.recheckRequested": "Повторная проверка завершена. Требуется ваше решение.",
+        "notifications.closedPresent": "Повторная проверка закрыла проблему.",
+        "notifications.resolvedByAdmin": "Решение по результату закрыто администратором.",
+        "notifications.adminQueueResolved": "Решение общей очереди закрыто.",
+        "notifications.confirmed": "Проверка подтверждена.",
+        "notifications.unread": "Непрочитано",
+        "notifications.read": "Прочитано",
+        "notifications.markAll": "Отметить видимые как прочитанные",
+        "notifications.queue": "Ожидающие решения",
+        "notifications.confirmResult": "Подтвердить результат",
+        "notifications.dispute": "Оспорить",
+        "notifications.disputeComment": "Почему вы не согласны с результатом",
+        "notifications.disputePhoto": "Добавить фотографию (необязательно)",
+        "notifications.sendDispute": "Отправить спор",
+        "notifications.stale": "Действие больше недоступно. Показан актуальный статус.",
+        "notifications.reason": "Причина административного решения",
+        "notifications.reasonHint": "Причина попадёт в аудит и не показывается в preview.",
+        "notifications.resolve": "Закрыть решение",
+        "notifications.adminConflict": "Другой администратор уже закрыл это решение. Данные обновлены."
+      },
+      kk: {
+        "lab.eyebrow": "Yessenov University",
+        "lab.title": "Мобильді QR макеттері",
+        "lab.intro": "Негізгі үдерістерді интерактивті тексеру. Бұл API, камера және деректерді сақтаусыз прототип.",
+        "lab.prototype": "Прототип · API жоқ",
+        "control.screen": "Экран",
+        "control.state": "Күй",
+        "control.role": "Рөл",
+        "control.language": "Тіл",
+        "control.viewport": "Құрылғы ені",
+        "control.long": "Ұзын деректерді тексеру",
+        "control.keyboard": "Экрандық пернетақтаны көрсету",
+        "accept.title": "Нені тексереміз",
+        "accept.overflow": "320 px кезінде көлденең айналдыру және кесілген батырмалар жоқ.",
+        "accept.touch": "Басу аймақтары кемінде 44×44.",
+        "accept.locale": "Барлық мәтін грамматикалық бөліктерсіз толық ауысады.",
+        "accept.keyboard": "Экрандық пернетақта айналдыру аймағын азайтады, бірақ әрекет батырмасын қолжетімді қалдырады.",
+        "accept.privacy": "Жасырын жауаптылар, түсініктемелер және себептер алдын ала көрініске шықпайды.",
+        "accept.a11y": "Фокус көрінеді, қателер өрістермен байланысқан, күйлер тек түспен берілмейді.",
+        "screen.inspections": "Техниктің тексерулері",
+        "screen.create": "Жаңа тексеру",
+        "screen.context": "Корпус және кабинет",
+        "screen.scanner": "QR сканері",
+        "screen.resolver": "QR нәтижесі",
+        "screen.result": "Заттың нәтижесі",
+        "screen.newItem": "Жаңа зат",
+        "screen.summary": "Тексеруді аяқтау",
+        "screen.responsibility": "Жауапкершілік және беру",
+        "screen.notifications": "Хабарламалар және шешімдер",
+        "role.warehouse": "Техник",
+        "role.employee": "Қызметкер",
+        "role.admin": "Әкімші",
+        "role.owner": "Иесі",
+        "state.loading": "Жүктелуде",
+        "state.empty": "Бос",
+        "state.active": "Белсенді деректер",
+        "state.offline": "Желі жоқ",
+        "state.error": "Қате",
+        "state.default": "Қалыпты",
+        "state.validation": "Өріс қателері",
+        "state.submitting": "Жіберілуде",
+        "state.success": "Сәтті",
+        "state.select": "Таңдау",
+        "state.emptyRoom": "Бос кабинет",
+        "state.mismatch": "Контекст сәйкес емес",
+        "state.progress": "Орындалу барысы",
+        "state.duplicate": "Қайталану",
+        "state.start": "Іске қосуға дейін",
+        "state.pending": "Рұқсат сұрау",
+        "state.denied": "Камераға тыйым салынған",
+        "state.unavailable": "Камера қолжетімсіз",
+        "state.camera": "Камера белсенді",
+        "state.manual": "Қолмен енгізу",
+        "state.resolving": "Танылуда",
+        "state.building": "Корпус танылды",
+        "state.room": "Кабинет танылды",
+        "state.item": "Зат танылды",
+        "state.invalid": "Пішім дұрыс емес",
+        "state.unknown": "Код табылмады",
+        "state.unissued": "Код шығарылмаған",
+        "state.ambiguous": "Код бірмәнді емес",
+        "state.revoked": "Код кері қайтарылған",
+        "state.inactive": "Нысан белсенді емес",
+        "state.wrongContext": "Контекст дұрыс емес",
+        "state.notAccessible": "Нысан қолжетімсіз",
+        "state.moved": "Орны ауысқан",
+        "state.missing": "Жоқ",
+        "state.photoError": "Фото қатесі",
+        "state.conflict": "Нұсқа қайшылығы",
+        "state.saved": "Сақталды",
+        "state.form": "Нысан",
+        "state.blocked": "Аяқтауға тыйым салынған",
+        "state.confirmed": "Расталды",
+        "state.awaiting": "Шешімдерді күтуде",
+        "state.readonly": "Тек көру",
+        "state.disputed": "Қайта тексеру қажет",
+        "state.free": "Бос зат",
+        "state.occupied": "Басқа адамға бекітілген",
+        "state.requested": "Беру сұралды",
+        "state.existing": "Белсенді беру",
+        "state.confirm": "Беруді растау",
+        "state.rejected": "Беру қабылданбады",
+        "state.feed": "Таспа",
+        "state.decisions": "Жұмыс кезегі",
+        "state.disputeForm": "Даулау нысаны",
+        "state.stale": "Ескірген әрекет",
+        "state.adminReason": "Әкімші шешімі",
+        "state.adminConflict": "Бәсекелес шешім",
+        "common.back": "Артқа",
+        "common.notifications": "Хабарламалар: 3 оқылмаған",
+        "common.retry": "Қайталау",
+        "common.cancel": "Бас тарту",
+        "common.continue": "Жалғастыру",
+        "common.save": "Сақтау",
+        "common.saving": "Сақталуда…",
+        "common.scan": "QR сканерлеу",
+        "common.manual": "Кодты қолмен енгізу",
+        "common.close": "Жабу",
+        "common.refresh": "Деректерді жаңарту",
+        "common.loading": "Деректер жүктелуде…",
+        "common.offline": "Интернетке қосылу жоқ. Деректер сақталмады.",
+        "common.serverError": "Деректерді жүктеу мүмкін болмады. Ілгерілеуіңіз серверде сақталған.",
+        "common.required": "Міндетті өріс.",
+        "common.noAccess": "Бұл бөлім сіздің рөліңіз үшін қолжетімсіз.",
+        "common.noAccessHint": "Басты бетке оралыңыз немесе әкімшіге хабарласыңыз.",
+        "common.openHome": "Басты бетке",
+        "common.adminReason": "Әкімшілік әрекеттің себебі",
+        "common.adminReasonHint": "Себеп міндетті, аудитте сақталады және хабарламада көрсетілмейді.",
+        "data.item": "Epson EB-X06 проекторы",
+        "data.itemLong": "Оқу аудиториясына арналған қосымша бекіткіштер мен кабельдер жиынтығы бар мультимедиялық интерактивті проектор",
+        "data.building": "Бас корпус",
+        "data.room": "302 кабинет",
+        "data.inventory": "TMP-2026-000042",
+        "data.date": "27 шілде, 14:35",
+        "inspections.title": "Менің тексерулерім",
+        "inspections.empty": "Әзірге тексерулер жоқ",
+        "inspections.emptyHint": "Тексеру жасап, корпус пен кабинетті таңдаудан бастаңыз.",
+        "inspections.create": "Тексеру жасау",
+        "inspections.active": "Оқу кабинеттерін түгендеу",
+        "inspections.progress": "4 кабинеттің 2-еуі тексерілді",
+        "inspections.draft": "Жоба",
+        "inspections.confirmed": "Расталды",
+        "inspections.completedName": "Зертханалық корпусты тексеру",
+        "create.title": "Жаңа тексеру",
+        "create.label": "Тексеру атауы",
+        "create.placeholder": "Мысалы, № 1 корпусты тексеру",
+        "create.error": "Атау енгізіңіз — 2-ден 120 таңбаға дейін.",
+        "create.serverError": "Тексеруді жасау мүмкін болмады. Атау нысанда қалды — қайталап көріңіз.",
+        "create.technician": "Тағайындалған техник",
+        "create.technicianPlaceholder": "Белсенді техникті таңдаңыз",
+        "create.adminHint": "Әкімші тексеруді таңдалған техник үшін жасайды, бірақ бүкіл тексеруге жауапты адам тағайындамайды.",
+        "create.submit": "Тексеру жасау",
+        "create.success": "Тексеру жасалды. Енді корпус пен кабинетті таңдаңыз.",
+        "context.title": "Кабинетті таңдау",
+        "context.building": "Корпус",
+        "context.room": "Кабинет",
+        "context.choose": "Тізімнен таңдау",
+        "context.scanBuilding": "Корпусты сканерлеу",
+        "context.scanRoom": "Кабинетті сканерлеу",
+        "context.empty": "Кабинеттің бастапқы тізімінде заттар жоқ.",
+        "context.emptyAction": "Кабинетті тексерілген деп белгілеу",
+        "context.mismatch": "Бұл кабинет басқа корпусқа жатады. Ағымдағы таңдау сақталды.",
+        "context.duplicate": "Кабинет тексеруге қосылған. Бастапқы тізім өзгермеді.",
+        "context.progress": "12 заттың 8-і тексерілді",
+        "scanner.title": "QR сканерлеу",
+        "scanner.startTitle": "Камера тек сіздің әрекетіңізбен іске қосылады",
+        "scanner.startHint": "Камера қолжетімсіз болса, қолмен жалғастыруға болады.",
+        "scanner.start": "Камераны қосу",
+        "scanner.pending": "Жүйелік терезеде камераға рұқсат беріңіз.",
+        "scanner.denied": "Камераға қол жеткізуге тыйым салынған",
+        "scanner.deniedHint": "Браузер баптауларында камераға рұқсат беріңіз немесе кодты қолмен енгізіңіз.",
+        "scanner.unavailable": "Бұл құрылғыда камера қолжетімсіз.",
+        "scanner.aim": "QR кодты жақтаудың ішіне орналастырыңыз",
+        "scanner.codeLabel": "QR код деректері",
+        "scanner.codePlaceholder": "YUQ1:… немесе бұрын жапсырылған код",
+        "scanner.resolve": "Кодты тексеру",
+        "scanner.resolving": "Код серверде тексерілуде…",
+        "scanner.offline": "Тану үшін интернет қажет. Код кезекке сақталмады.",
+        "scanner.duplicate": "Бұл код оқылған. Бар нәтиже ашылады.",
+        "resolver.title": "Сканерлеу нәтижесі",
+        "resolver.building": "Корпус танылды. Енді кабинетті таңдаңыз немесе сканерлеңіз.",
+        "resolver.room": "Кабинет танылды. Заттарға өтуге болады.",
+        "resolver.item": "Зат табылды. Деректерді тексеріп, нәтижені көрсетіңіз.",
+        "resolver.invalid": "QR код пішіміне қолдау көрсетілмейді.",
+        "resolver.unknown": "Код табылмады. Енгізуді тексеріңіз немесе таңдалған кабинетте жаңа зат жасаңыз.",
+        "resolver.unissued": "Жүйелік код шығарылмаған. Оны нысан жасау үшін пайдаланбаңыз.",
+        "resolver.ambiguous": "Код бірнеше нысанмен байланысты. Әкімшіге хабарласыңыз.",
+        "resolver.revoked": "Код кері қайтарылды және енді жарамсыз.",
+        "resolver.inactive": "Нысан белсенді емес. Өзгерту қолжетімсіз.",
+        "resolver.wrongContext": "Алдымен дұрыс корпус пен кабинетті таңдаңыз.",
+        "resolver.notAccessible": "Нысан қолжетімсіз немесе код енді жарамсыз.",
+        "resolver.open": "Карточканы ашу",
+        "resolver.createItem": "Жаңа зат жасау",
+        "result.title": "Заттың нәтижесі",
+        "result.registryRoom": "Тізілім бойынша: 302 кабинет",
+        "result.actualRoom": "Нақты: 305 кабинет",
+        "result.choose": "Нәтижені таңдаңыз",
+        "result.present": "Орнында",
+        "result.missing": "Жоқ",
+        "result.moved": "Орны ауысқан",
+        "result.broken": "Ақаулы",
+        "result.unknown": "Анықтау мүмкін болмады",
+        "result.comment": "Түсініктеме",
+        "result.commentPlaceholder": "Түсіндірме қосыңыз",
+        "result.photo": "Фотосурет қосу",
+        "result.movedWarning": "Зат басқа кабинеттен табылды. Тізілім автоматты түрде өзгермейді.",
+        "result.missingHint": "Жоқ зат кабинет тізімінен сканерлеусіз белгіленеді.",
+        "result.photoError": "Фотосуретті өңдеу мүмкін болмады. 10 МБ-қа дейінгі JPEG, PNG немесе WebP таңдаңыз.",
+        "result.conflict": "Нәтиже басқа құрылғыда өзгертілді. Деректерді жаңартыңыз; енгізілген түсініктеме нысанда сақталды.",
+        "result.saved": "Нәтиже сақталып, ағымдағы кабинетке қосылды.",
+        "new.title": "Жаңа зат",
+        "new.hint": "Зат тізілімде жауапты адамсыз жасалады.",
+        "new.name": "Атауы",
+        "new.numberType": "Түгендеу нөмірінің түрі",
+        "new.official": "Ресми",
+        "new.temporary": "Уақытша",
+        "new.number": "Түгендеу нөмірі",
+        "new.tmp": "Нөмір автоматты түрде жасалады: TMP-2026-…",
+        "new.result": "Жаңа заттың нәтижесі",
+        "new.validation": "Атауды толтырып, рұқсат етілген нәтижені таңдаңыз.",
+        "new.photoError": "Фотосуретті жүктеу мерзімі аяқталды. Нысан сақталды; файлды қайта таңдаңыз.",
+        "new.submit": "Жасап, тексеруге қосу",
+        "new.successTemporary": "Зат уақытша нөмірмен жасалып, тексеруге қосылды.",
+        "new.successOfficial": "Зат ресми нөмірмен жасалып, тексеруге қосылды.",
+        "summary.title": "Тексеруді аяқтау",
+        "summary.progress": "24 заттың 19-ы дайын",
+        "summary.unprocessed": "Екі кабинетте 5 затты өңдеу қалды.",
+        "summary.blocked": "Аяқтау қолжетімсіз: барлық кабинет нақты тексерілген жоқ.",
+        "summary.complete": "Тексеруді аяқтау",
+        "summary.confirmed": "Тексеру расталды: мәселелі нәтижелер жоқ.",
+        "summary.awaiting": "Тексеру 3 зат бойынша шешімдерді күтуде.",
+        "summary.readonly": "Аяқталған тексеруді қалыпты өңдеуге тыйым салынған.",
+        "summary.disputed": "Жауапты адам нәтижені даулаған. Тек осы затты қайта тексеріңіз.",
+        "summary.recheck": "Қайта тексеруді ашу",
+        "responsibility.title": "Жауапкершілік",
+        "responsibility.free": "Затқа жауапты адам тағайындалмаған.",
+        "responsibility.accept": "Жауапкершілікті қабылдау",
+        "responsibility.occupied": "Зат басқа қызметкерге бекітілген.",
+        "responsibility.hidden": "Ағымдағы жауапты адамның аты жасырылған.",
+        "responsibility.request": "Беруді сұрау",
+        "responsibility.requested": "Сұрау жіберілді. Шешімге дейін зат ағымдағы жауапты адамда қалады.",
+        "responsibility.existing": "Зат бойынша беру күтілуде. Екінші сұрау жасауға болмайды.",
+        "responsibility.confirm": "Затты осы қызметкерге беруді растайсыз ба?",
+        "responsibility.confirmAction": "Беруді растау",
+        "responsibility.reject": "Қабылдамау",
+        "responsibility.rejected": "Беру қабылданбады. Жауапты адам өзгермеді.",
+        "responsibility.conflict": "Затты басқа қызметкер қабылдап қойған. Карточка жаңартылды.",
+        "responsibility.adminHint": "Әкімшілік өзгеріс қалыпты беру үдерісін алмастырмайды және себепті талап етеді.",
+        "responsibility.adminEmployee": "Жаңа жауапты қызметкер",
+        "responsibility.adminApply": "Әкімшілік өзгерісті қолдану",
+        "notifications.title": "Хабарламалар",
+        "notifications.empty": "Жаңа хабарламалар жоқ",
+        "notifications.emptyHint": "Күтілетін әрекеттер жұмыс кезектерінде қолжетімді.",
+        "notifications.transfer": "Затты беру бойынша сіздің шешіміңіз күтілуде.",
+        "notifications.decision": "Затты тексеру нәтижесін растаңыз немесе даулаңыз.",
+        "notifications.recheck": "Нәтиже дауланды. Затты қайта тексеру қажет.",
+        "notifications.adminQueue": "Жаңа шешім әкімшіні күтуде.",
+        "notifications.review": "Шешімді ашу",
+        "notifications.open": "Ашу",
+        "notifications.transferConfirmed": "Затты беру расталды.",
+        "notifications.transferRejected": "Затты беру сұрауы қабылданбады.",
+        "notifications.transferCancelled": "Затты беру сұрауын бастамашы болдырмады.",
+        "notifications.transferOverridden": "Затты беруді әкімші өзгертті.",
+        "notifications.recheckRequested": "Қайта тексеру аяқталды. Сіздің шешіміңіз қажет.",
+        "notifications.closedPresent": "Қайта тексеру мәселені жапты.",
+        "notifications.resolvedByAdmin": "Нәтиже бойынша шешімді әкімші жапты.",
+        "notifications.adminQueueResolved": "Жалпы кезектегі шешім жабылды.",
+        "notifications.confirmed": "Тексеру расталды.",
+        "notifications.unread": "Оқылмаған",
+        "notifications.read": "Оқылған",
+        "notifications.markAll": "Көрінетіндерді оқылған деп белгілеу",
+        "notifications.queue": "Күтілетін шешімдер",
+        "notifications.confirmResult": "Нәтижені растау",
+        "notifications.dispute": "Даулау",
+        "notifications.disputeComment": "Неліктен нәтижемен келіспейсіз",
+        "notifications.disputePhoto": "Фотосурет қосу (міндетті емес)",
+        "notifications.sendDispute": "Дауды жіберу",
+        "notifications.stale": "Әрекет енді қолжетімсіз. Ағымдағы күй көрсетілді.",
+        "notifications.reason": "Әкімшілік шешімнің себебі",
+        "notifications.reasonHint": "Себеп аудитке түседі және алдын ала көріністе көрсетілмейді.",
+        "notifications.resolve": "Шешімді жабу",
+        "notifications.adminConflict": "Бұл шешімді басқа әкімші жауып қойған. Деректер жаңартылды."
+      },
+      en: {
+        "lab.eyebrow": "Yessenov University",
+        "lab.title": "Mobile QR mockups",
+        "lab.intro": "Interactive review of key flows. This prototype has no API, camera, or persistence.",
+        "lab.prototype": "Prototype · no API",
+        "control.screen": "Screen",
+        "control.state": "State",
+        "control.role": "Role",
+        "control.language": "Language",
+        "control.viewport": "Device width",
+        "control.long": "Test long data",
+        "control.keyboard": "Show software keyboard",
+        "accept.title": "Review checklist",
+        "accept.overflow": "No horizontal scrolling or clipped CTAs at 320 px.",
+        "accept.touch": "Touch targets are at least 44×44.",
+        "accept.locale": "Every message switches as a whole, without grammatical fragments.",
+        "accept.keyboard": "The software keyboard reduces the scroll area while keeping the CTA reachable.",
+        "accept.privacy": "Hidden owners, comments, and reasons never appear in previews.",
+        "accept.a11y": "Focus is visible, errors are linked to fields, and status is not color-only.",
+        "screen.inspections": "Technician inspections",
+        "screen.create": "New inspection",
+        "screen.context": "Building and room",
+        "screen.scanner": "QR scanner",
+        "screen.resolver": "QR result",
+        "screen.result": "Item result",
+        "screen.newItem": "New item",
+        "screen.summary": "Complete inspection",
+        "screen.responsibility": "Responsibility and transfer",
+        "screen.notifications": "Notifications and decisions",
+        "role.warehouse": "Technician",
+        "role.employee": "Employee",
+        "role.admin": "Administrator",
+        "role.owner": "Owner",
+        "state.loading": "Loading",
+        "state.empty": "Empty",
+        "state.active": "Active data",
+        "state.offline": "Offline",
+        "state.error": "Error",
+        "state.default": "Default",
+        "state.validation": "Field errors",
+        "state.submitting": "Submitting",
+        "state.success": "Success",
+        "state.select": "Selection",
+        "state.emptyRoom": "Empty room",
+        "state.mismatch": "Context mismatch",
+        "state.progress": "Progress",
+        "state.duplicate": "Duplicate",
+        "state.start": "Before start",
+        "state.pending": "Permission request",
+        "state.denied": "Camera denied",
+        "state.unavailable": "Camera unavailable",
+        "state.camera": "Camera active",
+        "state.manual": "Manual entry",
+        "state.resolving": "Resolving",
+        "state.building": "Building resolved",
+        "state.room": "Room resolved",
+        "state.item": "Item resolved",
+        "state.invalid": "Invalid format",
+        "state.unknown": "Code not found",
+        "state.unissued": "Code was not issued",
+        "state.ambiguous": "Ambiguous code",
+        "state.revoked": "Revoked code",
+        "state.inactive": "Inactive object",
+        "state.wrongContext": "Wrong context",
+        "state.notAccessible": "Object unavailable",
+        "state.moved": "Moved",
+        "state.missing": "Missing",
+        "state.photoError": "Photo error",
+        "state.conflict": "Version conflict",
+        "state.saved": "Saved",
+        "state.form": "Form",
+        "state.blocked": "Completion blocked",
+        "state.confirmed": "Confirmed",
+        "state.awaiting": "Awaiting decisions",
+        "state.readonly": "Read only",
+        "state.disputed": "Recheck required",
+        "state.free": "Unassigned item",
+        "state.occupied": "Assigned to someone else",
+        "state.requested": "Transfer requested",
+        "state.existing": "Active transfer",
+        "state.confirm": "Confirm transfer",
+        "state.rejected": "Transfer rejected",
+        "state.feed": "Feed",
+        "state.decisions": "Work queue",
+        "state.disputeForm": "Dispute form",
+        "state.stale": "Stale action",
+        "state.adminReason": "Administrator decision",
+        "state.adminConflict": "Concurrent decision",
+        "common.back": "Back",
+        "common.notifications": "Notifications: 3 unread",
+        "common.retry": "Try again",
+        "common.cancel": "Cancel",
+        "common.continue": "Continue",
+        "common.save": "Save",
+        "common.saving": "Saving…",
+        "common.scan": "Scan QR",
+        "common.manual": "Enter code manually",
+        "common.close": "Close",
+        "common.refresh": "Refresh data",
+        "common.loading": "Loading data…",
+        "common.offline": "There is no internet connection. Data was not saved.",
+        "common.serverError": "Data could not be loaded. Your progress is stored on the server.",
+        "common.required": "This field is required.",
+        "common.noAccess": "This section is not available to your role.",
+        "common.noAccessHint": "Return to the home page or contact an administrator.",
+        "common.openHome": "Go to home",
+        "common.adminReason": "Reason for the administrator action",
+        "common.adminReasonHint": "A reason is required, stored in the audit, and never shown in the notification.",
+        "data.item": "Epson EB-X06 projector",
+        "data.itemLong": "Interactive multimedia classroom projector with an additional complete set of mounting hardware and connection cables",
+        "data.building": "Main building",
+        "data.room": "Room 302",
+        "data.inventory": "TMP-2026-000042",
+        "data.date": "July 27, 2:35 PM",
+        "inspections.title": "My inspections",
+        "inspections.empty": "No inspections yet",
+        "inspections.emptyHint": "Create an inspection, then start by choosing a building and room.",
+        "inspections.create": "Create inspection",
+        "inspections.active": "Classroom inventory",
+        "inspections.progress": "2 of 4 rooms inspected",
+        "inspections.draft": "Draft",
+        "inspections.confirmed": "Confirmed",
+        "inspections.completedName": "Laboratory building inspection",
+        "create.title": "New inspection",
+        "create.label": "Inspection name",
+        "create.placeholder": "For example, Building 1 inspection",
+        "create.error": "Enter a name between 2 and 120 characters.",
+        "create.serverError": "The inspection could not be created. Its name remains in the form—try again.",
+        "create.technician": "Assigned technician",
+        "create.technicianPlaceholder": "Choose an active technician",
+        "create.adminHint": "An administrator creates the inspection for a selected technician without assigning one responsible employee to the whole inspection.",
+        "create.submit": "Create inspection",
+        "create.success": "The inspection was created. Now choose a building and room.",
+        "context.title": "Choose a room",
+        "context.building": "Building",
+        "context.room": "Room",
+        "context.choose": "Choose from list",
+        "context.scanBuilding": "Scan building",
+        "context.scanRoom": "Scan room",
+        "context.empty": "The room has no items in its baseline list.",
+        "context.emptyAction": "Mark room as inspected",
+        "context.mismatch": "This room belongs to another building. Your current selection was preserved.",
+        "context.duplicate": "The room is already in the inspection. Its baseline list was not changed.",
+        "context.progress": "8 of 12 items inspected",
+        "scanner.title": "Scan QR",
+        "scanner.startTitle": "The camera starts only after your action",
+        "scanner.startHint": "You can continue manually if the camera is unavailable.",
+        "scanner.start": "Turn on camera",
+        "scanner.pending": "Allow camera access in the system dialog.",
+        "scanner.denied": "Camera access is denied",
+        "scanner.deniedHint": "Allow the camera in browser settings or enter the code manually.",
+        "scanner.unavailable": "The camera is unavailable on this device.",
+        "scanner.aim": "Place the QR code inside the frame",
+        "scanner.codeLabel": "QR code data",
+        "scanner.codePlaceholder": "YUQ1:… or a previously attached code",
+        "scanner.resolve": "Check code",
+        "scanner.resolving": "Checking the code on the server…",
+        "scanner.offline": "An internet connection is required. The code was not queued.",
+        "scanner.duplicate": "This code was already read. Opening the existing result.",
+        "resolver.title": "Scan result",
+        "resolver.building": "Building resolved. Now choose or scan a room.",
+        "resolver.room": "Room resolved. You can continue to items.",
+        "resolver.item": "Item found. Check its data and select a result.",
+        "resolver.invalid": "The QR code format is not supported.",
+        "resolver.unknown": "Code not found. Check the input or create a new item in the selected room.",
+        "resolver.unissued": "This system code was never issued. Do not use it to create an object.",
+        "resolver.ambiguous": "The code points to multiple objects. Contact an administrator.",
+        "resolver.revoked": "The code was revoked and is no longer valid.",
+        "resolver.inactive": "The object is inactive. Changes are unavailable.",
+        "resolver.wrongContext": "Choose the correct building and room first.",
+        "resolver.notAccessible": "The object is unavailable or the code is no longer valid.",
+        "resolver.open": "Open card",
+        "resolver.createItem": "Create new item",
+        "result.title": "Item result",
+        "result.registryRoom": "Registry: room 302",
+        "result.actualRoom": "Observed: room 305",
+        "result.choose": "Choose a result",
+        "result.present": "Present",
+        "result.missing": "Missing",
+        "result.moved": "Moved",
+        "result.broken": "Broken",
+        "result.unknown": "Unable to determine",
+        "result.comment": "Comment",
+        "result.commentPlaceholder": "Add an explanation",
+        "result.photo": "Add photo",
+        "result.movedWarning": "The item was found in another room. The registry will not change automatically.",
+        "result.missingHint": "Mark a missing item from the room list without scanning it.",
+        "result.photoError": "The photo could not be processed. Choose a JPEG, PNG, or WebP file up to 10 MB.",
+        "result.conflict": "The result changed on another device. Refresh data; your comment remains in the form.",
+        "result.saved": "The result was saved and added to the current room.",
+        "new.title": "New item",
+        "new.hint": "The item will be created in the registry without a responsible employee.",
+        "new.name": "Name",
+        "new.numberType": "Inventory number type",
+        "new.official": "Official",
+        "new.temporary": "Temporary",
+        "new.number": "Inventory number",
+        "new.tmp": "A number will be generated automatically: TMP-2026-…",
+        "new.result": "New item result",
+        "new.validation": "Enter a name and choose an allowed result.",
+        "new.photoError": "The photo upload expired. The form was preserved; choose the file again.",
+        "new.submit": "Create and add to inspection",
+        "new.successTemporary": "The item was created with a temporary number and added to the inspection.",
+        "new.successOfficial": "The item was created with an official number and added to the inspection.",
+        "summary.title": "Complete inspection",
+        "summary.progress": "19 of 24 items complete",
+        "summary.unprocessed": "5 items in two rooms still need a result.",
+        "summary.blocked": "Completion is unavailable because not every room was explicitly inspected.",
+        "summary.complete": "Complete inspection",
+        "summary.confirmed": "Inspection confirmed: there are no problematic results.",
+        "summary.awaiting": "The inspection is awaiting decisions for 3 items.",
+        "summary.readonly": "Normal editing of a completed inspection is locked.",
+        "summary.disputed": "The responsible employee disputed the result. Recheck only this item.",
+        "summary.recheck": "Open recheck",
+        "responsibility.title": "Responsibility",
+        "responsibility.free": "The item has no responsible employee.",
+        "responsibility.accept": "Accept responsibility",
+        "responsibility.occupied": "The item is assigned to another employee.",
+        "responsibility.hidden": "The current responsible employee's name is hidden.",
+        "responsibility.request": "Request transfer",
+        "responsibility.requested": "Request sent. The item stays with its current responsible employee until a decision.",
+        "responsibility.existing": "A transfer is already pending for this item. A second request cannot be created.",
+        "responsibility.confirm": "Transfer this item to the requesting employee?",
+        "responsibility.confirmAction": "Confirm transfer",
+        "responsibility.reject": "Reject",
+        "responsibility.rejected": "The transfer was rejected. Responsibility did not change.",
+        "responsibility.conflict": "Another employee already accepted this item. The card was refreshed.",
+        "responsibility.adminHint": "An administrator change does not replace the normal transfer process and requires a reason.",
+        "responsibility.adminEmployee": "New responsible employee",
+        "responsibility.adminApply": "Apply administrator change",
+        "notifications.title": "Notifications",
+        "notifications.empty": "No new notifications",
+        "notifications.emptyHint": "Pending actions remain available in their work queues.",
+        "notifications.transfer": "Your decision on an item transfer is required.",
+        "notifications.decision": "Confirm or dispute the item inspection result.",
+        "notifications.recheck": "The result was disputed. Recheck the item.",
+        "notifications.adminQueue": "A new decision requires an administrator.",
+        "notifications.review": "Open decision",
+        "notifications.open": "Open",
+        "notifications.transferConfirmed": "The item transfer was confirmed.",
+        "notifications.transferRejected": "The item transfer request was rejected.",
+        "notifications.transferCancelled": "The item transfer request was cancelled by its requester.",
+        "notifications.transferOverridden": "The item transfer was changed by an administrator.",
+        "notifications.recheckRequested": "The recheck is complete. Your decision is required.",
+        "notifications.closedPresent": "The recheck resolved the issue.",
+        "notifications.resolvedByAdmin": "The result decision was closed by an administrator.",
+        "notifications.adminQueueResolved": "The shared-queue decision was closed.",
+        "notifications.confirmed": "The inspection was confirmed.",
+        "notifications.unread": "Unread",
+        "notifications.read": "Read",
+        "notifications.markAll": "Mark visible items as read",
+        "notifications.queue": "Pending decisions",
+        "notifications.confirmResult": "Confirm result",
+        "notifications.dispute": "Dispute",
+        "notifications.disputeComment": "Why you disagree with the result",
+        "notifications.disputePhoto": "Add photo (optional)",
+        "notifications.sendDispute": "Submit dispute",
+        "notifications.stale": "The action is no longer available. Current status is shown.",
+        "notifications.reason": "Reason for the administrator decision",
+        "notifications.reasonHint": "The reason is stored in the audit and is not shown in previews.",
+        "notifications.resolve": "Close decision",
+        "notifications.adminConflict": "Another administrator already closed this decision. Data was refreshed."
+      }
+    };
+
+    const screens = {
+      inspections: ["loading", "empty", "active", "offline", "error"],
+      create: ["default", "validation", "submitting", "error", "success"],
+      context: ["select", "emptyRoom", "mismatch", "progress", "duplicate"],
+      scanner: ["start", "pending", "denied", "unavailable", "camera", "manual", "resolving", "offline", "duplicate"],
+      resolver: ["building", "room", "item", "invalid", "unknown", "unissued", "ambiguous", "revoked", "inactive", "wrongContext", "notAccessible"],
+      result: ["default", "moved", "missing", "photoError", "conflict", "saved"],
+      newItem: ["form", "validation", "submitting", "photoError", "success"],
+      summary: ["progress", "blocked", "confirmed", "awaiting", "readonly", "disputed"],
+      responsibility: ["free", "occupied", "requested", "existing", "confirm", "rejected", "conflict"],
+      notifications: ["loading", "empty", "feed", "decisions", "disputeForm", "stale", "adminReason", "adminConflict"]
+    };
+
+    const access = {
+      inspections: ["warehouse", "admin"],
+      create: ["warehouse", "admin"],
+      context: ["warehouse", "admin"],
+      scanner: ["warehouse", "employee", "admin"],
+      resolver: ["warehouse", "employee", "admin"],
+      result: ["warehouse", "admin"],
+      newItem: ["warehouse", "admin"],
+      summary: ["warehouse", "admin"],
+      responsibility: ["employee", "admin"],
+      notifications: ["warehouse", "employee", "admin"]
+    };
+
+    const model = {
+      screen: "inspections",
+      state: "active",
+      role: "warehouse",
+      language: "ru",
+      width: "375",
+      long: false,
+      keyboard: false,
+      numberType: "temporary",
+      selectedResult: null
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const t = (key) => copy[model.language][key] || copy.ru[key] || key;
+    const itemName = () => t(model.long ? "data.itemLong" : "data.item");
+    const icon = (value) => `<span aria-hidden="true">${value}</span>`;
+    const chip = (label, tone = "") => `<span class="chip ${tone}">${label}</span>`;
+    const button = (label, kind = "", disabled = false) =>
+      `<button class="button ${kind}" type="button" ${disabled ? "disabled" : ""}>${label}</button>`;
+    const notice = (text, tone = "") => `<div class="notice ${tone}" role="${tone === "error" ? "alert" : "status"}">${text}</div>`;
+    const field = (label, value = "", options = {}) => {
+      const id = options.id || "field-" + Math.random().toString(36).slice(2);
+      const errorId = id + "-error";
+      return `<div class="field">
+        <label for="${id}">${label}</label>
+        <input id="${id}" value="${value}" placeholder="${options.placeholder || ""}"
+          ${options.required ? 'required aria-required="true"' : ""}
+          ${options.invalid ? `aria-invalid="true" aria-describedby="${errorId}"` : ""}>
+        ${options.invalid ? `<p class="field-error" id="${errorId}">${options.error || t("common.required")}</p>` : ""}
+      </div>`;
+    };
+    const selectField = (label, id, invalid = false) => {
+      const errorId = `${id}-error`;
+      return `<div class="field">
+        <label for="${id}">${label}</label>
+        <select id="${id}" required aria-required="true"
+          ${invalid ? `aria-invalid="true" aria-describedby="${errorId}"` : ""}>
+          ${invalid ? `<option value="" selected>${t("create.technicianPlaceholder")}</option>` : ""}
+          <option value="employee-1">Demo Employee 1</option>
+          <option value="employee-2">Demo Employee 2</option>
+        </select>
+        ${invalid ? `<p class="field-error" id="${errorId}">${t("common.required")}</p>` : ""}
+      </div>`;
+    };
+    const textareaField = (label, id, options = {}) => {
+      const errorId = `${id}-error`;
+      return `<div class="field">
+        <label for="${id}">${label}</label>
+        <textarea id="${id}" ${options.required ? 'required aria-required="true"' : ""}
+          ${options.invalid ? `aria-invalid="true" aria-describedby="${errorId}"` : ""}></textarea>
+        ${options.invalid ? `<p class="field-error" id="${errorId}">${options.error || t("common.required")}</p>` : ""}
+      </div>`;
+    };
+    const adminReasonField = (id) => model.role === "admin"
+      ? `${textareaField(t("common.adminReason"), id, { required: true, invalid: true })}
+         <p class="muted">${t("common.adminReasonHint")}</p>`
+      : "";
+
+    function shell(title, body, footer = "") {
+      return `<div class="phone ${model.keyboard ? "keyboard-open" : ""}">
+        <header class="phone-header">
+          <div class="statusbar"><span>14:35</span><span>4G · 82%</span></div>
+          <div class="toolbar">
+            <button class="icon-button" type="button" aria-label="${t("common.back")}">${icon("←")}</button>
+            <h2>${title}</h2>
+            <button class="icon-button badge-dot" type="button" aria-label="${t("common.notifications")}">${icon("♢")}</button>
+          </div>
+        </header>
+        <section class="phone-body" aria-label="${title}"><div class="stack">${body}</div></section>
+        ${footer ? `<footer class="phone-footer">${footer}</footer>` : "<div></div>"}
+        <div class="keyboard-preview" aria-hidden="true">
+          ${Array.from({ length: 20 }, (_, index) => `<span class="keyboard-key ${index >= 18 ? "wide" : ""}"></span>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    function renderAccessDenied() {
+      return shell(t("common.noAccess"), `
+        <div class="empty">
+          <div>
+            <div class="empty-icon" aria-hidden="true">⊘</div>
+            <h3>${t("common.noAccess")}</h3>
+            <p class="muted">${t("common.noAccessHint")}</p>
+          </div>
+        </div>
+      `, button(t("common.openHome"), "secondary"));
+    }
+
+    function renderInspections() {
+      const state = model.state;
+      if (state === "loading") return shell(t("inspections.title"), `
+        <div class="card stack" aria-busy="true"><p class="sr-only" role="status">${t("common.loading")}</p><div class="skeleton short"></div><div class="skeleton"></div><div class="skeleton tall"></div></div>
+        <div class="card stack" aria-busy="true"><div class="skeleton short"></div><div class="skeleton"></div><div class="skeleton tall"></div></div>
+      `);
+      if (state === "empty") return shell(t("inspections.title"), `
+        <div class="empty"><div><div class="empty-icon" aria-hidden="true">▣</div><h3>${t("inspections.empty")}</h3><p class="muted">${t("inspections.emptyHint")}</p></div></div>
+      `, button(t("inspections.create")));
+      const message = state === "offline" ? notice(t("common.offline"), "error") :
+        state === "error" ? notice(t("common.serverError"), "error") : "";
+      return shell(t("inspections.title"), `
+        ${message}
+        <article class="card">
+          <div class="row between"><div class="grow"><h3>${t("inspections.active")}</h3><p class="meta">${t("data.date")}</p></div>${chip(t("inspections.draft"), "warn")}</div>
+          <div class="progress" aria-label="${t("inspections.progress")}"><span></span></div>
+          <p class="meta" style="margin-top:8px">${t("inspections.progress")}</p>
+        </article>
+        <article class="card">
+          <div class="row between"><div class="grow"><h3>${t("inspections.completedName")}</h3><p class="meta">${t("data.date")}</p></div>${chip(t("inspections.confirmed"), "good")}</div>
+        </article>
+      `, state === "error" ? button(t("common.retry")) : button(t("inspections.create")));
+    }
+
+    function renderCreate() {
+      const invalid = model.state === "validation";
+      const submitting = model.state === "submitting";
+      const message = model.state === "error" ? notice(t("create.serverError"), "error") :
+        model.state === "success" ? notice(t("create.success"), "good") : "";
+      return shell(t("create.title"), `
+        <div class="stack" ${submitting ? 'aria-busy="true"' : ""}>
+          ${submitting ? `<p class="sr-only" role="status">${t("common.saving")}</p>` : ""}
+          ${message}
+          ${model.role === "admin" ? notice(t("create.adminHint"), "info") : ""}
+          ${field(t("create.label"), invalid ? "A" : "", { id: "inspection-name", placeholder: t("create.placeholder"), invalid, required: true, error: t("create.error") })}
+          ${model.role === "admin"
+            ? selectField(t("create.technician"), "inspection-technician", invalid)
+            : ""}
+          <p class="muted">0 / 120</p>
+        </div>
+      `, button(submitting ? t("common.saving") : t("create.submit"), "", submitting));
+    }
+
+    function renderContext() {
+      let message = "";
+      if (model.state === "emptyRoom") message = notice(t("context.empty"), "info");
+      if (model.state === "mismatch") message = notice(t("context.mismatch"), "error");
+      if (model.state === "duplicate") message = notice(t("context.duplicate"), "info");
+      return shell(t("context.title"), `
+        ${message}
+        <div class="card stack">
+          <div><p class="meta">${t("context.building")}</p><h3>${t("data.building")}</h3></div>
+          <div class="divider"></div>
+          <div><p class="meta">${t("context.room")}</p><h3>${t("data.room")}</h3></div>
+          ${model.state === "progress" ? `<div class="progress"><span></span></div><p class="meta">${t("context.progress")}</p>` : ""}
+        </div>
+        <div class="segmented">
+          <button type="button">${t("context.choose")}</button>
+          <button type="button">${t("context.scanBuilding")}</button>
+        </div>
+        ${adminReasonField("context-admin-reason")}
+      `, model.state === "emptyRoom"
+        ? button(t("context.emptyAction"), "", model.role === "admin")
+        : `${button(t("context.scanRoom"), "", model.role === "admin")}${button(t("common.continue"), "secondary")}`);
+    }
+
+    function renderScanner() {
+      const state = model.state;
+      if (state === "camera") return shell(t("scanner.title"), `
+        <div class="camera" role="img" aria-label="${t("scanner.aim")}"><p class="camera-copy">${t("scanner.aim")}</p></div>
+      `, button(t("common.manual"), "secondary"));
+      if (state === "manual") return shell(t("scanner.title"), `
+        ${field(t("scanner.codeLabel"), "YUQ1:01J4Z3R2C8M5N7P9Q1S6T0V4X2", { id: "manual-code", placeholder: t("scanner.codePlaceholder") })}
+      `, button(t("scanner.resolve")));
+      if (state === "resolving") return shell(t("scanner.title"), `
+        <div class="card stack" aria-busy="true"><div class="skeleton tall"></div><p class="muted" role="status">${t("scanner.resolving")}</p></div>
+      `, button(t("scanner.resolving"), "", true));
+      const message = {
+        pending: `<div aria-busy="true">${notice(t("scanner.pending"), "info")}</div>`,
+        denied: notice(`${t("scanner.denied")}. ${t("scanner.deniedHint")}`, "error"),
+        unavailable: notice(t("scanner.unavailable"), "error"),
+        offline: notice(t("scanner.offline"), "error"),
+        duplicate: notice(t("scanner.duplicate"), "info")
+      }[state] || "";
+      return shell(t("scanner.title"), `
+        ${message}
+        <div class="empty"><div><div class="empty-icon" aria-hidden="true">▦</div><h3>${t("scanner.startTitle")}</h3><p class="muted">${t("scanner.startHint")}</p></div></div>
+      `, `${button(t("scanner.start"), "", state === "pending")}${button(t("common.manual"), "secondary")}`);
+    }
+
+    function renderResolver() {
+      const sensitiveEmployeeStates = ["building", "room", "unknown", "unissued", "ambiguous", "revoked", "inactive", "wrongContext"];
+      const effectiveState =
+        model.role === "employee" && sensitiveEmployeeStates.includes(model.state)
+          ? "notAccessible"
+          : model.state;
+      const key = `resolver.${effectiveState}`;
+      const ok = ["building", "room", "item"].includes(effectiveState);
+      const symbol = ok ? "✓" : "!";
+      const tone = ok ? "good" : "error";
+      let footer;
+      if (ok) {
+        footer = button(t(effectiveState === "item" ? "resolver.open" : "common.continue"));
+      } else if (effectiveState === "unknown" && ["warehouse", "admin"].includes(model.role)) {
+        footer = `<button class="button" type="button" data-screen="newItem" data-state="form">${t("resolver.createItem")}</button>${button(t("common.retry"), "secondary")}`;
+      } else {
+        footer = `${button(t("common.retry"))}${button(t("common.manual"), "secondary")}`;
+      }
+      return shell(t("resolver.title"), `
+        <div class="empty"><div>
+          <div class="empty-icon" aria-hidden="true">${symbol}</div>
+          ${notice(t(key), tone)}
+        </div></div>
+      `, footer);
+    }
+
+    function resultOptions(active, allowed = ["present", "missing", "moved", "broken", "unknown"]) {
+      return `<div class="result-grid" role="group" aria-label="${t("result.choose")}">
+        ${allowed.map((key) =>
+          `<button type="button" class="${active === key ? "active" : ""}" aria-pressed="${active === key}" data-result="${key}">${t(`result.${key}`)}</button>`).join("")}
+      </div>`;
+    }
+
+    function renderResult() {
+      const active = model.selectedResult ||
+        (model.state === "moved" ? "moved" : model.state === "missing" ? "missing" : "present");
+      const stateNotice = {
+        moved: notice(t("result.movedWarning")),
+        missing: notice(t("result.missingHint"), "info"),
+        photoError: notice(t("result.photoError"), "error"),
+        conflict: notice(t("result.conflict"), "error"),
+        saved: notice(t("result.saved"), "good")
+      }[model.state] || "";
+      return shell(t("result.title"), `
+        ${stateNotice}
+        <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p><p class="meta">${t("result.registryRoom")}</p>${model.state === "moved" ? `<p class="meta">${t("result.actualRoom")}</p>` : ""}</article>
+        <h3 class="section-title">${t("result.choose")}</h3>
+        ${resultOptions(active)}
+        <div class="field"><label for="result-comment">${t("result.comment")}</label><textarea id="result-comment" placeholder="${t("result.commentPlaceholder")}"></textarea></div>
+        ${button(t("result.photo"), "secondary")}
+        ${adminReasonField("result-admin-reason")}
+      `, button(t("common.save"), "", model.role === "admin"));
+    }
+
+    function renderNewItem() {
+      const invalid = model.state === "validation";
+      const submitting = model.state === "submitting";
+      const stateNotice = {
+        validation: notice(t("new.validation"), "error"),
+        photoError: notice(t("new.photoError"), "error"),
+        success: notice(
+          t(model.numberType === "official" ? "new.successOfficial" : "new.successTemporary"),
+          "good",
+        )
+      }[model.state] || notice(t("new.hint"), "info");
+      return shell(t("new.title"), `
+        <div class="stack" ${submitting ? 'aria-busy="true"' : ""}>
+          ${submitting ? `<p class="sr-only" role="status">${t("common.saving")}</p>` : ""}
+          ${stateNotice}
+          ${field(t("new.name"), invalid ? "" : itemName(), { id: "new-name", invalid, required: true })}
+          <h3 class="section-title">${t("new.numberType")}</h3>
+          <div class="segmented" role="group" aria-label="${t("new.numberType")}">
+            <button type="button" class="${model.numberType === "official" ? "active" : ""}" aria-pressed="${model.numberType === "official"}" data-number-type="official">${t("new.official")}</button>
+            <button type="button" class="${model.numberType === "temporary" ? "active" : ""}" aria-pressed="${model.numberType === "temporary"}" data-number-type="temporary">${t("new.temporary")}</button>
+          </div>
+          ${model.numberType === "official"
+            ? field(t("new.number"), "INV-2026-0042", { id: "official-number", required: true })
+            : `<p class="muted">${t("new.tmp")}</p>`}
+          <h3 class="section-title">${t("new.result")}</h3>
+          ${resultOptions(
+            ["present", "broken", "unknown"].includes(model.selectedResult) ? model.selectedResult : "present",
+            ["present", "broken", "unknown"],
+          )}
+          ${button(t("result.photo"), "secondary")}
+          ${adminReasonField("new-item-admin-reason")}
+        </div>
+      `, button(
+        submitting ? t("common.saving") : t("new.submit"),
+        "",
+        submitting || model.role === "admin",
+      ));
+    }
+
+    function renderSummary() {
+      const stateNotice = {
+        progress: notice(t("summary.unprocessed"), "info"),
+        blocked: notice(t("summary.blocked"), "error"),
+        confirmed: notice(t("summary.confirmed"), "good"),
+        awaiting: notice(t("summary.awaiting")),
+        readonly: notice(t("summary.readonly"), "info"),
+        disputed: notice(t("summary.disputed"), "error")
+      }[model.state];
+      return shell(t("summary.title"), `
+        ${stateNotice}
+        <div class="card stack">
+          <div class="row between"><h3>${t("data.building")}</h3>${chip("2 / 4", model.state === "confirmed" ? "good" : "warn")}</div>
+          <div class="progress"><span></span></div>
+          <p class="meta">${t("summary.progress")}</p>
+        </div>
+        <div class="card"><h3>${t("data.room")}</h3><p class="meta">${t("context.progress")}</p></div>
+        ${adminReasonField("summary-admin-reason")}
+      `, model.state === "disputed"
+        ? button(t("summary.recheck"), "", model.role === "admin")
+        : button(
+            t("summary.complete"),
+            "",
+            model.role === "admin" || ["blocked", "readonly", "confirmed", "awaiting"].includes(model.state),
+          ));
+    }
+
+    function renderResponsibility() {
+      const state = model.state;
+      if (model.role === "admin") {
+        return shell(t("responsibility.title"), `
+          ${notice(t("responsibility.adminHint"), "info")}
+          <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p><p class="meta">${t("data.room")}</p></article>
+          ${selectField(t("responsibility.adminEmployee"), "admin-new-responsible")}
+          ${adminReasonField("responsibility-admin-reason")}
+        `, button(t("responsibility.adminApply"), "", true));
+      }
+      const messages = {
+        free: notice(t("responsibility.free"), "info"),
+        occupied: notice(`${t("responsibility.occupied")} ${t("responsibility.hidden")}`, "info"),
+        requested: notice(t("responsibility.requested"), "good"),
+        existing: notice(t("responsibility.existing"), "error"),
+        confirm: notice(t("responsibility.confirm")),
+        rejected: notice(t("responsibility.rejected"), "info"),
+        conflict: notice(t("responsibility.conflict"), "error")
+      };
+      let footer = button(t("common.close"), "secondary");
+      if (state === "free") footer = button(t("responsibility.accept"));
+      if (state === "occupied") footer = button(t("responsibility.request"));
+      if (state === "confirm") footer = `${button(t("responsibility.confirmAction"))}${button(t("responsibility.reject"), "danger")}`;
+      if (state === "requested") footer = button(t("common.cancel"), "danger");
+      return shell(t("responsibility.title"), `
+        ${messages[state]}
+        <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p><p class="meta">${t("data.room")}</p></article>
+      `, footer);
+    }
+
+    function notificationCard(text, unread = false, targetScreen = "notifications", targetState = "stale") {
+      const href = `?${new URLSearchParams({
+        screen: targetScreen,
+        state: targetState,
+        role: model.role,
+        lang: model.language,
+        width: model.width,
+      }).toString()}`;
+      return `<li class="card">
+        <div class="row between"><div class="grow"><h3>${text}</h3><p class="meta">${t("data.date")}</p></div>${chip(t(unread ? "notifications.unread" : "notifications.read"), unread ? "warn" : "")}</div>
+        <a class="notification-link" href="${href}">${t("notifications.open")}</a>
+      </li>`;
+    }
+    const notificationList = (cards) =>
+      `<ul class="notification-list" aria-label="${t("notifications.title")}">${cards.join("")}</ul>`;
+
+    function renderNotifications() {
+      const state = model.state;
+      if (state === "loading") return shell(t("notifications.title"), `
+        <div class="card stack" aria-busy="true"><p class="sr-only" role="status">${t("common.loading")}</p><div class="skeleton short"></div><div class="skeleton"></div><div class="skeleton tall"></div></div>
+      `);
+      if (state === "empty") return shell(t("notifications.title"), `
+        <div class="empty"><div><div class="empty-icon" aria-hidden="true">◇</div><h3>${t("notifications.empty")}</h3><p class="muted">${t("notifications.emptyHint")}</p></div></div>
+      `);
+      if (state === "feed") {
+        const roleFeed = model.role === "warehouse"
+          ? notificationList([
+              notificationCard(t("notifications.recheck"), true, "summary", "disputed"),
+              notificationCard(t("notifications.resolvedByAdmin"), false),
+              notificationCard(t("notifications.adminQueueResolved"), false),
+              notificationCard(t("notifications.confirmed"), false, "summary", "confirmed"),
+            ])
+          : model.role === "admin"
+            ? notificationList([
+                notificationCard(t("notifications.adminQueue"), true, "notifications", "decisions"),
+              ])
+            : notificationList([
+                notificationCard(t("notifications.transfer"), true, "responsibility", "confirm"),
+                notificationCard(t("notifications.transferConfirmed"), false, "responsibility", "requested"),
+                notificationCard(t("notifications.transferRejected"), false, "responsibility", "rejected"),
+                notificationCard(t("notifications.transferCancelled"), false),
+                notificationCard(t("notifications.transferOverridden"), false),
+                notificationCard(t("notifications.decision"), true, "notifications", "decisions"),
+                notificationCard(t("notifications.recheckRequested"), true, "notifications", "decisions"),
+                notificationCard(t("notifications.closedPresent"), false),
+                notificationCard(t("notifications.resolvedByAdmin"), false),
+              ]);
+        return shell(t("notifications.title"), roleFeed, button(t("notifications.markAll"), "secondary"));
+      }
+      if (state === "decisions") {
+        const adminQueue = model.role === "admin";
+        return shell(t("notifications.queue"), `
+          ${notice(t(adminQueue ? "notifications.adminQueue" : "notifications.decision"), "info")}
+          <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p><p class="meta">${t("data.date")}</p></article>
+        `, adminQueue
+          ? button(t("notifications.review"))
+          : `${button(t("notifications.confirmResult"))}<button class="button danger" type="button" data-screen="notifications" data-state="disputeForm">${t("notifications.dispute")}</button>`);
+      }
+      if (state === "disputeForm") return shell(t("notifications.dispute"), `
+        <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p><p class="meta">${t("data.date")}</p></article>
+        ${textareaField(t("notifications.disputeComment"), "dispute-comment", {
+          required: true,
+          invalid: true,
+          error: t("common.required"),
+        })}
+        ${button(t("notifications.disputePhoto"), "secondary")}
+      `, button(t("notifications.sendDispute"), "", true));
+      if (state === "adminReason") return shell(t("notifications.queue"), `
+        ${textareaField(t("notifications.reason"), "admin-reason", { required: true, invalid: true, error: t("common.required") })}
+        <p class="muted">${t("notifications.reasonHint")}</p>
+      `, button(t("notifications.resolve"), "", true));
+      const message = state === "adminConflict" ? t("notifications.adminConflict") : t("notifications.stale");
+      return shell(t("notifications.queue"), `
+        ${notice(message, "error")}
+        <article class="card"><h3>${itemName()}</h3><p class="meta">${t("data.inventory")}</p></article>
+      `, button(t("common.refresh")));
+    }
+
+    const renderers = {
+      inspections: renderInspections,
+      create: renderCreate,
+      context: renderContext,
+      scanner: renderScanner,
+      resolver: renderResolver,
+      result: renderResult,
+      newItem: renderNewItem,
+      summary: renderSummary,
+      responsibility: renderResponsibility,
+      notifications: renderNotifications
+    };
+
+    function canRenderCurrentState() {
+      if (!access[model.screen].includes(model.role)) return false;
+      if (model.screen === "notifications" && ["adminReason", "adminConflict"].includes(model.state) && model.role !== "admin") return false;
+      if (model.screen === "notifications" && model.state === "disputeForm" && model.role !== "employee") return false;
+      if (model.screen === "notifications" && model.state === "decisions" && !["employee", "admin"].includes(model.role)) return false;
+      return true;
+    }
+
+    function renderControls() {
+      document.documentElement.lang = model.language;
+      document.title = t("lab.title");
+      document.querySelectorAll("[data-copy]").forEach((node) => {
+        node.textContent = t(node.dataset.copy);
+      });
+
+      const screenSelect = $("#screen");
+      screenSelect.innerHTML = Object.keys(screens).map((key) =>
+        `<option value="${key}" ${key === model.screen ? "selected" : ""}>${t(`screen.${key}`)}</option>`).join("");
+
+      const stateSelect = $("#state");
+      stateSelect.innerHTML = screens[model.screen].map((key) =>
+        `<option value="${key}" ${key === model.state ? "selected" : ""}>${t(`state.${key}`)}</option>`).join("");
+
+      const roleSelect = $("#role");
+      roleSelect.innerHTML = ["warehouse", "employee", "admin", "owner"].map((key) =>
+        `<option value="${key}" ${key === model.role ? "selected" : ""}>${t(`role.${key}`)}</option>`).join("");
+
+      $("#language").value = model.language;
+      $("#long-copy").checked = model.long;
+      $("#keyboard-open").checked = model.keyboard;
+      document.querySelectorAll("[data-width]").forEach((node) => {
+        node.setAttribute("aria-pressed", String(node.dataset.width === model.width));
+      });
+      document.documentElement.style.setProperty("--device-width", `${model.width}px`);
+      $("#device-summary").textContent = `${model.width} px · ${t(`role.${model.role}`)} · ${model.language.toUpperCase()}`;
+    }
+
+    function render() {
+      renderControls();
+      const allowed = canRenderCurrentState();
+      $("#app").innerHTML = allowed ? renderers[model.screen]() : renderAccessDenied();
+      const query = new URLSearchParams({
+        screen: model.screen,
+        state: model.state,
+        role: model.role,
+        lang: model.language,
+        width: model.width,
+        long: model.long ? "1" : "0",
+        keyboard: model.keyboard ? "1" : "0",
+        number: model.numberType
+      });
+      history.replaceState(null, "", `?${query.toString()}`);
+    }
+
+    function hydrateFromQuery() {
+      const query = new URLSearchParams(location.search);
+      if (screens[query.get("screen")]) {
+        model.screen = query.get("screen");
+        model.state = screens[model.screen][0];
+      }
+      const state = query.get("state");
+      if (screens[model.screen].includes(state)) model.state = state;
+      if (["warehouse", "employee", "admin", "owner"].includes(query.get("role"))) model.role = query.get("role");
+      if (copy[query.get("lang")]) model.language = query.get("lang");
+      if (["320", "375", "430"].includes(query.get("width"))) model.width = query.get("width");
+      model.long = query.get("long") === "1";
+      model.keyboard = query.get("keyboard") === "1";
+      if (["official", "temporary"].includes(query.get("number"))) model.numberType = query.get("number");
+    }
+
+    $("#screen").addEventListener("change", (event) => {
+      model.screen = event.target.value;
+      model.state = screens[model.screen][0];
+      model.selectedResult = null;
+      render();
+    });
+    $("#state").addEventListener("change", (event) => {
+      model.state = event.target.value;
+      render();
+    });
+    $("#role").addEventListener("change", (event) => {
+      model.role = event.target.value;
+      render();
+    });
+    $("#language").addEventListener("change", (event) => {
+      model.language = event.target.value;
+      render();
+    });
+    $("#long-copy").addEventListener("change", (event) => {
+      model.long = event.target.checked;
+      render();
+    });
+    $("#keyboard-open").addEventListener("change", (event) => {
+      model.keyboard = event.target.checked;
+      render();
+    });
+    $("#app").addEventListener("click", (event) => {
+      const target = event.target.closest("[data-screen], [data-number-type], [data-result]");
+      if (!target) return;
+      let focusSelector = null;
+      if (target.dataset.screen && screens[target.dataset.screen]) {
+        model.screen = target.dataset.screen;
+        model.state = screens[model.screen].includes(target.dataset.state) ? target.dataset.state : screens[model.screen][0];
+        model.selectedResult = null;
+      }
+      if (["official", "temporary"].includes(target.dataset.numberType)) {
+        model.numberType = target.dataset.numberType;
+        focusSelector = `[data-number-type="${model.numberType}"]`;
+      }
+      if (["present", "missing", "moved", "broken", "unknown"].includes(target.dataset.result)) {
+        model.selectedResult = target.dataset.result;
+        focusSelector = `[data-result="${model.selectedResult}"]`;
+      }
+      render();
+      if (focusSelector) document.querySelector(focusSelector)?.focus();
+    });
+    document.querySelectorAll("[data-width]").forEach((node) => {
+      node.addEventListener("click", () => {
+        model.width = node.dataset.width;
+        render();
+      });
+    });
+
+    hydrateFromQuery();
+    render();
+  </script>
+</body>
+</html>
