@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { resetRateLimitStateForTests } from "@/lib/security/rate-limiter";
 import { resetSessionStateForTests } from "@/lib/security/session";
+import { resetPasswordResetStateForTests } from "@/lib/security/password-reset";
 
 const ORIGINAL_ENV = {
   YU_DATA_DIRECTORY: process.env.YU_DATA_DIRECTORY,
@@ -14,6 +15,9 @@ const ORIGINAL_ENV = {
   AUTH_ADMIN_PASSWORD_HASH: process.env.AUTH_ADMIN_PASSWORD_HASH,
   AUTH_ADMIN_PASSWORD_SALT: process.env.AUTH_ADMIN_PASSWORD_SALT,
   AUTH_ADMIN_BLOCKED: process.env.AUTH_ADMIN_BLOCKED,
+  AUTH_PASSWORD_RESET_WEBHOOK_URL: process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL,
+  AUTH_PASSWORD_RESET_WEBHOOK_SECRET:
+    process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET,
 };
 
 function restoreEnvironment() {
@@ -44,8 +48,11 @@ export async function resetAuthTestEnvironment(directory: string) {
   process.env.AUTH_ADMIN_PASSWORD_HASH = "";
   process.env.AUTH_ADMIN_PASSWORD_SALT = "";
   process.env.AUTH_ADMIN_BLOCKED = "";
+  process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL = "";
+  process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET = "";
   resetRateLimitStateForTests();
   resetSessionStateForTests();
+  resetPasswordResetStateForTests();
 }
 
 export async function removeAuthTestDirectory(directory: string) {

@@ -22,11 +22,12 @@ export default defineConfig({
         "lib/security/authorization.ts",
         "lib/security/credentials.ts",
         "lib/security/login-protection.ts",
+        "lib/security/password-reset.ts",
         "lib/security/rate-limiter.ts",
         "lib/security/registration-protection.ts",
         "lib/security/session.ts",
         "lib/data-directory.ts",
-        "app/api/auth/{login,logout,register,session}/route.ts",
+        "app/api/auth/{forgot-password,login,logout,register,reset-password,session}/route.ts",
         "proxy.ts",
       ],
       thresholds: {

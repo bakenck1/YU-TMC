@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { E2E_DATA_DIRECTORY } from "./tests/e2e/environment";
 
 const port = Number(process.env.YU_E2E_PORT ?? "3110");
+const webhookPort = Number(process.env.YU_E2E_WEBHOOK_PORT ?? String(port + 1));
 const baseURL = `http://localhost:${port}`;
 process.env.YU_E2E_DATA_DIRECTORY = E2E_DATA_DIRECTORY;
 
@@ -41,6 +42,9 @@ export default defineConfig({
       AUTH_ADMIN_PASSWORD_HASH: "",
       AUTH_ADMIN_PASSWORD_SALT: "",
       AUTH_ADMIN_BLOCKED: "",
+      AUTH_PASSWORD_RESET_WEBHOOK_URL: `http://127.0.0.1:${webhookPort}/password-reset`,
+      AUTH_PASSWORD_RESET_WEBHOOK_SECRET: "yu-e2e-reset-webhook-secret",
+      YU_E2E_WEBHOOK_PORT: String(webhookPort),
     },
   },
 });

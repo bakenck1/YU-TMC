@@ -5,6 +5,7 @@ import {
 import { normalizeEmail } from "@/lib/security/login-protection";
 import {
   consumePasswordResetRequestLimits,
+  commitPasswordResetCode,
   createPasswordResetCode,
   revokePasswordResetCode,
 } from "@/lib/security/password-reset";
@@ -88,12 +89,10 @@ export async function POST(request: Request) {
         signal: AbortSignal.timeout(8_000),
       });
       if (!webhookResponse.ok) throw new Error("password_reset_delivery_failed");
-    } catch {
-      revokePasswordResetCode(email);
-      return Response.json(
-        { error: "password_reset_delivery_failed" },
-        { status: 503, headers: rateLimitHeaders(apiLimit) },
-      );
+      commitPasswordResetCode(email, code);
+    } catch (error) {
+      revokePasswordResetCode(email, code);
+      console.error("Password-reset delivery failed", error);
     }
   }
 

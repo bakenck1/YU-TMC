@@ -21,6 +21,8 @@ execution, independent trust review, corrections, commit and push.
 The complete local and CI gate is `npm run test:all`. It runs coverage first,
 then builds the production application and executes the Playwright journey.
 Use `YU_E2E_PORT` to choose another port for a concurrent local run.
+The reset-password journey also reserves the next port for its authenticated
+webhook fixture; override it with `YU_E2E_WEBHOOK_PORT` when necessary.
 
 ## Trust rules
 
@@ -33,3 +35,11 @@ Use `YU_E2E_PORT` to choose another port for a concurrent local run.
 - Stateful bootstrap flows are atomic and reset their dedicated data directory
   before every attempt, including retries.
 - A negative assertion is paired with a positive control where practical.
+
+## Documented architecture gaps
+
+- Password-reset codes and rate-limit buckets are intentionally process-local
+  in-memory state. A multi-instance deployment must move them to Redis/Valkey.
+- Changing a password does not yet revoke already-issued session cookies.
+- Enumeration-safe password-reset responses do not eliminate timing side
+  channels from outbound delivery work.

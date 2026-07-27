@@ -7,6 +7,11 @@ export const E2E_DATA_DIRECTORY =
   process.env.YU_E2E_DATA_DIRECTORY ??
   path.join(tmpdir(), `yu-inventory-playwright-auth-${randomUUID()}`);
 
+export const E2E_WEBHOOK_FILE = path.join(
+  E2E_DATA_DIRECTORY,
+  "password-reset-webhook.json",
+);
+
 function assertSafeDirectory() {
   const resolved = path.resolve(E2E_DATA_DIRECTORY);
   const expectedParent = path.resolve(tmpdir());
