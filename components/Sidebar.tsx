@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -131,8 +132,8 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex items-center gap-2 px-4 py-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-white font-bold">
-          YU
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-black/5">
+          <Image src="/logo.png" alt={settings.organizationName} width={36} height={36} className="h-full w-full object-contain p-1" priority />
         </div>
         <AnimatePresence initial={false}>
           {!collapsed && (
@@ -141,7 +142,8 @@ function SidebarContent({
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
               transition={{ duration: 0.15 }}
-              className="overflow-hidden whitespace-nowrap text-sm font-semibold text-zinc-800"
+              style={{ fontFamily: "var(--font-montserrat)" }}
+              className="overflow-hidden whitespace-nowrap text-sm font-semibold text-[#002060]"
             >
               {settings.organizationName}
             </motion.span>

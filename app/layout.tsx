@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import AppSettingsProvider from "@/components/AppSettingsProvider";
 import AuthProvider from "@/components/AuthProvider";
@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin", "cyrillic"],
+  weight: ["600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "YU Inventory",
   description: "Университеттің тауарлық-материалдық құндылықтарын есепке алу жүйесі",
@@ -28,7 +34,7 @@ export default function RootLayout({
   return (
     <html
       lang="kk"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="h-full">
         <AppSettingsProvider>

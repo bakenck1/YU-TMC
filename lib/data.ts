@@ -4,6 +4,7 @@ import type {
   InventoryItem,
 } from "./types";
 import { items21to110 } from "./items-21-110";
+import { campusBuildings } from "./campus";
 
 export const items: InventoryItem[] = [
   ...Array.from({ length: 10 }, (_, index) => ({
@@ -37,87 +38,23 @@ export const items: InventoryItem[] = [
   ...items21to110,
 ];
 
-export const buildings: Building[] = [
-  {
-    id: "main",
-    name: "Главный корпус",
-    address: "ул. Университетская, 1",
-    itemCount: 214,
-    floors: [
-      {
-        id: "main-1",
-        name: "1 этаж",
-        rooms: [
-          { id: "main-1-101", name: "Приёмная", itemCount: 6 },
-          { id: "main-1-102", name: "Библиотека", itemCount: 42 },
-        ],
-      },
-      {
-        id: "main-2",
-        name: "2 этаж",
-        rooms: [
-          { id: "main-2-201", name: "Деканат", itemCount: 18 },
-          { id: "main-2-202", name: "Ауд. 205", itemCount: 24 },
-        ],
-      },
-      {
-        id: "main-3",
-        name: "3 этаж",
-        rooms: [
-          { id: "main-3-305", name: "Ауд. 305", itemCount: 20 },
-          { id: "main-3-306", name: "Ауд. 306", itemCount: 16 },
-        ],
-      },
-      {
-        id: "main-b",
-        name: "Подвал",
-        rooms: [
-          { id: "main-b-server", name: "Серверная", itemCount: 12 },
-          { id: "main-b-archive", name: "Архив", itemCount: 8 },
-        ],
-      },
-    ],
-  },
-  {
-    id: "b",
-    name: "Корпус Б",
-    address: "ул. Студенческая, 5",
-    itemCount: 98,
-    floors: [
-      {
-        id: "b-2",
-        name: "2 этаж",
-        rooms: [{ id: "b-2-210", name: "Ауд. 210", itemCount: 15 }],
-      },
-      {
-        id: "b-3",
-        name: "3 этаж",
-        rooms: [{ id: "b-3-312", name: "Ауд. 312", itemCount: 11 }],
-      },
-    ],
-  },
-  {
-    id: "v",
-    name: "Корпус В",
-    address: "пр-т Науки, 12",
-    itemCount: 156,
-    floors: [
-      {
-        id: "v-1",
-        name: "1 этаж",
-        rooms: [
-          { id: "v-1-104", name: "Лаборатория 104", itemCount: 27 },
-          { id: "v-1-106", name: "Лаборатория 106", itemCount: 19 },
-        ],
-      },
-      {
-        id: "v-2",
-        name: "2 этаж",
-        rooms: [{ id: "v-2-220", name: "Ауд. 220", itemCount: 14 }],
-      },
-    ],
-  },
-];
+// Реальные корпуса кампуса — берём из данных интерактивной карты (lib/campus.ts),
+// чтобы «Локации», счётчики и карта на Главной были согласованы.
+export const buildings: Building[] = Object.values(campusBuildings).map((b) => ({
+  id: b.id,
+  name: b.name,
+  address: b.sub,
+  itemCount: b.total,
+  floors: b.floors.map((f) => ({
+    id: `${b.id}-${f.n}`,
+    name: `Этаж ${f.n}`,
+    rooms: f.rooms.map((r) => ({
+      id: `${b.id}-${f.n}-${r.code}`,
+      name: r.name,
+      itemCount: r.items.length,
+    })),
+  })),
+}));
 
 export const users: AppUser[] = [
   { id: "1", code: "USR-001", fullName: "Demo Administrator", role: "Админ", email: "admin@example.test", phone: "—", addedAt: "2023-09-01", emailVerified: true, active: true },
