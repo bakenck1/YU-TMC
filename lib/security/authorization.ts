@@ -30,7 +30,8 @@ function matchesRoute(pathname: string, route: string) {
 
 export function canAccessPath(role: AuthRole, pathname: string) {
   if (role === "admin" || role === "owner") return true;
-  return ROLE_ROUTES[role].some((route) => matchesRoute(pathname, route));
+  const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
+  return ROLE_ROUTES[role].some((route) => matchesRoute(pathOnly, route));
 }
 
 export function defaultPathForRole(role: AuthRole) {
@@ -38,5 +39,17 @@ export function defaultPathForRole(role: AuthRole) {
 }
 
 export function isSafeReturnPath(value: string | null | undefined) {
-  return Boolean(value && value.startsWith("/") && !value.startsWith("//"));
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return false;
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return false;
+
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(decoded)) {
+      return false;
+    }
+    const base = "https://yu-inventory.test";
+    return new URL(value, base).origin === base;
+  } catch {
+    return false;
+  }
 }

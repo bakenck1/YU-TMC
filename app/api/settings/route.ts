@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { dataDirectory } from "@/lib/data-directory";
 import {
   DEFAULT_APP_SETTINGS,
   isAppLanguage,
@@ -17,24 +18,25 @@ import { sessionFromRequest } from "@/lib/security/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SETTINGS_DIRECTORY = path.join(process.cwd(), ".data");
-const SETTINGS_FILE = path.join(SETTINGS_DIRECTORY, "settings.json");
+function settingsFile() {
+  return path.join(dataDirectory(), "settings.json");
+}
 
 async function readSettings(): Promise<AppSettings> {
   try {
-    const content = await readFile(SETTINGS_FILE, "utf8");
+    const content = await readFile(settingsFile(), "utf8");
     const parsed: unknown = JSON.parse(content);
     return isAppSettings(parsed) ? parsed : DEFAULT_APP_SETTINGS;
   } catch {
-    await mkdir(SETTINGS_DIRECTORY, { recursive: true });
-    await writeFile(SETTINGS_FILE, JSON.stringify(DEFAULT_APP_SETTINGS, null, 2), "utf8");
+    await mkdir(dataDirectory(), { recursive: true });
+    await writeFile(settingsFile(), JSON.stringify(DEFAULT_APP_SETTINGS, null, 2), "utf8");
     return DEFAULT_APP_SETTINGS;
   }
 }
 
 async function saveSettings(settings: AppSettings) {
-  await mkdir(SETTINGS_DIRECTORY, { recursive: true });
-  await writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+  await mkdir(dataDirectory(), { recursive: true });
+  await writeFile(settingsFile(), JSON.stringify(settings, null, 2), "utf8");
 }
 
 export async function GET(request: Request) {

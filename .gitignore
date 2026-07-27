@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-e2e/
 /out/
 
 # production
@@ -40,6 +41,12 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# automated test artifacts
+/coverage/
+/playwright-report/
+/test-results/
+/debug.log
 
 # typescript
 *.tsbuildinfo

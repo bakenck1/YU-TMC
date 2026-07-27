@@ -9,12 +9,14 @@ import {
   normalizeAuthRole,
   type AuthenticatedUser,
 } from "./authorization";
+import { dataDirectory } from "../data-directory";
 
 const scryptAsync = promisify(scrypt);
 const DUMMY_SALT = "yu-inventory-dummy-credential-v1";
 const DUMMY_HASH = scryptSync("invalid-password", DUMMY_SALT, 64);
-const AUTH_DIRECTORY = path.join(process.cwd(), ".data");
-const AUTH_FILE = path.join(AUTH_DIRECTORY, "auth-credentials.json");
+function authFile() {
+  return path.join(dataDirectory(), "auth-credentials.json");
+}
 
 interface StoredCredentials {
   email: string;
@@ -48,7 +50,7 @@ function isStoredCredentials(value: unknown): value is StoredCredentials {
 
 async function storedCredentials() {
   try {
-    const value: unknown = JSON.parse(await readFile(AUTH_FILE, "utf8"));
+    const value: unknown = JSON.parse(await readFile(authFile(), "utf8"));
     return isStoredCredentials(value) ? value : null;
   } catch {
     return null;
@@ -131,8 +133,8 @@ export async function updatePasswordCredential(email: string, password: string) 
     updatedAt: new Date().toISOString(),
   };
 
-  await mkdir(AUTH_DIRECTORY, { recursive: true });
-  await writeFile(AUTH_FILE, JSON.stringify(next, null, 2), "utf8");
+  await mkdir(dataDirectory(), { recursive: true });
+  await writeFile(authFile(), JSON.stringify(next, null, 2), "utf8");
   return true;
 }
 
@@ -156,9 +158,9 @@ export async function initializeAdminCredential(input: {
     updatedAt: new Date().toISOString(),
   };
 
-  await mkdir(AUTH_DIRECTORY, { recursive: true });
+  await mkdir(dataDirectory(), { recursive: true });
   try {
-    await writeFile(AUTH_FILE, JSON.stringify(next, null, 2), {
+    await writeFile(authFile(), JSON.stringify(next, null, 2), {
       encoding: "utf8",
       flag: "wx",
     });
