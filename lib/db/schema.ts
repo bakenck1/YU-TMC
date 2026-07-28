@@ -38,6 +38,7 @@ import {
   QR_TARGET_KINDS,
   RECORD_STATUSES,
   RESPONSIBILITY_SOURCES,
+  TRANSFER_OVERRIDE_OUTCOMES,
   TRANSFER_STATUSES,
 } from "@/lib/contracts/inventory-domain";
 import { USER_ROLES } from "@/lib/contracts/users";
@@ -85,6 +86,10 @@ export const responsibilitySourceEnum = inventorySchema.enum(
 export const transferStatusEnum = inventorySchema.enum(
   "transfer_status",
   TRANSFER_STATUSES,
+);
+export const transferOverrideOutcomeEnum = inventorySchema.enum(
+  "transfer_override_outcome",
+  TRANSFER_OVERRIDE_OUTCOMES,
 );
 export const inspectionStatusEnum = inventorySchema.enum(
   "inspection_status",
@@ -682,6 +687,11 @@ export const responsibilityPeriodsTable = inventorySchema.table(
   },
   (table) => [
     check(
+      "responsibility_periods_acceptance_actor_check",
+      sql`${table.source} <> 'accepted'
+          OR ${table.startedBy} = ${table.responsibleUserId}`,
+    ),
+    check(
       "responsibility_periods_end_state_check",
       sql`(
             ${table.endedAt} IS NULL
@@ -748,6 +758,7 @@ export const transfersTable = inventorySchema.table(
     }),
     decisionComment: varchar({ length: 1000 }),
     administrativeReason: varchar({ length: 1000 }),
+    overrideOutcome: transferOverrideOutcomeEnum(),
     overrideResponsibleId: uuid().references(() => usersTable.id, {
       onDelete: "restrict",
       onUpdate: "restrict",
@@ -770,6 +781,7 @@ export const transfersTable = inventorySchema.table(
             AND ${table.closedBy} IS NULL
             AND ${table.decisionComment} IS NULL
             AND ${table.administrativeReason} IS NULL
+            AND ${table.overrideOutcome} IS NULL
             AND ${table.overrideResponsibleId} IS NULL
           ) OR (
             ${table.status} <> 'pending_current_owner'
@@ -805,9 +817,19 @@ export const transfersTable = inventorySchema.table(
             ${table.status} = 'overridden'
             AND ${table.administrativeReason} IS NOT NULL
             AND btrim(${table.administrativeReason}) <> ''
+            AND (
+              (
+                ${table.overrideOutcome} = 'assigned'
+                AND ${table.overrideResponsibleId} IS NOT NULL
+              ) OR (
+                ${table.overrideOutcome} = 'released'
+                AND ${table.overrideResponsibleId} IS NULL
+              )
+            )
           ) OR (
             ${table.status} <> 'overridden'
             AND ${table.administrativeReason} IS NULL
+            AND ${table.overrideOutcome} IS NULL
             AND ${table.overrideResponsibleId} IS NULL
           )`,
     ),
@@ -1214,6 +1236,19 @@ export const deviationDecisionsTable = inventorySchema.table(
           OR (
             ${table.comment} IS NOT NULL
             AND btrim(${table.comment}) <> ''
+          )`,
+    ),
+    check(
+      "deviation_decisions_administrative_reason_scope_check",
+      sql`(
+            ${table.status} = 'resolved_by_admin'
+            AND (
+              ${table.administrativeReason} IS NULL
+              OR btrim(${table.administrativeReason}) <> ''
+            )
+          ) OR (
+            ${table.status} <> 'resolved_by_admin'
+            AND ${table.administrativeReason} IS NULL
           )`,
     ),
     check(

@@ -1,5 +1,5 @@
 {
-  "id": "756b9745-dac0-4ecb-8a62-84865d7f1215",
+  "id": "d669f13a-ca28-4d4a-8796-a3a5688aa783",
   "prevId": "b66bbe1d-a024-43de-b7d3-1291e7209e1c",
   "version": "7",
   "dialect": "postgresql",
@@ -798,6 +798,10 @@
         "deviation_decisions_dispute_comment_check": {
           "name": "deviation_decisions_dispute_comment_check",
           "value": "\"yu_inventory\".\"deviation_decisions\".\"status\" <> 'disputed'\n          OR (\n            \"yu_inventory\".\"deviation_decisions\".\"comment\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"deviation_decisions\".\"comment\") <> ''\n          )"
+        },
+        "deviation_decisions_administrative_reason_scope_check": {
+          "name": "deviation_decisions_administrative_reason_scope_check",
+          "value": "(\n            \"yu_inventory\".\"deviation_decisions\".\"status\" = 'resolved_by_admin'\n            AND (\n              \"yu_inventory\".\"deviation_decisions\".\"administrative_reason\" IS NULL\n              OR btrim(\"yu_inventory\".\"deviation_decisions\".\"administrative_reason\") <> ''\n            )\n          ) OR (\n            \"yu_inventory\".\"deviation_decisions\".\"status\" <> 'resolved_by_admin'\n            AND \"yu_inventory\".\"deviation_decisions\".\"administrative_reason\" IS NULL\n          )"
         },
         "deviation_decisions_comment_check": {
           "name": "deviation_decisions_comment_check",
@@ -3754,6 +3758,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "responsibility_periods_acceptance_actor_check": {
+          "name": "responsibility_periods_acceptance_actor_check",
+          "value": "\"yu_inventory\".\"responsibility_periods\".\"source\" <> 'accepted'\n          OR \"yu_inventory\".\"responsibility_periods\".\"started_by\" = \"yu_inventory\".\"responsibility_periods\".\"responsible_user_id\""
+        },
         "responsibility_periods_end_state_check": {
           "name": "responsibility_periods_end_state_check",
           "value": "(\n            \"yu_inventory\".\"responsibility_periods\".\"ended_at\" IS NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_by\" IS NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"end_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"responsibility_periods\".\"ended_at\" IS NOT NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_by\" IS NOT NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_at\" >= \"yu_inventory\".\"responsibility_periods\".\"started_at\"\n            AND \"yu_inventory\".\"responsibility_periods\".\"end_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"responsibility_periods\".\"end_reason\") <> ''\n          )"
@@ -4102,6 +4110,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "override_outcome": {
+          "name": "override_outcome",
+          "type": "transfer_override_outcome",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": false
+        },
         "override_responsible_id": {
           "name": "override_responsible_id",
           "type": "uuid",
@@ -4304,7 +4319,7 @@
         },
         "transfers_state_check": {
           "name": "transfers_state_check",
-          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"decision_comment\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NOT NULL\n          )"
+          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"decision_comment\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_outcome\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NOT NULL\n          )"
         },
         "transfers_closure_actor_check": {
           "name": "transfers_closure_actor_check",
@@ -4316,7 +4331,7 @@
         },
         "transfers_override_state_check": {
           "name": "transfers_override_state_check",
-          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"transfers\".\"administrative_reason\") <> ''\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          )"
+          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"transfers\".\"administrative_reason\") <> ''\n            AND (\n              (\n                \"yu_inventory\".\"transfers\".\"override_outcome\" = 'assigned'\n                AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NOT NULL\n              ) OR (\n                \"yu_inventory\".\"transfers\".\"override_outcome\" = 'released'\n                AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n              )\n            )\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_outcome\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          )"
         }
       },
       "isRLSEnabled": false
@@ -4756,6 +4771,14 @@
         "transfer",
         "admin_override",
         "migration"
+      ]
+    },
+    "yu_inventory.transfer_override_outcome": {
+      "name": "transfer_override_outcome",
+      "schema": "yu_inventory",
+      "values": [
+        "assigned",
+        "released"
       ]
     },
     "yu_inventory.transfer_status": {

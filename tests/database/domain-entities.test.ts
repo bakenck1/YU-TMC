@@ -359,6 +359,21 @@ describe("inventory domain entities", () => {
       await expectDatabaseError(
         client,
         () => client.query(
+          `insert into "yu_inventory"."responsibility_periods"
+             (id, item_id, responsible_user_id, source, started_by)
+           values ($1, $2, $3, 'accepted', $4)`,
+          [
+            randomUUID(),
+            domain.itemId,
+            requesterId,
+            domain.technicianId,
+          ],
+        ),
+        "23514",
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
           `insert into "yu_inventory"."transfers"
              (id, item_id, requested_by, proposed_responsible_id,
               current_responsible_id_at_request)
@@ -444,6 +459,7 @@ describe("inventory domain entities", () => {
           client.query(
             `update "yu_inventory"."transfers"
              set status = 'overridden', closed_at = now(), closed_by = $2,
+                 override_outcome = 'assigned',
                  override_responsible_id = $3
              where id = $1`,
             [
@@ -458,6 +474,7 @@ describe("inventory domain entities", () => {
         `update "yu_inventory"."transfers"
          set status = 'overridden', closed_at = now(), closed_by = $2,
              administrative_reason = 'Emergency reassignment',
+             override_outcome = 'assigned',
              override_responsible_id = $3
          where id = $1`,
         [
@@ -465,6 +482,49 @@ describe("inventory domain entities", () => {
           domain.technicianId,
           requesterId,
         ],
+      );
+      const releaseTransferId = randomUUID();
+      await client.query(
+        `insert into "yu_inventory"."transfers"
+           (id, item_id, requested_by, proposed_responsible_id,
+            current_responsible_id_at_request)
+         values ($1, $2, $3, $3, $4)`,
+        [
+          releaseTransferId,
+          domain.itemId,
+          requesterId,
+          domain.employeeId,
+        ],
+      );
+      await expectDatabaseError(
+        client,
+        () =>
+          client.query(
+            `update "yu_inventory"."transfers"
+             set status = 'overridden', closed_at = now(), closed_by = $2,
+                 administrative_reason = 'Incomplete override'
+             where id = $1`,
+            [releaseTransferId, domain.technicianId],
+          ),
+        "23514",
+      );
+      await client.query(
+        `update "yu_inventory"."transfers"
+         set status = 'overridden', closed_at = now(), closed_by = $2,
+             administrative_reason = 'Release unassigned item',
+             override_outcome = 'released'
+         where id = $1`,
+        [releaseTransferId, domain.technicianId],
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `update "yu_inventory"."deviation_decisions"
+           set administrative_reason = 'Not an administrative resolution'
+           where id = $1`,
+          [domain.decisionId],
+        ),
+        "23514",
       );
       await expectDatabaseError(
         client,
