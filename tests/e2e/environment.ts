@@ -51,10 +51,7 @@ async function resetE2EDatabase() {
     await pool.query("begin");
     try {
       await pool.query(
-        `truncate table
-           "yu_inventory"."user_password_credentials",
-           "yu_inventory"."auth_bootstrap",
-           "yu_inventory"."users"`,
+        `truncate table "yu_inventory"."users" cascade`,
       );
       await pool.query(
         `alter sequence "yu_inventory"."user_code_sequence" restart with 1`,

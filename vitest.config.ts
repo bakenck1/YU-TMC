@@ -11,7 +11,7 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
     testTimeout: 20_000,
     hookTimeout: 20_000,
     fileParallelism: false,
@@ -27,6 +27,8 @@ export default defineConfig({
         "lib/security/registration-protection.ts",
         "lib/security/session.ts",
         "lib/data-directory.ts",
+        "lib/inventory-list.ts",
+        "components/ItemsTable.tsx",
         "app/api/auth/{forgot-password,login,logout,register,reset-password,session}/route.ts",
         "proxy.ts",
       ],

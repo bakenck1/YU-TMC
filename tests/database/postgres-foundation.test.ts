@@ -48,11 +48,30 @@ describe("PostgreSQL foundation", () => {
     expect(firstState.applicationSchemaExists).toBe(true);
     expect(firstState.schemaTables).toEqual([
       "__schema_contract",
+      "audit_records",
       "auth_bootstrap",
+      "buildings",
+      "deviation_decisions",
+      "inspection_room_items",
+      "inspection_rooms",
+      "inspections",
+      "item_inventory_number_history",
+      "item_result_revisions",
+      "item_results",
+      "items",
+      "notification_deliveries",
+      "notification_events",
+      "notification_mailboxes",
+      "notification_receipts",
+      "photos",
+      "qr_identifiers",
+      "responsibility_periods",
+      "rooms",
+      "transfers",
       "user_password_credentials",
       "users",
     ]);
-    expect(firstState.migrationCount).toBe(2);
+    expect(firstState.migrationCount).toBe(3);
     expect(firstState.deploymentId).toBe(migrationConfig.deploymentId);
     expect(firstState.manifestHash).toBe(
       migrationResults[0]?.manifestHash,
@@ -84,6 +103,7 @@ describe("PostgreSQL foundation", () => {
   it("gives the runtime role only the repository privileges it needs", async () => {
     const pool = createPostgresPool(runtimeConfig, { max: 1 });
     const userId = randomUUID();
+    const buildingId = randomUUID();
 
     try {
       const identity = await pool.query<{
@@ -149,6 +169,32 @@ describe("PostgreSQL foundation", () => {
             [userId],
           ),
         ).resolves.toMatchObject({ rowCount: 1 });
+        await pool.query(
+          `insert into "yu_inventory"."buildings"
+             (id, name, name_key, address, address_key,
+              created_by, updated_by)
+           values ($1, 'Runtime Building', 'runtime building',
+                   'Runtime address', 'runtime address', $2, $2)`,
+          [buildingId, userId],
+        );
+        await expect(
+          pool.query(
+            `update "yu_inventory"."buildings"
+             set address = 'Updated runtime address',
+                 address_key = 'updated runtime address'
+             where id = $1
+             returning id`,
+            [buildingId],
+          ),
+        ).resolves.toMatchObject({ rowCount: 1 });
+        await expect(
+          pool.query(
+            `select id
+             from "yu_inventory"."buildings"
+             where id = $1`,
+            [buildingId],
+          ),
+        ).resolves.toMatchObject({ rowCount: 1 });
       } finally {
         await pool.query("rollback");
       }
@@ -161,6 +207,13 @@ describe("PostgreSQL foundation", () => {
           `update "yu_inventory"."__schema_contract"
            set updated_at = updated_at
            where singleton = true`,
+        ),
+      );
+      await expectPermissionDenied(
+        pool.query(
+          `update "yu_inventory"."audit_records"
+           set action = action
+           where false`,
         ),
       );
       await expectPermissionDenied(

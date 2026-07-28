@@ -1,7 +1,7 @@
 {
   "organizationName": "YU Inventory",
   "language": "kk",
-  "emailNotifications": true,
+  "emailNotifications": false,
   "pushNotifications": false,
   "maintenanceAlerts": false
 }
