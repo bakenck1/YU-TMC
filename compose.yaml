@@ -1,0 +1,39 @@
+name: yu-inventory
+
+services:
+  postgres-development:
+    image: postgres:17-alpine
+    profiles: ["development"]
+    environment:
+      POSTGRES_DB: yu_inventory_dev
+      POSTGRES_PASSWORD: local-development-password
+      POSTGRES_USER: yu_inventory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yu_inventory -d yu_inventory_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-development-data:/var/lib/postgresql/data
+
+  postgres-test:
+    image: postgres:17-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: yu_inventory_test
+      POSTGRES_PASSWORD: local-test-password
+      POSTGRES_USER: yu_inventory_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yu_inventory_test -d yu_inventory_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "55433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+volumes:
+  postgres-development-data:
