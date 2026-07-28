@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 import type { AppUser, UserRole } from "@/lib/types";
+import type { UserDto } from "@/lib/contracts/users";
+import { canManageUser } from "@/lib/security/permissions";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { TranslationKey } from "@/lib/i18n";
 
@@ -27,20 +29,20 @@ type SortKey = "fullName" | "email" | "role" | "addedAt";
 type SortDirection = "asc" | "desc";
 type EmailFilter = "all" | "verified" | "unverified";
 
-const ROLE_OPTIONS: UserRole[] = ["Админ", "Владелец", "Кладовщик", "Сотрудник"];
+const ROLE_OPTIONS: UserRole[] = ["admin", "owner", "warehouse", "employee"];
 
 const ROLE_STYLES: Record<UserRole, string> = {
-  Админ: "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-  Владелец: "bg-slate-800 text-white ring-1 ring-inset ring-slate-950/10",
-  Кладовщик: "bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-600/20",
-  Сотрудник: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
+  admin: "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
+  owner: "bg-slate-800 text-white ring-1 ring-inset ring-slate-950/10",
+  warehouse: "bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-600/20",
+  employee: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
 };
 
 const INPUT_CLASS =
   "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10";
 
 function formatDate(iso: string, locale: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale, {
+  return new Date(iso).toLocaleDateString(locale, {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -48,10 +50,10 @@ function formatDate(iso: string, locale: string) {
 }
 
 const ROLE_LABEL_KEYS: Record<UserRole, TranslationKey> = {
-  Админ: "users.admin",
-  Владелец: "users.owner",
-  Кладовщик: "users.warehouse",
-  Сотрудник: "users.employee",
+  admin: "users.admin",
+  owner: "users.owner",
+  warehouse: "users.warehouse",
+  employee: "users.employee",
 };
 
 function getInitials(fullName: string) {
@@ -131,40 +133,50 @@ interface UserFormValues {
   emailVerified: boolean;
   active: boolean;
   sendInvitation: boolean;
+  initialPassword: string;
 }
 
 function UserFormModal({
   user,
+  roleOptions,
   suggestedCode,
   onClose,
   onSave,
 }: {
   user: AppUser | null;
+  roleOptions: readonly UserRole[];
   suggestedCode: string;
   onClose: () => void;
-  onSave: (values: UserFormValues) => void;
+  onSave: (values: UserFormValues) => Promise<void>;
 }) {
   const { t } = useAppSettings();
+  const [saving, setSaving] = useState(false);
   const [values, setValues] = useState<UserFormValues>({
     code: user?.code ?? suggestedCode,
     fullName: user?.fullName ?? "",
     email: user?.email ?? "",
     phone: user?.phone === "—" ? "" : (user?.phone ?? ""),
-    role: user?.role ?? "Сотрудник",
+    role: user?.role ?? "employee",
     emailVerified: user?.emailVerified ?? false,
-    active: user?.active ?? true,
-    sendInvitation: user?.invitationSent ?? true,
+    active: user?.active ?? false,
+    sendInvitation: false,
+    initialPassword: "",
   });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave({
-      ...values,
-      code: values.code.trim(),
-      fullName: values.fullName.trim(),
-      email: values.email.trim(),
-      phone: values.phone.trim() || "—",
-    });
+    setSaving(true);
+    try {
+      await onSave({
+        ...values,
+        code: values.code.trim(),
+        fullName: values.fullName.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim() || "—",
+      });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -207,9 +219,9 @@ function UserFormModal({
               <input
                 required
                 value={values.code}
-                onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
+                readOnly
                 placeholder={t("users.codePlaceholder")}
-                className={INPUT_CLASS}
+                className={`${INPUT_CLASS} bg-zinc-50 text-zinc-500`}
               />
             </label>
             <label className="text-sm font-medium text-zinc-700">
@@ -219,8 +231,9 @@ function UserFormModal({
                 type="email"
                 value={values.email}
                 onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))}
+                readOnly={user !== null}
                 placeholder="name@example.com"
-                className={INPUT_CLASS}
+                className={`${INPUT_CLASS} ${user ? "bg-zinc-50 text-zinc-500" : ""}`}
               />
             </label>
             <label className="text-sm font-medium text-zinc-700">
@@ -240,12 +253,37 @@ function UserFormModal({
                 onChange={(event) => setValues((current) => ({ ...current, role: event.target.value as UserRole }))}
                 className={INPUT_CLASS}
               >
-                {ROLE_OPTIONS.map((role) => (
+                {roleOptions.map((role) => (
                   <option key={role} value={role}>
                     {t(ROLE_LABEL_KEYS[role])}
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
+              {user ? "Новый временный пароль" : "Временный пароль"}
+              <input
+                type="password"
+                minLength={12}
+                maxLength={128}
+                value={values.initialPassword}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    initialPassword: event.target.value,
+                    active: user
+                      ? current.active
+                      : current.active && event.target.value.length >= 12,
+                  }))
+                }
+                placeholder="Не менее 12 символов"
+                className={INPUT_CLASS}
+              />
+              <span className="mt-1.5 block text-xs font-normal text-zinc-400">
+                {user
+                  ? "Оставьте поле пустым, чтобы не менять текущий пароль."
+                  : "Без временного пароля профиль сохранится неактивным."}
+              </span>
             </label>
           </div>
 
@@ -254,8 +292,9 @@ function UserFormModal({
               <input
                 type="checkbox"
                 checked={values.active}
+                disabled={!user && values.initialPassword.length < 12}
                 onChange={(event) => setValues((current) => ({ ...current, active: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
+                className="mt-0.5 h-4 w-4 accent-emerald-600 disabled:opacity-50"
               />
               <span>
                 <span className="block text-sm font-medium text-zinc-700">{t("users.isActive")}</span>
@@ -274,25 +313,19 @@ function UserFormModal({
                 <span className="mt-0.5 block text-xs text-zinc-400">{t("users.emailVerifiedHint")}</span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-transparent p-2 hover:border-zinc-200 hover:bg-white sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={values.sendInvitation}
-                onChange={(event) => setValues((current) => ({ ...current, sendInvitation: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
-              />
-              <span>
-                <span className="block text-sm font-medium text-zinc-700">{t("users.sendInvitation")}</span>
-                <span className="mt-0.5 block text-xs text-zinc-400">{t("users.sendInvitationHint")}</span>
-              </span>
-            </label>
+            {!user && (
+              <p className="text-xs leading-5 text-zinc-500 sm:col-span-2">
+                Чтобы сразу активировать учётную запись, сначала задайте
+                временный пароль.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col-reverse gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
               {t("common.cancel")}
             </button>
-            <button type="submit" className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+            <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">
               {user ? t("users.saveChanges") : t("users.create")}
             </button>
           </div>
@@ -304,12 +337,14 @@ function UserFormModal({
 
 function UserDetailsModal({
   user,
+  canMutate,
   onClose,
   onEdit,
   onToggleActive,
   onDelete,
 }: {
   user: AppUser;
+  canMutate: boolean;
   onClose: () => void;
   onEdit: () => void;
   onToggleActive: () => void;
@@ -374,22 +409,24 @@ function UserDetailsModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
-              <Pencil className="h-4 w-4" />
-              {t("users.edit")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActionsOpen((open) => !open)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-              {t("users.moreActions")}
-            </button>
-          </div>
+          {canMutate && (
+            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                <Pencil className="h-4 w-4" />
+                {t("users.edit")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionsOpen((open) => !open)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                {t("users.moreActions")}
+              </button>
+            </div>
+          )}
 
-          {actionsOpen && (
+          {canMutate && actionsOpen && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
@@ -457,7 +494,13 @@ function DeleteConfirmation({
   );
 }
 
-export default function UsersManager({ initialUsers }: { initialUsers: AppUser[] }) {
+export default function UsersManager({
+  initialUsers,
+  actorRole,
+}: {
+  initialUsers: AppUser[];
+  actorRole: UserRole;
+}) {
   const { locale, t } = useAppSettings();
   const [records, setRecords] = useState(initialUsers);
   const [query, setQuery] = useState("");
@@ -471,9 +514,20 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formUserId, setFormUserId] = useState<string | null | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   const selectedUser = records.find((user) => user.id === selectedId) ?? null;
   const formUser = formUserId === null ? null : records.find((user) => user.id === formUserId) ?? null;
+  const roleOptions =
+    actorRole === "admin"
+      ? ROLE_OPTIONS
+      : (["warehouse", "employee"] as const);
+  const canMutateSelectedUser =
+    selectedUser !== null &&
+    canManageUser(actorRole, {
+      currentRole: selectedUser.role,
+      nextRole: selectedUser.role,
+    });
   const deleteUser = records.find((user) => user.id === deleteId) ?? null;
 
   const filteredUsers = useMemo(() => {
@@ -509,12 +563,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
   const rangeStart = filteredUsers.length === 0 ? 0 : startIndex + 1;
   const rangeEnd = Math.min(startIndex + pageSize, filteredUsers.length);
   const hasActiveFilters = roleFilter !== "all" || emailFilter !== "all";
-  const nextCodeNumber =
-    records.reduce((highest, user) => {
-      const numericPart = Number(user.code.match(/\d+/)?.[0] ?? 0);
-      return Math.max(highest, numericPart);
-    }, 0) + 1;
-  const suggestedCode = `USR-${String(nextCodeNumber).padStart(3, "0")}`;
+  const suggestedCode = "Назначается автоматически";
 
   function resetPage() {
     setPage(1);
@@ -541,47 +590,95 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
     }
   }
 
-  function saveUser(values: UserFormValues) {
+  async function saveUser(values: UserFormValues) {
     const existing = formUserId ? records.find((user) => user.id === formUserId) : null;
-    const { sendInvitation, ...userValues } = values;
-
-    if (existing) {
-      setRecords((current) =>
-        current.map((user) =>
-          user.id === existing.id
+    setMutationError(null);
+    const response = await fetch(
+      existing ? `/api/users/${encodeURIComponent(existing.id)}` : "/api/users",
+      {
+        method: existing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          existing
             ? {
-                ...user,
-                ...userValues,
-                invitationSent: sendInvitation,
+                fullName: values.fullName,
+                phone: values.phone,
+                role: values.role,
+                emailVerified: values.emailVerified,
+                active: values.active,
+                version: existing.version,
+                initialPassword: values.initialPassword || undefined,
               }
-            : user,
+            : {
+                fullName: values.fullName,
+                email: values.email,
+                phone: values.phone,
+                role: values.role,
+                emailVerified: values.emailVerified,
+                active: values.active,
+                initialPassword: values.initialPassword || undefined,
+              },
         ),
-      );
-      setSelectedId(existing.id);
-    } else {
-      const nextNumericId = records.reduce((highest, user) => Math.max(highest, Number(user.id) || 0), 0) + 1;
-      const created: AppUser = {
-        id: String(nextNumericId),
-        ...userValues,
-        invitationSent: sendInvitation,
-        addedAt: new Date().toISOString().slice(0, 10),
-      };
-      setRecords((current) => [created, ...current]);
-      setSelectedId(created.id);
-      resetPage();
+      },
+    );
+    if (!response.ok) {
+      setMutationError(await userMutationError(response));
+      return;
     }
-
+    const payload = (await response.json()) as { user: UserDto };
+    const saved = normalizeUser(payload.user);
+    setRecords((current) =>
+      existing
+        ? current.map((user) => (user.id === saved.id ? saved : user))
+        : [saved, ...current],
+    );
+    setSelectedId(saved.id);
+    if (!existing) resetPage();
     setFormUserId(undefined);
   }
 
-  function toggleActive(userId: string) {
+  async function toggleActive(userId: string) {
+    const user = records.find((candidate) => candidate.id === userId);
+    if (!user) return;
+    setMutationError(null);
+    const response = await fetch(`/api/users/${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: user.fullName,
+        phone: user.phone,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        active: !user.active,
+        version: user.version,
+      }),
+    });
+    if (!response.ok) {
+      setMutationError(await userMutationError(response));
+      return;
+    }
+    const payload = (await response.json()) as { user: UserDto };
+    const updated = normalizeUser(payload.user);
     setRecords((current) =>
-      current.map((user) => (user.id === userId ? { ...user, active: !user.active } : user)),
+      current.map((candidate) =>
+        candidate.id === updated.id ? updated : candidate,
+      ),
     );
   }
 
-  function deleteRecord() {
+  async function deleteRecord() {
     if (!deleteId) return;
+    const user = records.find((candidate) => candidate.id === deleteId);
+    if (!user) return;
+    setMutationError(null);
+    const response = await fetch(
+      `/api/users/${encodeURIComponent(deleteId)}?version=${user.version}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) {
+      setMutationError(await userMutationError(response));
+      return;
+    }
     setRecords((current) => current.filter((user) => user.id !== deleteId));
     setDeleteId(null);
     setSelectedId(null);
@@ -595,6 +692,11 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
 
   return (
     <div className="space-y-4">
+      {mutationError && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {mutationError}
+        </div>
+      )}
       <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <label className="relative min-w-0 flex-1">
@@ -850,6 +952,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
       {selectedUser && (
         <UserDetailsModal
           user={selectedUser}
+          canMutate={canMutateSelectedUser}
           onClose={() => setSelectedId(null)}
           onEdit={() => setFormUserId(selectedUser.id)}
           onToggleActive={() => toggleActive(selectedUser.id)}
@@ -861,6 +964,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
         <UserFormModal
           key={formUserId ?? "create"}
           user={formUser}
+          roleOptions={roleOptions}
           suggestedCode={suggestedCode}
           onClose={() => setFormUserId(undefined)}
           onSave={saveUser}
@@ -870,4 +974,36 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
       {deleteUser && <DeleteConfirmation user={deleteUser} onCancel={() => setDeleteId(null)} onConfirm={deleteRecord} />}
     </div>
   );
+}
+
+function normalizeUser(user: UserDto): AppUser {
+  return {
+    ...user,
+    phone: user.phone || "—",
+  };
+}
+
+async function userMutationError(response: Response): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+  if (payload?.error === "user_version_conflict") {
+    return "Запись уже изменена другим сотрудником. Обновите страницу.";
+  }
+  if (payload?.error === "last_active_admin") {
+    return "Нельзя отключить или удалить последнего активного администратора.";
+  }
+  if (payload?.error === "email_already_exists") {
+    return "Пользователь с таким email уже существует.";
+  }
+  if (payload?.error === "user_login_not_configured") {
+    return "Сначала настройте пользователю способ входа.";
+  }
+  if (payload?.error === "invalid_initial_password") {
+    return "Временный пароль должен содержать от 12 до 128 символов.";
+  }
+  if (response.status === 403) {
+    return "У вас нет прав для изменения этой учётной записи.";
+  }
+  return "Не удалось сохранить изменения. Попробуйте ещё раз.";
 }

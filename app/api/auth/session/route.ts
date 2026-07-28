@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   consumeApiRateLimit,
   rateLimitedResponse,
@@ -6,9 +6,9 @@ import {
 } from "@/lib/security/rate-limiter";
 import {
   SESSION_COOKIE_NAME,
-  sessionUser,
   verifySessionToken,
 } from "@/lib/security/session";
+import { getApplicationServices } from "@/lib/server/application";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +26,37 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  let user;
+  try {
+    user = await getApplicationServices().users.resolveSessionSubject(
+      session.sub,
+    );
+  } catch {
+    return Response.json(
+      { error: "authentication_unavailable" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+
+  if (!user) {
+    const response = NextResponse.json(
+      { authenticated: false },
+      { status: 401, headers: rateLimitHeaders(apiLimit) },
+    );
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: "",
+      expires: new Date(0),
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+    });
+    return response;
+  }
+
   return Response.json(
-    { authenticated: true, user: sessionUser(session) },
+    { authenticated: true, user },
     { headers: rateLimitHeaders(apiLimit) },
   );
 }

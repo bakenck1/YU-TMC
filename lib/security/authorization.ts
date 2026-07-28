@@ -1,6 +1,15 @@
-export const AUTH_ROLES = ["admin", "owner", "warehouse", "employee"] as const;
+import {
+  USER_ROLES,
+  type UserRole,
+} from "@/lib/contracts/users";
+import {
+  hasPermission,
+  type AppPermission,
+} from "@/lib/security/permissions";
 
-export type AuthRole = (typeof AUTH_ROLES)[number];
+export const AUTH_ROLES = USER_ROLES;
+
+export type AuthRole = UserRole;
 
 export interface AuthenticatedUser {
   email: string;
@@ -12,25 +21,32 @@ export function isAuthRole(value: unknown): value is AuthRole {
   return typeof value === "string" && AUTH_ROLES.includes(value as AuthRole);
 }
 
-export function normalizeAuthRole(value: unknown): AuthRole {
-  return isAuthRole(value) ? value : "admin";
-}
-
-const ROLE_ROUTES: Record<AuthRole, readonly string[]> = {
-  admin: ["/"],
-  owner: ["/"],
-  warehouse: ["/", "/items", "/locations", "/analytics"],
-  employee: ["/", "/items"],
-};
+const ROUTE_PERMISSIONS = [
+  ["/inventory", "inventory.workspace.read"],
+  ["/analytics", "legacy.analytics.read"],
+  ["/locations", "legacy.locations.read"],
+  ["/settings", "legacy.settings.manage"],
+  ["/users", "legacy.users.read"],
+  ["/items", "legacy.items.read"],
+  ["/", "legacy.dashboard.read"],
+] as const satisfies readonly (readonly [string, AppPermission])[];
 
 function matchesRoute(pathname: string, route: string) {
   if (route === "/") return pathname === "/";
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function canAccessPath(role: AuthRole, pathname: string) {
-  if (role === "admin" || role === "owner") return true;
-  return ROLE_ROUTES[role].some((route) => matchesRoute(pathname, route));
+export function permissionForPath(pathname: string): AppPermission | null {
+  const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
+  return (
+    ROUTE_PERMISSIONS.find(([route]) => matchesRoute(pathOnly, route))?.[1] ??
+    null
+  );
+}
+
+export function canAccessPath(role: unknown, pathname: string) {
+  const permission = permissionForPath(pathname);
+  return permission !== null && hasPermission(role, permission);
 }
 
 export function defaultPathForRole(role: AuthRole) {
@@ -38,5 +54,17 @@ export function defaultPathForRole(role: AuthRole) {
 }
 
 export function isSafeReturnPath(value: string | null | undefined) {
-  return Boolean(value && value.startsWith("/") && !value.startsWith("//"));
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return false;
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return false;
+
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(decoded)) {
+      return false;
+    }
+    const base = "https://yu-inventory.test";
+    return new URL(value, base).origin === base;
+  } catch {
+    return false;
+  }
 }

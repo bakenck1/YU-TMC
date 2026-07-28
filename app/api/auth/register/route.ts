@@ -36,7 +36,16 @@ export async function POST(request: Request) {
     return rateLimitedResponse(registrationLimit, "too_many_registration_attempts");
   }
 
-  if (await isPasswordLoginConfigured()) {
+  let configured: boolean;
+  try {
+    configured = await isPasswordLoginConfigured();
+  } catch {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+  if (configured) {
     return Response.json(
       { error: "registration_closed" },
       { status: 409, headers: rateLimitHeaders(apiLimit) },
@@ -78,6 +87,7 @@ export async function POST(request: Request) {
   if (
     !validName(firstName) ||
     !validName(lastName) ||
+    `${firstName} ${lastName}`.length > 120 ||
     !validEmail(email) ||
     password.length < 12 ||
     password.length > 128
@@ -88,11 +98,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await initializeAdminCredential({
-    email,
-    name: `${firstName} ${lastName}`,
-    password,
-  });
+  let user;
+  try {
+    user = await initializeAdminCredential({
+      email,
+      name: `${firstName} ${lastName}`,
+      password,
+    });
+  } catch {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
   if (!user) {
     return Response.json(
       { error: "registration_closed" },

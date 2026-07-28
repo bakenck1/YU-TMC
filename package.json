@@ -6,24 +6,52 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "validate:mockups": "node scripts/validate-mobile-mockups.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
+    "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:import-auth": "node --conditions=react-server --import tsx scripts/db/import-legacy-auth.ts",
+    "db:smoke": "tsx scripts/db/smoke.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:db": "vitest run --config vitest.database.config.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:all": "npm run test:coverage && npm run test:db && npm run test:e2e"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.25.0",
     "next": "16.2.11",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^3.10.0"
+    "recharts": "^3.10.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@next/env": "16.2.11",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.10",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.1",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

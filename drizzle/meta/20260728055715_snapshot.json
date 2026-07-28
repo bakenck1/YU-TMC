@@ -1,0 +1,322 @@
+{
+  "id": "b66bbe1d-a024-43de-b7d3-1291e7209e1c",
+  "prevId": "0ad3fc3f-f45e-4e93-8ea5-4ba5b2ee5192",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "yu_inventory.auth_bootstrap": {
+      "name": "auth_bootstrap",
+      "schema": "yu_inventory",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_admin_user_id": {
+          "name": "first_admin_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "auth_bootstrap_first_admin_user_id_users_id_fk": {
+          "name": "auth_bootstrap_first_admin_user_id_users_id_fk",
+          "tableFrom": "auth_bootstrap",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "first_admin_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "auth_bootstrap_singleton_check": {
+          "name": "auth_bootstrap_singleton_check",
+          "value": "\"yu_inventory\".\"auth_bootstrap\".\"singleton\" = true"
+        },
+        "auth_bootstrap_completion_check": {
+          "name": "auth_bootstrap_completion_check",
+          "value": "(\"yu_inventory\".\"auth_bootstrap\".\"completed_at\" IS NULL) = (\"yu_inventory\".\"auth_bootstrap\".\"first_admin_user_id\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.user_password_credentials": {
+      "name": "user_password_credentials",
+      "schema": "yu_inventory",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "algorithm": {
+          "name": "algorithm",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'scrypt'"
+        },
+        "salt": {
+          "name": "salt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scrypt_n": {
+          "name": "scrypt_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 16384
+        },
+        "scrypt_r": {
+          "name": "scrypt_r",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 8
+        },
+        "scrypt_p": {
+          "name": "scrypt_p",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "key_length": {
+          "name": "key_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 64
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_password_credentials_user_id_users_id_fk": {
+          "name": "user_password_credentials_user_id_users_id_fk",
+          "tableFrom": "user_password_credentials",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "user_password_credentials_algorithm_check": {
+          "name": "user_password_credentials_algorithm_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"algorithm\" = 'scrypt'"
+        },
+        "user_password_credentials_hash_check": {
+          "name": "user_password_credentials_hash_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"hash\" ~ '^[0-9a-f]{128}$'"
+        },
+        "user_password_credentials_parameters_check": {
+          "name": "user_password_credentials_parameters_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"scrypt_n\" = 16384 AND \"yu_inventory\".\"user_password_credentials\".\"scrypt_r\" = 8 AND \"yu_inventory\".\"user_password_credentials\".\"scrypt_p\" = 1 AND \"yu_inventory\".\"user_password_credentials\".\"key_length\" = 64"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.users": {
+      "name": "users",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "auth_role",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_code_unique": {
+          "name": "users_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_email_normalized_check": {
+          "name": "users_email_normalized_check",
+          "value": "\"yu_inventory\".\"users\".\"email\" = lower(btrim(\"yu_inventory\".\"users\".\"email\"))"
+        },
+        "users_version_positive_check": {
+          "name": "users_version_positive_check",
+          "value": "\"yu_inventory\".\"users\".\"version\" > 0"
+        },
+        "users_deactivated_state_check": {
+          "name": "users_deactivated_state_check",
+          "value": "\"yu_inventory\".\"users\".\"is_active\" OR \"yu_inventory\".\"users\".\"deactivated_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "yu_inventory.auth_role": {
+      "name": "auth_role",
+      "schema": "yu_inventory",
+      "values": [
+        "admin",
+        "owner",
+        "warehouse",
+        "employee"
+      ]
+    }
+  },
+  "schemas": {
+    "yu_inventory": "yu_inventory"
+  },
+  "sequences": {
+    "yu_inventory.user_code_sequence": {
+      "name": "user_code_sequence",
+      "schema": "yu_inventory",
+      "increment": "1",
+      "startWith": "1",
+      "minValue": "1",
+      "maxValue": "9223372036854775807",
+      "cache": "1",
+      "cycle": false
+    }
+  },
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

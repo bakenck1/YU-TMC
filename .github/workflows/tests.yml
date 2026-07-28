@@ -1,0 +1,43 @@
+name: Reliable test suite
+
+on:
+  push:
+    branches: [master, "codex/**"]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: yu_inventory_test
+          POSTGRES_PASSWORD: local-migrator-test-password
+          POSTGRES_USER: yu_inventory_test_migrator
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U yu_inventory_test_migrator -d yu_inventory_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Create restricted PostgreSQL runtime role
+        run: >-
+          docker exec "${{ job.services.postgres.id }}"
+          psql
+          --set ON_ERROR_STOP=1
+          --username yu_inventory_test_migrator
+          --dbname yu_inventory_test
+          --command
+          "CREATE ROLE yu_inventory_test_runtime LOGIN PASSWORD 'local-runtime-test-password'"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:all

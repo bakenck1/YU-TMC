@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { dataDirectory } from "../data-directory";
 import {
   isAuthRole,
   type AuthenticatedUser,
@@ -21,12 +22,11 @@ import {
 export const SESSION_COOKIE_NAME = "yu_inventory_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 export const REMEMBERED_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
-const SESSION_SECRET_FILE = path.join(
-  process.cwd(),
-  ".data",
-  "session-secret",
-);
 let cachedSessionSecret: string | null = null;
+
+function sessionSecretFile() {
+  return path.join(dataDirectory(), "session-secret");
+}
 
 export interface SessionPayload {
   sub: string;
@@ -43,7 +43,7 @@ function sessionSecret() {
   if (cachedSessionSecret) return cachedSessionSecret;
 
   try {
-    const stored = readFileSync(SESSION_SECRET_FILE, "utf8").trim();
+    const stored = readFileSync(sessionSecretFile(), "utf8").trim();
     if (stored.length >= 32) {
       cachedSessionSecret = stored;
       return stored;
@@ -53,9 +53,10 @@ function sessionSecret() {
   }
 
   try {
-    mkdirSync(path.dirname(SESSION_SECRET_FILE), { recursive: true });
+    const secretFile = sessionSecretFile();
+    mkdirSync(path.dirname(secretFile), { recursive: true });
     const generated = randomBytes(48).toString("base64url");
-    writeFileSync(SESSION_SECRET_FILE, generated, {
+    writeFileSync(secretFile, generated, {
       encoding: "utf8",
       flag: "wx",
     });
@@ -63,7 +64,7 @@ function sessionSecret() {
     return generated;
   } catch {
     try {
-      const stored = readFileSync(SESSION_SECRET_FILE, "utf8").trim();
+      const stored = readFileSync(sessionSecretFile(), "utf8").trim();
       if (stored.length >= 32) {
         cachedSessionSecret = stored;
         return stored;
@@ -107,7 +108,9 @@ export function verifySessionToken(token: string): SessionPayload | null {
   const secret = sessionSecret();
   if (!secret) return null;
 
-  const [encodedPayload, receivedSignature] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedPayload, receivedSignature] = parts;
   if (!encodedPayload || !receivedSignature) return null;
 
   const expectedSignature = signature(encodedPayload, secret);
@@ -140,6 +143,13 @@ export function verifySessionToken(token: string): SessionPayload | null {
   } catch {
     return null;
   }
+}
+
+export function resetSessionStateForTests() {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("Session state can only be reset in tests");
+  }
+  cachedSessionSecret = null;
 }
 
 export function sessionUser(payload: SessionPayload): AuthenticatedUser {

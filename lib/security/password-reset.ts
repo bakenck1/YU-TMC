@@ -19,10 +19,17 @@ interface ResetCodeRecord {
   codeHash: string;
   expiresAt: number;
   attempts: number;
+  generation: number;
+}
+
+interface ResetCodeState {
+  nextGeneration: number;
+  pending: Map<string, ResetCodeRecord>;
+  delivered?: ResetCodeRecord;
 }
 
 type PasswordResetGlobal = typeof globalThis & {
-  __yuInventoryPasswordResetCodes?: Map<string, ResetCodeRecord>;
+  __yuInventoryPasswordResetCodes?: Map<string, ResetCodeState>;
 };
 
 const requestByIp = new InMemoryRateLimiter({
@@ -47,6 +54,21 @@ function records() {
   const shared = globalThis as PasswordResetGlobal;
   shared.__yuInventoryPasswordResetCodes ??= new Map();
   return shared.__yuInventoryPasswordResetCodes;
+}
+
+function stateFor(key: string) {
+  const existing = records().get(key);
+  if (existing) return existing;
+  const state: ResetCodeState = {
+    nextGeneration: 1,
+    pending: new Map(),
+  };
+  records().set(key, state);
+  return state;
+}
+
+function removeEmptyState(key: string, state: ResetCodeState) {
+  if (!state.delivered && state.pending.size === 0) records().delete(key);
 }
 
 function emailKey(email: string) {
@@ -74,29 +96,62 @@ export function consumePasswordResetConfirmationLimit(request: Request) {
 
 export function createPasswordResetCode(email: string) {
   const code = randomInt(100_000, 1_000_000).toString();
-  records().set(emailKey(email), {
-    codeHash: hashCode(email, code),
+  const key = emailKey(email);
+  const state = stateFor(key);
+  const codeHash = hashCode(email, code);
+  state.pending.set(codeHash, {
+    codeHash,
     expiresAt: Date.now() + RESET_CODE_TTL_MS,
     attempts: 0,
+    generation: state.nextGeneration,
   });
+  state.nextGeneration += 1;
   return code;
 }
 
-export function revokePasswordResetCode(email: string) {
-  records().delete(emailKey(email));
+export function commitPasswordResetCode(email: string, code: string) {
+  const key = emailKey(email);
+  const state = records().get(key);
+  if (!state) return;
+  const codeHash = hashCode(email, code);
+  const record = state.pending.get(codeHash);
+  if (!record) return;
+  state.pending.delete(codeHash);
+  if (!state.delivered || record.generation >= state.delivered.generation) {
+    state.delivered = record;
+  }
+  removeEmptyState(key, state);
+}
+
+export function revokePasswordResetCode(email: string, code?: string) {
+  const key = emailKey(email);
+  if (code === undefined) {
+    records().delete(key);
+    return;
+  }
+
+  const state = records().get(key);
+  if (!state) return;
+  state.pending.delete(hashCode(email, code));
+  removeEmptyState(key, state);
 }
 
 export function verifyAndConsumePasswordResetCode(email: string, code: string) {
   const key = emailKey(email);
-  const record = records().get(key);
+  const state = records().get(key);
+  const record = state?.delivered;
   if (!record || record.expiresAt <= Date.now()) {
-    records().delete(key);
+    if (state) {
+      delete state.delivered;
+      removeEmptyState(key, state);
+    }
     return false;
   }
 
   record.attempts += 1;
   if (record.attempts > RESET_CODE_ATTEMPTS) {
-    records().delete(key);
+    delete state!.delivered;
+    removeEmptyState(key, state!);
     return false;
   }
 
@@ -105,6 +160,15 @@ export function verifyAndConsumePasswordResetCode(email: string, code: string) {
   const matches =
     expected.length === received.length && timingSafeEqual(expected, received);
 
-  if (matches) records().delete(key);
+  if (matches) {
+    records().delete(key);
+  }
   return matches;
+}
+
+export function resetPasswordResetStateForTests() {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("Password-reset state can only be reset in tests");
+  }
+  records().clear();
 }

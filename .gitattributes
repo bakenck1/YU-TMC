@@ -1,0 +1,4 @@
+# Drizzle hashes migration files byte-for-byte. Keep hashes identical on
+# Windows and Linux even when core.autocrlf is enabled.
+drizzle/*.sql text eol=lf
+drizzle/meta/*.json text eol=lf

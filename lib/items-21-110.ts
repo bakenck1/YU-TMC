@@ -115,7 +115,7 @@ const seeds: ItemSeed[] = [
 export const items21to110: InventoryItem[] = seeds.map((seed, index) => {
   const [qrCode, itemType, brandModel, location, responsible, updatedAt, price = 0, displayStatus = "Работник"] = seed;
   const id = String(index + 21);
-
+  
   return {
     id,
     name: `${itemType}${brandModel ? ` ${brandModel}` : ""}`,

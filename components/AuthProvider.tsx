@@ -9,7 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthenticatedUser } from "@/lib/security/authorization";
+import {
+  isAuthRole,
+  type AuthenticatedUser,
+} from "@/lib/security/authorization";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
@@ -26,7 +29,7 @@ function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
   return (
     typeof user.email === "string" &&
     typeof user.name === "string" &&
-    ["admin", "owner", "warehouse", "employee"].includes(user.role ?? "")
+    isAuthRole(user.role)
   );
 }
 

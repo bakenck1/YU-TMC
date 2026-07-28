@@ -172,3 +172,16 @@ const apiRateLimiter = new InMemoryRateLimiter({
 export function consumeApiRateLimit(request: Request) {
   return apiRateLimiter.consume(getClientIp(request));
 }
+
+export function resetRateLimitStateForTests() {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("Rate-limit state can only be reset in tests");
+  }
+
+  const stores = (globalThis as RateLimitGlobal).__yuInventoryRateLimitStores;
+  if (!stores) return;
+  for (const state of stores.values()) {
+    state.buckets.clear();
+    state.lastSweepAt = Date.now();
+  }
+}

@@ -24,7 +24,7 @@ export default function ForgotPasswordForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    const normalizedEmail = email.trim();
+    const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       setFieldError(t("auth.emailRequired"));
       return;
@@ -35,6 +35,7 @@ export default function ForgotPasswordForm() {
     }
 
     setFieldError(null);
+    setEmail(normalizedEmail);
     setLoading(true);
     try {
       const response = await fetch("/api/auth/forgot-password", {
