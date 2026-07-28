@@ -22,6 +22,7 @@ import {
   QR_TARGET_KINDS,
   RECORD_STATUSES,
   RESPONSIBILITY_SOURCES,
+  TRANSFER_OVERRIDE_OUTCOMES,
   TRANSFER_STATUSES,
 } from "@/lib/contracts/inventory-domain";
 import {
@@ -64,6 +65,7 @@ import {
   responsibilitySourceEnum,
   roomsTable,
   transfersTable,
+  transferOverrideOutcomeEnum,
   transferStatusEnum,
 } from "@/lib/db/schema";
 
@@ -130,6 +132,9 @@ describe("inventory domain schema declarations", () => {
       RESPONSIBILITY_SOURCES,
     );
     expect(transferStatusEnum.enumValues).toEqual(TRANSFER_STATUSES);
+    expect(transferOverrideOutcomeEnum.enumValues).toEqual(
+      TRANSFER_OVERRIDE_OUTCOMES,
+    );
     expect(inspectionStatusEnum.enumValues).toEqual(INSPECTION_STATUSES);
     expect(itemResultValueEnum.enumValues).toEqual(ITEM_RESULT_VALUES);
     expect(decisionRecipientKindEnum.enumValues).toEqual(
@@ -161,6 +166,7 @@ describe("inventory domain schema declarations", () => {
     const resultRevision = getTableConfig(itemResultRevisionsTable);
     const decision = getTableConfig(deviationDecisionsTable);
     const photo = getTableConfig(photosTable);
+    const responsibility = getTableConfig(responsibilityPeriodsTable);
     const transfer = getTableConfig(transfersTable);
 
     expect(
@@ -202,6 +208,9 @@ describe("inventory domain schema declarations", () => {
         (column) => column === itemResultRevisionsTable.observedRoomId,
       )?.notNull,
     ).toBe(true);
+    expect(
+      responsibility.checks.map((constraint) => constraint.name),
+    ).toContain("responsibility_periods_acceptance_actor_check");
     expect(transfer.checks.map((constraint) => constraint.name)).toEqual(
       expect.arrayContaining([
         "transfers_closure_actor_check",

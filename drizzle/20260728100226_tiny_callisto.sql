@@ -18,6 +18,7 @@ CREATE TYPE "yu_inventory"."qr_status" AS ENUM('active', 'revoked');--> statemen
 CREATE TYPE "yu_inventory"."qr_target_kind" AS ENUM('building', 'room', 'item');--> statement-breakpoint
 CREATE TYPE "yu_inventory"."record_status" AS ENUM('active', 'archived');--> statement-breakpoint
 CREATE TYPE "yu_inventory"."responsibility_source" AS ENUM('accepted', 'transfer', 'admin_override', 'migration');--> statement-breakpoint
+CREATE TYPE "yu_inventory"."transfer_override_outcome" AS ENUM('assigned', 'released');--> statement-breakpoint
 CREATE TYPE "yu_inventory"."transfer_status" AS ENUM('pending_current_owner', 'confirmed', 'rejected', 'cancelled', 'overridden');--> statement-breakpoint
 CREATE TABLE "yu_inventory"."audit_records" (
 	"id" uuid PRIMARY KEY NOT NULL,
@@ -96,6 +97,16 @@ CREATE TABLE "yu_inventory"."deviation_decisions" (
           OR (
             "yu_inventory"."deviation_decisions"."comment" IS NOT NULL
             AND btrim("yu_inventory"."deviation_decisions"."comment") <> ''
+          )),
+	CONSTRAINT "deviation_decisions_administrative_reason_scope_check" CHECK ((
+            "yu_inventory"."deviation_decisions"."status" = 'resolved_by_admin'
+            AND (
+              "yu_inventory"."deviation_decisions"."administrative_reason" IS NULL
+              OR btrim("yu_inventory"."deviation_decisions"."administrative_reason") <> ''
+            )
+          ) OR (
+            "yu_inventory"."deviation_decisions"."status" <> 'resolved_by_admin'
+            AND "yu_inventory"."deviation_decisions"."administrative_reason" IS NULL
           )),
 	CONSTRAINT "deviation_decisions_comment_check" CHECK ("yu_inventory"."deviation_decisions"."comment" IS NULL OR btrim("yu_inventory"."deviation_decisions"."comment") <> ''),
 	CONSTRAINT "deviation_decisions_previous_not_self_check" CHECK ("yu_inventory"."deviation_decisions"."previous_decision_id" IS NULL OR "yu_inventory"."deviation_decisions"."previous_decision_id" <> "yu_inventory"."deviation_decisions"."id")
@@ -544,6 +555,8 @@ CREATE TABLE "yu_inventory"."responsibility_periods" (
 	"ended_at" timestamp with time zone,
 	"ended_by" uuid,
 	"end_reason" varchar(1000),
+	CONSTRAINT "responsibility_periods_acceptance_actor_check" CHECK ("yu_inventory"."responsibility_periods"."source" <> 'accepted'
+          OR "yu_inventory"."responsibility_periods"."started_by" = "yu_inventory"."responsibility_periods"."responsible_user_id"),
 	CONSTRAINT "responsibility_periods_end_state_check" CHECK ((
             "yu_inventory"."responsibility_periods"."ended_at" IS NULL
             AND "yu_inventory"."responsibility_periods"."ended_by" IS NULL
@@ -591,6 +604,7 @@ CREATE TABLE "yu_inventory"."transfers" (
 	"closed_by" uuid,
 	"decision_comment" varchar(1000),
 	"administrative_reason" varchar(1000),
+	"override_outcome" "yu_inventory"."transfer_override_outcome",
 	"override_responsible_id" uuid,
 	CONSTRAINT "transfers_requester_is_proposed_check" CHECK ("yu_inventory"."transfers"."requested_by" = "yu_inventory"."transfers"."proposed_responsible_id"),
 	CONSTRAINT "transfers_distinct_responsible_users_check" CHECK ("yu_inventory"."transfers"."proposed_responsible_id" <> "yu_inventory"."transfers"."current_responsible_id_at_request"),
@@ -600,6 +614,7 @@ CREATE TABLE "yu_inventory"."transfers" (
             AND "yu_inventory"."transfers"."closed_by" IS NULL
             AND "yu_inventory"."transfers"."decision_comment" IS NULL
             AND "yu_inventory"."transfers"."administrative_reason" IS NULL
+            AND "yu_inventory"."transfers"."override_outcome" IS NULL
             AND "yu_inventory"."transfers"."override_responsible_id" IS NULL
           ) OR (
             "yu_inventory"."transfers"."status" <> 'pending_current_owner'
@@ -626,9 +641,19 @@ CREATE TABLE "yu_inventory"."transfers" (
             "yu_inventory"."transfers"."status" = 'overridden'
             AND "yu_inventory"."transfers"."administrative_reason" IS NOT NULL
             AND btrim("yu_inventory"."transfers"."administrative_reason") <> ''
+            AND (
+              (
+                "yu_inventory"."transfers"."override_outcome" = 'assigned'
+                AND "yu_inventory"."transfers"."override_responsible_id" IS NOT NULL
+              ) OR (
+                "yu_inventory"."transfers"."override_outcome" = 'released'
+                AND "yu_inventory"."transfers"."override_responsible_id" IS NULL
+              )
+            )
           ) OR (
             "yu_inventory"."transfers"."status" <> 'overridden'
             AND "yu_inventory"."transfers"."administrative_reason" IS NULL
+            AND "yu_inventory"."transfers"."override_outcome" IS NULL
             AND "yu_inventory"."transfers"."override_responsible_id" IS NULL
           ))
 );

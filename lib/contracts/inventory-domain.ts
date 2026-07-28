@@ -62,6 +62,13 @@ export const TRANSFER_STATUSES = [
 ] as const;
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
 
+export const TRANSFER_OVERRIDE_OUTCOMES = [
+  "assigned",
+  "released",
+] as const;
+export type TransferOverrideOutcome =
+  (typeof TRANSFER_OVERRIDE_OUTCOMES)[number];
+
 export const INSPECTION_STATUSES = [
   "draft",
   "awaiting_decisions",
