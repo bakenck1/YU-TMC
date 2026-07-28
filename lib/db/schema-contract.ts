@@ -74,6 +74,15 @@ export async function writeSchemaContract(
     await client.query(
       `grant select on table ${CONTRACT_TABLE} to ${runtimeRole}`,
     );
+    await client.query(
+      `grant select, insert, update on all tables in schema "yu_inventory" to ${runtimeRole}`,
+    );
+    await client.query(
+      `revoke insert, update on table ${CONTRACT_TABLE} from ${runtimeRole}`,
+    );
+    await client.query(
+      `grant usage, select on all sequences in schema "yu_inventory" to ${runtimeRole}`,
+    );
     await client.query("commit");
   } catch (error) {
     try {

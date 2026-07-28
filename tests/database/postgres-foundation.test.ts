@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
@@ -5,6 +6,7 @@ import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 
 let migrationConfig: DatabaseConfig;
+let runtimeConfig: DatabaseConfig;
 let databaseWasPrepared = false;
 
 describe("PostgreSQL foundation", () => {
@@ -13,6 +15,17 @@ describe("PostgreSQL foundation", () => {
       purpose: "migration",
       target: "test",
     });
+    runtimeConfig = readDatabaseConfig({
+      purpose: "runtime",
+      target: "test",
+    });
+
+    if (
+      decodeURIComponent(new URL(migrationConfig.connectionString).username) ===
+      runtimeConfig.runtimeUsername
+    ) {
+      throw new Error("The PostgreSQL test must use distinct database roles.");
+    }
 
     await resetTestSchemas(migrationConfig);
     databaseWasPrepared = true;
@@ -33,8 +46,13 @@ describe("PostgreSQL foundation", () => {
     const firstState = await readDatabaseState(migrationConfig);
 
     expect(firstState.applicationSchemaExists).toBe(true);
-    expect(firstState.schemaTables).toEqual(["__schema_contract"]);
-    expect(firstState.migrationCount).toBe(1);
+    expect(firstState.schemaTables).toEqual([
+      "__schema_contract",
+      "auth_bootstrap",
+      "user_password_credentials",
+      "users",
+    ]);
+    expect(firstState.migrationCount).toBe(2);
     expect(firstState.deploymentId).toBe(migrationConfig.deploymentId);
     expect(firstState.manifestHash).toBe(
       migrationResults[0]?.manifestHash,
@@ -62,7 +80,106 @@ describe("PostgreSQL foundation", () => {
       /migration history has drifted/,
     );
   });
+
+  it("gives the runtime role only the repository privileges it needs", async () => {
+    const pool = createPostgresPool(runtimeConfig, { max: 1 });
+    const userId = randomUUID();
+
+    try {
+      const identity = await pool.query<{
+        can_create: boolean;
+        current_user: string;
+      }>(
+        `select current_user,
+                has_schema_privilege(
+                  current_user,
+                  'yu_inventory',
+                  'CREATE'
+                ) as can_create`,
+      );
+      expect(identity.rows[0]).toMatchObject({
+        can_create: false,
+        current_user: runtimeConfig.runtimeUsername,
+      });
+
+      await expect(
+        pool.query(
+          `select deployment_id
+           from "yu_inventory"."__schema_contract"
+           where singleton = true`,
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      await pool.query("begin");
+      try {
+        await pool.query(
+          `insert into "yu_inventory"."users"
+             (id, code, email, full_name, role, phone, email_verified,
+              is_active, created_at, updated_at)
+           values (
+             $1,
+             'USR-' || lpad(
+               nextval('"yu_inventory"."user_code_sequence"')::text,
+               6,
+               '0'
+             ),
+             $2,
+             'Runtime Permission Probe',
+             'employee',
+             null,
+             false,
+             true,
+             transaction_timestamp(),
+             transaction_timestamp()
+           )`,
+          [userId, `permission-${userId}@example.com`],
+        );
+        await expect(
+          pool.query(
+            `update "yu_inventory"."users"
+             set full_name = 'Updated Permission Probe'
+             where id = $1
+             returning id`,
+            [userId],
+          ),
+        ).resolves.toMatchObject({ rowCount: 1 });
+        await expect(
+          pool.query(
+            `select id from "yu_inventory"."users" where id = $1`,
+            [userId],
+          ),
+        ).resolves.toMatchObject({ rowCount: 1 });
+      } finally {
+        await pool.query("rollback");
+      }
+
+      await expectPermissionDenied(
+        pool.query(`delete from "yu_inventory"."users" where false`),
+      );
+      await expectPermissionDenied(
+        pool.query(
+          `update "yu_inventory"."__schema_contract"
+           set updated_at = updated_at
+           where singleton = true`,
+        ),
+      );
+      await expectPermissionDenied(
+        pool.query(`create table "yu_inventory"."runtime_escape" (id int)`),
+      );
+      await expectPermissionDenied(
+        pool.query(
+          `select count(*) from "yu_migrations"."__drizzle_migrations"`,
+        ),
+      );
+    } finally {
+      await pool.end();
+    }
+  });
 });
+
+async function expectPermissionDenied(operation: Promise<unknown>) {
+  await expect(operation).rejects.toMatchObject({ code: "42501" });
+}
 
 async function resetTestSchemas(config: DatabaseConfig) {
   if (!config.databaseName.toLowerCase().endsWith("_test")) {

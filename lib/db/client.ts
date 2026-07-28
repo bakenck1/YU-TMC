@@ -5,7 +5,10 @@ import { createHash } from "node:crypto";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 
-import { readDatabaseConfig } from "@/lib/db/env";
+import {
+  applicationDatabaseTarget,
+  readDatabaseConfig,
+} from "@/lib/db/env";
 import { createPostgresPool } from "@/lib/db/pool";
 
 interface CachedDatabase {
@@ -55,7 +58,10 @@ export async function closeDatabase(): Promise<void> {
 }
 
 function getCachedDatabase(): CachedDatabase {
-  const config = readDatabaseConfig({ purpose: "runtime" });
+  const config = readDatabaseConfig({
+    purpose: "runtime",
+    target: applicationDatabaseTarget(),
+  });
   const signature = createHash("sha256")
     .update(
       [

@@ -4,6 +4,10 @@ import { removeE2EData, resetE2EData } from "../environment";
 const EMAIL = "admin@example.com";
 const PASSWORD = "Correct-Horse-Battery-2026!";
 
+test.use({
+  extraHTTPHeaders: { "x-forwarded-for": "198.51.100.11" },
+});
+
 test.beforeEach(async () => {
   await resetE2EData();
 });

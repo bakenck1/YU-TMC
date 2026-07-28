@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { resetRateLimitStateForTests } from "@/lib/security/rate-limiter";
 import { resetSessionStateForTests } from "@/lib/security/session";
 import { resetPasswordResetStateForTests } from "@/lib/security/password-reset";
+import { resetApplicationServicesForTests } from "@/lib/server/application";
 
 const ORIGINAL_ENV = {
   YU_DATA_DIRECTORY: process.env.YU_DATA_DIRECTORY,
@@ -18,6 +19,7 @@ const ORIGINAL_ENV = {
   AUTH_PASSWORD_RESET_WEBHOOK_URL: process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL,
   AUTH_PASSWORD_RESET_WEBHOOK_SECRET:
     process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET,
+  YU_INVENTORY_TEST_USER_STORE: process.env.YU_INVENTORY_TEST_USER_STORE,
 };
 
 function restoreEnvironment() {
@@ -50,6 +52,8 @@ export async function resetAuthTestEnvironment(directory: string) {
   process.env.AUTH_ADMIN_BLOCKED = "";
   process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL = "";
   process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET = "";
+  process.env.YU_INVENTORY_TEST_USER_STORE = "memory";
+  resetApplicationServicesForTests();
   resetRateLimitStateForTests();
   resetSessionStateForTests();
   resetPasswordResetStateForTests();
@@ -62,6 +66,7 @@ export async function removeAuthTestDirectory(directory: string) {
     throw new Error(`Refusing to remove unsafe test directory: ${resolved}`);
   }
   await rm(resolved, { recursive: true, force: true });
+  resetApplicationServicesForTests();
   restoreEnvironment();
 }
 

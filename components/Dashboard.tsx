@@ -1,13 +1,13 @@
 "use client";
 
 import { Boxes, MapPin, TriangleAlert, Users } from "lucide-react";
-import StatCard from "@/components/StatCard";
-import CampusMap from "@/components/CampusMap";
-import { dashboardStats } from "@/lib/data";
-import { campusTotals } from "@/lib/campus";
-import { useAppSettings } from "@/components/AppSettingsProvider";
 
-export default function Home() {
+import CampusMap from "@/components/CampusMap";
+import StatCard from "@/components/StatCard";
+import { useAppSettings } from "@/components/AppSettingsProvider";
+import { campusTotals } from "@/lib/campus";
+
+export default function Dashboard({ totalUsers }: { totalUsers: number }) {
   const { t } = useAppSettings();
   return (
     <div className="space-y-6">
@@ -20,7 +20,7 @@ export default function Home() {
           icon={TriangleAlert}
           hint={t("dashboard.maintenance")}
         />
-        <StatCard label={t("dashboard.users")} value={dashboardStats.totalUsers} icon={Users} hint={t("dashboard.inSystem")} />
+        <StatCard label={t("dashboard.users")} value={totalUsers} icon={Users} hint={t("dashboard.inSystem")} />
       </div>
 
       <CampusMap />

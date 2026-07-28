@@ -1,7 +1,4 @@
-import {
-  getConfiguredUser,
-  isPasswordLoginConfigured,
-} from "@/lib/security/credentials";
+import { getApplicationServices } from "@/lib/server/application";
 import { normalizeEmail } from "@/lib/security/login-protection";
 import {
   consumePasswordResetRequestLimits,
@@ -54,15 +51,30 @@ export async function POST(request: Request) {
   }
 
   const webhookUrl = process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL?.trim();
-  if (!(await isPasswordLoginConfigured()) || !webhookUrl) {
+  let configured: boolean;
+  try {
+    configured = await getApplicationServices().users.isConfigured();
+  } catch {
+    configured = false;
+  }
+  if (!configured || !webhookUrl) {
     return Response.json(
       { error: "password_reset_not_configured" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
     );
   }
 
-  const user = await getConfiguredUser();
-  if (user && user.email === email) {
+  let user;
+  try {
+    user =
+      await getApplicationServices().users.findPasswordResetRecipient(email);
+  } catch {
+    return Response.json(
+      { error: "password_reset_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+  if (user) {
     const code = createPasswordResetCode(email);
     const resetUrl = new URL("/reset-password", request.url);
     resetUrl.searchParams.set("email", email);

@@ -1,6 +1,11 @@
-export const AUTH_ROLES = ["admin", "owner", "warehouse", "employee"] as const;
+import {
+  USER_ROLES,
+  type UserRole,
+} from "@/lib/contracts/users";
 
-export type AuthRole = (typeof AUTH_ROLES)[number];
+export const AUTH_ROLES = USER_ROLES;
+
+export type AuthRole = UserRole;
 
 export interface AuthenticatedUser {
   email: string;

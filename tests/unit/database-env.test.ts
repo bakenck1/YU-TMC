@@ -7,6 +7,7 @@ import {
 import {
   DatabaseConfigurationError,
   DatabaseOperationError,
+  applicationDatabaseTarget,
   databaseTargetFromNodeEnv,
   parseDatabaseTarget,
   readDatabaseConfig,
@@ -38,6 +39,29 @@ describe("database environment configuration", () => {
     expect(() => databaseTargetFromNodeEnv("staging")).toThrow(
       /development, test, or production/,
     );
+  });
+
+  it("uses the test database only for the isolated production E2E build", () => {
+    expect(
+      applicationDatabaseTarget({
+        NODE_ENV: "production",
+        NEXT_DIST_DIR: ".next-e2e",
+        YU_INVENTORY_E2E_DATABASE_TARGET: "test",
+      }),
+    ).toBe("test");
+    expect(
+      applicationDatabaseTarget({
+        NODE_ENV: "production",
+        YU_INVENTORY_E2E_DATABASE_TARGET: "test",
+      }),
+    ).toBe("production");
+    expect(
+      applicationDatabaseTarget({
+        NODE_ENV: "development",
+        NEXT_DIST_DIR: ".next-e2e",
+        YU_INVENTORY_E2E_DATABASE_TARGET: "test",
+      }),
+    ).toBe("development");
   });
 
   it("shows safe command errors but suppresses raw driver messages", () => {
@@ -164,6 +188,44 @@ describe("database environment configuration", () => {
         target: "test",
       }),
     ).toThrow(/deployment IDs must be different/);
+  });
+
+  it("requires a distinct migrator role for database-backed tests", () => {
+    const baseEnvironment = {
+      TEST_DATABASE_DEPLOYMENT_ID: testDeploymentId,
+      TEST_DATABASE_URL: testUrl,
+    };
+
+    expect(() =>
+      readDatabaseConfig({
+        env: baseEnvironment,
+        purpose: "migration",
+        target: "test",
+      }),
+    ).toThrow("TEST_DATABASE_MIGRATOR_URL is required");
+
+    expect(() =>
+      readDatabaseConfig({
+        env: {
+          ...baseEnvironment,
+          TEST_DATABASE_MIGRATOR_URL: testUrl,
+        },
+        purpose: "migration",
+        target: "test",
+      }),
+    ).toThrow(/different PostgreSQL role/);
+
+    expect(
+      readDatabaseConfig({
+        env: {
+          ...baseEnvironment,
+          TEST_DATABASE_MIGRATOR_URL:
+            "postgresql://migrator:test-secret@test-db.internal:5432/yu_inventory_test",
+        },
+        purpose: "migration",
+        target: "test",
+      }).purpose,
+    ).toBe("migration");
   });
 
   it("requires a _test database for tests and forbids it elsewhere", () => {

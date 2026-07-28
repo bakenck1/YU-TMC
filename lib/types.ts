@@ -47,7 +47,8 @@ export interface Building {
   floors: Floor[];
 }
 
-export type UserRole = "Админ" | "Владелец" | "Кладовщик" | "Сотрудник";
+export type { UserRole } from "@/lib/contracts/users";
+import type { UserRole } from "@/lib/contracts/users";
 
 export interface AppUser {
   id: string;
@@ -59,5 +60,6 @@ export interface AppUser {
   addedAt: string;
   emailVerified: boolean;
   active: boolean;
+  version: number;
   invitationSent?: boolean;
 }

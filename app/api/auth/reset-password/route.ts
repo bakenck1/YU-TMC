@@ -74,7 +74,13 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await updatePasswordCredential(email, password))) {
+  let updated: boolean;
+  try {
+    updated = await updatePasswordCredential(email, password);
+  } catch {
+    updated = false;
+  }
+  if (!updated) {
     return Response.json(
       { error: "password_reset_failed" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },

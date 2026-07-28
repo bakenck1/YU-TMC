@@ -19,8 +19,12 @@ Each feature is completed separately: test-design review, implementation,
 execution, independent trust review, corrections, commit and push.
 
 The complete local and CI gate is `npm run test:all`. It runs coverage first,
-then builds the production application and executes the Playwright journey.
-Use `YU_E2E_PORT` to choose another port for a concurrent local run.
+then the real PostgreSQL migration/concurrency/permission suite, then builds the
+production application and executes the Playwright journey against the same
+disposable PostgreSQL service. Start `postgres-test` from `compose.yaml` before
+running the gate locally. The runner holds a working-tree lock across build,
+database preparation and Playwright; do not run two E2E suites against the same
+checkout/test database concurrently.
 The reset-password journey also reserves the next port for its authenticated
 webhook fixture; override it with `YU_E2E_WEBHOOK_PORT` when necessary.
 
@@ -29,8 +33,8 @@ webhook fixture; override it with `YU_E2E_WEBHOOK_PORT` when necessary.
 - Tests never read or write the working `.data` directory.
 - Security integration tests use real crypto, filesystem operations and route
   handlers; they do not mock the business logic they assert.
-- E2E tests use a real production Next.js server and Chromium without API
-  interception.
+- E2E tests use a real production Next.js server, restricted PostgreSQL runtime
+  credentials and Chromium without API interception or an in-memory user store.
 - Browser journeys use web-first assertions and never sleep for fixed periods.
 - Stateful bootstrap flows are atomic and reset their dedicated data directory
   before every attempt, including retries.

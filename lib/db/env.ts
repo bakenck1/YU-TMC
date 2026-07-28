@@ -84,6 +84,20 @@ export function databaseTargetFromNodeEnv(
   return parsed.data;
 }
 
+export function applicationDatabaseTarget(
+  env: Environment = process.env,
+): DatabaseTarget {
+  const nodeTarget = databaseTargetFromNodeEnv(env.NODE_ENV);
+  if (
+    nodeTarget === "production" &&
+    env.NEXT_DIST_DIR === ".next-e2e" &&
+    env.YU_INVENTORY_E2E_DATABASE_TARGET === "test"
+  ) {
+    return "test";
+  }
+  return nodeTarget;
+}
+
 export function parseDatabaseTarget(value: string): DatabaseTarget {
   const parsed = targetSchema.safeParse(value);
 
@@ -118,9 +132,12 @@ export function readDatabaseConfig({
   if (purpose === "migration") {
     const configuredMigratorUrl = env[migratorKey]?.trim();
 
-    if (target === "production" && !configuredMigratorUrl) {
+    if (
+      (target === "production" || target === "test") &&
+      !configuredMigratorUrl
+    ) {
       throw new DatabaseConfigurationError(
-        "DATABASE_MIGRATOR_URL is required for production migrations.",
+        `${migratorKey} is required for ${target} migrations.`,
       );
     }
 
@@ -137,11 +154,11 @@ export function readDatabaseConfig({
       }
 
       if (
-        target === "production" &&
+        (target === "production" || target === "test") &&
         parsedMigratorUrl.username === parsedRuntimeUrl.username
       ) {
         throw new DatabaseConfigurationError(
-          "DATABASE_MIGRATOR_URL must use a different PostgreSQL role than DATABASE_URL.",
+          `${migratorKey} must use a different PostgreSQL role than ${runtimeKey}.`,
         );
       }
 

@@ -19,6 +19,7 @@ import {
   resetAuthTestEnvironment,
   uniqueRequest,
 } from "../helpers/auth-test-environment";
+import { getApplicationServices } from "@/lib/server/application";
 
 const directory = createAuthTestDirectory();
 
@@ -48,6 +49,28 @@ function settingsRequest(
 describe("settings route", () => {
   beforeEach(async () => {
     await resetAuthTestEnvironment(directory);
+    const users = getApplicationServices().users;
+    await users.registerFirstAdmin({
+      email: "admin@example.com",
+      name: "Admin",
+      password: "Settings-Test-Password-2026!",
+    });
+    for (const role of ["owner", "employee"] as const) {
+      const created = await users.createUser({
+        email: `${role}@example.com`,
+        fullName: role,
+        role,
+        initialPassword: `Settings-${role}-Password-2026!`,
+      });
+      await users.updateUser(created.id, {
+        fullName: created.fullName,
+        phone: created.phone,
+        role: created.role,
+        emailVerified: created.emailVerified,
+        active: true,
+        version: created.version,
+      });
+    }
   });
 
   afterAll(async () => {

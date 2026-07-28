@@ -37,7 +37,7 @@ describe("proxy authorization", () => {
   it("redirects an anonymous deep link to login and preserves a safe returnTo", () => {
     const response = proxy(new NextRequest("http://localhost/items/42?tab=history"));
     expect(response.status).toBe(307);
-    const location = new URL(getRedirectUrl(response));
+    const location = new URL(getRedirectUrl(response)!);
     expect(location.pathname).toBe("/login");
     expect(location.searchParams.get("returnTo")).toBe("/items/42?tab=history");
   });
@@ -56,24 +56,25 @@ describe("proxy authorization", () => {
   });
 
   it.each([
-    ["admin", "/users", 200, null],
-    ["owner", "/settings", 200, null],
-    ["warehouse", "/analytics", 200, null],
-    ["warehouse", "/users", 307, "/"],
-    ["employee", "/items/42", 200, null],
-    ["employee", "/locations", 307, "/items"],
-  ] as const)("enforces %s access to %s", (role, pathname, status, redirectPath) => {
+    ["admin", "/users"],
+    ["owner", "/settings"],
+    ["warehouse", "/analytics"],
+    ["warehouse", "/users"],
+    ["employee", "/items/42"],
+    ["employee", "/locations"],
+  ] as const)("treats a signed %s session as an optimistic gate for %s", (role, pathname) => {
     const response = proxy(authenticatedRequest(pathname, role));
-    expect(response.status).toBe(status);
-    if (redirectPath) expect(new URL(getRedirectUrl(response)).pathname).toBe(redirectPath);
-    else expect(response.headers.get("location")).toBeNull();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
   });
 
-  it("redirects authenticated users away from auth pages", () => {
+  it("lets DB-aware auth pages resolve signed sessions without a redirect loop", () => {
     const admin = proxy(authenticatedRequest("/login", "admin"));
     const employee = proxy(authenticatedRequest("/register", "employee"));
-    expect(new URL(getRedirectUrl(admin)).pathname).toBe("/");
-    expect(new URL(getRedirectUrl(employee)).pathname).toBe("/items");
+    expect(admin.status).toBe(200);
+    expect(employee.status).toBe(200);
+    expect(admin.headers.get("location")).toBeNull();
+    expect(employee.headers.get("location")).toBeNull();
   });
 
   it.each([

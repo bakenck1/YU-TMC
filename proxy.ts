@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  canAccessPath,
-  defaultPathForRole,
   isSafeReturnPath,
 } from "@/lib/security/authorization";
 import {
@@ -33,18 +31,6 @@ export function proxy(request: NextRequest) {
     const response = loginRedirect(request);
     if (token) response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
-  }
-
-  if (session && isPublicPage) {
-    return NextResponse.redirect(
-      new URL(defaultPathForRole(session.role), request.url),
-    );
-  }
-
-  if (session && !canAccessPath(session.role, pathname)) {
-    return NextResponse.redirect(
-      new URL(defaultPathForRole(session.role), request.url),
-    );
   }
 
   const response = NextResponse.next();

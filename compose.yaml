@@ -23,15 +23,17 @@ services:
     profiles: ["test"]
     environment:
       POSTGRES_DB: yu_inventory_test
-      POSTGRES_PASSWORD: local-test-password
-      POSTGRES_USER: yu_inventory_test
+      POSTGRES_PASSWORD: local-migrator-test-password
+      POSTGRES_USER: yu_inventory_test_migrator
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U yu_inventory_test -d yu_inventory_test"]
+      test: ["CMD-SHELL", "pg_isready -U yu_inventory_test_migrator -d yu_inventory_test"]
       interval: 2s
       timeout: 3s
       retries: 20
     ports:
       - "55433:5432"
+    volumes:
+      - ./scripts/db/init-test-database.sql:/docker-entrypoint-initdb.d/10-runtime-role.sql:ro
     tmpfs:
       - /var/lib/postgresql/data
 

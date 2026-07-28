@@ -10,6 +10,10 @@ const EMAIL = "admin@example.com";
 const OLD_PASSWORD = "Correct-Horse-Battery-2026!";
 const NEW_PASSWORD = "Replacement-Password-2026!";
 
+test.use({
+  extraHTTPHeaders: { "x-forwarded-for": "198.51.100.13" },
+});
+
 test.beforeEach(async () => {
   await resetE2EData();
 });
@@ -94,8 +98,9 @@ test("a user recovers access through the real delivery and login flow", async ({
 
   await test.step("the old password is rejected and the new password signs in", async () => {
     await page.locator('a[href="/login"]').click();
+    await expect(page).toHaveURL(/\/login$/);
     const email = page.locator('input[type="email"]');
-    const password = page.locator('input[type="password"]');
+    const password = page.locator('input[autocomplete="current-password"]');
     await email.fill(EMAIL);
     await password.fill(OLD_PASSWORD);
     await page.locator('button[type="submit"]').click();

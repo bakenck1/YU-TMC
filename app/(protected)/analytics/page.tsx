@@ -1,3 +1,4 @@
+// Authentication for this route group is enforced by the adjacent layout.
 import AnalyticsCharts, {
   type AnalyticsDashboardData,
   type ChartDatum,
@@ -5,6 +6,7 @@ import AnalyticsCharts, {
 } from "@/components/AnalyticsCharts";
 import { items } from "@/lib/data";
 import type { InventoryItem } from "@/lib/types";
+import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 
 const INVENTORY_TARGET = 1140;
 
@@ -125,7 +127,8 @@ function valueByType(): ChartDatum[] {
     .sort((a, b) => b.value - a.value);
 }
 
-export default function AnalyticsPage() {
+export default async function AnalyticsPage() {
+  await requireAuthorizedPage("/analytics");
   const totalValue = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
   const assigned = items.filter(
     (item) => item.responsible.trim() && item.responsible !== "-",

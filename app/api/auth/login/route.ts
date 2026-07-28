@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  getConfiguredUser,
-  isPasswordLoginConfigured,
-  verifyPasswordCredentials,
-} from "@/lib/security/credentials";
+import { getApplicationServices } from "@/lib/server/application";
 import {
   checkFailedLoginLimit,
   clearFailedLogins,
@@ -82,15 +78,39 @@ export async function POST(request: Request) {
     return rateLimitedResponse(emailLimit, "too_many_login_attempts");
   }
 
-  if (!(await isPasswordLoginConfigured()) || !isSessionConfigured()) {
+  let configured: boolean;
+  try {
+    configured = await getApplicationServices().users.isConfigured();
+  } catch {
     return Response.json(
       { error: "authentication_not_configured" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
     );
   }
 
-  const authenticated = await verifyPasswordCredentials(email, password);
-  if (!authenticated) {
+  if (!configured || !isSessionConfigured()) {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+
+  let authentication: Awaited<
+    ReturnType<ReturnType<typeof getApplicationServices>["users"]["authenticate"]>
+  >;
+  try {
+    authentication = await getApplicationServices().users.authenticate(
+      email,
+      password,
+    );
+  } catch {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
+
+  if (authentication.status === "invalid") {
     const failedAttempt = recordFailedLogin(email);
     if (!failedAttempt.allowed) {
       return rateLimitedResponse(failedAttempt, "too_many_login_attempts");
@@ -102,15 +122,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const configuredUser = await getConfiguredUser();
-  if (!configuredUser) {
-    return Response.json(
-      { error: "authentication_not_configured" },
-      { status: 503, headers: rateLimitHeaders(apiLimit) },
-    );
-  }
-
-  if (configuredUser.blocked) {
+  if (authentication.status === "blocked") {
     return Response.json(
       { error: "user_blocked" },
       { status: 403, headers: rateLimitHeaders(apiLimit) },
@@ -118,11 +130,7 @@ export async function POST(request: Request) {
   }
 
   clearFailedLogins(email);
-  const user = {
-    email: configuredUser.email,
-    name: configuredUser.name,
-    role: configuredUser.role,
-  };
+  const user = authentication.user;
   const ttlSeconds = rememberMe
     ? REMEMBERED_SESSION_TTL_SECONDS
     : SESSION_TTL_SECONDS;

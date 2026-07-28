@@ -1,12 +1,10 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { POST as register } from "@/app/api/auth/register/route";
 import { POST as login } from "@/app/api/auth/login/route";
 import { POST as logout } from "@/app/api/auth/logout/route";
 import { GET as session } from "@/app/api/auth/session/route";
-import { dataDirectory } from "@/lib/data-directory";
+import { getApplicationServices } from "@/lib/server/application";
 import {
   updatePasswordCredential,
   verifyPasswordCredentials,
@@ -106,17 +104,13 @@ describe("authentication route handlers", () => {
         user: { email: "admin@example.com", name: "Ada Lovelace", role: "admin" },
       });
 
-      const persisted = await readFile(
-        path.join(dataDirectory(), "auth-credentials.json"),
-        "utf8",
-      );
-      expect(persisted).not.toContain(PASSWORD);
-      expect(JSON.parse(persisted)).toMatchObject({
+      await expect(getApplicationServices().users.listUsers()).resolves.toEqual([
+        expect.objectContaining({
         email: "admin@example.com",
-        name: "Ada Lovelace",
+        fullName: "Ada Lovelace",
         role: "admin",
-      });
-      expect(JSON.parse(persisted).hash).toMatch(/^[a-f\d]{128}$/);
+        }),
+      ]);
       await expect(verifyPasswordCredentials("ADMIN@example.com", PASSWORD)).resolves.toBe(true);
 
       const repeated = await register(registrationRequest("second@example.com"));
@@ -220,7 +214,32 @@ describe("authentication route handlers", () => {
 
     it("rejects a configured but blocked user", async () => {
       await register(registrationRequest());
-      process.env.AUTH_ADMIN_BLOCKED = "true";
+      const users = getApplicationServices().users;
+      const second = await users.createUser({
+        email: "second-admin@example.com",
+        fullName: "Second Admin",
+        role: "admin",
+        initialPassword: "Second-Admin-Password-2026!",
+      });
+      await users.updateUser(second.id, {
+        fullName: second.fullName,
+        phone: second.phone,
+        role: second.role,
+        emailVerified: second.emailVerified,
+        active: true,
+        version: second.version,
+      });
+      const first = (await users.listUsers()).find(
+        (user) => user.email === "admin@example.com",
+      )!;
+      await users.updateUser(first.id, {
+        fullName: first.fullName,
+        phone: first.phone,
+        role: first.role,
+        emailVerified: first.emailVerified,
+        active: false,
+        version: first.version,
+      });
       const response = await login(loginRequest());
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toEqual({ error: "user_blocked" });
@@ -284,6 +303,68 @@ describe("authentication route handlers", () => {
       );
       expect(tampered.status).toBe(401);
       expect((await session(new NextRequest("http://localhost/api/auth/session"))).status).toBe(401);
+    });
+
+    it("uses the current database name, role and active state for an old cookie", async () => {
+      const registered = await register(registrationRequest());
+      const { token } = cookieValue(registered);
+      const users = getApplicationServices().users;
+      const second = await users.createUser({
+        email: "second-admin@example.com",
+        fullName: "Second Admin",
+        role: "admin",
+        initialPassword: "Second-Admin-Password-2026!",
+      });
+      await users.updateUser(second.id, {
+        fullName: second.fullName,
+        phone: second.phone,
+        role: second.role,
+        emailVerified: second.emailVerified,
+        active: true,
+        version: second.version,
+      });
+      const original = (await users.listUsers()).find(
+        (user) => user.email === "admin@example.com",
+      )!;
+      const changed = await users.updateUser(original.id, {
+        fullName: "Current Warehouse Name",
+        phone: original.phone,
+        role: "warehouse",
+        emailVerified: original.emailVerified,
+        active: true,
+        version: original.version,
+      });
+
+      const refreshed = await session(
+        new NextRequest("http://localhost/api/auth/session", {
+          headers: { cookie: `yu_inventory_session=${token}` },
+        }),
+      );
+      expect(refreshed.status).toBe(200);
+      await expect(refreshed.json()).resolves.toMatchObject({
+        user: {
+          name: "Current Warehouse Name",
+          role: "warehouse",
+        },
+      });
+
+      await users.updateUser(changed.id, {
+        fullName: changed.fullName,
+        phone: changed.phone,
+        role: changed.role,
+        emailVerified: changed.emailVerified,
+        active: false,
+        version: changed.version,
+      });
+      const revoked = await session(
+        new NextRequest("http://localhost/api/auth/session", {
+          headers: { cookie: `yu_inventory_session=${token}` },
+        }),
+      );
+      expect(revoked.status).toBe(401);
+      expect(revoked.headers.get("set-cookie")).toContain(
+        "yu_inventory_session=",
+      );
     });
 
     it("expires the session cookie on logout", async () => {

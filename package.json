@@ -11,15 +11,15 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:import-auth": "node --conditions=react-server --import tsx scripts/db/import-legacy-auth.ts",
     "db:smoke": "tsx scripts/db/smoke.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:db": "vitest run --config vitest.database.config.ts",
     "test:coverage": "vitest run --coverage",
-    "pretest:e2e": "node tests/e2e/build.mjs",
-    "test:e2e": "playwright test",
-    "test:all": "npm run test:coverage && npm run test:e2e"
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:all": "npm run test:coverage && npm run test:db && npm run test:e2e"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
@@ -30,6 +30,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.10.0",
+    "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
