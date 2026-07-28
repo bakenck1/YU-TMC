@@ -7,12 +7,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  await requireAuthorizedPage("/users");
+  const currentUser = await requireAuthorizedPage("/users");
   const users = (await getApplicationServices().users.listUsers()).map(
     (user) => ({
       ...user,
       phone: user.phone ?? "—",
     }),
   );
-  return <UsersManager initialUsers={users} />;
+  return (
+    <UsersManager initialUsers={users} actorRole={currentUser.role} />
+  );
 }

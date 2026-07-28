@@ -11,15 +11,16 @@ import {
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { requireCurrentUserToken } from "@/lib/server/security/request-user";
 
-export async function requireAuthenticatedPage(): Promise<void> {
-  await currentPageUser();
+export async function requireAuthenticatedPage() {
+  return currentPageUser();
 }
 
-export async function requireAuthorizedPage(pathname: string): Promise<void> {
+export async function requireAuthorizedPage(pathname: string) {
   const user = await currentPageUser();
   if (!canAccessPath(user.role, pathname)) {
     redirect(defaultPathForRole(user.role));
   }
+  return user;
 }
 
 async function currentPageUser() {

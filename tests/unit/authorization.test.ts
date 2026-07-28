@@ -10,6 +10,8 @@ describe("authorization contracts", () => {
   it.each<[AuthRole, string, boolean]>([
     ["admin", "/settings", true],
     ["owner", "/users/42", true],
+    ["owner", "/inventory", false],
+    ["admin", "/inventory/inspections", true],
     ["warehouse", "/", true],
     ["warehouse", "/items/42", true],
     ["warehouse", "/locations", true],
@@ -21,6 +23,9 @@ describe("authorization contracts", () => {
     ["employee", "/items/42?tab=info#top", true],
     ["employee", "/items-other", false],
     ["employee", "/locations", false],
+    ["admin", "/unknown", false],
+    ["admin", "/settings-other", false],
+    ["warehouse", "/inventory-other", false],
   ])("allows role %s to access %s: %s", (role, pathname, expected) => {
     expect(canAccessPath(role, pathname)).toBe(expected);
   });

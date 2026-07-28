@@ -3,11 +3,10 @@ import {
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
-import { canAccessPath } from "@/lib/security/authorization";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { validationError } from "@/lib/domain/application-error";
-import { requireCurrentUser } from "@/lib/server/security/request-user";
+import { requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,13 +30,7 @@ export async function PATCH(request: Request) {
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
   const headers = rateLimitHeaders(apiLimit);
   try {
-    const user = await requireCurrentUser(request);
-    if (!canAccessPath(user.role, "/settings")) {
-      return Response.json(
-        { error: "forbidden" },
-        { status: 403, headers },
-      );
-    }
+    await requirePermission(request, "legacy.settings.manage");
     let input: unknown;
     try {
       input = await request.json();

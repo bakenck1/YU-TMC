@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { AppUser, UserRole } from "@/lib/types";
 import type { UserDto } from "@/lib/contracts/users";
+import { canManageUser } from "@/lib/security/permissions";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { TranslationKey } from "@/lib/i18n";
 
@@ -137,11 +138,13 @@ interface UserFormValues {
 
 function UserFormModal({
   user,
+  roleOptions,
   suggestedCode,
   onClose,
   onSave,
 }: {
   user: AppUser | null;
+  roleOptions: readonly UserRole[];
   suggestedCode: string;
   onClose: () => void;
   onSave: (values: UserFormValues) => Promise<void>;
@@ -250,7 +253,7 @@ function UserFormModal({
                 onChange={(event) => setValues((current) => ({ ...current, role: event.target.value as UserRole }))}
                 className={INPUT_CLASS}
               >
-                {ROLE_OPTIONS.map((role) => (
+                {roleOptions.map((role) => (
                   <option key={role} value={role}>
                     {t(ROLE_LABEL_KEYS[role])}
                   </option>
@@ -334,12 +337,14 @@ function UserFormModal({
 
 function UserDetailsModal({
   user,
+  canMutate,
   onClose,
   onEdit,
   onToggleActive,
   onDelete,
 }: {
   user: AppUser;
+  canMutate: boolean;
   onClose: () => void;
   onEdit: () => void;
   onToggleActive: () => void;
@@ -404,22 +409,24 @@ function UserDetailsModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
-              <Pencil className="h-4 w-4" />
-              {t("users.edit")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActionsOpen((open) => !open)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-              {t("users.moreActions")}
-            </button>
-          </div>
+          {canMutate && (
+            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                <Pencil className="h-4 w-4" />
+                {t("users.edit")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionsOpen((open) => !open)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                {t("users.moreActions")}
+              </button>
+            </div>
+          )}
 
-          {actionsOpen && (
+          {canMutate && actionsOpen && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
@@ -487,7 +494,13 @@ function DeleteConfirmation({
   );
 }
 
-export default function UsersManager({ initialUsers }: { initialUsers: AppUser[] }) {
+export default function UsersManager({
+  initialUsers,
+  actorRole,
+}: {
+  initialUsers: AppUser[];
+  actorRole: UserRole;
+}) {
   const { locale, t } = useAppSettings();
   const [records, setRecords] = useState(initialUsers);
   const [query, setQuery] = useState("");
@@ -505,6 +518,16 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
 
   const selectedUser = records.find((user) => user.id === selectedId) ?? null;
   const formUser = formUserId === null ? null : records.find((user) => user.id === formUserId) ?? null;
+  const roleOptions =
+    actorRole === "admin"
+      ? ROLE_OPTIONS
+      : (["warehouse", "employee"] as const);
+  const canMutateSelectedUser =
+    selectedUser !== null &&
+    canManageUser(actorRole, {
+      currentRole: selectedUser.role,
+      nextRole: selectedUser.role,
+    });
   const deleteUser = records.find((user) => user.id === deleteId) ?? null;
 
   const filteredUsers = useMemo(() => {
@@ -929,6 +952,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
       {selectedUser && (
         <UserDetailsModal
           user={selectedUser}
+          canMutate={canMutateSelectedUser}
           onClose={() => setSelectedId(null)}
           onEdit={() => setFormUserId(selectedUser.id)}
           onToggleActive={() => toggleActive(selectedUser.id)}
@@ -940,6 +964,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: AppUser[]
         <UserFormModal
           key={formUserId ?? "create"}
           user={formUser}
+          roleOptions={roleOptions}
           suggestedCode={suggestedCode}
           onClose={() => setFormUserId(undefined)}
           onSave={saveUser}
@@ -976,6 +1001,9 @@ async function userMutationError(response: Response): Promise<string> {
   }
   if (payload?.error === "invalid_initial_password") {
     return "Временный пароль должен содержать от 12 до 128 символов.";
+  }
+  if (response.status === 403) {
+    return "У вас нет прав для изменения этой учётной записи.";
   }
   return "Не удалось сохранить изменения. Попробуйте ещё раз.";
 }

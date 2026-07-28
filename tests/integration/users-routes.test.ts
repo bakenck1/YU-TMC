@@ -15,9 +15,17 @@ import {
   resetAuthTestEnvironment,
   uniqueRequest,
 } from "../helpers/auth-test-environment";
+import { getApplicationServices } from "@/lib/server/application";
+import {
+  createSessionToken,
+  SESSION_COOKIE_NAME,
+} from "@/lib/security/session";
 
 const directory = createAuthTestDirectory();
 let sessionCookie = "";
+let ownerSessionCookie = "";
+let employeeSessionCookie = "";
+let adminActorId = "";
 
 describe("persistent users route", () => {
   beforeEach(async () => {
@@ -33,6 +41,35 @@ describe("persistent users route", () => {
     sessionCookie =
       response.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     expect(response.status).toBe(201);
+
+    const users = getApplicationServices().users;
+    adminActorId = (
+      await users.resolveCurrentAccount("admin@example.com")
+    )!.userId;
+    const owner = await users.createUser({
+      fullName: "Owner User",
+      email: "owner@example.com",
+      role: "owner",
+      active: true,
+      initialPassword: "Owner-Route-Password-2026!",
+    }, adminActorId);
+    const employee = await users.createUser({
+      fullName: "Employee User",
+      email: "employee@example.com",
+      role: "employee",
+      active: true,
+      initialPassword: "Employee-Route-Password-2026!",
+    }, adminActorId);
+    ownerSessionCookie = sessionCookieFor({
+      email: owner.email,
+      name: owner.fullName,
+      role: owner.role,
+    });
+    employeeSessionCookie = sessionCookieFor({
+      email: employee.email,
+      name: employee.fullName,
+      role: employee.role,
+    });
   });
 
   afterAll(async () => {
@@ -43,6 +80,77 @@ describe("persistent users route", () => {
     const response = await listUsers(uniqueRequest("/api/users"));
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "unauthorized" });
+  });
+
+  it("applies the centralized role matrix to user operations", async () => {
+    const employeeResponse = await listUsers(
+      authenticatedRequest("/api/users", {}, employeeSessionCookie),
+    );
+    expect(employeeResponse.status).toBe(403);
+
+    const ownerResponse = await listUsers(
+      authenticatedRequest("/api/users", {}, ownerSessionCookie),
+    );
+    expect(ownerResponse.status).toBe(200);
+
+    const createdByOwner = await createUser(
+      authenticatedJsonRequest(
+        "/api/users",
+        "POST",
+        {
+          fullName: "Managed Employee",
+          email: "managed.employee@example.com",
+          role: "employee",
+        },
+        ownerSessionCookie,
+      ),
+    );
+    expect(createdByOwner.status).toBe(201);
+
+    const forbiddenPromotion = await createUser(
+      authenticatedJsonRequest(
+        "/api/users",
+        "POST",
+        {
+          fullName: "Forbidden Admin",
+          email: "forbidden.admin@example.com",
+          role: "admin",
+        },
+        ownerSessionCookie,
+      ),
+    );
+    expect(forbiddenPromotion.status).toBe(403);
+
+    const admin = (await getApplicationServices().users.listUsers()).find(
+      (user) => user.email === "admin@example.com",
+    )!;
+    const forbiddenAdminEdit = await updateUser(
+      authenticatedJsonRequest(
+        `/api/users/${admin.id}`,
+        "PATCH",
+        {
+          fullName: admin.fullName,
+          phone: admin.phone,
+          role: admin.role,
+          emailVerified: admin.emailVerified,
+          active: admin.active,
+          version: admin.version,
+        },
+        ownerSessionCookie,
+      ),
+      { params: Promise.resolve({ id: admin.id }) },
+    );
+    expect(forbiddenAdminEdit.status).toBe(403);
+
+    const forbiddenAdminDelete = await deleteUser(
+      authenticatedRequest(
+        `/api/users/${admin.id}?version=${admin.version}`,
+        { method: "DELETE" },
+        ownerSessionCookie,
+      ),
+      { params: Promise.resolve({ id: admin.id }) },
+    );
+    expect(forbiddenAdminDelete.status).toBe(403);
   });
 
   it("persists create, update and soft-delete with optimistic versions", async () => {
@@ -219,16 +327,29 @@ function authenticatedJsonRequest(
   pathname: string,
   method: "POST" | "PATCH",
   body: unknown,
+  cookie = sessionCookie,
 ) {
   return authenticatedRequest(pathname, {
     method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, cookie);
 }
 
-function authenticatedRequest(pathname: string, init: RequestInit = {}) {
+function authenticatedRequest(
+  pathname: string,
+  init: RequestInit = {},
+  cookie = sessionCookie,
+) {
   const headers = new Headers(init.headers);
-  headers.set("cookie", sessionCookie);
+  headers.set("cookie", cookie);
   return uniqueRequest(pathname, { ...init, headers });
+}
+
+function sessionCookieFor(user: {
+  email: string;
+  name: string;
+  role: "admin" | "owner" | "warehouse" | "employee";
+}) {
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(createSessionToken(user))}`;
 }

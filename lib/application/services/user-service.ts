@@ -12,6 +12,7 @@ import type {
   UserRepositories,
 } from "@/lib/application/ports/user-repositories";
 import type { PasswordHasher } from "@/lib/application/ports/password-hasher";
+import { canManageUser } from "@/lib/security/permissions";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,6 +28,10 @@ export interface AuthenticatedAccount {
   email: string;
   name: string;
   role: UserRole;
+}
+
+export interface CurrentAccount extends AuthenticatedAccount {
+  userId: string;
 }
 
 export type AuthenticationResult =
@@ -83,13 +88,22 @@ export class UserService {
   async resolveSessionSubject(
     subject: string,
   ): Promise<AuthenticatedAccount | null> {
+    const user = await this.resolveCurrentAccount(subject);
+    return user
+      ? { email: user.email, name: user.name, role: user.role }
+      : null;
+  }
+
+  async resolveCurrentAccount(
+    subject: string,
+  ): Promise<CurrentAccount | null> {
     const email = normalizeUserEmail(subject);
     if (!email) return null;
 
     return this.unitOfWork.read(async ({ users }) => {
       const user = await users.findByNormalizedEmail(email);
       return user && user.active && !user.deletedAt
-        ? authenticatedAccount(user)
+        ? currentAccount(user)
         : null;
     });
   }
@@ -221,7 +235,10 @@ export class UserService {
     );
   }
 
-  async createUser(input: CreateUserInput): Promise<UserDto> {
+  async createUser(
+    input: CreateUserInput,
+    actorUserId: string,
+  ): Promise<UserDto> {
     const id = this.ids.create();
     const createdAt = this.clock.now();
     const email = requireEmail(input.email);
@@ -233,6 +250,10 @@ export class UserService {
       : null;
 
     return this.unitOfWork.transaction(async ({ users, credentials }) => {
+      const actor = await requireActiveActor(users, actorUserId);
+      if (!canManageUser(actor.role, { nextRole: input.role })) {
+        throw new ApplicationError("forbidden", "forbidden");
+      }
       if (await users.findByNormalizedEmail(email)) {
         throw new ApplicationError("conflict", "email_already_exists");
       }
@@ -257,7 +278,11 @@ export class UserService {
     });
   }
 
-  async updateUser(id: string, input: UpdateUserInput): Promise<UserDto> {
+  async updateUser(
+    id: string,
+    input: UpdateUserInput,
+    actorUserId: string,
+  ): Promise<UserDto> {
     const fullName = requireName(input.fullName);
     const phone = normalizePhone(input.phone);
     const initialPassword = normalizeInitialPassword(input.initialPassword);
@@ -267,9 +292,18 @@ export class UserService {
 
     return this.unitOfWork.transaction(async (repositories) => {
       const { users } = repositories;
-      const current = await users.findById(id);
+      const actor = await requireActiveActor(users, actorUserId);
+      const current = await users.findByIdForUpdate(id);
       if (!current || current.deletedAt) {
         throw new ApplicationError("not_found", "user_not_found");
+      }
+      if (
+        !canManageUser(actor.role, {
+          currentRole: current.role,
+          nextRole: input.role,
+        })
+      ) {
+        throw new ApplicationError("forbidden", "forbidden");
       }
       if (
         current.role === "admin" &&
@@ -317,11 +351,19 @@ export class UserService {
     });
   }
 
-  async deleteUser(id: string, version: number): Promise<void> {
+  async deleteUser(
+    id: string,
+    version: number,
+    actorUserId: string,
+  ): Promise<void> {
     await this.unitOfWork.transaction(async ({ users }) => {
-      const current = await users.findById(id);
+      const actor = await requireActiveActor(users, actorUserId);
+      const current = await users.findByIdForUpdate(id);
       if (!current || current.deletedAt) {
         throw new ApplicationError("not_found", "user_not_found");
+      }
+      if (!canManageUser(actor.role, { currentRole: current.role })) {
+        throw new ApplicationError("forbidden", "forbidden");
       }
       if (current.role === "admin" && current.active) {
         await assertAnotherActiveAdmin(users);
@@ -342,8 +384,26 @@ async function assertAnotherActiveAdmin(
   }
 }
 
+async function requireActiveActor(
+  users: UserRepositories["users"],
+  actorUserId: string,
+): Promise<UserRecord> {
+  const actor = await users.findByIdForUpdate(actorUserId);
+  if (!actor || !actor.active || actor.deletedAt) {
+    throw new ApplicationError("unauthorized", "unauthorized");
+  }
+  return actor;
+}
+
 function authenticatedAccount(user: UserRecord): AuthenticatedAccount {
   return { email: user.email, name: user.fullName, role: user.role };
+}
+
+function currentAccount(user: UserRecord): CurrentAccount {
+  return {
+    userId: user.id,
+    ...authenticatedAccount(user),
+  };
 }
 
 function toUserDto(user: UserRecord): UserDto {

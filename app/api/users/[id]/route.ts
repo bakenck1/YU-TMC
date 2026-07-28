@@ -2,7 +2,7 @@ import { USER_ROLES, type UpdateUserInput } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
-import { requireUserAdministrator } from "@/lib/server/security/request-user";
+import { requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,13 +15,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireUserAdministrator(request);
+    const actor = await requirePermission(request, "legacy.users.manage");
     const { id } = await params;
     requireUserId(id);
     const body: unknown = await request.json();
+    const input = parseUpdateUser(body);
     const user = await getApplicationServices().users.updateUser(
       id,
-      parseUpdateUser(body),
+      input,
+      actor.userId,
     );
     return Response.json({ user });
   } catch (error) {
@@ -34,13 +36,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireUserAdministrator(request);
+    const actor = await requirePermission(request, "legacy.users.manage");
     const { id } = await params;
     requireUserId(id);
     const url = new URL(request.url);
     const version = Number(url.searchParams.get("version"));
     if (!Number.isInteger(version) || version < 1) throw invalidRequest();
-    await getApplicationServices().users.deleteUser(id, version);
+    await getApplicationServices().users.deleteUser(
+      id,
+      version,
+      actor.userId,
+    );
     return new Response(null, { status: 204 });
   } catch (error) {
     return userErrorResponse(normalizeRequestError(error));

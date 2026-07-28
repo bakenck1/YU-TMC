@@ -22,6 +22,7 @@ import {
 import { getApplicationServices } from "@/lib/server/application";
 
 const directory = createAuthTestDirectory();
+let adminActorId = "";
 
 function settingsRequest(
   method: "GET" | "PATCH",
@@ -55,13 +56,16 @@ describe("settings route", () => {
       name: "Admin",
       password: "Settings-Test-Password-2026!",
     });
-    for (const role of ["owner", "employee"] as const) {
+    adminActorId = (
+      await users.resolveCurrentAccount("admin@example.com")
+    )!.userId;
+    for (const role of ["owner", "warehouse", "employee"] as const) {
       const created = await users.createUser({
         email: `${role}@example.com`,
         fullName: role,
         role,
         initialPassword: `Settings-${role}-Password-2026!`,
-      });
+      }, adminActorId);
       await users.updateUser(created.id, {
         fullName: created.fullName,
         phone: created.phone,
@@ -69,7 +73,7 @@ describe("settings route", () => {
         emailVerified: created.emailVerified,
         active: true,
         version: created.version,
-      });
+      }, adminActorId);
     }
   });
 
@@ -98,11 +102,15 @@ describe("settings route", () => {
       error: "unauthorized",
     });
 
-    const forbidden = await patchSettings(
-      settingsRequest("PATCH", { language: "ru" }, "employee"),
-    );
-    expect(forbidden.status).toBe(403);
-    await expect(forbidden.json()).resolves.toEqual({ error: "forbidden" });
+    for (const role of ["warehouse", "employee"] as const) {
+      const forbidden = await patchSettings(
+        settingsRequest("PATCH", { language: "ru" }, role),
+      );
+      expect(forbidden.status).toBe(403);
+      await expect(forbidden.json()).resolves.toEqual({
+        error: "forbidden",
+      });
+    }
   });
 
   it("updates settings through the service and repository", async () => {
@@ -132,6 +140,57 @@ describe("settings route", () => {
       organizationName: "YU Campus",
       language: "en",
       maintenanceAlerts: false,
+    });
+  });
+
+  it("uses the current database role instead of a stale cookie role", async () => {
+    const users = getApplicationServices().users;
+    await users.createUser({
+      email: "second.admin@example.com",
+      fullName: "Second Admin",
+      role: "admin",
+      active: true,
+      initialPassword: "Second-Admin-Password-2026!",
+    }, adminActorId);
+    const original = (await users.listUsers()).find(
+      (user) => user.email === "admin@example.com",
+    )!;
+    await users.updateUser(original.id, {
+      fullName: original.fullName,
+      phone: original.phone,
+      role: "employee",
+      emailVerified: original.emailVerified,
+      active: original.active,
+      version: original.version,
+    }, adminActorId);
+
+    const response = await patchSettings(
+      settingsRequest("PATCH", { language: "ru" }, "admin"),
+    );
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "forbidden" });
+  });
+
+  it("rejects a deactivated actor even when its cookie is still valid", async () => {
+    const users = getApplicationServices().users;
+    const owner = (await users.listUsers()).find(
+      (user) => user.email === "owner@example.com",
+    )!;
+    await users.updateUser(owner.id, {
+      fullName: owner.fullName,
+      phone: owner.phone,
+      role: owner.role,
+      emailVerified: owner.emailVerified,
+      active: false,
+      version: owner.version,
+    }, adminActorId);
+
+    const response = await patchSettings(
+      settingsRequest("PATCH", { language: "ru" }, "owner"),
+    );
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "unauthorized",
     });
   });
 

@@ -79,6 +79,10 @@ class MemoryUserRepository implements UserRepository {
     return user ? cloneUser(user) : null;
   }
 
+  async findByIdForUpdate(id: string): Promise<UserRecord | null> {
+    return this.findById(id);
+  }
+
   async findByNormalizedEmail(email: string): Promise<UserRecord | null> {
     const user = [...this.state.users.values()].find(
       (candidate) => candidate.email === email,

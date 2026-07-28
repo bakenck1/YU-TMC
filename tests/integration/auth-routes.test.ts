@@ -215,12 +215,15 @@ describe("authentication route handlers", () => {
     it("rejects a configured but blocked user", async () => {
       await register(registrationRequest());
       const users = getApplicationServices().users;
+      const adminActorId = (
+        await users.resolveCurrentAccount("admin@example.com")
+      )!.userId;
       const second = await users.createUser({
         email: "second-admin@example.com",
         fullName: "Second Admin",
         role: "admin",
         initialPassword: "Second-Admin-Password-2026!",
-      });
+      }, adminActorId);
       await users.updateUser(second.id, {
         fullName: second.fullName,
         phone: second.phone,
@@ -228,7 +231,7 @@ describe("authentication route handlers", () => {
         emailVerified: second.emailVerified,
         active: true,
         version: second.version,
-      });
+      }, adminActorId);
       const first = (await users.listUsers()).find(
         (user) => user.email === "admin@example.com",
       )!;
@@ -239,7 +242,7 @@ describe("authentication route handlers", () => {
         emailVerified: first.emailVerified,
         active: false,
         version: first.version,
-      });
+      }, adminActorId);
       const response = await login(loginRequest());
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toEqual({ error: "user_blocked" });
@@ -309,12 +312,15 @@ describe("authentication route handlers", () => {
       const registered = await register(registrationRequest());
       const { token } = cookieValue(registered);
       const users = getApplicationServices().users;
+      const adminActorId = (
+        await users.resolveCurrentAccount("admin@example.com")
+      )!.userId;
       const second = await users.createUser({
         email: "second-admin@example.com",
         fullName: "Second Admin",
         role: "admin",
         initialPassword: "Second-Admin-Password-2026!",
-      });
+      }, adminActorId);
       await users.updateUser(second.id, {
         fullName: second.fullName,
         phone: second.phone,
@@ -322,7 +328,7 @@ describe("authentication route handlers", () => {
         emailVerified: second.emailVerified,
         active: true,
         version: second.version,
-      });
+      }, adminActorId);
       const original = (await users.listUsers()).find(
         (user) => user.email === "admin@example.com",
       )!;
@@ -333,7 +339,7 @@ describe("authentication route handlers", () => {
         emailVerified: original.emailVerified,
         active: true,
         version: original.version,
-      });
+      }, adminActorId);
 
       const refreshed = await session(
         new NextRequest("http://localhost/api/auth/session", {
@@ -355,7 +361,7 @@ describe("authentication route handlers", () => {
         emailVerified: changed.emailVerified,
         active: false,
         version: changed.version,
-      });
+      }, second.id);
       const revoked = await session(
         new NextRequest("http://localhost/api/auth/session", {
           headers: { cookie: `yu_inventory_session=${token}` },

@@ -8,6 +8,8 @@ import { UserService } from "@/lib/application/services/user-service";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 
+const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
+
 class DeterministicPasswordHasher implements PasswordHasher {
   async hash(password: string): Promise<PasswordHash> {
     return { salt: "deterministic-test-salt", hash: bytes(password) };
@@ -65,7 +67,7 @@ describe("UserService", () => {
       fullName: " Staff Member ",
       role: "employee",
       active: true,
-    });
+    }, ADMIN_USER_ID);
 
     expect(created).toMatchObject({
       email: "staff@example.com",
@@ -84,7 +86,7 @@ describe("UserService", () => {
         emailVerified: created.emailVerified,
         active: true,
         version: created.version,
-      }),
+      }, ADMIN_USER_ID),
     ).rejects.toMatchObject({ publicCode: "user_login_not_configured" });
 
     const configured = await service.updateUser(created.id, {
@@ -95,7 +97,7 @@ describe("UserService", () => {
       active: true,
       version: created.version,
       initialPassword: "Configured-Later-Password-2026!",
-    });
+    }, ADMIN_USER_ID);
     expect(configured.active).toBe(true);
     await expect(
       service.authenticate(
@@ -112,14 +114,14 @@ describe("UserService", () => {
       email: "staff@example.com",
       fullName: "Staff Member",
       role: "employee",
-    });
+    }, ADMIN_USER_ID);
 
     await expect(
       service.createUser({
         email: " STAFF@example.com ",
         fullName: "Other Member",
         role: "employee",
-      }),
+      }, ADMIN_USER_ID),
     ).rejects.toMatchObject({
       publicCode: "email_already_exists",
     });
@@ -131,7 +133,7 @@ describe("UserService", () => {
       emailVerified: created.emailVerified,
       active: false,
       version: created.version,
-    });
+    }, ADMIN_USER_ID);
     await expect(
       service.updateUser(created.id, {
         fullName: "Stale Edit",
@@ -140,7 +142,7 @@ describe("UserService", () => {
         emailVerified: false,
         active: false,
         version: created.version,
-      }),
+      }, ADMIN_USER_ID),
     ).rejects.toMatchObject({ publicCode: "user_version_conflict" });
   });
 
@@ -153,7 +155,7 @@ describe("UserService", () => {
       role: "employee",
       active: true,
       initialPassword: "Ready-User-Password-2026!",
-    });
+    }, ADMIN_USER_ID);
 
     expect(created.active).toBe(true);
     await expect(
@@ -165,6 +167,76 @@ describe("UserService", () => {
       status: "authenticated",
       user: { email: "ready@example.com" },
     });
+  });
+
+  it("rechecks privileged target roles inside the mutation transaction", async () => {
+    const service = createService();
+    await registerAdmin(service);
+    const owner = await service.createUser({
+      email: "owner@example.com",
+      fullName: "Active Owner",
+      role: "owner",
+      active: true,
+      initialPassword: "Owner-Test-Password-2026!",
+    }, ADMIN_USER_ID);
+    const employee = await service.createUser({
+      email: "future-version@example.com",
+      fullName: "Future Version",
+      role: "employee",
+    }, ADMIN_USER_ID);
+    const promoted = await service.updateUser(employee.id, {
+      fullName: employee.fullName,
+      phone: employee.phone,
+      role: "admin",
+      emailVerified: employee.emailVerified,
+      active: employee.active,
+      version: employee.version,
+    }, ADMIN_USER_ID);
+
+    await expect(
+      service.updateUser(promoted.id, {
+        fullName: "Owner overwrite",
+        phone: promoted.phone,
+        role: "employee",
+        emailVerified: promoted.emailVerified,
+        active: promoted.active,
+        version: promoted.version,
+      }, owner.id),
+    ).rejects.toMatchObject({ publicCode: "forbidden" });
+    await expect(
+      service.deleteUser(promoted.id, promoted.version, owner.id),
+    ).rejects.toMatchObject({ publicCode: "forbidden" });
+  });
+
+  it("reloads the actor by immutable id inside each mutation transaction", async () => {
+    const service = createService();
+    await registerAdmin(service);
+    const secondAdmin = await service.createUser({
+      email: "authority-admin@example.com",
+      fullName: "Authority Admin",
+      role: "admin",
+      active: true,
+      initialPassword: "Authority-Admin-Password-2026!",
+    }, ADMIN_USER_ID);
+    const originalAdmin = (await service.listUsers()).find(
+      (user) => user.id === ADMIN_USER_ID,
+    )!;
+    await service.updateUser(originalAdmin.id, {
+      fullName: originalAdmin.fullName,
+      phone: originalAdmin.phone,
+      role: "employee",
+      emailVerified: originalAdmin.emailVerified,
+      active: originalAdmin.active,
+      version: originalAdmin.version,
+    }, secondAdmin.id);
+
+    await expect(
+      service.createUser({
+        email: "stale-authority@example.com",
+        fullName: "Stale Authority",
+        role: "employee",
+      }, ADMIN_USER_ID),
+    ).rejects.toMatchObject({ publicCode: "forbidden" });
   });
 
   it("never deactivates, demotes or deletes the last active admin", async () => {
@@ -181,7 +253,7 @@ describe("UserService", () => {
           emailVerified: admin.emailVerified,
           active: true,
           version: admin.version,
-        }),
+        }, ADMIN_USER_ID),
       () =>
         service.updateUser(admin.id, {
           fullName: admin.fullName,
@@ -190,8 +262,8 @@ describe("UserService", () => {
           emailVerified: admin.emailVerified,
           active: false,
           version: admin.version,
-        }),
-      () => service.deleteUser(admin.id, admin.version),
+        }, ADMIN_USER_ID),
+      () => service.deleteUser(admin.id, admin.version, ADMIN_USER_ID),
     ];
 
     for (const attempt of attempts) {
@@ -209,7 +281,7 @@ describe("UserService", () => {
       fullName: "Second Admin",
       role: "admin",
       initialPassword: "Second-Admin-Password-2026!",
-    });
+    }, ADMIN_USER_ID);
     const activeSecond = await service.updateUser(second.id, {
       fullName: second.fullName,
       phone: second.phone,
@@ -217,7 +289,7 @@ describe("UserService", () => {
       emailVerified: second.emailVerified,
       active: true,
       version: second.version,
-    });
+    }, ADMIN_USER_ID);
     expect(
       await service.resolveSessionSubject(activeSecond.email),
     ).not.toBeNull();
@@ -229,7 +301,7 @@ describe("UserService", () => {
       emailVerified: activeSecond.emailVerified,
       active: false,
       version: activeSecond.version,
-    });
+    }, ADMIN_USER_ID);
     await expect(
       service.resolveSessionSubject(activeSecond.email),
     ).resolves.toBeNull();

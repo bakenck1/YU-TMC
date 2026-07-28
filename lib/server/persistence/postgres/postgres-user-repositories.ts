@@ -74,6 +74,14 @@ class PostgresUserRepository implements UserRepository {
     return result.rows[0] ? mapUser(result.rows[0]) : null;
   }
 
+  async findByIdForUpdate(id: string): Promise<UserRecord | null> {
+    const result = await this.source.query<UserRow>(
+      `select * from ${USERS} where id = $1 for update`,
+      [id],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  }
+
   async findByNormalizedEmail(email: string): Promise<UserRecord | null> {
     const result = await this.source.query<UserRow>(
       `select * from ${USERS} where email = $1`,

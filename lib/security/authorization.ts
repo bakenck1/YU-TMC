@@ -2,6 +2,10 @@ import {
   USER_ROLES,
   type UserRole,
 } from "@/lib/contracts/users";
+import {
+  hasPermission,
+  type AppPermission,
+} from "@/lib/security/permissions";
 
 export const AUTH_ROLES = USER_ROLES;
 
@@ -17,26 +21,32 @@ export function isAuthRole(value: unknown): value is AuthRole {
   return typeof value === "string" && AUTH_ROLES.includes(value as AuthRole);
 }
 
-export function normalizeAuthRole(value: unknown): AuthRole {
-  return isAuthRole(value) ? value : "admin";
-}
-
-const ROLE_ROUTES: Record<AuthRole, readonly string[]> = {
-  admin: ["/"],
-  owner: ["/"],
-  warehouse: ["/", "/items", "/locations", "/analytics"],
-  employee: ["/", "/items"],
-};
+const ROUTE_PERMISSIONS = [
+  ["/inventory", "inventory.workspace.read"],
+  ["/analytics", "legacy.analytics.read"],
+  ["/locations", "legacy.locations.read"],
+  ["/settings", "legacy.settings.manage"],
+  ["/users", "legacy.users.read"],
+  ["/items", "legacy.items.read"],
+  ["/", "legacy.dashboard.read"],
+] as const satisfies readonly (readonly [string, AppPermission])[];
 
 function matchesRoute(pathname: string, route: string) {
   if (route === "/") return pathname === "/";
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function canAccessPath(role: AuthRole, pathname: string) {
-  if (role === "admin" || role === "owner") return true;
+export function permissionForPath(pathname: string): AppPermission | null {
   const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
-  return ROLE_ROUTES[role].some((route) => matchesRoute(pathOnly, route));
+  return (
+    ROUTE_PERMISSIONS.find(([route]) => matchesRoute(pathOnly, route))?.[1] ??
+    null
+  );
+}
+
+export function canAccessPath(role: unknown, pathname: string) {
+  const permission = permissionForPath(pathname);
+  return permission !== null && hasPermission(role, permission);
 }
 
 export function defaultPathForRole(role: AuthRole) {

@@ -2,6 +2,11 @@ import "server-only";
 
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
+import {
+  hasPermission,
+  type AppPermission,
+  type AuthorizationActor,
+} from "@/lib/security/permissions";
 import { sessionFromRequest } from "@/lib/security/session";
 import { verifySessionToken } from "@/lib/security/session";
 
@@ -38,7 +43,7 @@ async function requireSessionSubject(subject: string) {
 async function resolveSessionSubject(subject: string) {
   let user;
   try {
-    user = await getApplicationServices().users.resolveSessionSubject(subject);
+    user = await getApplicationServices().users.resolveCurrentAccount(subject);
   } catch (error) {
     throw new ApplicationError("unavailable", "authentication_unavailable", {
       cause: error,
@@ -47,10 +52,20 @@ async function resolveSessionSubject(subject: string) {
   return user;
 }
 
-export async function requireUserAdministrator(request: Request) {
+export async function requirePermission(
+  request: Request,
+  permission: AppPermission,
+) {
   const user = await requireCurrentUser(request);
-  if (user.role !== "admin" && user.role !== "owner") {
+  if (!hasPermission(user.role, permission)) {
     throw new ApplicationError("forbidden", "forbidden");
   }
   return user;
+}
+
+export function authorizationActor(user: {
+  userId: string;
+  role: AuthorizationActor["role"];
+}): AuthorizationActor {
+  return { userId: user.userId, role: user.role };
 }

@@ -14,6 +14,7 @@ let migrationConfig: DatabaseConfig;
 let runtimeConfig: DatabaseConfig;
 let pool: Pool;
 let service: UserService;
+let adminActorId = "";
 
 describe("persistent PostgreSQL users", () => {
   beforeAll(async () => {
@@ -57,6 +58,9 @@ describe("persistent PostgreSQL users", () => {
 
     await pool.end();
     ({ pool, service } = createService(runtimeConfig));
+    adminActorId = (
+      await service.resolveCurrentAccount(winner.email)
+    )!.userId;
     await expect(service.authenticate(winner.email, password)).resolves.toEqual({
       status: "authenticated",
       user: winner,
@@ -70,7 +74,7 @@ describe("persistent PostgreSQL users", () => {
           email: `user-${index}@example.com`,
           fullName: `User ${index}`,
           role: "employee",
-        }),
+        }, adminActorId),
       ),
     );
     expect(new Set(created.map((user) => user.code)).size).toBe(created.length);
@@ -79,7 +83,7 @@ describe("persistent PostgreSQL users", () => {
         email: " USER-0@EXAMPLE.COM ",
         fullName: "Duplicate User",
         role: "employee",
-      }),
+      }, adminActorId),
     ).rejects.toMatchObject({ publicCode: "email_already_exists" });
   });
 
@@ -89,7 +93,7 @@ describe("persistent PostgreSQL users", () => {
       fullName: "Another Admin",
       role: "admin",
       initialPassword: "Another-Admin-Password-2026!",
-    });
+    }, adminActorId);
     const activeSecond = await service.updateUser(second.id, {
       fullName: second.fullName,
       phone: second.phone,
@@ -97,7 +101,7 @@ describe("persistent PostgreSQL users", () => {
       emailVerified: second.emailVerified,
       active: true,
       version: second.version,
-    });
+    }, adminActorId);
     const first = (await service.listUsers()).find(
       (user) => user.role === "admin" && user.id !== activeSecond.id,
     )!;
@@ -110,7 +114,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: first.emailVerified,
         active: false,
         version: first.version,
-      }),
+      }, adminActorId),
       service.updateUser(activeSecond.id, {
         fullName: activeSecond.fullName,
         phone: activeSecond.phone,
@@ -118,16 +122,97 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: activeSecond.emailVerified,
         active: false,
         version: activeSecond.version,
-      }),
+      }, adminActorId),
     ]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(
       1,
     );
+    const activeAdmins = (await service.listUsers()).filter(
+      (user) => user.role === "admin" && user.active,
+    );
+    expect(activeAdmins).toHaveLength(1);
+    adminActorId = activeAdmins[0]!.id;
+  });
+
+  it("cannot race owner authorization against an admin promotion", async () => {
+    const owner = await service.createUser({
+      email: "race-owner@example.com",
+      fullName: "Race Owner",
+      role: "owner",
+      active: true,
+      initialPassword: "Race-Owner-Password-2026!",
+    }, adminActorId);
+    const target = await service.createUser({
+      email: "promotion-race@example.com",
+      fullName: "Promotion Race",
+      role: "employee",
+    }, adminActorId);
+
+    const [promotion, ownerMutation] = await Promise.allSettled([
+      service.updateUser(target.id, {
+        fullName: target.fullName,
+        phone: target.phone,
+        role: "admin",
+        emailVerified: target.emailVerified,
+        active: target.active,
+        version: target.version,
+      }, adminActorId),
+      service.updateUser(target.id, {
+        fullName: "Owner overwrite",
+        phone: target.phone,
+        role: "employee",
+        emailVerified: target.emailVerified,
+        active: target.active,
+        version: target.version + 1,
+      }, owner.id),
+    ]);
+
+    expect(promotion.status).toBe("fulfilled");
+    expect(ownerMutation.status).toBe("rejected");
     expect(
-      (await service.listUsers()).filter(
-        (user) => user.role === "admin" && user.active,
-      ),
-    ).toHaveLength(1);
+      (await service.listUsers()).find((user) => user.id === target.id),
+    ).toMatchObject({ role: "admin", fullName: target.fullName });
+  });
+
+  it("reloads actor authority after a concurrent demotion commits", async () => {
+    const actor = await service.createUser({
+      email: "concurrent-actor@example.com",
+      fullName: "Concurrent Actor",
+      role: "admin",
+      active: true,
+      initialPassword: "Concurrent-Actor-Password-2026!",
+    }, adminActorId);
+    const client = await pool.connect();
+    let committed = false;
+    try {
+      await client.query("begin");
+      await client.query(
+        `update "yu_inventory"."users"
+         set role = 'employee', version = version + 1
+         where id = $1`,
+        [actor.id],
+      );
+      const mutation = service.createUser({
+        email: "must-not-exist@example.com",
+        fullName: "Must Not Exist",
+        role: "employee",
+      }, actor.id);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await client.query("commit");
+      committed = true;
+
+      await expect(mutation).rejects.toMatchObject({
+        publicCode: "forbidden",
+      });
+      expect(
+        (await service.listUsers()).some(
+          (user) => user.email === "must-not-exist@example.com",
+        ),
+      ).toBe(false);
+    } finally {
+      if (!committed) await client.query("rollback");
+      client.release();
+    }
   });
 
   it("commits a user and credential atomically", async () => {

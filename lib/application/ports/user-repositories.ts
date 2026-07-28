@@ -55,6 +55,7 @@ export interface InsertPasswordCredential {
 export interface UserRepository {
   list(): Promise<UserRecord[]>;
   findById(id: string): Promise<UserRecord | null>;
+  findByIdForUpdate(id: string): Promise<UserRecord | null>;
   findByNormalizedEmail(email: string): Promise<UserRecord | null>;
   insert(input: InsertUserRecord): Promise<UserRecord>;
   update(input: UpdateUserRecord): Promise<UserRecord | null>;

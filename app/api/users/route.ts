@@ -2,14 +2,14 @@ import { USER_ROLES, type CreateUserInput } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
-import { requireUserAdministrator } from "@/lib/server/security/request-user";
+import { requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUserAdministrator(request);
+    await requirePermission(request, "legacy.users.read");
     return Response.json({
       users: await getApplicationServices().users.listUsers(),
     });
@@ -20,10 +20,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireUserAdministrator(request);
+    const actor = await requirePermission(request, "legacy.users.manage");
     const body: unknown = await request.json();
     const input = parseCreateUser(body);
-    const user = await getApplicationServices().users.createUser(input);
+    const user = await getApplicationServices().users.createUser(
+      input,
+      actor.userId,
+    );
     return Response.json({ user }, { status: 201 });
   } catch (error) {
     return userErrorResponse(normalizeRequestError(error));
