@@ -99,8 +99,12 @@ class PostgresUserRepository implements UserRepository {
          values (
            $1,
            'USR-' || lpad(nextval('${CODE_SEQUENCE}')::text, 6, '0'),
-           $2, $3, $4, $5, $6, $7, $8, $8,
-           case when $7 then null else $8 end
+           $2, $3, $4, $5::varchar, $6::boolean, $7::boolean,
+           $8::timestamptz, $8::timestamptz,
+           case
+             when $7::boolean then null
+             else $8::timestamptz
+           end
          )
          returning *`,
         [

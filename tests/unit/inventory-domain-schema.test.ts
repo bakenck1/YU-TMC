@@ -7,6 +7,7 @@ import {
   DECISION_RESOLUTIONS,
   DECISION_STATUSES,
   INSPECTION_STATUSES,
+  IDEMPOTENCY_STATES,
   INVENTORY_NUMBER_KINDS,
   ITEM_RESULT_VALUES,
   ITEM_STATUSES,
@@ -33,6 +34,8 @@ import {
   decisionResolutionEnum,
   decisionStatusEnum,
   deviationDecisionsTable,
+  idempotencyRequestsTable,
+  idempotencyStateEnum,
   inspectionRoomItemsTable,
   inspectionRoomsTable,
   inspectionsTable,
@@ -91,6 +94,7 @@ describe("inventory domain schema declarations", () => {
       notificationDeliveriesTable,
       notificationReceiptsTable,
       auditRecordsTable,
+      idempotencyRequestsTable,
     ];
 
     expect(tables.map((table) => getTableConfig(table).name)).toEqual([
@@ -113,6 +117,7 @@ describe("inventory domain schema declarations", () => {
       "notification_deliveries",
       "notification_receipts",
       "audit_records",
+      "idempotency_requests",
     ]);
   });
 
@@ -157,6 +162,7 @@ describe("inventory domain schema declarations", () => {
       NOTIFICATION_MAILBOX_KINDS,
     );
     expect(auditSubjectKindEnum.enumValues).toEqual(AUDIT_SUBJECT_KINDS);
+    expect(idempotencyStateEnum.enumValues).toEqual(IDEMPOTENCY_STATES);
   });
 
   it("uses composite context keys for snapshots and result revisions", () => {
@@ -219,4 +225,58 @@ describe("inventory domain schema declarations", () => {
       ]),
     );
   });
+
+  it("declares concurrency, idempotency, and global uniqueness guards", () => {
+    const versionedTables = [
+      buildingsTable,
+      roomsTable,
+      itemsTable,
+      inspectionsTable,
+      qrIdentifiersTable,
+      transfersTable,
+      deviationDecisionsTable,
+      photosTable,
+    ];
+
+    for (const table of versionedTables) {
+      const version = getTableConfig(table).columns.find(
+        (column) => column.name === "version",
+      );
+      expect(version?.notNull).toBe(true);
+      expect(version?.hasDefault).toBe(true);
+    }
+
+    expect(indexNames(itemsTable)).toContain(
+      "items_inventory_number_key_unique",
+    );
+    expect(indexNames(qrIdentifiersTable)).toEqual(
+      expect.arrayContaining([
+        "qr_identifiers_canonical_key_unique",
+        "qr_identifiers_active_primary_building_unique",
+        "qr_identifiers_active_primary_room_unique",
+        "qr_identifiers_active_primary_item_unique",
+      ]),
+    );
+    expect(indexNames(responsibilityPeriodsTable)).toContain(
+      "responsibility_periods_open_item_unique",
+    );
+    expect(indexNames(transfersTable)).toContain(
+      "transfers_pending_item_unique",
+    );
+    expect(indexNames(itemResultsTable)).toContain(
+      "item_results_inspection_item_unique",
+    );
+    expect(indexNames(idempotencyRequestsTable)).toContain(
+      "idempotency_requests_actor_operation_key_unique",
+    );
+  });
 });
+
+function indexNames(
+  table: Parameters<typeof getTableConfig>[0],
+): string[] {
+  return getTableConfig(table)
+    .indexes
+    .map((index) => index.config.name)
+    .filter((name): name is string => name !== undefined);
+}

@@ -5,6 +5,7 @@ import type { Pool, PoolClient, QueryResult } from "pg";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
+import { createPostgresInventoryConcurrencyRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-concurrency-repositories";
 
 let migrationConfig: DatabaseConfig;
 let pool: Pool;
@@ -284,6 +285,15 @@ describe("inventory domain entities", () => {
         "23514",
       );
       const secondResultId = randomUUID();
+      const secondItemId = randomUUID();
+      await client.query(
+        `insert into "yu_inventory"."items"
+           (id, name, room_id, inventory_number_kind, inventory_number,
+            inventory_number_key, created_by, updated_by)
+         values ($1, 'Second projector', $2, 'official', 'INV-2',
+                 'inv-2', $3, $3)`,
+        [secondItemId, domain.roomId, domain.technicianId],
+      );
       await client.query(
         `insert into "yu_inventory"."item_results"
            (id, inspection_id, inspection_room_id, item_id,
@@ -297,7 +307,7 @@ describe("inventory domain entities", () => {
           secondResultId,
           domain.inspectionId,
           domain.inspectionRoomId,
-          domain.itemId,
+          secondItemId,
           domain.roomId,
           domain.employeeId,
           domain.technicianId,
@@ -691,6 +701,259 @@ describe("inventory domain entities", () => {
     });
   });
 
+  it("enforces uniqueness, idempotency, versions, and append-only audit", async () => {
+    await withRollback(pool, async (client) => {
+      const domain = await seedInspectionDomain(client);
+      const primaryQrId = randomUUID();
+
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."items"
+             (id, name, room_id, inventory_number_kind, inventory_number,
+              inventory_number_key, created_by, updated_by)
+           values ($1, 'Duplicate number', $2, 'official', 'INV-1',
+                   'inv-1', $3, $3)`,
+          [randomUUID(), domain.roomId, domain.technicianId],
+        ),
+        "23505",
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."item_results"
+             (id, inspection_id, inspection_room_id, item_id,
+              registry_room_id_at_scan, responsible_id_at_scan,
+              decision_recipient_kind_at_scan, item_name_snapshot,
+              inventory_number_kind_snapshot, inventory_number_snapshot,
+              building_name_snapshot, room_designation_snapshot, created_by)
+           values ($1, $2, $3, $4, $5, $6, 'user', 'Projector',
+                   'official', 'INV-1', 'Building A', '101', $7)`,
+          [
+            randomUUID(),
+            domain.inspectionId,
+            domain.inspectionRoomId,
+            domain.itemId,
+            domain.roomId,
+            domain.employeeId,
+            domain.technicianId,
+          ],
+        ),
+        "23505",
+      );
+
+      await client.query(
+        `insert into "yu_inventory"."qr_identifiers"
+           (id, original_value, canonical_key, format, target_kind,
+            role, building_id, created_by)
+         values ($1, 'YUQ1:7K3M9W2T8R5D4H6N1P0QX9C2BZ',
+                 'YUQ1:7K3M9W2T8R5D4H6N1P0QX9C2BZ',
+                 'generated_v1', 'building', 'primary', $2, $3)`,
+        [primaryQrId, domain.buildingId, domain.technicianId],
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."qr_identifiers"
+             (id, original_value, canonical_key, format, target_kind,
+              role, item_id, created_by)
+           values ($1, 'duplicate', $2, 'legacy_raw', 'item', 'alias',
+                   $3, $4)`,
+          [
+            randomUUID(),
+            "YUQ1:7K3M9W2T8R5D4H6N1P0QX9C2BZ",
+            domain.itemId,
+            domain.technicianId,
+          ],
+        ),
+        "23505",
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."qr_identifiers"
+             (id, original_value, canonical_key, format, target_kind,
+              role, building_id, created_by)
+           values ($1, 'SECOND-PRIMARY', 'second-primary', 'legacy_raw',
+                   'building', 'primary', $2, $3)`,
+          [randomUUID(), domain.buildingId, domain.technicianId],
+        ),
+        "23505",
+      );
+
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."responsibility_periods"
+             (id, item_id, responsible_user_id, source, started_by)
+           values ($1, $2, $3, 'transfer', $4)`,
+          [
+            randomUUID(),
+            domain.itemId,
+            domain.technicianId,
+            domain.technicianId,
+          ],
+        ),
+        "23505",
+      );
+
+      await client.query(
+        `insert into "yu_inventory"."transfers"
+           (id, item_id, requested_by, proposed_responsible_id,
+            current_responsible_id_at_request)
+         values ($1, $2, $3, $3, $4)`,
+        [
+          randomUUID(),
+          domain.itemId,
+          domain.technicianId,
+          domain.employeeId,
+        ],
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."transfers"
+             (id, item_id, requested_by, proposed_responsible_id,
+              current_responsible_id_at_request)
+           values ($1, $2, $3, $3, $4)`,
+          [
+            randomUUID(),
+            domain.itemId,
+            domain.technicianId,
+            domain.employeeId,
+          ],
+        ),
+        "23505",
+      );
+
+      const concurrency = createPostgresInventoryConcurrencyRepositories(client);
+      const idempotencyId = randomUUID();
+      const request = {
+        id: idempotencyId,
+        actorId: domain.employeeId,
+        operation: "responsibility.accept",
+        key: "mobile-request-1",
+        requestHash: "a".repeat(64),
+        expiresAt: new Date(Date.now() + 60_000),
+      };
+      await expect(concurrency.idempotency.reserve(request)).resolves.toEqual({
+        kind: "reserved",
+        id: idempotencyId,
+      });
+      await expect(concurrency.idempotency.reserve({ ...request, id: randomUUID() })).resolves.toEqual({
+        kind: "in_progress",
+      });
+      await concurrency.idempotency.complete(
+        idempotencyId,
+        { status: 201, body: { id: "item-1" }, resourceId: domain.itemId },
+        new Date(),
+      );
+      await expect(concurrency.idempotency.reserve({ ...request, id: randomUUID() })).resolves.toEqual({
+        kind: "replay",
+        response: { status: 201, body: { id: "item-1" }, resourceId: domain.itemId },
+      });
+      await expect(concurrency.idempotency.reserve({
+        ...request,
+        id: randomUUID(),
+        requestHash: "b".repeat(64),
+      })).resolves.toEqual({ kind: "key_reused" });
+      await client.query(
+        `update "yu_inventory"."idempotency_requests"
+         set created_at = created_at - interval '2 seconds',
+             expires_at = now() - interval '1 second'
+         where id = $1`,
+        [idempotencyId],
+      );
+      const replacementId = randomUUID();
+      await expect(concurrency.idempotency.reserve({
+        ...request,
+        id: replacementId,
+        requestHash: "c".repeat(64),
+      })).resolves.toEqual({ kind: "reserved", id: replacementId });
+
+      const auditId = randomUUID();
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `insert into "yu_inventory"."audit_records"
+             (id, actor_id, actor_role_snapshot, subject_kind,
+              subject_id, action, after_values,
+              is_administrative_exception)
+           values ($1, $2, 'admin', 'item', $3, 'item.override',
+                   '{"status":"maintenance"}', true)`,
+          [auditId, domain.technicianId, domain.itemId],
+        ),
+        "23514",
+      );
+      await client.query(
+        `insert into "yu_inventory"."audit_records"
+           (id, actor_id, actor_role_snapshot, subject_kind,
+            subject_id, action, after_values, reason,
+            is_administrative_exception)
+         values ($1, $2, 'admin', 'item', $3, 'item.override',
+                 '{"status":"maintenance"}', 'Safety exception', true)`,
+        [auditId, domain.technicianId, domain.itemId],
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `update "yu_inventory"."audit_records"
+           set reason = 'Changed later'
+           where id = $1`,
+          [auditId],
+        ),
+        "55000",
+      );
+      await expectDatabaseError(
+        client,
+        () => client.query(
+          `delete from "yu_inventory"."audit_records" where id = $1`,
+          [auditId],
+        ),
+        "55000",
+      );
+
+      const versions = await client.query<{
+        building_version: number;
+        decision_version: number;
+        inspection_version: number;
+        item_version: number;
+      }>(
+        `select b.version as building_version,
+                d.version as decision_version,
+                i.version as inspection_version,
+                it.version as item_version
+         from "yu_inventory"."buildings" b
+         join "yu_inventory"."inspections" i on i.id = $2
+         join "yu_inventory"."items" it on it.id = $3
+         join "yu_inventory"."deviation_decisions" d on d.id = $4
+         where b.id = $1`,
+        [
+          domain.buildingId,
+          domain.inspectionId,
+          domain.itemId,
+          domain.decisionId,
+        ],
+      );
+      expect(versions.rows[0]).toEqual({
+        building_version: 1,
+        decision_version: 1,
+        inspection_version: 1,
+        item_version: 1,
+      });
+      await expect(concurrency.versions.advanceVersion({
+        record: "item",
+        id: domain.itemId,
+        expectedVersion: 1,
+      })).resolves.toBe(2);
+      await expect(concurrency.versions.advanceVersion({
+        record: "item",
+        id: domain.itemId,
+        expectedVersion: 1,
+      })).resolves.toBeNull();
+    });
+  });
+
   it("keeps inspection ownership separate from per-item acceptance", async () => {
     await withRollback(pool, async (client) => {
       const domain = await seedInspectionDomain(client);
@@ -748,7 +1011,77 @@ describe("inventory domain entities", () => {
     });
   });
 
-  it("leaves the next task's concurrency constraints unapplied", async () => {
+  it("serializes concurrent compare-and-swap and idempotency reservations", async () => {
+    const setupClient = await pool.connect();
+    let domain: SeededInspectionDomain;
+    try {
+      await setupClient.query("begin");
+      domain = await seedInspectionDomain(setupClient);
+      await setupClient.query("commit");
+    } finally {
+      setupClient.release();
+    }
+
+    const first = await pool.connect();
+    const second = await pool.connect();
+    try {
+      const firstRepositories = createPostgresInventoryConcurrencyRepositories(first);
+      const secondRepositories = createPostgresInventoryConcurrencyRepositories(second);
+      const request = {
+        id: randomUUID(),
+        actorId: domain.employeeId,
+        operation: "item.update",
+        key: `concurrent-${randomUUID()}`,
+        requestHash: "d".repeat(64),
+        expiresAt: new Date(Date.now() + 60_000),
+      };
+
+      await first.query("begin");
+      await second.query("begin");
+      await expect(firstRepositories.idempotency.reserve(request)).resolves.toEqual({
+        kind: "reserved",
+        id: request.id,
+      });
+      const duplicateReservation = secondRepositories.idempotency.reserve({
+        ...request,
+        id: randomUUID(),
+      });
+      await firstRepositories.idempotency.complete(
+        request.id,
+        { status: 200, body: { id: domain.itemId }, resourceId: domain.itemId },
+        new Date(),
+      );
+      await first.query("commit");
+      await expect(duplicateReservation).resolves.toEqual({
+        kind: "replay",
+        response: { status: 200, body: { id: domain.itemId }, resourceId: domain.itemId },
+      });
+      await second.query("commit");
+
+      await first.query("begin");
+      await second.query("begin");
+      await expect(firstRepositories.versions.advanceVersion({
+        record: "item",
+        id: domain.itemId,
+        expectedVersion: 1,
+      })).resolves.toBe(2);
+      const staleAdvance = secondRepositories.versions.advanceVersion({
+        record: "item",
+        id: domain.itemId,
+        expectedVersion: 1,
+      });
+      await first.query("commit");
+      await expect(staleAdvance).resolves.toBeNull();
+      await second.query("commit");
+    } finally {
+      await first.query("rollback").catch(() => undefined);
+      await second.query("rollback").catch(() => undefined);
+      first.release();
+      second.release();
+    }
+  });
+
+  it("creates the database uniqueness guards used for concurrent writes", async () => {
     const indexes = await pool.query<{
       indexdef: string;
       indexname: string;
@@ -768,14 +1101,14 @@ describe("inventory domain entities", () => {
         .map((row) => row.indexdef.replaceAll('"', ""))
         .join("\n");
 
-    expect(uniqueDefinitionsFor("qr_identifiers")).not.toContain(
+    expect(uniqueDefinitionsFor("qr_identifiers")).toContain(
       "(canonical_key)",
     );
-    expect(uniqueDefinitionsFor("items")).not.toContain(
+    expect(uniqueDefinitionsFor("items")).toContain(
       "(inventory_number_key)",
     );
-    expect(uniqueDefinitionsFor("transfers")).not.toMatch(/\(item_id(?:, status)?\)/);
-    expect(uniqueDefinitionsFor("item_results")).not.toContain(
+    expect(uniqueDefinitionsFor("transfers")).toMatch(/\(item_id\)/);
+    expect(uniqueDefinitionsFor("item_results")).toContain(
       "(inspection_id, item_id)",
     );
   });

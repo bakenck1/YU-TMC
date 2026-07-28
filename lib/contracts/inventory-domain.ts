@@ -162,3 +162,6 @@ export const AUDIT_SUBJECT_KINDS = [
   "notification",
 ] as const;
 export type AuditSubjectKind = (typeof AUDIT_SUBJECT_KINDS)[number];
+
+export const IDEMPOTENCY_STATES = ["processing", "completed"] as const;
+export type IdempotencyState = (typeof IDEMPOTENCY_STATES)[number];

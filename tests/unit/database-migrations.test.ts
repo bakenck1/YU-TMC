@@ -35,6 +35,40 @@ describe("database migration history", () => {
     expect(readLocalMigrationManifest().fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("keeps append-only audit protection in the concurrency migration", () => {
+    const migrationDirectory = path.resolve(process.cwd(), "drizzle");
+    const fileName = fs
+      .readdirSync(migrationDirectory)
+      .find((candidate) =>
+        candidate.endsWith("_domain-concurrency-and-audit.sql"),
+      );
+
+    expect(fileName).toBeDefined();
+    const contents = fs.readFileSync(
+      path.join(migrationDirectory, fileName!),
+      "utf8",
+    );
+    expect(contents).toContain(
+      'CREATE TRIGGER "audit_records_append_only"',
+    );
+    expect(contents).toContain("ERRCODE = '55000'");
+    expect(contents).toContain(
+      'CREATE UNIQUE INDEX "qr_identifiers_canonical_key_unique"',
+    );
+    expect(contents).toContain(
+      'CREATE UNIQUE INDEX "transfers_pending_item_unique"',
+    );
+    expect(contents).toContain(
+      "Cannot add inventory concurrency constraints while legacy duplicates exist",
+    );
+    expect(contents).toContain(
+      "Cannot require an administrative reason while legacy decisions have none",
+    );
+    expect(contents).toContain('GROUP BY "result_id" HAVING count(*) > 1');
+    expect(contents).toContain('GROUP BY "comparison_key" HAVING count(*) > 1');
+    expect(contents).toContain('GROUP BY "building_id" HAVING count(*) > 1');
+  });
+
   it("accepts an exact history and a valid applied prefix", () => {
     expect(() =>
       validateMigrationState(local, local, { allowPending: false }),

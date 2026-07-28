@@ -16,6 +16,11 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+`npm run dev` uses `DATABASE_URL` when it is configured. Otherwise it starts a
+persistent embedded PostgreSQL instance in `.data/postgres-development`,
+applies migrations, imports the existing local credential, and then starts
+Next.js. Docker is not required for this local fallback.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 PostgreSQL setup, environment isolation, migration commands, and production

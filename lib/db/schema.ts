@@ -23,6 +23,7 @@ import {
   DECISION_RESOLUTIONS,
   DECISION_STATUSES,
   INSPECTION_STATUSES,
+  IDEMPOTENCY_STATES,
   INVENTORY_NUMBER_KINDS,
   ITEM_RESULT_VALUES,
   ITEM_STATUSES,
@@ -130,6 +131,10 @@ export const notificationMailboxKindEnum = inventorySchema.enum(
 export const auditSubjectKindEnum = inventorySchema.enum(
   "audit_subject_kind",
   AUDIT_SUBJECT_KINDS,
+);
+export const idempotencyStateEnum = inventorySchema.enum(
+  "idempotency_state",
+  IDEMPOTENCY_STATES,
 );
 
 export const userCodeSequence = inventorySchema.sequence(
@@ -257,6 +262,7 @@ export const buildingsTable = inventorySchema.table(
       .notNull()
       .defaultNow(),
     archivedAt: timestamp({ withTimezone: true, mode: "date" }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check(
@@ -268,6 +274,7 @@ export const buildingsTable = inventorySchema.table(
       sql`(${table.status} = 'active' AND ${table.archivedAt} IS NULL AND ${table.archivedBy} IS NULL)
           OR (${table.status} = 'archived' AND ${table.archivedAt} IS NOT NULL AND ${table.archivedBy} IS NOT NULL)`,
     ),
+    check("buildings_version_check", sql`${table.version} > 0`),
     index("buildings_status_idx").on(table.status),
     index("buildings_name_address_key_idx").on(
       table.nameKey,
@@ -316,6 +323,7 @@ export const roomsTable = inventorySchema.table(
       .notNull()
       .defaultNow(),
     archivedAt: timestamp({ withTimezone: true, mode: "date" }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check(
@@ -332,6 +340,7 @@ export const roomsTable = inventorySchema.table(
       sql`(${table.status} = 'active' AND ${table.archivedAt} IS NULL AND ${table.archivedBy} IS NULL)
           OR (${table.status} = 'archived' AND ${table.archivedAt} IS NOT NULL AND ${table.archivedBy} IS NOT NULL)`,
     ),
+    check("rooms_version_check", sql`${table.version} > 0`),
     index("rooms_building_idx").on(table.buildingId),
     index("rooms_building_status_idx").on(table.buildingId, table.status),
     index("rooms_lookup_idx").on(
@@ -383,6 +392,7 @@ export const inspectionsTable = inventorySchema.table(
       onUpdate: "restrict",
     }),
     cancelReason: varchar({ length: 1000 }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check("inspections_name_check", sql`btrim(${table.name}) <> ''`),
@@ -419,6 +429,7 @@ export const inspectionsTable = inventorySchema.table(
             AND btrim(${table.cancelReason}) <> ''
           )`,
     ),
+    check("inspections_version_check", sql`${table.version} > 0`),
     index("inspections_technician_status_idx").on(
       table.technicianId,
       table.status,
@@ -474,6 +485,7 @@ export const itemsTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check(
@@ -486,6 +498,10 @@ export const itemsTable = inventorySchema.table(
     check(
       "items_archive_state_check",
       sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`,
+    ),
+    check("items_version_check", sql`${table.version} > 0`),
+    uniqueIndex("items_inventory_number_key_unique").on(
+      table.inventoryNumberKey,
     ),
     index("items_room_status_idx").on(table.roomId, table.status),
     index("items_status_idx").on(table.status),
@@ -551,6 +567,12 @@ export const itemInventoryNumberHistoryTable = inventorySchema.table(
       table.assignedAt,
     ),
     index("item_inventory_number_history_key_idx").on(table.comparisonKey),
+    uniqueIndex("item_inventory_number_history_key_unique").on(
+      table.comparisonKey,
+    ),
+    uniqueIndex("item_inventory_number_history_open_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.replacedAt} IS NULL`),
     index("item_inventory_number_history_assigned_by_idx").on(
       table.assignedBy,
     ),
@@ -594,6 +616,7 @@ export const qrIdentifiersTable = inventorySchema.table(
     }),
     revokedAt: timestamp({ withTimezone: true, mode: "date" }),
     revokeReason: varchar({ length: 1000 }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check(
@@ -635,7 +658,25 @@ export const qrIdentifiersTable = inventorySchema.table(
             AND ${table.canonicalKey} ~ '^YUQ1:[0-9A-HJKMNP-TV-Z]{26}$'
           )`,
     ),
-    index("qr_identifiers_canonical_key_idx").on(table.canonicalKey),
+    check("qr_identifiers_version_check", sql`${table.version} > 0`),
+    uniqueIndex("qr_identifiers_canonical_key_unique").on(
+      table.canonicalKey,
+    ),
+    uniqueIndex("qr_identifiers_active_primary_building_unique")
+      .on(table.buildingId)
+      .where(
+        sql`${table.status} = 'active' AND ${table.role} = 'primary' AND ${table.buildingId} IS NOT NULL`,
+      ),
+    uniqueIndex("qr_identifiers_active_primary_room_unique")
+      .on(table.roomId)
+      .where(
+        sql`${table.status} = 'active' AND ${table.role} = 'primary' AND ${table.roomId} IS NOT NULL`,
+      ),
+    uniqueIndex("qr_identifiers_active_primary_item_unique")
+      .on(table.itemId)
+      .where(
+        sql`${table.status} = 'active' AND ${table.role} = 'primary' AND ${table.itemId} IS NOT NULL`,
+      ),
     index("qr_identifiers_building_status_idx").on(
       table.buildingId,
       table.status,
@@ -714,6 +755,9 @@ export const responsibilityPeriodsTable = inventorySchema.table(
       table.endedAt,
     ),
     index("responsibility_periods_started_by_idx").on(table.startedBy),
+    uniqueIndex("responsibility_periods_open_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.endedAt} IS NULL`),
   ],
 );
 
@@ -763,6 +807,7 @@ export const transfersTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     check(
@@ -833,6 +878,10 @@ export const transfersTable = inventorySchema.table(
             AND ${table.overrideResponsibleId} IS NULL
           )`,
     ),
+    check("transfers_version_check", sql`${table.version} > 0`),
+    uniqueIndex("transfers_pending_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.status} = 'pending_current_owner'`),
     index("transfers_item_status_idx").on(table.itemId, table.status),
     index("transfers_current_owner_status_idx").on(
       table.currentResponsibleIdAtRequest,
@@ -1069,6 +1118,10 @@ export const itemResultsTable = inventorySchema.table(
     index("item_results_registry_room_idx").on(
       table.registryRoomIdAtScan,
     ),
+    uniqueIndex("item_results_inspection_item_unique").on(
+      table.inspectionId,
+      table.itemId,
+    ),
   ],
 );
 
@@ -1161,6 +1214,7 @@ export const deviationDecisionsTable = inventorySchema.table(
     comment: varchar({ length: 1000 }),
     resolution: decisionResolutionEnum(),
     administrativeReason: varchar({ length: 1000 }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     foreignKey({
@@ -1242,10 +1296,8 @@ export const deviationDecisionsTable = inventorySchema.table(
       "deviation_decisions_administrative_reason_scope_check",
       sql`(
             ${table.status} = 'resolved_by_admin'
-            AND (
-              ${table.administrativeReason} IS NULL
-              OR btrim(${table.administrativeReason}) <> ''
-            )
+            AND ${table.administrativeReason} IS NOT NULL
+            AND btrim(${table.administrativeReason}) <> ''
           ) OR (
             ${table.status} <> 'resolved_by_admin'
             AND ${table.administrativeReason} IS NULL
@@ -1259,6 +1311,10 @@ export const deviationDecisionsTable = inventorySchema.table(
       "deviation_decisions_previous_not_self_check",
       sql`${table.previousDecisionId} IS NULL OR ${table.previousDecisionId} <> ${table.id}`,
     ),
+    check("deviation_decisions_version_check", sql`${table.version} > 0`),
+    uniqueIndex("deviation_decisions_pending_result_unique")
+      .on(table.resultId)
+      .where(sql`${table.status} = 'pending'`),
     unique("deviation_decisions_id_result_unique").on(
       table.id,
       table.resultId,
@@ -1318,6 +1374,7 @@ export const photosTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    version: integer().notNull().default(1),
   },
   (table) => [
     foreignKey({
@@ -1486,6 +1543,7 @@ export const photosTable = inventorySchema.table(
             )
           )`,
     ),
+    check("photos_version_check", sql`${table.version} > 0`),
     index("photos_expiry_status_idx").on(table.status, table.expiresAt),
     index("photos_item_status_idx").on(table.itemId, table.status),
     index("photos_result_status_idx").on(
@@ -1683,6 +1741,7 @@ export const auditRecordsTable = inventorySchema.table(
     beforeValues: jsonb().$type<Record<string, unknown>>(),
     afterValues: jsonb().$type<Record<string, unknown>>(),
     reason: varchar({ length: 1000 }),
+    isAdministrativeException: boolean().notNull().default(false),
     metadata: jsonb()
       .$type<Record<string, unknown>>()
       .notNull()
@@ -1710,7 +1769,13 @@ export const auditRecordsTable = inventorySchema.table(
     ),
     check(
       "audit_records_reason_check",
-      sql`${table.reason} IS NULL OR btrim(${table.reason}) <> ''`,
+      sql`(
+            ${table.reason} IS NULL
+            AND ${table.isAdministrativeException} = false
+          ) OR (
+            ${table.reason} IS NOT NULL
+            AND btrim(${table.reason}) <> ''
+          )`,
     ),
     index("audit_records_subject_idx").on(
       table.subjectKind,
@@ -1719,5 +1784,60 @@ export const auditRecordsTable = inventorySchema.table(
     ),
     index("audit_records_actor_idx").on(table.actorId, table.occurredAt),
     index("audit_records_domain_event_idx").on(table.domainEventId),
+  ],
+);
+
+export const idempotencyRequestsTable = inventorySchema.table(
+  "idempotency_requests",
+  {
+    id: uuid().primaryKey(),
+    actorId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    operation: varchar({ length: 80 }).notNull(),
+    idempotencyKey: varchar({ length: 128 }).notNull(),
+    requestHash: varchar({ length: 64 }).notNull(),
+    state: idempotencyStateEnum().notNull().default("processing"),
+    responseStatus: integer(),
+    responseBody: jsonb().$type<Record<string, unknown>>(),
+    resourceId: uuid(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp({ withTimezone: true, mode: "date" }),
+    expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  },
+  (table) => [
+    check(
+      "idempotency_requests_values_check",
+      sql`btrim(${table.operation}) <> ''
+          AND btrim(${table.idempotencyKey}) <> ''
+          AND ${table.requestHash} ~ '^[0-9a-f]{64}$'
+          AND ${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "idempotency_requests_state_check",
+      sql`(
+            ${table.state} = 'processing'
+            AND ${table.responseStatus} IS NULL
+            AND ${table.responseBody} IS NULL
+            AND ${table.completedAt} IS NULL
+          ) OR (
+            ${table.state} = 'completed'
+            AND ${table.responseStatus} BETWEEN 100 AND 599
+            AND ${table.responseBody} IS NOT NULL
+            AND ${table.completedAt} IS NOT NULL
+            AND ${table.completedAt} >= ${table.createdAt}
+          )`,
+    ),
+    uniqueIndex("idempotency_requests_actor_operation_key_unique").on(
+      table.actorId,
+      table.operation,
+      table.idempotencyKey,
+    ),
+    index("idempotency_requests_expiry_idx").on(table.expiresAt),
   ],
 );

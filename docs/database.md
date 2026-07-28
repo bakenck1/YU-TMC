@@ -62,7 +62,15 @@ set a small limit or use the provider's transaction pooler for runtime traffic.
 
 ## Local development
 
-The Compose file is for development and tests only:
+Running `npm run dev` without `DATABASE_URL` starts the project-managed,
+persistent PostgreSQL instance in `.data/postgres-development`, applies pending
+migrations, imports the legacy local credential idempotently, verifies the
+schema, and starts Next.js. This is the default setup on a workstation without
+Docker.
+
+To use an external PostgreSQL instance instead, set `DATABASE_URL` and the
+related development variables. The Compose file is available for that workflow
+and for tests:
 
 ```powershell
 docker compose --profile development up -d --wait postgres-development
@@ -137,6 +145,42 @@ migrator role verifies the complete private history, while the runtime role
 must have schema access and see the exact deployment ID and manifest hash.
 Therefore a manually created empty schema or a pooler pointed at another
 database cannot pass the release check.
+
+## Inventory concurrency and audit guarantees
+
+Mutable inventory aggregates (`buildings`, `rooms`, `items`, `inspections`,
+QR identifiers, transfers, decisions, and photos) expose a positive `version`
+column. Server updates must include the version read by the client in their
+`WHERE` clause and increment it atomically; an update affecting zero rows is a
+version conflict and must be returned as `409 Conflict`.
+
+Mobile mutations reserve a row in `idempotency_requests` using the authenticated
+actor, operation name, and client key. The same key cannot be reused for a
+different request hash. A completed row stores the HTTP status and safe JSON
+response so a retry can receive the original result without repeating the
+domain transaction. At `expires_at`, a subsequent request atomically rotates
+that key to a new processing row; stale in-flight requests can no longer
+complete it. Choose an expiry that exceeds the maximum client retry window.
+
+PostgreSQL enforces global QR and inventory-number uniqueness, one active
+primary QR per target, one open responsibility and pending transfer per item,
+and one item result per inspection. These constraints are the final protection
+against races even when multiple application instances process requests.
+
+`audit_records` is append-only at the database layer: a trigger rejects every
+update and delete. Administrative exceptions set
+`is_administrative_exception = true`, which makes a non-blank reason mandatory.
+Non-administrative actions may still include an optional operator reason. The
+before/after snapshot constraint applies to every audit entry.
+
+Before applying the concurrency migration to an existing database, resolve
+legacy duplicate QR values, inventory numbers, active responsibilities, pending
+transfers and per-inspection item results. The migration fails before changing
+the schema with an actionable diagnostic if any of those records remain; it
+also refuses legacy administrative decisions without a recorded reason.
+Because PostgreSQL cannot create an index concurrently inside the transactional
+migration runner, schedule this migration in a maintenance window for large
+live tables.
 
 ## Moving legacy authentication to PostgreSQL
 
