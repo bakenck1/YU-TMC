@@ -63,10 +63,13 @@ set a small limit or use the provider's transaction pooler for runtime traffic.
 ## Local development
 
 Running `npm run dev` without `DATABASE_URL` starts the project-managed,
-persistent PostgreSQL instance in `.data/postgres-development`, applies pending
-migrations, imports the legacy local credential idempotently, verifies the
-schema, and starts Next.js. This is the default setup on a workstation without
-Docker.
+persistent PostgreSQL instance in `%LOCALAPPDATA%/YUInventory/postgres-development`, applies pending
+migrations, verifies the schema, and starts Next.js. This is the default setup
+on a workstation without Docker. It does not recreate a legacy account after a
+reset, so the first account registered in the application becomes the real
+administrator. To deliberately import a legacy account, run
+`npm run db:import-auth -- --target=development`, or set
+`YU_INVENTORY_IMPORT_LEGACY_AUTH=true` for a development startup.
 
 To use an external PostgreSQL instance instead, set `DATABASE_URL` and the
 related development variables. The Compose file is available for that workflow
@@ -87,6 +90,18 @@ docker compose --profile test up -d --wait postgres-test
 npm run test:db
 ```
 
+To begin local development with a clean database while keeping all migrations
+and table definitions, use the deliberately guarded reset command:
+
+```powershell
+npm run db:reset -- --target=development --confirm=DELETE_ALL_APPLICATION_DATA
+```
+
+It removes every application record in `yu_inventory_dev`, including users,
+inventory, locations, QR identifiers, history and audit records. It does not
+touch the schema or migration history. Afterward, register again: the first
+new account becomes the administrator.
+
 CI should provision a native PostgreSQL service or an ephemeral managed
 database and override `TEST_DATABASE_URL` and
 `TEST_DATABASE_MIGRATOR_URL` with distinct runtime and migrator roles, while
@@ -94,6 +109,24 @@ giving the database a unique `TEST_DATABASE_DEPLOYMENT_ID`. The committed
 Compose setup creates both roles so the suite can verify runtime grants and
 denials. `test:db` deliberately fails if the service or credentials are absent;
 it never skips database verification silently.
+
+### Reproducible inventory seed
+
+The development and test databases can be populated from the legacy fixtures in
+`lib/data.ts` after migrations have been applied:
+
+```powershell
+npm run db:seed -- --target=development
+npm run db:seed -- --target=test
+```
+
+The command is deliberately unavailable for production. It runs in one
+transaction under an advisory lock, creates deterministic users, buildings,
+rooms and items, preserves usable legacy QR aliases, writes inventory-number
+history and migration audit records, and marks the authentication bootstrap as
+complete. Placeholder or duplicate inventory numbers become deterministic
+`TMP-YYYY-NNNNNN` values. Re-running the command is safe and does not create
+duplicates.
 
 ## Migration workflow
 

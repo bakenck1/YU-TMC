@@ -7,6 +7,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgSchema,
   primaryKey,
   text,
@@ -448,6 +449,11 @@ export const itemsTable = inventorySchema.table(
     id: uuid().primaryKey(),
     name: varchar({ length: 160 }).notNull(),
     description: text(),
+    itemType: varchar({ length: 120 }).notNull().default("ТМЦ"),
+    brand: varchar({ length: 120 }),
+    model: varchar({ length: 160 }),
+    quantity: integer().notNull().default(1),
+    unitPrice: numeric({ precision: 14, scale: 2 }).notNull().default("0"),
     roomId: uuid()
       .notNull()
       .references(() => roomsTable.id, {
@@ -492,8 +498,11 @@ export const itemsTable = inventorySchema.table(
       "items_display_values_check",
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
+          AND btrim(${table.itemType}) <> ''
           AND btrim(${table.inventoryNumber}) <> ''
-          AND btrim(${table.inventoryNumberKey}) <> ''`,
+          AND btrim(${table.inventoryNumberKey}) <> ''
+          AND ${table.quantity} > 0
+          AND ${table.unitPrice} >= 0`,
     ),
     check(
       "items_archive_state_check",

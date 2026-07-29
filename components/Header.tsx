@@ -10,6 +10,8 @@ import type { AuthRole } from "@/lib/security/authorization";
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
   "/items": "nav.items",
+  "/inventory": "nav.inventory",
+  "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
   "/analytics": "nav.analytics",
   "/users": "nav.users",
@@ -38,6 +40,10 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   const { user, loading } = useAuth();
   const title = pathname.startsWith("/items/")
     ? `${t("nav.items")} / ${t("nav.itemCard")}`
+    : pathname.startsWith("/inventory/inspections")
+      ? t("nav.inspections")
+      : pathname.startsWith("/inventory/")
+        ? t("nav.inventory")
     : SECTION_TITLES[pathname]
       ? t(SECTION_TITLES[pathname])
       : settings.organizationName;

@@ -21,7 +21,7 @@ export default async function LoginPage({
   searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
   const cookieStore = await cookies();
-  const currentUser = await resolveCurrentUserToken(
+  const currentUser = await resolvePageUser(
     cookieStore.get(SESSION_COOKIE_NAME)?.value,
   );
   if (currentUser) redirect(defaultPathForRole(currentUser.role));
@@ -32,7 +32,7 @@ export default async function LoginPage({
     isSafeReturnPath(requestedReturnTo)
       ? requestedReturnTo
       : undefined;
-  const registrationAvailable = !(await isPasswordLoginConfigured());
+  const registrationAvailable = await isRegistrationAvailable();
 
   return (
     <AuthPageFrame>
@@ -42,4 +42,20 @@ export default async function LoginPage({
       />
     </AuthPageFrame>
   );
+}
+
+async function resolvePageUser(token: string | undefined) {
+  try {
+    return await resolveCurrentUserToken(token);
+  } catch {
+    return null;
+  }
+}
+
+async function isRegistrationAvailable() {
+  try {
+    return !(await isPasswordLoginConfigured());
+  } catch {
+    return false;
+  }
 }

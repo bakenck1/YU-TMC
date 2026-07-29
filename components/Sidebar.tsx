@@ -9,10 +9,12 @@ import {
   BarChart3,
   Boxes,
   ChevronLeft,
+  ClipboardCheck,
   LayoutDashboard,
   LogOut,
   LoaderCircle,
   MapPin,
+  ScanLine,
   Settings,
   Users,
   X,
@@ -32,6 +34,12 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
+  { href: "/inventory", labelKey: "nav.inventory", icon: ScanLine },
+  {
+    href: "/inventory/inspections",
+    labelKey: "nav.inspections",
+    icon: ClipboardCheck,
+  },
   { href: "/locations", labelKey: "nav.locations", icon: MapPin },
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { href: "/users", labelKey: "nav.users", icon: Users },
@@ -170,7 +178,9 @@ function SidebarContent({
               active={
                 item.href === "/"
                   ? pathname === "/"
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  : item.href === "/inventory"
+                    ? pathname === "/inventory"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
               }
               onClick={onNavigate}
             />

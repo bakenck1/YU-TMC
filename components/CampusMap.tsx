@@ -6,12 +6,12 @@ import { useAppSettings } from "./AppSettingsProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
   buildQrMatrix,
-  campusBuildings,
-  campusItemsById,
   QR_SIZE,
   statusMeta,
+  type CampusItem,
   type CampusStatus,
 } from "@/lib/campus";
+import type { CampusMapData } from "@/lib/campus-map-data";
 
 // Parse a CSS declaration string into a React style object (keeps the
 // high-fidelity prototype markup readable without hand-converting every prop).
@@ -95,7 +95,7 @@ const wing = (deg: number) => (
 
 const BUILDINGS: BuildingCfg[] = [
   {
-    id: "sport",
+    id: "sports-complex",
     wrap: "position:absolute;left:88.28%;top:340px;width:110px;height:150px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-56px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -113,7 +113,7 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "dorm2",
+    id: "dormitory-2",
     wrap: "position:absolute;left:62.5%;top:560px;width:140px;height:130px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-56px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -131,7 +131,7 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "main",
+    id: "main-campus",
     wrap: "position:absolute;left:8.59%;top:130px;width:280px;height:280px;",
     hoverY: 6,
     labelCss: "position:absolute;left:50%;top:34px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12.5px;padding:5px 12px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -149,8 +149,9 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "tech",
-    wrap: "position:absolute;left:24.22%;top:52px;width:96px;height:84px;",
+    id: "kgise",
+    // KGISE is located in the south-west part of the campus plan.
+    wrap: "position:absolute;left:13.5%;top:555px;width:96px;height:84px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-54px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
     tooltipCss: "position:absolute;left:50%;top:104px;transform:translateX(-50%);",
@@ -166,7 +167,25 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "dorm1",
+    id: "yessenov-technopark",
+    // The Technopark is positioned in the north-west block of the plan.
+    wrap: "position:absolute;left:25.5%;top:58px;width:118px;height:82px;",
+    hoverY: 5,
+    labelCss: "position:absolute;left:50%;top:-54px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
+    tooltipCss: "position:absolute;left:50%;top:104px;transform:translateX(-50%);",
+    selRing: "position:absolute;left:-8px;right:-8px;top:-34px;bottom:-8px;border:3px solid #002060;border-radius:18px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
+    shape: (
+      <>
+        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(70,60,35,.14);filter:blur(9px);border-radius:16px;")} />
+        <div style={css("position:absolute;inset:0;background:linear-gradient(#c7d4df,#9cadbb);border-radius:14px;")} />
+        <div style={css("position:absolute;left:0;right:0;top:-26px;height:82px;background:linear-gradient(135deg,#eef4f7,#d7e4eb);border-radius:14px;box-shadow:0 10px 18px rgba(60,80,90,.15);overflow:hidden;") }>
+          <div style={css("position:absolute;inset:10px;border:2px solid rgba(70,90,105,.15);border-radius:8px;")} />
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "dormitory-1",
     wrap: "position:absolute;left:47.66%;top:550px;width:140px;height:130px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-56px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -184,7 +203,7 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "marine",
+    id: "marine-academy",
     wrap: "position:absolute;left:80.47%;top:80px;width:95px;height:200px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-58px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -206,7 +225,7 @@ const BUILDINGS: BuildingCfg[] = [
 
 type View = "loading" | "building" | "floor" | "item";
 
-export default function CampusMap() {
+export default function CampusMap({ data }: { data: CampusMapData }) {
   const { t } = useAppSettings();
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -293,26 +312,33 @@ export default function CampusMap() {
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen, close]);
 
-  const building = buildingId ? campusBuildings[buildingId] : null;
-  const item = itemId ? campusItemsById[itemId] : null;
+  const building = buildingId ? data.buildings[buildingId] : null;
+  const item = itemId ? data.itemsById[itemId] : null;
 
   const crumbs = useMemo(() => {
     if (!building) return [];
-    const list: { label: string; onClick?: () => void; active?: boolean }[] = [
-      { label: t("map.campus"), onClick: close },
+    const list: {
+      label: string;
+      action?: "close" | "building" | { floor: number };
+      active?: boolean;
+    }[] = [
+      { label: t("map.campus"), action: "close" },
     ];
     if (view === "building") {
       list.push({ label: building.name, active: true });
     } else if (view === "floor" && floorN != null) {
-      list.push({ label: building.name, onClick: () => setView("building") });
+      list.push({ label: building.name, action: "building" });
       list.push({ label: t("map.floor", { n: floorN }), active: true });
     } else if (view === "item" && item) {
-      list.push({ label: building.name, onClick: () => setView("building") });
-      list.push({ label: t("map.floor", { n: item.floorN }), onClick: () => openFloor(item.floorN) });
+      list.push({ label: building.name, action: "building" });
+      list.push({
+        label: t("map.floor", { n: item.floorN }),
+        action: { floor: item.floorN },
+      });
       list.push({ label: item.name, active: true });
     }
     return list;
-  }, [building, view, floorN, item, t, close, openFloor]);
+  }, [building, view, floorN, item, t]);
 
   const keyItems = useMemo(() => {
     if (!building) return [];
@@ -351,7 +377,7 @@ export default function CampusMap() {
         </div>
 
         {BUILDINGS.map((b) => {
-          const data = campusBuildings[b.id];
+          const buildingData = data.buildings[b.id];
           const isHovered = hovered === b.id;
           const isSelected = buildingId === b.id;
           return (
@@ -377,7 +403,7 @@ export default function CampusMap() {
                   ...(isHovered ? { background: "#002060", color: "#fff" } : {}),
                 }}
               >
-                {data.name}
+                {buildingData.name}
               </div>
               {isHovered ? (
                 <div
@@ -394,7 +420,7 @@ export default function CampusMap() {
                     zIndex: 30,
                   }}
                 >
-                  {t("map.tooltip", { name: data.name, count: data.total })}
+                  {t("map.tooltip", { name: buildingData.name, count: buildingData.total })}
                 </div>
               ) : null}
             </div>
@@ -417,14 +443,31 @@ export default function CampusMap() {
                 {crumbs.map((c, i) => (
                   <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
                     {i > 0 ? <span style={{ color: "#c0c9c3", margin: "0 4px" }}>›</span> : null}
-                    <span
-                      onClick={c.onClick}
-                      style={c.active
-                        ? { fontWeight: 800, color: "#1c2420" }
-                        : { fontWeight: 700, color: "#002060", cursor: "pointer" }}
-                    >
-                      {c.label}
-                    </span>
+                    {c.active ? (
+                      <span style={{ fontWeight: 800, color: "#1c2420" }}>
+                        {c.label}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (c.action === "close") close();
+                          else if (c.action === "building") setView("building");
+                          else if (c.action) openFloor(c.action.floor);
+                        }}
+                        style={{
+                          padding: 0,
+                          border: 0,
+                          background: "transparent",
+                          font: "inherit",
+                          fontWeight: 700,
+                          color: "#002060",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {c.label}
+                      </button>
+                    )}
                   </span>
                 ))}
               </div>
@@ -509,6 +552,9 @@ export default function CampusMap() {
                       );
                     })}
                   </div>
+                  {keyItems.length === 0 ? (
+                    <div style={css("margin-top:2px;border:1px dashed #d9e2dc;border-radius:12px;padding:14px;color:#6b7671;font-size:13px;")}>В этом корпусе пока нет добавленных ТМЦ.</div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -549,6 +595,9 @@ export default function CampusMap() {
                       </div>
                     ))}
                   </div>
+                  {floor.rooms.length === 0 ? (
+                    <div style={css("border:1px dashed #d9e2dc;border-radius:14px;padding:16px;color:#6b7671;font-size:13px;line-height:1.5;")}>На этом этаже пока нет кабинетов. Добавьте кабинет в разделе «Управление инвентарём», и он появится здесь.</div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -569,7 +618,7 @@ function ItemCard({
   buildingName,
   t,
 }: {
-  item: (typeof campusItemsById)[string];
+  item: CampusItem;
   buildingName: string;
   t: ReturnType<typeof useAppSettings>["t"];
 }) {

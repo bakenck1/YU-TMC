@@ -1,16 +1,31 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
+import { InventoryLocationService } from "@/lib/application/services/inventory-location-service";
+import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
+import { QrResolutionService } from "@/lib/application/services/qr-resolution-service";
+import { InventoryResponsibilityService } from "@/lib/application/services/inventory-responsibility-service";
+import { InventoryInspectionService } from "@/lib/application/services/inventory-inspection-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
 import { FileSettingsRepository } from "@/lib/server/persistence/file/file-settings-repository";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
+import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
+import { createPostgresQrResolutionRepositories } from "@/lib/server/persistence/postgres/postgres-qr-resolution-repositories";
+import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
+import { createPostgresInventoryInspectionRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-inspection-repositories";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
 
 export interface ApplicationServices {
+  readonly items: InventoryItemService;
+  readonly locations: InventoryLocationService;
+  readonly qr: QrResolutionService;
+  readonly responsibility: InventoryResponsibilityService;
+  readonly inspections: InventoryInspectionService;
   readonly settings: SettingsService;
   readonly users: UserService;
 }
@@ -21,6 +36,11 @@ const globalApplication = globalThis as typeof globalThis & {
 };
 
 export function getApplicationServices(): ApplicationServices {
+  // Next.js keeps global values through hot reloads. Recreate the development
+  // container so a newly added service method is available immediately.
+  if (process.env.NODE_ENV === "development") {
+    return createApplicationServices();
+  }
   globalApplication.__yuInventoryApplication ??= createApplicationServices();
   return globalApplication.__yuInventoryApplication;
 }
@@ -41,6 +61,37 @@ function createApplicationServices(): ApplicationServices {
     : createPostgresUnitOfWork(createPostgresUserRepositories);
 
   return {
+    items: new InventoryItemService(
+      createPostgresUnitOfWork(createPostgresInventoryItemRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+      { create: () => randomBytes(16) },
+      {
+        next: (year) =>
+          `TMP-${year}-${String(Date.now() % 1_000_000).padStart(6, "0")}`,
+      },
+    ),
+    locations: new InventoryLocationService(
+      createPostgresUnitOfWork(createPostgresInventoryLocationRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+      { create: () => randomBytes(16) },
+    ),
+    qr: new QrResolutionService(
+      createPostgresUnitOfWork(createPostgresQrResolutionRepositories),
+    ),
+    responsibility: new InventoryResponsibilityService(
+      createPostgresUnitOfWork(
+        createPostgresInventoryResponsibilityRepositories,
+      ),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+    ),
+    inspections: new InventoryInspectionService(
+      createPostgresUnitOfWork(createPostgresInventoryInspectionRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+    ),
     settings: new SettingsService(new FileSettingsRepository()),
     users: new UserService(
       userUnitOfWork,

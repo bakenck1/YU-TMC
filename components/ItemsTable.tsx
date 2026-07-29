@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { ImageIcon, Search } from "lucide-react";
 import StatusBadge from "./StatusBadge";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { InventoryItem } from "@/lib/types";
@@ -22,7 +22,7 @@ function Thumb({ color, photo }: { color: string; photo?: string }) {
       className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg"
       style={{ backgroundColor: `${color}12`, border: `1px solid ${color}35` }}
     >
-      {photo ? <Image src={photo} alt={t("items.photoAlt")} fill sizes="64px" className="object-cover" /> : null}
+      {photo ? <Image src={photo} alt={t("items.photoAlt")} fill sizes="64px" className="object-cover" /> : <ImageIcon className="h-5 w-5 text-zinc-400" aria-label="Фото не добавлено" />}
       <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-bl-lg bg-emerald-500 px-1 text-[10px] font-semibold text-white">
         1
       </span>

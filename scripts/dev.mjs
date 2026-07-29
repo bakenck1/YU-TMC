@@ -10,14 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import {
-  initdb as packagedInitdb,
-} from "@embedded-postgres/windows-x64";
 import nextEnv from "@next/env";
 import pgPackage from "pg";
 
 const projectDirectory = process.cwd();
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCli = process.env.npm_execpath;
 const { loadEnvConfig } = nextEnv;
 const { Client } = pgPackage;
 
@@ -26,10 +24,26 @@ loadEnvConfig(projectDirectory, true);
 const configuredDatabaseUrl = process.env.DATABASE_URL?.trim();
 
 async function runWithEmbeddedPostgres() {
+  let packagedInitdb;
+  try {
+    ({ initdb: packagedInitdb } = await import("@embedded-postgres/windows-x64"));
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ERR_MODULE_NOT_FOUND") {
+      console.warn(
+        "@embedded-postgres/windows-x64 is not installed; starting Next.js without the local database fallback. Set DATABASE_URL for database-backed features.",
+      );
+      return runCommand(["run", "dev:next"], process.env);
+    }
+    throw error;
+  }
   console.log("Preparing automatic local database startup...");
   const databaseDirectory = path.join(
     process.env.YU_INVENTORY_POSTGRES_DATA_DIR?.trim() ||
-      path.join(projectDirectory, ".data", "postgres-development"),
+      path.join(
+        process.env.LOCALAPPDATA || tmpdir(),
+        "YUInventory",
+        "postgres-development",
+      ),
   );
   const databaseName = "yu_inventory_dev";
   const databaseUser = "yu_inventory";
@@ -55,7 +69,7 @@ async function runWithEmbeddedPostgres() {
     password: databasePassword,
     port: databasePort,
     user: databaseUser,
-  });
+  }, packagedInitdb);
 
   try {
     if (!existsSync(path.join(databaseDirectory, "PG_VERSION"))) {
@@ -67,11 +81,14 @@ async function runWithEmbeddedPostgres() {
     await postgres.start();
     await ensureDatabase(postgres, databaseName);
 
-    for (const args of [
+    const startupCommands = [
       ["run", "db:migrate", "--", "--target=development"],
-      ["run", "db:import-auth", "--", "--target=development"],
+      ...(process.env.YU_INVENTORY_IMPORT_LEGACY_AUTH === "true"
+        ? [["run", "db:import-auth", "--", "--target=development"]]
+        : []),
       ["run", "db:smoke", "--", "--target=development"],
-    ]) {
+    ];
+    for (const args of startupCommands) {
       const exitCode = await runCommand(args, environment);
       if (exitCode !== 0) return exitCode;
     }
@@ -111,10 +128,12 @@ async function ensureDatabase(postgres, databaseName) {
 
 function runCommand(args, environment) {
   return new Promise((resolve, reject) => {
-    const child = spawn(npmCommand, args, {
+    const command = npmCli ? process.execPath : npmCommand;
+    const commandArgs = npmCli ? [npmCli, ...args] : args;
+    const child = spawn(command, commandArgs, {
       cwd: projectDirectory,
       env: environment,
-      shell: process.platform === "win32",
+      shell: !npmCli && process.platform === "win32",
       stdio: "inherit",
       windowsHide: true,
     });
@@ -130,10 +149,10 @@ function runCommand(args, environment) {
 }
 
 class WindowsEmbeddedPostgres {
-  constructor(options) {
+  constructor(options, initdb) {
     this.options = options;
     this.process = null;
-    this.binaryDirectory = preparePortablePostgresBinaries();
+    this.binaryDirectory = preparePortablePostgresBinaries(initdb);
   }
 
   async initialise() {
@@ -234,7 +253,7 @@ class WindowsEmbeddedPostgres {
   }
 }
 
-function preparePortablePostgresBinaries() {
+function preparePortablePostgresBinaries(packagedInitdb) {
   if (process.platform !== "win32" || process.arch !== "x64") {
     throw new Error(
       "The automatic local PostgreSQL fallback supports Windows x64.",

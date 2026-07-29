@@ -16,15 +16,31 @@ export const metadata: Metadata = {
 
 export default async function RegisterPage() {
   const cookieStore = await cookies();
-  const currentUser = await resolveCurrentUserToken(
+  const currentUser = await resolvePageUser(
     cookieStore.get(SESSION_COOKIE_NAME)?.value,
   );
   if (currentUser) redirect(defaultPathForRole(currentUser.role));
-  if (await isPasswordLoginConfigured()) redirect("/login");
+  if (await isPasswordLoginConfiguredSafely()) redirect("/login");
 
   return (
     <AuthPageFrame>
       <RegisterForm />
     </AuthPageFrame>
   );
+}
+
+async function resolvePageUser(token: string | undefined) {
+  try {
+    return await resolveCurrentUserToken(token);
+  } catch {
+    return null;
+  }
+}
+
+async function isPasswordLoginConfiguredSafely() {
+  try {
+    return await isPasswordLoginConfigured();
+  } catch {
+    return true;
+  }
 }

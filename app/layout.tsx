@@ -36,7 +36,7 @@ export default function RootLayout({
       lang="kk"
       className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} h-full antialiased`}
     >
-      <body className="h-full">
+      <body className="h-full" suppressHydrationWarning>
         <AppSettingsProvider>
           <AuthProvider>
             <AppShell>{children}</AppShell>

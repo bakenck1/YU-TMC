@@ -33,6 +33,9 @@ async function currentPageUser() {
     if (error instanceof ApplicationError && error.kind === "unauthorized") {
       redirect("/login");
     }
+    if (error instanceof ApplicationError && error.kind === "unavailable") {
+      redirect("/login?error=authentication_unavailable");
+    }
     throw error;
   }
 }

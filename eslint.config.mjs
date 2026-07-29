@@ -103,6 +103,7 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    ".claude/worktrees/**",
     "next-env.d.ts",
   ]),
 ]);
