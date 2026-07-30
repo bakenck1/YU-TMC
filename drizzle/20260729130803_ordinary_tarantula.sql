@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."photos" ADD COLUMN "binary_data" "bytea";

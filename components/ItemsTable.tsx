@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import NextImage, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Search } from "lucide-react";
@@ -14,6 +14,13 @@ import {
   visibleItemStatus,
   type VisibleItemStatus,
 } from "@/lib/inventory-list";
+
+// Item photos are private API resources. Rendering them directly preserves the
+// user's session cookie and avoids sending a versioned URL through the image
+// optimizer, which intentionally rejects unrestricted query strings.
+function Image(props: ImageProps) {
+  return <NextImage {...props} unoptimized />;
+}
 
 function Thumb({ color, photo }: { color: string; photo?: string }) {
   const { t } = useAppSettings();

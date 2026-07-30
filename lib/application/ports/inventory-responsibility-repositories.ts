@@ -98,6 +98,7 @@ export interface AppendResponsibilityAuditRecord {
 
 export interface InventoryResponsibilityRepository {
   findItemState(itemId: string): Promise<ItemResponsibilityState | null>;
+  isUserActiveForUpdate(userId: string): Promise<boolean>;
   findPendingTransfer(itemId: string): Promise<TransferRecord | null>;
   findTransfer(id: string): Promise<TransferRecord | null>;
   listTransfersForUser(userId: string): Promise<TransferRecord[]>;

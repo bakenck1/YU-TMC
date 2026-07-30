@@ -51,7 +51,15 @@ export class QrResolutionService {
         target: null,
       };
     }
-    if (!fullAccess && record.targetKind !== "item") {
+    // A physical QR is not a universal capability for employee accounts.
+    // Employees may identify active items, but must receive the same opaque
+    // response for foreign target kinds, revoked codes, and inactive items.
+    if (
+      !fullAccess &&
+      (record.targetKind !== "item" ||
+        record.qrStatus !== "active" ||
+        record.targetStatus !== "active")
+    ) {
       throw new ApplicationError("not_found", "not_accessible");
     }
 

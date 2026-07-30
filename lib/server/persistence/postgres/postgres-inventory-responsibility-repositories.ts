@@ -96,6 +96,17 @@ class PostgresInventoryResponsibilityRepository
       : null;
   }
 
+  async isUserActiveForUpdate(userId: string): Promise<boolean> {
+    const result = await this.source.query(
+      `select 1
+         from ${USERS}
+        where id = $1 and is_active = true and deleted_at is null
+        for update`,
+      [userId],
+    );
+    return result.rowCount === 1;
+  }
+
   async findPendingTransfer(itemId: string): Promise<TransferRecord | null> {
     const result = await this.source.query<TransferRow>(
       transferSelect("where t.item_id = $1 and t.status = 'pending_current_owner'"),

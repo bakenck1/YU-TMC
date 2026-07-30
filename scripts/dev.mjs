@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -77,8 +78,13 @@ async function runWithEmbeddedPostgres() {
       await postgres.initialise();
     }
 
-    console.log("Starting the local PostgreSQL database...");
-    await postgres.start();
+    const databaseAlreadyRunning = await isDatabaseAvailable(databaseUrl);
+    if (databaseAlreadyRunning) {
+      console.log("Using the existing local PostgreSQL database...");
+    } else {
+      console.log("Starting the local PostgreSQL database...");
+      await postgres.start();
+    }
     await ensureDatabase(postgres, databaseName);
 
     const startupCommands = [
@@ -105,6 +111,21 @@ async function runWithEmbeddedPostgres() {
     await postgres.stop().catch((error) => {
       console.error("[postgres] Failed to stop cleanly:", error);
     });
+  }
+}
+
+async function isDatabaseAvailable(connectionString) {
+  const client = new Client({
+    connectionString,
+    connectionTimeoutMillis: 3000,
+  });
+  try {
+    await client.connect();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await client.end().catch(() => undefined);
   }
 }
 
@@ -182,6 +203,7 @@ class WindowsEmbeddedPostgres {
   }
 
   async start() {
+    this.removeStalePidFile();
     await new Promise((resolve, reject) => {
       let ready = false;
       this.process = spawn(
@@ -220,6 +242,15 @@ class WindowsEmbeddedPostgres {
         }
       });
     });
+  }
+
+  removeStalePidFile() {
+    const pidFile = path.join(this.options.databaseDir, "postmaster.pid");
+    if (!existsSync(pidFile)) return;
+    const pid = Number.parseInt(readFileSync(pidFile, "utf8").split(/\r?\n/, 1)[0] ?? "", 10);
+    if (Number.isSafeInteger(pid) && isProcessRunning(pid)) return;
+    console.warn("Removing a stale local PostgreSQL lock file...");
+    unlinkSync(pidFile);
   }
 
   async stop() {
@@ -287,6 +318,15 @@ function portablePostgresEnvironment(binaryDirectory) {
     LC_MESSAGES: "C",
     PATH: `${binaryDirectory};${process.env.PATH ?? ""}`,
   };
+}
+
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return Boolean(error && typeof error === "object" && error.code === "EPERM");
+  }
 }
 
 function runProcess(command, args, environment) {

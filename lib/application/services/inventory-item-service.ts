@@ -2,12 +2,14 @@ import type {
   CreateInventoryItemInput,
   InventoryItemDto,
   UpdateInventoryItemContentInput,
+  UpdateInventoryItemPhotoInput,
   UpdateInventoryItemProtectedInput,
 } from "@/lib/contracts/inventory-items";
 import type {
   AppendItemAuditRecord,
   InventoryItemRecord,
   InventoryItemRepositories,
+  StoredItemPhoto,
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
@@ -193,6 +195,59 @@ export class InventoryItemService {
       );
       return toItemDto({ ...updated, qrCode: current.qrCode });
     });
+  }
+
+  async updatePhoto(
+    id: string,
+    input: UpdateInventoryItemPhotoInput,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.edit_content");
+    const photo = normalizeCameraPhoto(input);
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.version !== input.version) throw versionConflict();
+      const updated = await items.updateItemPhoto({
+        id,
+        photoId: this.ids.create(),
+        bytes: photo.bytes,
+        width: photo.width,
+        height: photo.height,
+        actorId: actor.userId,
+        expectedVersion: input.version,
+        occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      await items.appendAudit(
+        createAudit({
+          id: this.ids.create(),
+          actor,
+          subjectId: id,
+          subjectRevision: updated.version,
+          action: "item.photo_captured",
+          afterValues: {
+            mimeType: "image/jpeg",
+            width: photo.width,
+            height: photo.height,
+            byteSize: photo.bytes.byteLength,
+          },
+          occurredAt,
+        }),
+      );
+      return toItemDto({ ...updated, qrCode: current.qrCode });
+    });
+  }
+
+  async getItemPhoto(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<StoredItemPhoto> {
+    await this.findItem(id, actor);
+    const photo = await this.unitOfWork.read(({ items }) => items.findItemPhoto(id));
+    if (!photo) throw new ApplicationError("not_found", "item_photo_not_found");
+    return photo;
   }
 
   async updateProtected(
@@ -433,6 +488,41 @@ function normalizeServiceInput(input: SendItemToServiceInput) {
     serviceName: normalizeText(input.serviceName, 160, "invalid_service_name"),
     reason: normalizeText(input.reason, 1_000, "invalid_service_reason"),
   };
+}
+
+function normalizeCameraPhoto(input: UpdateInventoryItemPhotoInput) {
+  if (!Number.isInteger(input.version) || input.version < 1) {
+    throw new ApplicationError("validation", "invalid_version");
+  }
+  if (
+    !Number.isInteger(input.width) ||
+    !Number.isInteger(input.height) ||
+    input.width < 1 ||
+    input.height < 1 ||
+    input.width > 1920 ||
+    input.height > 1920 ||
+    input.width * input.height > 2_500_000
+  ) {
+    throw new ApplicationError("validation", "invalid_photo_dimensions");
+  }
+  if (typeof input.imageDataUrl !== "string") {
+    throw new ApplicationError("validation", "invalid_camera_photo");
+  }
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(
+    input.imageDataUrl,
+  );
+  if (!match?.[1]) throw new ApplicationError("validation", "invalid_camera_photo");
+  let decoded: string;
+  try {
+    decoded = atob(match[1]);
+  } catch {
+    throw new ApplicationError("validation", "invalid_camera_photo");
+  }
+  const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+  if (bytes.byteLength < 1 || bytes.byteLength > 5 * 1024 * 1024) {
+    throw new ApplicationError("validation", "invalid_camera_photo_size");
+  }
+  return { bytes, width: input.width, height: input.height };
 }
 
 function normalizeText(value: unknown, max: number, code: string) {

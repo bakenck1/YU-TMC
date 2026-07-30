@@ -165,6 +165,9 @@ export class InventoryInspectionService {
       if (existing) return toItemResultDto(existing);
       const snapshot = await inspections.findItemSnapshot(input.itemId);
       if (!snapshot) throw notFound("item_not_found");
+      if (snapshot.registryRoomId !== inspectionRoom.roomId) {
+        throw notFound("item_not_found");
+      }
       const occurredAt = this.clock.now();
       let created;
       try {

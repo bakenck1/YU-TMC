@@ -273,6 +273,15 @@ export class InventoryResponsibilityService {
       if (current.status !== "pending_current_owner") {
         throw conflict("transfer_not_pending");
       }
+      if (
+        responsibleUserId &&
+        !(await responsibility.isUserActiveForUpdate(responsibleUserId))
+      ) {
+        throw new ApplicationError(
+          "validation",
+          "responsible_user_not_available",
+        );
+      }
       const occurredAt = this.clock.now();
       const updated = await responsibility.overrideTransfer({
         id,
@@ -400,11 +409,7 @@ function toTransferDto(record: TransferRecord): TransferDto {
   return {
     id: record.id,
     itemId: record.itemId,
-    requestedBy: record.requestedBy,
     requestedByName: record.requestedByName,
-    proposedResponsibleId: record.proposedResponsibleId,
-    currentResponsibleIdAtRequest: record.currentResponsibleIdAtRequest,
-    currentResponsibleName: record.currentResponsibleName,
     status: record.status,
     requestedAt: record.requestedAt.toISOString(),
     closedAt: record.closedAt?.toISOString() ?? null,

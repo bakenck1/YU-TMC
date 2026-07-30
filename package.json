@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "validate:mockups": "node scripts/validate-mobile-mockups.mjs",
+    "ui:capture": "playwright test --config=playwright.ui-flow.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db/migrate.ts",

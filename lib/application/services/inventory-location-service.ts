@@ -192,7 +192,9 @@ export class InventoryLocationService {
     requirePermission(actor, "inventory.workspace.read");
     return this.unitOfWork.read(async ({ locations }) => {
       const building = await locations.findBuildingById(buildingId);
-      if (!building) throw new ApplicationError("not_found", "building_not_found");
+      if (!building || building.status !== "active") {
+        throw new ApplicationError("not_found", "building_not_found");
+      }
       return (await locations.listRooms(buildingId)).map(toRoomDto);
     });
   }
@@ -212,7 +214,9 @@ export class InventoryLocationService {
 
     return this.unitOfWork.transaction(async ({ locations }) => {
       const building = await locations.findBuildingById(buildingId);
-      if (!building) throw new ApplicationError("not_found", "building_not_found");
+      if (!building || building.status !== "active") {
+        throw new ApplicationError("not_found", "building_not_found");
+      }
       const room = await locations.insertRoom({
         id: roomId,
         buildingId,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import type { QueryResultRow } from "pg";
 
 import type {
@@ -12,6 +13,7 @@ import type {
   InventoryItemRepository,
   ReplaceItemQrRecord,
   UpdateInventoryItemContentRecord,
+  UpdateInventoryItemPhotoRecord,
   UpdateInventoryItemProtectedRecord,
   UpdateInventoryItemStatusRecord,
 } from "@/lib/application/ports/inventory-item-repositories";
@@ -48,6 +50,7 @@ interface ItemRow extends QueryResultRow {
   responsible_id: string | null;
   responsible_name: string | null;
   photo_url: string | null;
+  photo_id: string | null;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -177,6 +180,66 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     );
     if (result.rowCount !== 1) return null;
     return this.findItemById(input.id);
+  }
+
+  async updateItemPhoto(
+    input: UpdateInventoryItemPhotoRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const itemUpdate = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set updated_by = $2, updated_at = $3, version = version + 1
+       where id = $1 and version = $4 and status <> 'decommissioned'`,
+      [input.id, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (itemUpdate.rowCount !== 1) return null;
+
+    await this.source.query(
+      `update ${PHOTOS}
+       set status = 'superseded', superseded_at = $2, version = version + 1
+       where item_id = $1 and purpose = 'item' and status = 'attached'`,
+      [input.id, input.occurredAt],
+    );
+    const objectKey = `database://items/${input.id}/${input.photoId}.jpg`;
+    const checksum = createHash("sha256").update(input.bytes).digest("hex");
+    await this.source.query(
+      `insert into ${PHOTOS}
+         (id, purpose, status, uploaded_by, original_object_key, preview_object_key,
+          trusted_mime_type, byte_size, width, height, checksum_sha256,
+          reserved_at, expires_at, attached_at, item_id, binary_data)
+       values ($1, 'item', 'attached', $2, $3, $3, 'image/jpeg', $4, $5, $6, $7,
+               $8, $9, $8, $10, $11)`,
+      [
+        input.photoId,
+        input.actorId,
+        objectKey,
+        input.bytes.byteLength,
+        input.width,
+        input.height,
+        checksum,
+        input.occurredAt,
+        new Date(input.occurredAt.getTime() + 24 * 60 * 60 * 1000),
+        input.id,
+        Buffer.from(input.bytes),
+      ],
+    );
+    return this.findItemById(input.id);
+  }
+
+  async findItemPhoto(id: string) {
+    const result = await this.source.query<{
+      binary_data: Buffer | null;
+      trusted_mime_type: string | null;
+    }>(
+      `select binary_data, trusted_mime_type
+         from ${PHOTOS}
+        where item_id = $1 and purpose = 'item' and status = 'attached'
+        order by attached_at desc
+        limit 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row?.binary_data || row.trusted_mime_type !== "image/jpeg") return null;
+    return { bytes: row.binary_data, mimeType: "image/jpeg" as const };
   }
 
   async updateItemProtected(
@@ -316,7 +379,7 @@ function itemSelect(where: string) {
            q.original_value as qr_code,
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
-           p.preview_object_key as photo_url,
+           p.preview_object_key as photo_url, p.id as photo_id,
            i.version, i.created_at, i.updated_at
       from ${ITEMS} i
       join ${ROOMS} r on r.id = i.room_id
@@ -336,10 +399,10 @@ function itemSelect(where: string) {
       ) rp on true
       left join ${USERS} u on u.id = rp.responsible_user_id
       left join lateral (
-        select preview_object_key
-          from ${PHOTOS}
+        select id, preview_object_key
+         from ${PHOTOS}
          where item_id = i.id and purpose = 'item'
-           and status in ('attached', 'superseded')
+           and status = 'attached'
          order by attached_at desc nulls last
          limit 1
       ) p on true
@@ -368,7 +431,9 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     qrCode: row.qr_code,
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
-    photoUrl: row.photo_url,
+    photoUrl: row.photo_id
+      ? `/api/inventory/items/${row.id}/photo?v=${row.version}`
+      : row.photo_url,
     version: Number(row.version),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),

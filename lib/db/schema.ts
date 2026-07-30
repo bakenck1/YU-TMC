@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   foreignKey,
   index,
   integer,
@@ -52,6 +53,10 @@ import { USER_ROLES } from "@/lib/contracts/users";
  * the committed bootstrap migration deliberately creates this namespace.
  */
 export const inventorySchema = pgSchema("yu_inventory");
+
+const binaryData = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+});
 
 export const authRoleEnum = inventorySchema.enum("auth_role", USER_ROLES);
 export const recordStatusEnum = inventorySchema.enum(
@@ -1365,6 +1370,7 @@ export const photosTable = inventorySchema.table(
     width: integer(),
     height: integer(),
     checksumSha256: varchar({ length: 64 }),
+    binaryData: binaryData("binary_data"),
     reservedAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),

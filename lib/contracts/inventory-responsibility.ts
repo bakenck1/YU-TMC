@@ -26,11 +26,7 @@ export interface ResponsibilityTimelineEntryDto {
 export interface TransferDto {
   id: string;
   itemId: string;
-  requestedBy: string;
   requestedByName: string;
-  proposedResponsibleId: string;
-  currentResponsibleIdAtRequest: string;
-  currentResponsibleName: string;
   status: TransferStatus;
   requestedAt: string;
   closedAt: string | null;

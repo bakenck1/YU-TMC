@@ -19,6 +19,8 @@ import { InventoryInspectionService } from "@/lib/application/services/inventory
 
 const NOW = new Date("2026-07-29T08:00:00.000Z");
 const TECHNICIAN = { userId: "tech-1", role: "warehouse" as const };
+const OTHER_TECHNICIAN = { userId: "tech-2", role: "warehouse" as const };
+const ADMIN = { userId: "admin-1", role: "admin" as const };
 const EMPLOYEE = { userId: "employee-1", role: "employee" as const };
 
 describe("InventoryInspectionService", () => {
@@ -53,6 +55,25 @@ describe("InventoryInspectionService", () => {
     ).rejects.toMatchObject({ kind: "forbidden" });
   });
 
+  it("does not disclose one technician's inspections to another technician", async () => {
+    const harness = createHarness();
+    const ownInspection = await harness.service.create({ name: "Own" }, TECHNICIAN);
+    const otherInspection = await harness.service.create(
+      { name: "Other" },
+      OTHER_TECHNICIAN,
+    );
+
+    await expect(harness.service.list(TECHNICIAN)).resolves.toEqual([
+      expect.objectContaining({ id: ownInspection.id, technicianId: TECHNICIAN.userId }),
+    ]);
+    await expect(harness.service.list(ADMIN)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: ownInspection.id }),
+        expect.objectContaining({ id: otherInspection.id }),
+      ]),
+    );
+  });
+
   it("snapshots an item result once per inspection and returns the prior result", async () => {
     const harness = createHarness();
     const inspection = await harness.service.create({ name: "July" }, TECHNICIAN);
@@ -82,6 +103,31 @@ describe("InventoryInspectionService", () => {
       ),
     ).resolves.toMatchObject({ id: recorded.id, result: "present" });
   });
+
+  it("does not record an item from another room against the selected inspection room", async () => {
+    const harness = createHarness();
+    const inspection = await harness.service.create({ name: "July" }, TECHNICIAN);
+    const room = await harness.service.addRoom(
+      inspection.id,
+      { buildingId: harness.buildingId, roomId: harness.roomId },
+      TECHNICIAN,
+    );
+    harness.repository.setItemRegistryRoom(
+      "00000000-0000-4000-8000-000000000099",
+    );
+
+    await expect(
+      harness.service.recordItemResult(
+        inspection.id,
+        room.id,
+        { itemId: harness.itemId, result: "present" },
+        TECHNICIAN,
+      ),
+    ).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "item_not_found",
+    });
+  });
 });
 
 function createHarness() {
@@ -98,6 +144,7 @@ function createHarness() {
     buildingId: "00000000-0000-4000-8000-000000000002",
     roomId: "00000000-0000-4000-8000-000000000003",
     itemId: "00000000-0000-4000-8000-000000000004",
+    repository,
     service: new InventoryInspectionService(
       unitOfWork,
       { now: () => NOW },
@@ -122,7 +169,7 @@ class MemoryInspectionRepository implements InventoryInspectionRepository {
     floorNumber: 2,
     floorLabel: null,
   };
-  private readonly itemSnapshot: ItemSnapshotAtScan = {
+  private itemSnapshot: ItemSnapshotAtScan = {
     itemId: "00000000-0000-4000-8000-000000000004",
     registryRoomId: "00000000-0000-4000-8000-000000000003",
     responsibleUserId: "employee-1",
@@ -154,6 +201,10 @@ class MemoryInspectionRepository implements InventoryInspectionRepository {
 
   async findItemSnapshot(itemId: string) {
     return itemId === this.itemSnapshot.itemId ? this.itemSnapshot : null;
+  }
+
+  setItemRegistryRoom(registryRoomId: string) {
+    this.itemSnapshot = { ...this.itemSnapshot, registryRoomId };
   }
 
   async findItemResult(inspectionId: string, itemId: string) {

@@ -9,7 +9,9 @@ import type {
   InventoryItemRepositories,
   InventoryItemRepository,
   ReplaceItemQrRecord,
+  StoredItemPhoto,
   UpdateInventoryItemContentRecord,
+  UpdateInventoryItemPhotoRecord,
   UpdateInventoryItemProtectedRecord,
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
@@ -158,6 +160,31 @@ describe("InventoryItemService", () => {
       afterValues: expect.objectContaining({ serviceName: "Service Centre" }),
     });
   });
+
+  it("stores a camera photo in the item record and audit trail", async () => {
+    const harness = createHarness();
+    const item = await harness.service.createItem(
+      { name: "Camera monitor", roomId: harness.roomId },
+      TECHNICIAN,
+    );
+
+    const updated = await harness.service.updatePhoto(
+      item.id,
+      {
+        version: item.version,
+        imageDataUrl: "data:image/jpeg;base64,/9j/2Q==",
+        width: 640,
+        height: 480,
+      },
+      TECHNICIAN,
+    );
+
+    expect(updated).toMatchObject({ version: 2, photoUrl: "memory://photo" });
+    expect(harness.audits.at(-1)).toMatchObject({
+      action: "item.photo_captured",
+      afterValues: expect.objectContaining({ width: 640, height: 480 }),
+    });
+  });
 });
 
 function createHarness() {
@@ -196,6 +223,7 @@ class MemoryItemRepository implements InventoryItemRepository {
   readonly audits: AppendItemAuditRecord[] = [];
   readonly revokedQrCodes: string[] = [];
   private readonly items = new Map<string, InventoryItemRecord>();
+  private photo: StoredItemPhoto | null = null;
 
   async roomExists(id: string) {
     return id === "00000000-0000-4000-8000-000000000001";
@@ -255,6 +283,24 @@ class MemoryItemRepository implements InventoryItemRepository {
     };
     this.items.set(input.id, updated);
     return updated;
+  }
+
+  async updateItemPhoto(input: UpdateInventoryItemPhotoRecord) {
+    const current = this.items.get(input.id);
+    if (!current || current.version !== input.expectedVersion) return null;
+    this.photo = { bytes: input.bytes, mimeType: "image/jpeg" };
+    const updated = {
+      ...current,
+      photoUrl: "memory://photo",
+      version: current.version + 1,
+      updatedAt: input.occurredAt,
+    };
+    this.items.set(input.id, updated);
+    return updated;
+  }
+
+  async findItemPhoto() {
+    return this.photo;
   }
 
   async updateItemProtected(input: UpdateInventoryItemProtectedRecord) {

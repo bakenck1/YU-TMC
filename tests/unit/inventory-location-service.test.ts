@@ -140,6 +140,38 @@ describe("InventoryLocationService", () => {
     });
   });
 
+  it("rejects room updates and archival by a warehouse user even with a known room id", async () => {
+    const harness = createHarness();
+    const building = await harness.service.createBuilding(
+      { name: "A", address: "Address A" },
+      ADMIN,
+    );
+    const room = await harness.service.createRoom(
+      building.id,
+      { designation: "101", floorNumber: 1 },
+      ADMIN,
+    );
+
+    await expect(
+      harness.service.updateRoom(
+        room.id,
+        { designation: "Hacked", floorNumber: 1, version: room.version },
+        TECHNICIAN,
+      ),
+    ).rejects.toMatchObject({ kind: "forbidden", publicCode: "forbidden" });
+    await expect(
+      harness.service.archiveRoom(room.id, room.version, TECHNICIAN),
+    ).rejects.toMatchObject({ kind: "forbidden", publicCode: "forbidden" });
+
+    await expect(
+      harness.service.updateRoom(
+        room.id,
+        { designation: "101", floorNumber: 1, version: room.version },
+        ADMIN,
+      ),
+    ).resolves.toMatchObject({ designation: "101", status: "active" });
+  });
+
   it("archives an empty room and then its empty building with audit history", async () => {
     const harness = createHarness();
     const building = await harness.service.createBuilding(
@@ -161,6 +193,32 @@ describe("InventoryLocationService", () => {
         expect.objectContaining({ action: "building.archived" }),
       ]),
     );
+  });
+
+  it("does not expose or create rooms through an archived building", async () => {
+    const harness = createHarness();
+    const building = await harness.service.createBuilding(
+      { name: "Archived", address: "Address A" },
+      ADMIN,
+    );
+    await harness.service.archiveBuilding(building.id, building.version, ADMIN);
+
+    await expect(
+      harness.service.listRooms(building.id, TECHNICIAN),
+    ).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "building_not_found",
+    });
+    await expect(
+      harness.service.createRoom(
+        building.id,
+        { designation: "101", floorNumber: 1 },
+        TECHNICIAN,
+      ),
+    ).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "building_not_found",
+    });
   });
 
   it.each([

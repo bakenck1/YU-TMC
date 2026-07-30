@@ -73,6 +73,46 @@ describe("QrResolutionService", () => {
     });
   });
 
+  it("does not disclose a revoked item QR to an employee", async () => {
+    const harness = createHarness({
+      canonicalKey: "legacy-revoked-item",
+      format: "legacy_raw",
+      qrStatus: "revoked",
+      targetKind: "item",
+      targetId: "item-1",
+      targetStatus: "active",
+      title: "Laptop",
+      buildingName: "Building A",
+      roomDesignation: "D212",
+      inventoryNumber: "INV-1",
+      responsibleName: null,
+    });
+
+    await expect(
+      harness.service.resolve("legacy-revoked-item", EMPLOYEE),
+    ).rejects.toMatchObject({ kind: "not_found", publicCode: "not_accessible" });
+  });
+
+  it("does not disclose an inactive item to an employee", async () => {
+    const harness = createHarness({
+      canonicalKey: "legacy-inactive-item",
+      format: "legacy_raw",
+      qrStatus: "active",
+      targetKind: "item",
+      targetId: "item-1",
+      targetStatus: "decommissioned",
+      title: "Laptop",
+      buildingName: "Building A",
+      roomDesignation: "D212",
+      inventoryNumber: "INV-1",
+      responsibleName: null,
+    });
+
+    await expect(
+      harness.service.resolve("legacy-inactive-item", EMPLOYEE),
+    ).rejects.toMatchObject({ kind: "not_found", publicCode: "not_accessible" });
+  });
+
   it("returns a distinct status for a valid but unissued generated code", async () => {
     const harness = createHarness(null);
     await expect(harness.service.resolve(GENERATED, ADMIN)).resolves.toMatchObject({

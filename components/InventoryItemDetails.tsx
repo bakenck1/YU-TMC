@@ -1,7 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Check, Download, Image as ImageIcon, Printer, Save, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  Download,
+  FileText,
+  Image as ImageIcon,
+  Pencil,
+  Printer,
+  QrCode,
+  Save,
+  Trash2,
+  Wrench,
+} from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -12,6 +25,7 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemQrDialogs from "@/components/InventoryItemQrDialogs";
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
+import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 
 export default function InventoryItemDetails({
   initialItem,
@@ -54,6 +68,8 @@ export default function InventoryItemDetails({
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [qrDialog, setQrDialog] = useState<"generate" | "scan" | "purpose" | null>(null);
   const [labelCount, setLabelCount] = useState("1");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
 
   async function saveContent() {
     setSaving(true);
@@ -162,6 +178,7 @@ export default function InventoryItemDetails({
   async function sendToService(input: { serviceName: string; reason: string }) {
     setServicing(true);
     setError("");
+    setSaved(false);
     try {
       const response = await fetch(`/api/inventory/items/${item.id}`, {
         method: "PATCH",
@@ -181,11 +198,39 @@ export default function InventoryItemDetails({
         throw new Error(body.error ?? "service_failed");
       }
       setItem(body.item);
+      setServiceDialogOpen(false);
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "service_failed");
     } finally {
       setServicing(false);
+    }
+  }
+
+  async function saveCameraPhoto(photo: {
+    imageDataUrl: string;
+    width: number;
+    height: number;
+  }) {
+    setCapturingPhoto(true);
+    setError("");
+    setSaved(false);
+    try {
+      const response = await fetch(`/api/inventory/items/${item.id}/photo`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: item.version, ...photo }),
+      });
+      const body = (await response.json()) as { item?: InventoryItemDto; error?: string };
+      if (!response.ok || !body.item) {
+        throw new Error(body.error ?? "photo_save_failed");
+      }
+      setItem(body.item);
+      setSaved(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "photo_save_failed");
+    } finally {
+      setCapturingPhoto(false);
     }
   }
 
@@ -209,6 +254,20 @@ export default function InventoryItemDetails({
           </span>
         </div>
       </div>
+
+      <nav aria-label="Действия с предметом" className="flex flex-wrap gap-2 rounded-xl border border-black/5 bg-white p-2 shadow-sm">
+        <button
+          type="button"
+          onClick={() => document.getElementById("item-information")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        >
+          <FileText className="h-4 w-4" /> Информация
+        </button>
+        {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
+        <button type="button" onClick={() => setQrDialog("generate")} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><QrCode className="h-4 w-4" />QR-код</button>
+        {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
+        {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><Trash2 className="h-4 w-4" />Списать</button> : null}
+      </nav>
 
       {error ? (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -240,6 +299,14 @@ export default function InventoryItemDetails({
         onClose={() => setServiceDialogOpen(false)}
         onSubmit={(input) => void sendToService(input)}
       />
+      <InventoryItemCameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(photo) => {
+          setCameraOpen(false);
+          void saveCameraPhoto(photo);
+        }}
+      />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.4fr)]">
         <section className="overflow-hidden rounded-2xl border border-amber-100 bg-[#fff8ec]">
@@ -252,6 +319,17 @@ export default function InventoryItemDetails({
                 Фото не добавлено
               </div>
             )}
+            {canEditContent ? (
+              <button
+                type="button"
+                onClick={() => setCameraOpen(true)}
+                disabled={capturingPhoto}
+                className="absolute bottom-3 right-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
+              >
+                <Camera className="h-4 w-4" />
+                {capturingPhoto ? "Сохранение…" : "Фото"}
+              </button>
+            ) : null}
           </div>
           <div className="border-t border-amber-100 p-5">
             <div className="flex items-center justify-center gap-3 rounded-xl bg-white p-4">
@@ -295,7 +373,7 @@ export default function InventoryItemDetails({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+        <section id="item-information" className="scroll-mt-6 rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
           <div className="mb-6 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-zinc-800">Карточка предмета</h2>
@@ -310,14 +388,10 @@ export default function InventoryItemDetails({
                 Изменить
               </button>
             ) : null}
-            {canManageProtected ? (
+            {canSendToService || canManageProtected ? (
               <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" onClick={() => void sendToService()} disabled={servicing || item.status === "maintenance"} className="rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50">
-                  {servicing ? "Отправка…" : item.status === "maintenance" ? "В сервисе" : "Отправить в сервис"}
-                </button>
-                <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
-                  <span className="inline-flex items-center gap-2"><Trash2 className="h-4 w-4" />Списать и архивировать</span>
-                </button>
+                {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} className="rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50">{servicing ? "Отправка…" : item.status === "maintenance" ? "В сервисе" : "Отправить в сервис"}</button> : null}
+                {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"><span className="inline-flex items-center gap-2"><Trash2 className="h-4 w-4" />Списать и архивировать</span></button> : null}
               </div>
             ) : null}
           </div>

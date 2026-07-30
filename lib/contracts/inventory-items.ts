@@ -56,6 +56,13 @@ export interface UpdateInventoryItemContentInput {
   unitPrice?: number | null;
 }
 
+export interface UpdateInventoryItemPhotoInput {
+  version: number;
+  imageDataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface UpdateInventoryItemProtectedInput {
   version: number;
   roomId: string;
