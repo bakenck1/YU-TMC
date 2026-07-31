@@ -51,7 +51,7 @@ async function main() {
          where singleton = true`, [actor],
       );
       await client.query("commit");
-      console.log(`Seeded ${users.length + 1} users and ${items.length} legacy inventory items.`);
+      console.log(`Seeded ${users.length} users and ${items.length} legacy inventory items.`);
     } catch (error) {
       await client.query("rollback").catch(() => undefined);
       throw error;
@@ -60,13 +60,8 @@ async function main() {
 }
 
 async function seedUsers(client: Pick<PoolClient, "query">) {
-  const seededUsers = [...users, {
-    id: "seed-owner", code: "USR-SEED-OWNER", fullName: "Seed System Owner",
-    email: "seed-owner@inventory.local", phone: "—", role: "owner" as const,
-    emailVerified: true, active: true,
-  }];
-  for (const user of seededUsers) {
-    const id = user.id === "seed-owner" ? seedId("user:owner") : seedId(`user:${user.id}`);
+  for (const user of users) {
+    const id = seedId(`user:${user.id}`);
     await client.query(
       `insert into ${SCHEMA}."users" (id, code, email, full_name, role, phone, email_verified, is_active, created_at, updated_at)
        values ($1, $2, $3, $4, $5, nullif($6, '—'), $7, true, now(), now())

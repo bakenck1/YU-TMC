@@ -59,6 +59,16 @@ const binaryData = customType<{ data: Uint8Array; driverData: Uint8Array }>({
 });
 
 export const authRoleEnum = inventorySchema.enum("auth_role", USER_ROLES);
+// Audit snapshots are immutable historical facts. Keep the retired owner
+// label only in this dedicated enum while active users use USER_ROLES.
+const AUDIT_ACTOR_ROLE_SNAPSHOTS = [
+  ...USER_ROLES,
+  "owner",
+] as const;
+export const auditActorRoleSnapshotEnum = inventorySchema.enum(
+  "audit_actor_role_snapshot",
+  AUDIT_ACTOR_ROLE_SNAPSHOTS,
+);
 export const recordStatusEnum = inventorySchema.enum(
   "record_status",
   RECORD_STATUSES,
@@ -1748,7 +1758,7 @@ export const auditRecordsTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
-    actorRoleSnapshot: authRoleEnum(),
+    actorRoleSnapshot: auditActorRoleSnapshotEnum(),
     subjectKind: auditSubjectKindEnum().notNull(),
     subjectId: uuid().notNull(),
     subjectRevision: integer(),

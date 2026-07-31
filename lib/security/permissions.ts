@@ -55,13 +55,7 @@ export const APP_PERMISSIONS = [
 export type AppPermission = (typeof APP_PERMISSIONS)[number];
 
 const ALL_ROLES: readonly UserRole[] = USER_ROLES;
-const ADMIN_OWNER: readonly UserRole[] = ["admin", "owner"];
-const ADMIN_OWNER_TECHNICIAN: readonly UserRole[] = [
-  "admin",
-  "owner",
-  "warehouse",
-];
-const ADMIN_TECHNICIAN: readonly UserRole[] = ["admin", "warehouse"];
+const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
 const INVENTORY_ROLES: readonly UserRole[] = [
   "admin",
   "warehouse",
@@ -74,25 +68,25 @@ const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
 export const PERMISSION_ROLES = {
   "legacy.dashboard.read": ALL_ROLES,
   "legacy.items.read": ALL_ROLES,
-  "legacy.locations.read": ADMIN_OWNER_TECHNICIAN,
-  "legacy.analytics.read": ADMIN_OWNER_TECHNICIAN,
-  "legacy.users.read": ADMIN_OWNER,
-  "legacy.users.manage": ADMIN_OWNER,
+  "legacy.locations.read": ADMIN_ONLY,
+  "legacy.analytics.read": ADMIN_ONLY,
+  "legacy.users.read": ADMIN_ONLY,
+  "legacy.users.manage": ADMIN_ONLY,
   "legacy.users.manage_privileged": ADMIN_ONLY,
-  "legacy.settings.manage": ADMIN_OWNER,
-  "inventory.workspace.read": ADMIN_TECHNICIAN,
-  "inventory.building.create": ADMIN_TECHNICIAN,
+  "legacy.settings.manage": ADMIN_ONLY,
+  "inventory.workspace.read": ADMIN_WAREHOUSE,
+  "inventory.building.create": ADMIN_ONLY,
   "inventory.building.manage": ADMIN_ONLY,
-  "inventory.room.create": ADMIN_TECHNICIAN,
+  "inventory.room.create": ADMIN_ONLY,
   "inventory.room.manage": ADMIN_ONLY,
-  "inventory.item.read_all": ADMIN_TECHNICIAN,
+  "inventory.item.read_all": ADMIN_WAREHOUSE,
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
-  "inventory.item.create": ADMIN_TECHNICIAN,
-  "inventory.item.edit_content": ADMIN_TECHNICIAN,
-  "inventory.item.send_to_service": ADMIN_TECHNICIAN,
+  "inventory.item.create": ADMIN_ONLY,
+  "inventory.item.edit_content": ADMIN_ONLY,
+  "inventory.item.send_to_service": ADMIN_ONLY,
   "inventory.item.manage_protected_fields": ADMIN_ONLY,
   "inventory.item.bulk_manage": ADMIN_ONLY,
-  "inventory.qr.resolve_full": ADMIN_TECHNICIAN,
+  "inventory.qr.resolve_full": ADMIN_WAREHOUSE,
   "inventory.qr.resolve_item": EMPLOYEE_ONLY,
   "inventory.qr.manage": ADMIN_ONLY,
   "inventory.responsibility.accept_free": EMPLOYEE_ONLY,
@@ -115,9 +109,9 @@ export const PERMISSION_ROLES = {
   "inventory.decision.resolve": ADMIN_ONLY,
   "inventory.notification.read": INVENTORY_ROLES,
   "inventory.photo.item_preview": INVENTORY_ROLES,
-  "inventory.photo.item_original": ADMIN_TECHNICIAN,
+  "inventory.photo.item_original": ADMIN_WAREHOUSE,
   "inventory.photo.inspection_preview": INVENTORY_ROLES,
-  "inventory.photo.inspection_original": ADMIN_TECHNICIAN,
+  "inventory.photo.inspection_original": ADMIN_WAREHOUSE,
   "inventory.photo.dispute_preview": INVENTORY_ROLES,
   "inventory.photo.dispute_original": ["admin", "employee"],
   "inventory.report.export": ADMIN_ONLY,
@@ -413,8 +407,8 @@ function isUserRole(value: unknown): value is UserRole {
 
 function isPrivilegedUserRole(
   role: UserRole | undefined,
-): role is "admin" | "owner" {
-  return role === "admin" || role === "owner";
+): role is "admin" {
+  return role === "admin";
 }
 
 function hasAdministrativeReason(reason: string | undefined): boolean {

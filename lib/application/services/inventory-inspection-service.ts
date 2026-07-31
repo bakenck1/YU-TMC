@@ -49,12 +49,14 @@ export class InventoryInspectionService {
     input: CreateInspectionInput,
     actor: AuthorizationActor,
   ): Promise<InspectionDto> {
-    if (
-      !(
-        actor.role === "warehouse" &&
-        hasPermission(actor.role, "inventory.inspection.create_self")
-      )
-    ) {
+    const canCreate =
+      (actor.role === "warehouse" &&
+        hasPermission(actor.role, "inventory.inspection.create_self")) ||
+      hasPermission(
+        actor.role,
+        "inventory.inspection.create_for_technician",
+      );
+    if (!canCreate) {
       throw forbidden();
     }
     const name = normalizeName(input.name);
@@ -86,7 +88,12 @@ export class InventoryInspectionService {
     input: AddInspectionRoomInput,
     actor: AuthorizationActor,
   ): Promise<InspectionRoomDto> {
+    const canMutateAll = hasPermission(
+      actor.role,
+      "inventory.inspection.mutate_all",
+    );
     if (
+      !canMutateAll &&
       !(
         actor.role === "warehouse" &&
         hasPermission(actor.role, "inventory.inspection.mutate_own_draft")
@@ -97,7 +104,9 @@ export class InventoryInspectionService {
     return this.unitOfWork.transaction(async ({ inspections }) => {
       const inspection = await inspections.findInspection(inspectionId);
       if (!inspection) throw notFound("inspection_not_found");
-      if (inspection.technicianId !== actor.userId) throw forbidden();
+      if (inspection.technicianId !== actor.userId && !canMutateAll) {
+        throw forbidden();
+      }
       if (inspection.status !== "draft") {
         throw new ApplicationError("conflict", "inspection_not_editable");
       }
@@ -137,7 +146,12 @@ export class InventoryInspectionService {
     input: RecordItemResultInput,
     actor: AuthorizationActor,
   ): Promise<ItemResultDto> {
+    const canRecordAll = hasPermission(
+      actor.role,
+      "inventory.result.record_all",
+    );
     if (
+      !canRecordAll &&
       !(
         actor.role === "warehouse" &&
         hasPermission(actor.role, "inventory.result.record_own_inspection")
@@ -152,7 +166,9 @@ export class InventoryInspectionService {
     return this.unitOfWork.transaction(async ({ inspections }) => {
       const inspection = await inspections.findInspection(inspectionId);
       if (!inspection) throw notFound("inspection_not_found");
-      if (inspection.technicianId !== actor.userId) throw forbidden();
+      if (inspection.technicianId !== actor.userId && !canRecordAll) {
+        throw forbidden();
+      }
       if (inspection.status !== "draft") {
         throw new ApplicationError("conflict", "inspection_not_editable");
       }

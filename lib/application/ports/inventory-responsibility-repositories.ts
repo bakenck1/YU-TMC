@@ -1,4 +1,5 @@
 import type { TransferStatus } from "@/lib/contracts/inventory-responsibility";
+import type { UserRole } from "@/lib/contracts/users";
 
 export interface ItemResponsibilityState {
   itemId: string;
@@ -87,7 +88,7 @@ export interface OverrideTransferRecord {
 export interface AppendResponsibilityAuditRecord {
   id: string;
   actorId: string;
-  actorRole: "admin" | "owner" | "warehouse" | "employee";
+  actorRole: UserRole;
   subjectKind: "responsibility" | "transfer";
   subjectId: string;
   action: string;

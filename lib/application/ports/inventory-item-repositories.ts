@@ -1,4 +1,5 @@
 import type { InventoryNumberKind, ItemStatus } from "@/lib/contracts/inventory-domain";
+import type { UserRole } from "@/lib/contracts/users";
 
 export interface InventoryItemRecord {
   id: string;
@@ -116,7 +117,7 @@ export interface ReplaceItemQrRecord extends InsertItemQrRecord {
 export interface AppendItemAuditRecord {
   id: string;
   actorId: string;
-  actorRole: "admin" | "owner" | "warehouse" | "employee";
+  actorRole: UserRole;
   subjectId: string;
   subjectRevision: number;
   action: string;

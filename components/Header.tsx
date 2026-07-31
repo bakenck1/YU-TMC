@@ -20,7 +20,6 @@ const SECTION_TITLES: Record<string, TranslationKey> = {
 
 const ROLE_LABELS: Record<AuthRole, TranslationKey> = {
   admin: "auth.roleAdmin",
-  owner: "auth.roleOwner",
   warehouse: "auth.roleWarehouse",
   employee: "auth.roleEmployee",
 };

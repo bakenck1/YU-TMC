@@ -29,11 +29,10 @@ type SortKey = "fullName" | "email" | "role" | "addedAt";
 type SortDirection = "asc" | "desc";
 type EmailFilter = "all" | "verified" | "unverified";
 
-const ROLE_OPTIONS: UserRole[] = ["admin", "owner", "warehouse", "employee"];
+const ROLE_OPTIONS: UserRole[] = ["admin", "warehouse", "employee"];
 
 const ROLE_STYLES: Record<UserRole, string> = {
   admin: "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-  owner: "bg-slate-800 text-white ring-1 ring-inset ring-slate-950/10",
   warehouse: "bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-600/20",
   employee: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
 };
@@ -51,7 +50,6 @@ function formatDate(iso: string, locale: string) {
 
 const ROLE_LABEL_KEYS: Record<UserRole, TranslationKey> = {
   admin: "users.admin",
-  owner: "users.owner",
   warehouse: "users.warehouse",
   employee: "users.employee",
 };

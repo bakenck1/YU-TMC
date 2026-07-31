@@ -3,6 +3,7 @@ import type {
   InspectionStatus,
   ItemResultValue,
 } from "@/lib/contracts/inventory-domain";
+import type { UserRole } from "@/lib/contracts/users";
 
 export interface InspectionRecord {
   id: string;
@@ -102,7 +103,7 @@ export interface InsertInspectionRoomRecord {
 export interface AppendInspectionAuditRecord {
   id: string;
   actorId: string;
-  actorRole: "admin" | "owner" | "warehouse" | "employee";
+  actorRole: UserRole;
   subjectKind: "inspection" | "item_result";
   subjectId: string;
   action: string;
