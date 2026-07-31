@@ -10,6 +10,7 @@ import { useAppSettings } from "./AppSettingsProvider";
 import type { InventoryItem } from "@/lib/types";
 import {
   filterInventoryItems,
+  inventoryStatusOptions,
   paginateInventoryItems,
   visibleItemStatus,
   type VisibleItemStatus,
@@ -98,14 +99,7 @@ export default function ItemsTable({
     () => Array.from(new Set(items.map((item) => item.location))),
     [items],
   );
-  const statusOptions = useMemo(() => {
-    const values = new Map<string, VisibleItemStatus>();
-    items.forEach((item) => {
-      const status = visibleItemStatus(item);
-      values.set(status.key, status);
-    });
-    return [...values.values()];
-  }, [items]);
+  const statusOptions = useMemo(() => inventoryStatusOptions(items), [items]);
 
   const filtered = useMemo(() => {
     return filterInventoryItems(items, {

@@ -78,20 +78,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where i.archived_at is null and i.status <> 'decommissioned'",
-      ),
-      [],
-    );
+    const result = await this.source.query<ItemRow>(itemSelect(""), []);
     return result.rows.map(mapItem);
   }
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where rp.responsible_user_id = $1 and i.archived_at is null and i.status <> 'decommissioned'",
-      ),
+      itemSelect("where rp.responsible_user_id = $1"),
       [userId],
     );
     return result.rows.map(mapItem);

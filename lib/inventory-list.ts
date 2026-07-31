@@ -1,4 +1,5 @@
 import type { InventoryItem, ItemStatus } from "./types";
+import { ITEM_STATUSES } from "./contracts/inventory-domain";
 
 export type VisibleItemStatus =
   | { key: `display:${string}`; kind: "display"; value: string }
@@ -17,6 +18,22 @@ export function visibleItemStatus(item: InventoryItem): VisibleItemStatus {
     : { key: `lifecycle:${item.status}`, kind: "lifecycle", value: item.status };
 }
 
+export function inventoryStatusOptions(
+  items: InventoryItem[],
+): VisibleItemStatus[] {
+  const values = new Map<string, VisibleItemStatus>(
+    ITEM_STATUSES.map((status) => [
+      `lifecycle:${status}`,
+      { key: `lifecycle:${status}`, kind: "lifecycle", value: status },
+    ]),
+  );
+  items.forEach((item) => {
+    const status = visibleItemStatus(item);
+    values.set(status.key, status);
+  });
+  return [...values.values()];
+}
+
 export function filterInventoryItems(items: InventoryItem[], filters: InventoryListFilters) {
   const query = filters.query.trim().toLowerCase();
   return items.filter((item) => {
@@ -29,9 +46,17 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
       matchesQuery &&
         (filters.category === "all" || item.category === filters.category) &&
         (filters.location === "all" || item.location === filters.location) &&
-        (filters.statusKey === "all" || visibleItemStatus(item).key === filters.statusKey),
+        matchesStatusFilter(item, filters.statusKey),
     );
   });
+}
+
+function matchesStatusFilter(item: InventoryItem, statusKey: string) {
+  if (statusKey === "all") return true;
+  if (statusKey.startsWith("lifecycle:")) {
+    return statusKey === `lifecycle:${item.status}`;
+  }
+  return visibleItemStatus(item).key === statusKey;
 }
 
 export function paginateInventoryItems<T>(items: T[], requestedPage: number, pageSize: number) {
