@@ -11,14 +11,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
-
-type BarcodeDetectorInstance = {
-  detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>>;
-};
-
-type BarcodeDetectorConstructor = new (options?: {
-  formats?: string[];
-}) => BarcodeDetectorInstance;
+import {
+  startBarcodeScanner,
+  type BarcodeScannerSession,
+} from "@/lib/browser-barcode-scanner";
 
 interface ScannedRoom {
   id: string;
@@ -34,8 +30,8 @@ export default function InventoryRoomQrScanner({
   onRoomResolved: (room: ScannedRoom) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<number | null>(null);
+  const scannerSessionRef = useRef<BarcodeScannerSession | null>(null);
+  const cameraRequestRef = useRef(0);
   const [manualValue, setManualValue] = useState("");
   const [cameraState, setCameraState] = useState<
     "idle" | "starting" | "active" | "unsupported" | "denied"
@@ -65,16 +61,16 @@ export default function InventoryRoomQrScanner({
   }, []);
 
   function stopCamera() {
-    if (intervalRef.current !== null) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    cameraRequestRef.current += 1;
+    scannerSessionRef.current?.stop();
+    scannerSessionRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraState("idle");
   }
 
   async function startCamera(nextFacingMode = facingMode) {
-    const Detector = getBarcodeDetector();
+    stopCamera();
+    const requestId = ++cameraRequestRef.current;
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraState("unsupported");
       return;
@@ -83,51 +79,38 @@ export default function InventoryRoomQrScanner({
     setMessage(null);
     setCameraState("starting");
     try {
-      stopCamera();
-      const stream = await requestCamera(nextFacingMode);
-      streamRef.current = stream;
       const video = videoRef.current;
-      if (!video) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (!video || requestId !== cameraRequestRef.current) {
         setCameraState("idle");
         return;
       }
-      video.srcObject = stream;
-      await video.play();
-      setFacingMode(nextFacingMode);
-      setCameraState("active");
-      if (!Detector) {
-        setMessage(
-          "Камера открыта, но этот браузер не поддерживает автоматическое распознавание QR. Введите код вручную.",
-        );
+      const session = await startBarcodeScanner({
+        video,
+        format: "qr_code",
+        facingMode: nextFacingMode,
+        onDetected(value) {
+          if (requestId !== cameraRequestRef.current) return;
+          stopCamera();
+          void resolveCode(value);
+        },
+      });
+      if (requestId !== cameraRequestRef.current) {
+        session.stop();
         return;
       }
-      const detector = new Detector({ formats: ["qr_code"] });
-      intervalRef.current = window.setInterval(() => {
-        void detectCode(detector, video);
-      }, 500);
+      scannerSessionRef.current = session;
+      setFacingMode(nextFacingMode);
+      setCameraState("active");
     } catch {
-      stopCamera();
-      setCameraState("denied");
+      if (requestId === cameraRequestRef.current) {
+        stopCamera();
+        setCameraState("denied");
+      }
     }
   }
 
   async function switchCamera() {
     await startCamera(facingMode === "environment" ? "user" : "environment");
-  }
-
-  async function detectCode(detector: BarcodeDetectorInstance, video: HTMLVideoElement) {
-    if (resolving || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    try {
-      const result = await detector.detect(video);
-      const value = result[0]?.rawValue?.trim();
-      if (value) {
-        stopCamera();
-        await resolveCode(value);
-      }
-    } catch {
-      // Keep the preview open: some frames cannot be decoded while autofocus runs.
-    }
   }
 
   async function resolveCode(value: string) {
@@ -210,28 +193,4 @@ export default function InventoryRoomQrScanner({
       </section>
     </div>
   );
-}
-
-function getBarcodeDetector(): BarcodeDetectorConstructor | null {
-  if (typeof window === "undefined") return null;
-  return (
-    window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }
-  ).BarcodeDetector ?? null;
-}
-
-async function requestCamera(facingMode: "environment" | "user") {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { exact: facingMode } },
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "NotAllowedError") {
-      throw error;
-    }
-    return navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: facingMode } },
-    });
-  }
 }

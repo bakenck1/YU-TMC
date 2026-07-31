@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import AppSettingsProvider from "@/components/AppSettingsProvider";
 import AuthProvider from "@/components/AuthProvider";
+import PwaRegistration from "@/components/PwaRegistration";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,6 +25,20 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: "YU Inventory",
   description: "Университеттің тауарлық-материалдық құндылықтарын есепке алу жүйесі",
+  applicationName: "YU Inventory",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "YU Inventory",
+  },
+  icons: {
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#002060",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -37,6 +52,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="h-full" suppressHydrationWarning>
+        <PwaRegistration />
         <AppSettingsProvider>
           <AuthProvider>
             <AppShell>{children}</AppShell>

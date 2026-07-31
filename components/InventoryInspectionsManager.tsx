@@ -18,6 +18,10 @@ import type {
   ItemResultDto,
   RecordItemResultInput,
 } from "@/lib/contracts/inventory-inspection-results";
+import {
+  startBarcodeScanner,
+  type BarcodeScannerSession,
+} from "@/lib/browser-barcode-scanner";
 
 export default function InventoryInspectionsManager({
   initialInspections,
@@ -45,9 +49,7 @@ export default function InventoryInspectionsManager({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastScanRef = useRef<{ value: string; at: number } | null>(null);
+  const scannerSessionRef = useRef<BarcodeScannerSession | null>(null);
   const cameraRequestRef = useRef(0);
 
   useEffect(() => {
@@ -195,12 +197,8 @@ export default function InventoryInspectionsManager({
 
   function stopCamera() {
     cameraRequestRef.current += 1;
-    if (scanTimerRef.current) {
-      clearInterval(scanTimerRef.current);
-      scanTimerRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    scannerSessionRef.current?.stop();
+    scannerSessionRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOpen(false);
   }
@@ -213,70 +211,27 @@ export default function InventoryInspectionsManager({
       setCameraError("Камера не поддерживается этим браузером.");
       return;
     }
-    const Detector = (
-      window as typeof window & {
-        BarcodeDetector?: {
-          new (options: { formats: string[] }): {
-            detect(
-              source: HTMLVideoElement,
-            ): Promise<Array<{ rawValue?: string }>>;
-          };
-          getSupportedFormats?: () => Promise<string[]>;
-        };
-      }
-    ).BarcodeDetector;
-    if (!Detector) {
-      setCameraError("Распознавание кодов камерой не поддерживается; используйте ручной ввод.");
-      return;
-    }
     try {
-      const supportedFormats = await Detector.getSupportedFormats?.();
-      if (requestId !== cameraRequestRef.current) return;
-      if (supportedFormats && !supportedFormats.includes(codeFormat)) {
-        setCameraError(
-          codeFormat === "code_39"
-            ? "Этот браузер не распознаёт Code 39. Выберите QR или используйте ручной ввод."
-            : "Этот браузер не распознаёт QR. Выберите Code 39 или используйте ручной ввод.",
-        );
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
-      if (requestId !== cameraRequestRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
       setCameraOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const video = videoRef.current;
-      if (!video) {
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        return;
-      }
-      video.srcObject = stream;
-      await video.play();
-      if (requestId !== cameraRequestRef.current) return;
-      const detector = new Detector({ formats: [codeFormat] });
-      scanTimerRef.current = setInterval(() => {
-        void detector.detect(video).then((codes) => {
+      if (!video || requestId !== cameraRequestRef.current) return;
+      const session = await startBarcodeScanner({
+        video,
+        format: codeFormat,
+        onDetected(value) {
           if (requestId !== cameraRequestRef.current) return;
-          const value = codes[0]?.rawValue?.trim();
-          if (!value) return;
-          const previous = lastScanRef.current;
-          if (previous && previous.value === value && Date.now() - previous.at < 2_000) {
-            return;
-          }
-          lastScanRef.current = { value, at: Date.now() };
           setQrValue(value);
           navigator.vibrate?.(60);
           stopCamera();
           void resolveQr(value);
-        }).catch(() => undefined);
-      }, 350);
+        },
+      });
+      if (requestId !== cameraRequestRef.current) {
+        session.stop();
+        return;
+      }
+      scannerSessionRef.current = session;
     } catch (cause) {
       if (requestId === cameraRequestRef.current) {
         stopCamera();

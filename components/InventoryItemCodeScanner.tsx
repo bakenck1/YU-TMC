@@ -3,16 +3,14 @@
 import { Barcode, Camera, Keyboard, QrCode, ScanLine, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-type Detector = { detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>> };
-type DetectorConstructor = {
-  new (options?: { formats?: string[] }): Detector;
-  getSupportedFormats?: () => Promise<string[]>;
-};
+import {
+  startBarcodeScanner,
+  type BarcodeScannerSession,
+} from "@/lib/browser-barcode-scanner";
 
 export default function InventoryItemCodeScanner({ onClose, onCodeSelected }: { onClose: () => void; onCodeSelected: (value: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const scannerSessionRef = useRef<BarcodeScannerSession | null>(null);
   const cameraRequestRef = useRef(0);
   const [manualValue, setManualValue] = useState("");
   const [format, setFormat] = useState<"code_39" | "qr_code">("code_39");
@@ -22,10 +20,9 @@ export default function InventoryItemCodeScanner({ onClose, onCodeSelected }: { 
 
   function stop() {
     cameraRequestRef.current += 1;
-    if (timerRef.current !== null) window.clearInterval(timerRef.current);
-    timerRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    scannerSessionRef.current?.stop();
+    scannerSessionRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
   }
 
   function choose(value: string) {
@@ -38,50 +35,30 @@ export default function InventoryItemCodeScanner({ onClose, onCodeSelected }: { 
   async function startCamera() {
     stop();
     const requestId = ++cameraRequestRef.current;
-    const DetectorClass = (window as typeof window & { BarcodeDetector?: DetectorConstructor }).BarcodeDetector;
-    if (!DetectorClass || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setMessage("Сканирование камерой не поддерживается. Введите код вручную.");
       return;
     }
     try {
-      const supportedFormats = await DetectorClass.getSupportedFormats?.();
-      if (requestId !== cameraRequestRef.current) return;
-      if (supportedFormats && !supportedFormats.includes(format)) {
-        setMessage(
-          format === "code_39"
-            ? "Этот браузер не распознаёт Code 39. Выберите QR или введите код вручную."
-            : "Этот браузер не распознаёт QR. Выберите Code 39 или введите код вручную.",
-        );
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
-      if (requestId !== cameraRequestRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
       const video = videoRef.current;
-      if (!video) {
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        return;
-      }
-      video.srcObject = stream;
-      await video.play();
-      if (requestId !== cameraRequestRef.current) return;
-      const detector = new DetectorClass({ formats: [format] });
+      if (!video || requestId !== cameraRequestRef.current) return;
       setMessage(
         format === "code_39"
           ? "Камера включена. Наведите её на штрих-код Code 39."
           : "Камера включена. Наведите её на QR-код.",
       );
-      timerRef.current = window.setInterval(() => {
-        void detector.detect(video).then((items) => {
-          if (requestId !== cameraRequestRef.current) return;
-          const value = items[0]?.rawValue;
-          if (value) choose(value);
-        }).catch(() => undefined);
-      }, 500);
+      const session = await startBarcodeScanner({
+        video,
+        format,
+        onDetected(value) {
+          if (requestId === cameraRequestRef.current) choose(value);
+        },
+      });
+      if (requestId !== cameraRequestRef.current) {
+        session.stop();
+        return;
+      }
+      scannerSessionRef.current = session;
     } catch {
       if (requestId === cameraRequestRef.current) {
         stop();
