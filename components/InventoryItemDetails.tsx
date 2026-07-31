@@ -6,6 +6,7 @@ import {
   Barcode,
   Camera,
   Check,
+  ChevronDown,
   Download,
   FileText,
   Image as ImageIcon,
@@ -13,6 +14,7 @@ import {
   Printer,
   QrCode,
   Save,
+  ShieldCheck,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -143,6 +145,9 @@ export default function InventoryItemDetails({
         throw new Error(body.error ?? "save_failed");
       }
       setItem(body.item);
+      setProtectedRoomId(body.item.room.id);
+      setInventoryNumber(body.item.inventoryNumber);
+      setStatus(body.item.status);
       setProtectedEditing(false);
       setReplaceQr(false);
       setQrReplaceReason("");
@@ -152,6 +157,24 @@ export default function InventoryItemDetails({
     } finally {
       setSaving(false);
     }
+  }
+
+  function openProtectedFields() {
+    setProtectedRoomId(item.room.id);
+    setInventoryNumber(item.inventoryNumber);
+    setStatus(item.status);
+    setReplaceQr(false);
+    setQrReplaceReason("");
+    setProtectedEditing(true);
+  }
+
+  function closeProtectedFields() {
+    setProtectedRoomId(item.room.id);
+    setInventoryNumber(item.inventoryNumber);
+    setStatus(item.status);
+    setReplaceQr(false);
+    setQrReplaceReason("");
+    setProtectedEditing(false);
   }
 
   async function archiveItem() {
@@ -265,9 +288,124 @@ export default function InventoryItemDetails({
         </button>
         {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
         <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />Штрих-код</button>
+        {canManageProtected ? (
+          <button
+            type="button"
+            onClick={() =>
+              protectedEditing
+                ? closeProtectedFields()
+                : openProtectedFields()
+            }
+            aria-expanded={protectedEditing}
+            aria-controls="protected-fields-panel"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Защищённые поля
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${protectedEditing ? "rotate-180" : ""}`}
+            />
+          </button>
+        ) : null}
         {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
         {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><Trash2 className="h-4 w-4" />Списать</button> : null}
       </nav>
+
+      {canManageProtected && protectedEditing ? (
+        <section
+          id="protected-fields-panel"
+          aria-labelledby="protected-fields-title"
+          className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"
+        >
+          <div>
+            <h2 id="protected-fields-title" className="font-semibold text-zinc-800">
+              Защищённые поля
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Изменения доступны только администратору и сохраняются в аудите.
+            </p>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-zinc-600">Кабинет</span>
+              <select
+                value={protectedRoomId}
+                onChange={(event) => setProtectedRoomId(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
+              >
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.designation} · этаж {room.floorNumber}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-600">Официальный номер</span>
+              <input
+                value={inventoryNumber}
+                onChange={(event) => setInventoryNumber(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-600">Статус</span>
+              <select
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as InventoryItemDto["status"])
+                }
+                className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
+              >
+                <option value="active">Активен</option>
+                <option value="maintenance">На обслуживании</option>
+                <option value="decommissioned">Списан</option>
+              </select>
+            </label>
+            <div className="space-y-2 text-sm">
+              <label className="flex items-center gap-2 text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={replaceQr}
+                  onChange={(event) => setReplaceQr(event.target.checked)}
+                />
+                Заменить QR-код / штрих-код
+              </label>
+              {replaceQr ? (
+                <input
+                  value={qrReplaceReason}
+                  onChange={(event) => setQrReplaceReason(event.target.value)}
+                  placeholder="Обязательная причина замены"
+                  maxLength={1000}
+                  className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
+                />
+              ) : null}
+            </div>
+            <div className="flex gap-2 sm:col-span-2">
+              <button
+                type="button"
+                onClick={() => void saveProtectedFields()}
+                disabled={
+                  saving ||
+                  !protectedRoomId ||
+                  !inventoryNumber.trim() ||
+                  (replaceQr && !qrReplaceReason.trim())
+                }
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving ? "Сохранение…" : "Сохранить"}
+              </button>
+              <button
+                type="button"
+                onClick={closeProtectedFields}
+                className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-zinc-600"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -448,109 +586,6 @@ export default function InventoryItemDetails({
           )}
         </section>
       </div>
-
-      {canManageProtected ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="font-semibold text-zinc-800">Защищённые поля</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Изменения доступны только администратору и сохраняются в аудите.
-              </p>
-            </div>
-            {!protectedEditing ? (
-              <button
-                type="button"
-                onClick={() => setProtectedEditing(true)}
-                className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700"
-              >
-                Изменить
-              </button>
-            ) : null}
-          </div>
-          {protectedEditing ? (
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="text-zinc-600">Кабинет</span>
-                <select
-                  value={protectedRoomId}
-                  onChange={(event) => setProtectedRoomId(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
-                >
-                  {rooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.designation} · этаж {room.floorNumber}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="text-zinc-600">Официальный номер</span>
-                <input
-                  value={inventoryNumber}
-                  onChange={(event) => setInventoryNumber(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-zinc-600">Статус</span>
-                <select
-                  value={status}
-                  onChange={(event) =>
-                    setStatus(event.target.value as InventoryItemDto["status"])
-                  }
-                  className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
-                >
-                  <option value="active">Активен</option>
-                  <option value="maintenance">На обслуживании</option>
-                  <option value="decommissioned">Списан</option>
-                </select>
-              </label>
-              <div className="space-y-2 text-sm">
-                <label className="flex items-center gap-2 text-zinc-700">
-                  <input
-                    type="checkbox"
-                    checked={replaceQr}
-                    onChange={(event) => setReplaceQr(event.target.checked)}
-                  />
-                  Заменить QR-код
-                </label>
-                {replaceQr ? (
-                  <input
-                    value={qrReplaceReason}
-                    onChange={(event) => setQrReplaceReason(event.target.value)}
-                    placeholder="Обязательная причина замены"
-                    maxLength={1000}
-                    className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
-                  />
-                ) : null}
-              </div>
-              <div className="flex gap-2 sm:col-span-2">
-                <button
-                  type="button"
-                  onClick={() => void saveProtectedFields()}
-                  disabled={
-                    saving ||
-                    !protectedRoomId ||
-                    !inventoryNumber.trim() ||
-                    (replaceQr && !qrReplaceReason.trim())
-                  }
-                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {saving ? "Сохранение…" : "Сохранить"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProtectedEditing(false)}
-                  className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-zinc-600"
-                >
-                  Отмена
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
 
       {timeline.length ? (
         <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
