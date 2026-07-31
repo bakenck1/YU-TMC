@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ArrowLeft,
+  Barcode,
   Camera,
   Check,
   Download,
@@ -67,7 +68,7 @@ export default function InventoryItemDetails({
   const [archiveConfirmationOpen, setArchiveConfirmationOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [qrDialog, setQrDialog] = useState<"generate" | "scan" | "purpose" | null>(null);
-  const [labelCount, setLabelCount] = useState("1");
+  const [codeKind, setCodeKind] = useState<"barcode" | "qr">("barcode");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
 
@@ -112,9 +113,8 @@ export default function InventoryItemDetails({
     }
   }
 
-  function printQrLabels() {
-    const copies = Math.max(1, Math.min(100, Number.parseInt(labelCount, 10) || 1));
-    window.open(`/items/${item.id}/qr?copies=${copies}`, "_blank", "noopener,noreferrer");
+  function printCodeLabel(kind: "barcode" | "qr") {
+    window.open(`/items/${item.id}/qr?kind=${kind}`, "_blank", "noopener,noreferrer");
     setQrDialog(null);
   }
 
@@ -264,7 +264,7 @@ export default function InventoryItemDetails({
           <FileText className="h-4 w-4" /> Информация
         </button>
         {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
-        <button type="button" onClick={() => setQrDialog("generate")} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><QrCode className="h-4 w-4" />QR-код</button>
+        <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />Штрих-код</button>
         {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
         {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><Trash2 className="h-4 w-4" />Списать</button> : null}
       </nav>
@@ -281,10 +281,10 @@ export default function InventoryItemDetails({
       ) : null}
       <InventoryItemQrDialogs
         kind={qrDialog}
-        labelCount={labelCount}
-        onLabelCountChange={setLabelCount}
+        codeKind={codeKind}
+        onCodeKindChange={setCodeKind}
         onClose={() => setQrDialog(null)}
-        onPrint={printQrLabels}
+        onPrint={printCodeLabel}
       />
       <InventoryItemArchiveDialog
         itemName={item.name}
@@ -333,32 +333,37 @@ export default function InventoryItemDetails({
           </div>
           <div className="border-t border-amber-100 p-5">
             <div className="flex items-center justify-center gap-3 rounded-xl bg-white p-4">
-              {item.qrCode ? (
+              {codeKind === "barcode" || item.qrCode ? (
                 <Image
-                  src={`/api/inventory/items/${item.id}/qr?format=svg`}
-                  alt={`QR-код: ${item.name}`}
-                  width={96}
+                  src={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=svg`}
+                  alt={`${codeKind === "barcode" ? "Штрих-код Code 39" : "QR-код"}: ${item.name}`}
+                  width={codeKind === "barcode" ? 240 : 96}
                   height={96}
                   unoptimized
+                  className={codeKind === "barcode" ? "max-w-[58%]" : undefined}
                 />
               ) : null}
               <div className="min-w-0">
-                <p className="text-xs text-zinc-400">QR-код</p>
+                <p className="text-xs text-zinc-400">{codeKind === "barcode" ? "Штрих-код Code 39" : "QR-код"}</p>
                 <p className="break-all font-mono text-xs text-zinc-700">
-                  {item.qrCode ?? "Не назначен"}
+                  {codeKind === "barcode" ? item.inventoryNumber : item.qrCode ?? "Не назначен"}
                 </p>
               </div>
             </div>
-            {item.qrCode ? (
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-white/70 p-1">
+              <button type="button" onClick={() => setCodeKind("barcode")} aria-pressed={codeKind === "barcode"} className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${codeKind === "barcode" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><Barcode className="h-4 w-4" />Code 39</button>
+              <button type="button" onClick={() => setCodeKind("qr")} aria-pressed={codeKind === "qr"} className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${codeKind === "qr" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><QrCode className="h-4 w-4" />QR</button>
+            </div>
+            {codeKind === "barcode" || item.qrCode ? (
               <div className="mt-3 grid grid-cols-2 gap-2 print:hidden">
                 <a
-                  href={`/api/inventory/items/${item.id}/qr?format=png&download=1`}
+                  href={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=${codeKind === "barcode" ? "svg" : "png"}&download=1`}
                   className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
                 >
                   <Download className="h-4 w-4" /> Скачать
                 </a>
                 <Link
-                  href={`/items/${item.id}/qr`}
+                  href={`/items/${item.id}/qr?kind=${codeKind}`}
                   className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
                 >
                   <Printer className="h-4 w-4" /> Печать
@@ -366,9 +371,9 @@ export default function InventoryItemDetails({
               </div>
             ) : null}
             <div className="mt-3 grid gap-2 text-xs print:hidden">
-              <button type="button" onClick={() => setQrDialog("generate")} className="rounded-lg bg-emerald-500 px-3 py-2 font-semibold text-white hover:bg-emerald-600">Генерация QR-кода</button>
-              <button type="button" onClick={() => setQrDialog("scan")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Как сканировать QR-код?</button>
-              <button type="button" onClick={() => setQrDialog("purpose")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Для чего QR-код ТМЦ?</button>
+              <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="rounded-lg bg-emerald-500 px-3 py-2 font-semibold text-white hover:bg-emerald-600">Генерация штрих-кода</button>
+              <button type="button" onClick={() => setQrDialog("scan")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Как сканировать код?</button>
+              <button type="button" onClick={() => setQrDialog("purpose")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Для чего нужен код ТМЦ?</button>
             </div>
           </div>
         </section>

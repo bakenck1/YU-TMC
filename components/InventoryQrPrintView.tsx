@@ -8,12 +8,13 @@ import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 
 export default function InventoryQrPrintView({
   item,
-  copies = 1,
+  kind,
 }: {
   item: InventoryItemDto;
-  copies?: number;
+  kind: "barcode" | "qr";
 }) {
-  const qrUrl = `/api/inventory/items/${item.id}/qr?format=svg`;
+  const codeUrl = `/api/inventory/items/${item.id}/qr?kind=${kind}&format=svg`;
+  const isBarcode = kind === "barcode";
   return (
     <main className="mx-auto min-h-screen max-w-3xl bg-white p-6 text-zinc-900 sm:p-10">
       <div className="mb-6 flex flex-wrap gap-2 print:hidden">
@@ -25,11 +26,17 @@ export default function InventoryQrPrintView({
           <Printer className="h-4 w-4" /> Печать
         </button>
         <a
-          href={`/api/inventory/items/${item.id}/qr?format=png&download=1`}
+          href={`/api/inventory/items/${item.id}/qr?kind=${kind}&format=${isBarcode ? "svg" : "png"}&download=1`}
           className="flex items-center gap-2 rounded-lg border border-black/10 px-4 py-2 text-sm font-semibold"
         >
-          <Download className="h-4 w-4" /> Скачать PNG
+          <Download className="h-4 w-4" /> Скачать {isBarcode ? "SVG" : "PNG"}
         </a>
+        <Link
+          href={`/items/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
+          className="rounded-lg border border-black/10 px-4 py-2 text-sm"
+        >
+          {isBarcode ? "Показать QR" : "Показать штрих-код"}
+        </Link>
         <Link
           href={`/items/${item.id}`}
           className="rounded-lg border border-black/10 px-4 py-2 text-sm"
@@ -38,16 +45,15 @@ export default function InventoryQrPrintView({
         </Link>
       </div>
       <div className="grid gap-5 print:gap-0">
-        {Array.from({ length: copies }, (_, index) => (
-      <section key={index} className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:break-after-page print:border-black">
+      <section className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:border-black">
         <Image
-          src={qrUrl}
-          alt={`QR-код: ${item.name}`}
-          width={280}
-          height={280}
+          src={codeUrl}
+          alt={`${isBarcode ? "Штрих-код Code 39" : "QR-код"}: ${item.name}`}
+          width={isBarcode ? 420 : 280}
+          height={isBarcode ? 160 : 280}
           unoptimized
           priority
-          className="h-auto w-[45%]"
+          className={isBarcode ? "h-auto w-[65%]" : "h-auto w-[45%]"}
         />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -71,11 +77,10 @@ export default function InventoryQrPrintView({
             </div>
           </dl>
           <p className="mt-5 break-all font-mono text-[10px] text-zinc-500">
-            {item.qrCode}
+            {isBarcode ? item.inventoryNumber : item.qrCode}
           </p>
         </div>
       </section>
-        ))}
       </div>
     </main>
   );

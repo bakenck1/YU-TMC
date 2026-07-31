@@ -14,6 +14,7 @@ import type {
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
+import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import {
   hasPermission,
   type AuthorizationActor,
@@ -116,7 +117,7 @@ export class InventoryItemService {
         roomId: values.roomId,
         inventoryNumberKind,
         inventoryNumber,
-        inventoryNumberKey: comparisonKey(inventoryNumber),
+        inventoryNumberKey: inventoryNumberComparisonKey(inventoryNumber),
         actorId: actor.userId,
         occurredAt,
       });
@@ -478,7 +479,7 @@ function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
       64,
       "invalid_inventory_number",
     ),
-    inventoryNumberKey: comparisonKey(input.inventoryNumber),
+    inventoryNumberKey: inventoryNumberComparisonKey(input.inventoryNumber),
     status: normalizeStatus(input.status),
   };
 }
@@ -547,10 +548,6 @@ function normalizeStatus(value: unknown): ItemStatus {
     return value;
   }
   throw new ApplicationError("validation", "invalid_item_status");
-}
-
-function comparisonKey(value: string) {
-  return value.normalize("NFKC").trim().toLocaleLowerCase("ru-RU");
 }
 
 function requirePermission(

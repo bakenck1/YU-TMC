@@ -12,11 +12,16 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const value = new URL(request.url).searchParams.get("value");
+    const url = new URL(request.url);
+    const value = url.searchParams.get("value");
     if (!value) throw new ApplicationError("validation", "qr_value_required");
+    const kindInput = url.searchParams.get("kind");
+    const kind =
+      kindInput === "barcode" || kindInput === "qr" ? kindInput : "auto";
     const resolution = await getApplicationServices().qr.resolve(
       value,
       authorizationActor(user),
+      kind,
     );
     return Response.json({ resolution });
   } catch (error) {

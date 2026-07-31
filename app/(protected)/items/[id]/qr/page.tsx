@@ -10,15 +10,15 @@ export default async function ItemQrPrintPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ copies?: string }>;
+  searchParams: Promise<{ kind?: string }>;
 }) {
   const { id } = await params;
-  const { copies: copiesInput } = await searchParams;
+  const { kind: kindInput } = await searchParams;
   const user = await requireAuthorizedPage(`/items/${id}`);
   const item = await getApplicationServices().items.findItem(id, {
     userId: user.userId,
     role: user.role,
   });
-  const copies = Math.max(1, Math.min(100, Number.parseInt(copiesInput ?? "1", 10) || 1));
-  return <InventoryQrPrintView item={item} copies={copies} />;
+  const kind = kindInput === "qr" ? "qr" : "barcode";
+  return <InventoryQrPrintView item={item} kind={kind} />;
 }

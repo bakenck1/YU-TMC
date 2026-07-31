@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, ClipboardCheck, Plus, ScanLine, WifiOff, X } from "lucide-react";
+import {
+  Barcode,
+  Camera,
+  ClipboardCheck,
+  Plus,
+  QrCode,
+  ScanLine,
+  WifiOff,
+  X,
+} from "lucide-react";
 import type { InspectionDto } from "@/lib/contracts/inventory-inspections";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
@@ -26,6 +35,9 @@ export default function InventoryInspectionsManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [qrValue, setQrValue] = useState("");
+  const [codeFormat, setCodeFormat] = useState<"code_39" | "qr_code">(
+    "code_39",
+  );
   const [resolution, setResolution] = useState<QrResolutionDto | null>(null);
   const [recordedResult, setRecordedResult] = useState<ItemResultDto | null>(null);
   const [resultComment, setResultComment] = useState("");
@@ -36,6 +48,7 @@ export default function InventoryInspectionsManager({
   const streamRef = useRef<MediaStream | null>(null);
   const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastScanRef = useRef<{ value: string; at: number } | null>(null);
+  const cameraRequestRef = useRef(0);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -118,7 +131,7 @@ export default function InventoryInspectionsManager({
     setRecordedResult(null);
     try {
       const response = await fetch(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(scannedValue)}`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(scannedValue)}&kind=${codeFormat === "code_39" ? "barcode" : "qr"}`,
       );
       const body = (await response.json()) as {
         resolution?: QrResolutionDto;
@@ -181,6 +194,7 @@ export default function InventoryInspectionsManager({
   }
 
   function stopCamera() {
+    cameraRequestRef.current += 1;
     if (scanTimerRef.current) {
       clearInterval(scanTimerRef.current);
       scanTimerRef.current = null;
@@ -192,6 +206,8 @@ export default function InventoryInspectionsManager({
   }
 
   async function startCamera() {
+    stopCamera();
+    const requestId = ++cameraRequestRef.current;
     setCameraError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("Камера не поддерживается этим браузером.");
@@ -199,32 +215,55 @@ export default function InventoryInspectionsManager({
     }
     const Detector = (
       window as typeof window & {
-        BarcodeDetector?: new (options: {
-          formats: string[];
-        }) => {
-          detect(source: HTMLVideoElement): Promise<Array<{ rawValue?: string }>>;
+        BarcodeDetector?: {
+          new (options: { formats: string[] }): {
+            detect(
+              source: HTMLVideoElement,
+            ): Promise<Array<{ rawValue?: string }>>;
+          };
+          getSupportedFormats?: () => Promise<string[]>;
         };
       }
     ).BarcodeDetector;
     if (!Detector) {
-      setCameraError("Распознавание QR камерой не поддерживается; используйте ручной ввод.");
+      setCameraError("Распознавание кодов камерой не поддерживается; используйте ручной ввод.");
       return;
     }
     try {
+      const supportedFormats = await Detector.getSupportedFormats?.();
+      if (requestId !== cameraRequestRef.current) return;
+      if (supportedFormats && !supportedFormats.includes(codeFormat)) {
+        setCameraError(
+          codeFormat === "code_39"
+            ? "Этот браузер не распознаёт Code 39. Выберите QR или используйте ручной ввод."
+            : "Этот браузер не распознаёт QR. Выберите Code 39 или используйте ручной ввод.",
+        );
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       setCameraOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const video = videoRef.current;
-      if (!video) throw new Error("camera_preview_unavailable");
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        return;
+      }
       video.srcObject = stream;
       await video.play();
-      const detector = new Detector({ formats: ["qr_code"] });
+      if (requestId !== cameraRequestRef.current) return;
+      const detector = new Detector({ formats: [codeFormat] });
       scanTimerRef.current = setInterval(() => {
         void detector.detect(video).then((codes) => {
+          if (requestId !== cameraRequestRef.current) return;
           const value = codes[0]?.rawValue?.trim();
           if (!value) return;
           const previous = lastScanRef.current;
@@ -239,12 +278,14 @@ export default function InventoryInspectionsManager({
         }).catch(() => undefined);
       }, 350);
     } catch (cause) {
-      stopCamera();
-      setCameraError(
-        cause instanceof DOMException && cause.name === "NotAllowedError"
-          ? "Доступ к камере отклонён. Разрешите камеру или используйте ручной ввод."
-          : "Не удалось открыть камеру.",
-      );
+      if (requestId === cameraRequestRef.current) {
+        stopCamera();
+        setCameraError(
+          cause instanceof DOMException && cause.name === "NotAllowedError"
+            ? "Доступ к камере отклонён. Разрешите камеру или используйте ручной ввод."
+            : "Не удалось открыть камеру.",
+        );
+      }
     }
   }
 
@@ -286,7 +327,31 @@ export default function InventoryInspectionsManager({
       <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">
           <ScanLine className="h-5 w-5 text-emerald-500" />
-          <h2 className="font-semibold text-zinc-800">Ручной ввод QR</h2>
+          <h2 className="font-semibold text-zinc-800">Сканирование кода ТМЦ</h2>
+        </div>
+        <div className="mt-4 grid max-w-sm grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              stopCamera();
+              setCodeFormat("code_39");
+            }}
+            aria-pressed={codeFormat === "code_39"}
+            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${codeFormat === "code_39" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}
+          >
+            <Barcode className="h-4 w-4" /> Code 39
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              stopCamera();
+              setCodeFormat("qr_code");
+            }}
+            aria-pressed={codeFormat === "qr_code"}
+            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${codeFormat === "qr_code" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}
+          >
+            <QrCode className="h-4 w-4" /> QR
+          </button>
         </div>
         {!online ? (
           <p role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -300,7 +365,7 @@ export default function InventoryInspectionsManager({
             onKeyDown={(event) => {
               if (event.key === "Enter") void resolveQr();
             }}
-            placeholder="YUQ1:… или старый код"
+            placeholder="Инвентарный номер, YUQ1:… или старый код"
             className="min-w-0 flex-1 rounded-xl border border-black/10 px-3 py-2.5 font-mono text-sm outline-none focus:border-emerald-500"
           />
           <button

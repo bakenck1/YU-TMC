@@ -95,7 +95,7 @@ export default function InventoryItemCreateForm({
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />Сканировать QR предмета</button>
+              <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />Сканировать код предмета</button>
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")}</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm"><span className="text-zinc-500">Тип ТМЦ</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder="Например, моноблок" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>

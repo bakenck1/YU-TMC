@@ -22,6 +22,11 @@ export interface QrResolutionRecord {
 
 export interface QrResolutionRepository {
   findByCanonicalKey(canonicalKey: string): Promise<QrResolutionRecord | null>;
+  findItemByBarcode(
+    barcodeValue: string,
+    inventoryNumberKey: string,
+    fallbackKey: string | null,
+  ): Promise<QrResolutionRecord | null>;
 }
 
 export interface QrResolutionRepositories {

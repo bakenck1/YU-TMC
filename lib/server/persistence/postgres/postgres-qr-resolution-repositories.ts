@@ -83,4 +83,50 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       responsibleName: row.responsible_name,
     };
   }
+
+  async findItemByBarcode(
+    barcodeValue: string,
+    inventoryNumberKey: string,
+    fallbackKey: string | null,
+  ): Promise<QrResolutionRecord | null> {
+    const result = await this.source.query<QrRow>(
+      `select $1::text as canonical_key, 'legacy_raw'::text as format,
+              'active'::text as qr_status, 'item'::text as target_kind,
+              i.id as target_id, i.status::text as target_status,
+              i.name as title, b.name as building_name,
+              r.designation as room_designation, i.inventory_number,
+              u.full_name as responsible_name
+         from ${ITEMS} i
+         join ${ROOMS} r on r.id = i.room_id
+         join ${BUILDINGS} b on b.id = r.building_id
+         left join lateral (
+           select responsible_user_id
+             from ${RESPONSIBILITY}
+            where item_id = i.id and ended_at is null
+            order by started_at desc
+            limit 1
+         ) rp on true
+         left join ${USERS} u on u.id = rp.responsible_user_id
+        where ($3::text is not null and
+               upper(left(replace(i.id::text, '-', ''), 16)) = upper($3))
+           or ($3::text is null and i.inventory_number_key = $2)
+        limit 1`,
+      [barcodeValue, inventoryNumberKey, fallbackKey ?? null],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      canonicalKey: row.canonical_key,
+      format: row.format,
+      qrStatus: row.qr_status,
+      targetKind: row.target_kind,
+      targetId: row.target_id,
+      targetStatus: row.target_status,
+      title: row.title,
+      buildingName: row.building_name,
+      roomDesignation: row.room_designation,
+      inventoryNumber: row.inventory_number,
+      responsibleName: row.responsible_name,
+    };
+  }
 }
