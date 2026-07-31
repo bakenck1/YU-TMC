@@ -54,6 +54,7 @@ interface ItemRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  archived_at: Date | null;
 }
 
 export function createPostgresInventoryItemRepositories(
@@ -78,7 +79,9 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async listItems(): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where i.archived_at is null"),
+      itemSelect(
+        "where i.archived_at is null and i.status <> 'decommissioned'",
+      ),
       [],
     );
     return result.rows.map(mapItem);
@@ -86,7 +89,29 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where rp.responsible_user_id = $1 and i.archived_at is null"),
+      itemSelect(
+        "where rp.responsible_user_id = $1 and i.archived_at is null and i.status <> 'decommissioned'",
+      ),
+      [userId],
+    );
+    return result.rows.map(mapItem);
+  }
+
+  async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
+    const result = await this.source.query<ItemRow>(
+      itemSelect("where i.status = 'decommissioned'"),
+      [],
+    );
+    return result.rows.map(mapItem);
+  }
+
+  async listDecommissionedItemsAssignedTo(
+    userId: string,
+  ): Promise<InventoryItemRecord[]> {
+    const result = await this.source.query<ItemRow>(
+      itemSelect(
+        "where rp.responsible_user_id = $1 and i.status = 'decommissioned'",
+      ),
       [userId],
     );
     return result.rows.map(mapItem);
@@ -250,7 +275,16 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         `update ${ITEMS}
          set room_id = $2, inventory_number_kind = $3,
              inventory_number = $4, inventory_number_key = $5,
-             status = $6, updated_by = $7, updated_at = $8,
+             status = $6,
+             archived_by = case
+               when $6 = 'decommissioned' then coalesce(archived_by, $7)
+               else null
+             end,
+             archived_at = case
+               when $6 = 'decommissioned' then coalesce(archived_at, $8)
+               else null
+             end,
+             updated_by = $7, updated_at = $8,
              version = version + 1
          where id = $1 and version = $9`,
         [
@@ -380,7 +414,7 @@ function itemSelect(where: string) {
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
            p.preview_object_key as photo_url, p.id as photo_id,
-           i.version, i.created_at, i.updated_at
+           i.version, i.created_at, i.updated_at, i.archived_at
       from ${ITEMS} i
       join ${ROOMS} r on r.id = i.room_id
       join ${BUILDINGS} b on b.id = r.building_id
@@ -437,6 +471,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     version: Number(row.version),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    archivedAt: row.archived_at ? new Date(row.archived_at) : null,
   };
 }
 

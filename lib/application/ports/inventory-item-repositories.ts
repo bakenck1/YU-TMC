@@ -24,6 +24,7 @@ export interface InventoryItemRecord {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  archivedAt: Date | null;
 }
 
 export interface InsertInventoryItemRecord {
@@ -128,6 +129,10 @@ export interface InventoryItemRepository {
   roomExists(id: string): Promise<boolean>;
   listItems(): Promise<InventoryItemRecord[]>;
   listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]>;
+  listDecommissionedItems(): Promise<InventoryItemRecord[]>;
+  listDecommissionedItemsAssignedTo(
+    userId: string,
+  ): Promise<InventoryItemRecord[]>;
   findItemById(id: string): Promise<InventoryItemRecord | null>;
   insertItem(input: InsertInventoryItemRecord): Promise<InventoryItemRecord>;
   updateItemContent(

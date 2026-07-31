@@ -443,13 +443,20 @@ export default function InventoryInspectionsManager({
                       placeholder="Комментарий (необязательно)"
                       className="w-full resize-none rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-emerald-500"
                     />
+                    {!selectedInspection || !inspections
+                      .find((inspection) => inspection.id === selectedInspection)
+                      ?.rooms.some((room) => room.roomId === selectedRoom) ? (
+                      <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        Сначала создайте или выберите черновик проверки и добавьте в него нужный кабинет. После этого результат будет сохранён.
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       {RESULT_OPTIONS.map((option) => (
                         <button
                           key={option.value}
                           type="button"
                           onClick={() => void recordResult(option.value)}
-                          disabled={busy || !selectedInspection}
+                          disabled={busy}
                           className="rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-50"
                         >
                           {option.label}

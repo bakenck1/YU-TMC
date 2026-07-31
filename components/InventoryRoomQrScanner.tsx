@@ -1,6 +1,13 @@
 "use client";
 
-import { Camera, Keyboard, LoaderCircle, ScanLine, X } from "lucide-react";
+import {
+  Camera,
+  Keyboard,
+  LoaderCircle,
+  ScanLine,
+  SwitchCamera,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
@@ -33,11 +40,28 @@ export default function InventoryRoomQrScanner({
   const [cameraState, setCameraState] = useState<
     "idle" | "starting" | "active" | "unsupported" | "denied"
   >("idle");
+  const [facingMode, setFacingMode] = useState<"environment" | "user">(
+    "environment",
+  );
+  const [canSwitchCamera, setCanSwitchCamera] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => stopCamera();
+    let cancelled = false;
+    void navigator.mediaDevices?.enumerateDevices?.()
+      .then((devices) => {
+        if (!cancelled) {
+          setCanSwitchCamera(
+            devices.filter((device) => device.kind === "videoinput").length > 1,
+          );
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
   }, []);
 
   function stopCamera() {
@@ -49,9 +73,9 @@ export default function InventoryRoomQrScanner({
     streamRef.current = null;
   }
 
-  async function startCamera() {
+  async function startCamera(nextFacingMode = facingMode) {
     const Detector = getBarcodeDetector();
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setCameraState("unsupported");
       return;
     }
@@ -59,17 +83,26 @@ export default function InventoryRoomQrScanner({
     setMessage(null);
     setCameraState("starting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: "environment" } },
-      });
+      stopCamera();
+      const stream = await requestCamera(nextFacingMode);
       streamRef.current = stream;
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop());
+        setCameraState("idle");
+        return;
+      }
       video.srcObject = stream;
       await video.play();
-      const detector = new Detector({ formats: ["qr_code"] });
+      setFacingMode(nextFacingMode);
       setCameraState("active");
+      if (!Detector) {
+        setMessage(
+          "Камера открыта, но этот браузер не поддерживает автоматическое распознавание QR. Введите код вручную.",
+        );
+        return;
+      }
+      const detector = new Detector({ formats: ["qr_code"] });
       intervalRef.current = window.setInterval(() => {
         void detectCode(detector, video);
       }, 500);
@@ -77,6 +110,10 @@ export default function InventoryRoomQrScanner({
       stopCamera();
       setCameraState("denied");
     }
+  }
+
+  async function switchCamera() {
+    await startCamera(facingMode === "environment" ? "user" : "environment");
   }
 
   async function detectCode(detector: BarcodeDetectorInstance, video: HTMLVideoElement) {
@@ -151,10 +188,16 @@ export default function InventoryRoomQrScanner({
           {cameraState !== "active" ? <div className="flex aspect-video flex-col items-center justify-center gap-3 px-5 text-center text-sm text-zinc-300"><ScanLine className="h-9 w-9" /><span>{cameraState === "unsupported" ? "Камера или QR-распознавание не поддерживаются этим браузером." : cameraState === "denied" ? "Доступ к камере не разрешён." : "Включите камеру для сканирования QR-кода."}</span></div> : null}
         </div>
 
-        <button type="button" onClick={() => void startCamera()} disabled={cameraState === "starting" || cameraState === "active"} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50">
-          {cameraState === "starting" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-          {cameraState === "active" ? "Камера включена" : "Открыть камеру"}
-        </button>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={() => void startCamera()} disabled={cameraState === "starting" || cameraState === "active"} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50">
+            {cameraState === "starting" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            {cameraState === "active" ? "Камера включена" : "Открыть камеру"}
+          </button>
+          <button type="button" onClick={() => void switchCamera()} disabled={cameraState === "starting"} aria-label="Переключить камеру" title={canSwitchCamera ? "Переключить камеру" : "Попробовать другую доступную камеру"} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
+            <SwitchCamera className="h-4 w-4" />
+            {facingMode === "environment" ? "Задняя" : "Передняя"}
+          </button>
+        </div>
 
         <div className="mt-5 border-t border-zinc-100 pt-5">
           <label className="block text-sm font-medium text-zinc-700">Не удалось отсканировать? Введите код кабинета вручную</label>
@@ -174,4 +217,21 @@ function getBarcodeDetector(): BarcodeDetectorConstructor | null {
   return (
     window as typeof window & { BarcodeDetector?: BarcodeDetectorConstructor }
   ).BarcodeDetector ?? null;
+}
+
+async function requestCamera(facingMode: "environment" | "user") {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { exact: facingMode } },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      throw error;
+    }
+    return navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: facingMode } },
+    });
+  }
 }

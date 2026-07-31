@@ -70,7 +70,15 @@ function itemLinkLabel(item: InventoryItem) {
   return `${item.name} — ${identifier}`;
 }
 
-export default function ItemsTable({ items }: { items: InventoryItem[] }) {
+export default function ItemsTable({
+  items,
+  showFilters = true,
+  dateLabel,
+}: {
+  items: InventoryItem[];
+  showFilters?: boolean;
+  dateLabel?: string;
+}) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -147,6 +155,7 @@ export default function ItemsTable({ items }: { items: InventoryItem[] }) {
 
   return (
     <div className="space-y-4">
+      {showFilters ? (
       <div className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white p-4 lg:flex-row lg:items-center">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -171,6 +180,7 @@ export default function ItemsTable({ items }: { items: InventoryItem[] }) {
           {locations.map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
       </div>
+      ) : null}
 
       <div className="flex items-center justify-between text-sm text-zinc-400">
         <p>{t("items.found", { count: filtered.length })}</p>
@@ -189,7 +199,7 @@ export default function ItemsTable({ items }: { items: InventoryItem[] }) {
               <th className="px-3 py-4 font-medium">{t("items.location")}</th>
               <th className="px-3 py-4 font-medium">{t("items.status")}</th>
               <th className="px-3 py-4 font-medium">{t("items.responsible")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.updated")}</th>
+              <th className="px-3 py-4 font-medium">{dateLabel ?? t("items.updated")}</th>
               <th className="px-3 py-4 text-center font-medium">{t("items.quantity")}</th>
               <th className="px-4 py-4 text-right font-medium">{t("items.price")}</th>
             </tr>
@@ -245,7 +255,7 @@ export default function ItemsTable({ items }: { items: InventoryItem[] }) {
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
                 <dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd>
                 <dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd>
-                <dt className="text-zinc-400">{t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "—"}</dd>
+                <dt className="text-zinc-400">{dateLabel ?? t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "—"}</dd>
                 <dt className="text-zinc-400">{t("items.quantityPrice")}</dt><dd className="text-right">{item.quantity ?? 1} · {(item.price ?? 0).toFixed(2)} {t("common.currency")}</dd>
               </dl>
             </article>

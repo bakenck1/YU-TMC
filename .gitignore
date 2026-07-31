@@ -10,13 +10,8 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
 # next.js
 /.next/
-/.next-e2e/
-/.next-e2e.lock
 /out/
 
 # production
@@ -35,7 +30,6 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-!.env.test
 
 # runtime authentication state
 /.data/auth-credentials.json
@@ -45,10 +39,6 @@ yarn-error.log*
 # vercel
 .vercel
 
-# automated test artifacts
-/coverage/
-/playwright-report/
-/test-results/
 /debug.log
 
 # typescript

@@ -38,8 +38,10 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   const pathname = usePathname();
   const { settings, t } = useAppSettings();
   const { user, loading } = useAuth();
-  const title = pathname.startsWith("/items/")
-    ? `${t("nav.items")} / ${t("nav.itemCard")}`
+  const title = pathname === "/items/decommissioned"
+    ? t("nav.decommissioned")
+    : pathname.startsWith("/items/")
+      ? `${t("nav.items")} / ${t("nav.itemCard")}`
     : pathname.startsWith("/inventory/inspections")
       ? t("nav.inspections")
       : pathname.startsWith("/inventory/")

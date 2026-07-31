@@ -7,13 +7,13 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
+  Archive,
   Boxes,
   ChevronLeft,
   ClipboardCheck,
   LayoutDashboard,
   LogOut,
   LoaderCircle,
-  MapPin,
   ScanLine,
   Settings,
   Users,
@@ -34,13 +34,17 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
+  {
+    href: "/items/decommissioned",
+    labelKey: "nav.decommissioned",
+    icon: Archive,
+  },
   { href: "/inventory", labelKey: "nav.inventory", icon: ScanLine },
   {
     href: "/inventory/inspections",
     labelKey: "nav.inspections",
     icon: ClipboardCheck,
   },
-  { href: "/locations", labelKey: "nav.locations", icon: MapPin },
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
@@ -123,6 +127,13 @@ function SidebarContent({
   const visibleItems = user
     ? NAV_ITEMS.filter((item) => canAccessPath(user.role, item.href))
     : [];
+  const activeHref = visibleItems
+    .filter((item) =>
+      item.href === "/"
+        ? pathname === "/"
+        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -175,13 +186,7 @@ function SidebarContent({
               key={item.href}
               item={item}
               collapsed={collapsed}
-              active={
-                item.href === "/"
-                  ? pathname === "/"
-                  : item.href === "/inventory"
-                    ? pathname === "/inventory"
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              }
+              active={item.href === activeHref}
               onClick={onNavigate}
             />
           ))

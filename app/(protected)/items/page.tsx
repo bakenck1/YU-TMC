@@ -1,9 +1,8 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
-import type { InventoryItem } from "@/lib/types";
-import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
+import { toInventoryItemView } from "@/lib/inventory-item-view";
 import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -31,31 +30,7 @@ export default async function ItemsPage() {
           <InventoryItemCreateForm rooms={rooms} />
         </div>
       ) : null}
-      <ItemsTable items={serverItems.map(toLegacyItem)} />
+      <ItemsTable items={serverItems.map(toInventoryItemView)} />
     </div>
   );
-}
-
-function toLegacyItem(item: InventoryItemDto): InventoryItem {
-  return {
-    id: item.id,
-    name: item.name,
-    inventoryNumber: item.inventoryNumber,
-    category: item.itemType as InventoryItem["category"],
-    location: `${item.room.buildingName} / ${item.room.designation}`,
-    responsible: item.responsible?.name ?? "",
-    status: item.status,
-    photoColor: "#0ea5e9",
-    qrCode: item.qrCode ?? undefined,
-    photo: item.photoUrl ?? undefined,
-    displayStatus:
-      item.inventoryNumberKind === "temporary"
-        ? "Требует присвоения номера"
-        : undefined,
-    updatedAt: new Date(item.updatedAt).toLocaleDateString(),
-    itemType: item.itemType,
-    brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || item.name,
-    quantity: item.quantity,
-    price: item.unitPrice,
-  };
 }

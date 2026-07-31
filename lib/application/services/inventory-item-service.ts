@@ -64,6 +64,21 @@ export class InventoryItemService {
     return repositories.map(toItemDto);
   }
 
+  async listDecommissionedItems(
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    const records = await this.unitOfWork.read(async (repos) => {
+      if (hasPermission(actor.role, "inventory.item.read_all")) {
+        return repos.items.listDecommissionedItems();
+      }
+      if (hasPermission(actor.role, "inventory.item.read_assigned")) {
+        return repos.items.listDecommissionedItemsAssignedTo(actor.userId);
+      }
+      throw forbidden();
+    });
+    return records.map(toItemDto);
+  }
+
   async findItem(
     id: string,
     actor: AuthorizationActor,
@@ -620,6 +635,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     version: record.version,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    archivedAt: record.archivedAt?.toISOString() ?? null,
   };
 }
 
