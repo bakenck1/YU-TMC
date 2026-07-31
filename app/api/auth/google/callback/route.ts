@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
       await getApplicationServices().users.authenticateGoogleIdentity({
         subject: identity.subject,
         email: identity.email,
+        name: identity.name,
       });
     if (authentication.status === "invalid") {
       return finish(

@@ -34,8 +34,9 @@ http://localhost:3000/api/auth/google/callback
 
 Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and
 `GOOGLE_WORKSPACE_DOMAIN=yu.edu.kz` in `.env.local`. Production callback URLs
-must use HTTPS. Users are provisioned and assigned roles by an administrator;
-only active users with an email in the configured Workspace domain can sign in.
+must use HTTPS. A verified Workspace user is created as an active `employee` on
+the first sign-in; an administrator can then change the role or deactivate the
+account.
 The callback verifies the ID token, nonce, audience, verified email, and
 Workspace `hd` claim before creating the application session.
 

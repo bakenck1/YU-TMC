@@ -11,6 +11,7 @@ import type {
 } from "../lib/application/ports/user-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { UserService } from "../lib/application/services/user-service";
+import { MemoryUserUnitOfWork } from "../lib/server/persistence/memory/memory-user-unit-of-work";
 
 function record(
   input: Partial<UserRecord> & Pick<UserRecord, "id" | "email" | "role">,
@@ -30,7 +31,7 @@ function record(
   };
 }
 
-test("Google identity authenticates only a provisioned active account", async () => {
+test("Google identity binds an active account and creates a new employee", async () => {
   const active = record({
     id: "active",
     email: "employee@yu.edu.kz",
@@ -69,8 +70,16 @@ test("Google identity authenticates only a provisioned active account", async ()
     await service.authenticateGoogleIdentity({
       subject: "google-unknown",
       email: "unknown@yu.edu.kz",
+      name: "New Workspace User",
     }),
-    { status: "invalid" },
+    {
+      status: "authenticated",
+      user: {
+        email: "unknown@yu.edu.kz",
+        name: "New Workspace User",
+        role: "employee",
+      },
+    },
   );
   assert.equal(
     (
@@ -88,6 +97,56 @@ test("Google identity authenticates only a provisioned active account", async ()
     }),
     { status: "invalid" },
   );
+  assert.deepEqual(
+    await service.authenticateGoogleIdentity({
+      subject: "off-domain",
+      email: "employee@gmail.com",
+    }),
+    { status: "invalid" },
+  );
+  assert.deepEqual(
+    await service.authenticateGoogleIdentity({
+      subject: "invalid-email",
+      email: "not-an-email",
+    }),
+    { status: "invalid" },
+  );
+});
+
+test("concurrent first Google sign-ins create one user and one binding", async () => {
+  const unitOfWork = new MemoryUserUnitOfWork();
+  let nextId = 0;
+  const service = new UserService(
+    unitOfWork,
+    {
+      async hash() {
+        throw new Error("Password hashing is not expected");
+      },
+      async verify() {
+        return false;
+      },
+    },
+    { now: () => new Date("2026-01-02T00:00:00Z") },
+    { create: () => `google-user-${++nextId}` },
+  );
+  const input = {
+    subject: "concurrent-google-subject",
+    email: "concurrent@yu.edu.kz",
+    name: "Concurrent User",
+  };
+
+  const results = await Promise.all([
+    service.authenticateGoogleIdentity(input),
+    service.authenticateGoogleIdentity(input),
+  ]);
+
+  assert.deepEqual(
+    results.map((result) => result.status),
+    ["authenticated", "authenticated"],
+  );
+  const users = await service.listUsers();
+  assert.equal(users.length, 1);
+  assert.equal(users[0]?.email, "concurrent@yu.edu.kz");
 });
 
 test("administrator can provision an active SSO-only user without a password", async () => {
@@ -147,6 +206,7 @@ function serviceWithUsers(records: UserRecord[]) {
     },
   } as UserRepository;
   const externalIdentities = {
+    async lockProvisioning() {},
     async findUserBySubject(provider, subject) {
       const identity = identities.get(`${provider}:${subject}`);
       return identity

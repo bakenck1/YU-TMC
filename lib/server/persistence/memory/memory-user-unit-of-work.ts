@@ -179,6 +179,10 @@ class MemoryUserRepository implements UserRepository {
 class MemoryExternalIdentityRepository implements ExternalIdentityRepository {
   constructor(private readonly state: MemoryState) {}
 
+  async lockProvisioning(): Promise<void> {
+    // MemoryUserUnitOfWork already serializes complete transactions.
+  }
+
   async findUserBySubject(
     provider: ExternalIdentityRecord["provider"],
     subject: string,

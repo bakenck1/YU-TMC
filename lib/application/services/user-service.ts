@@ -86,24 +86,44 @@ export class UserService {
   }
 
   async authenticateGoogleIdentity(
-    input: { subject: string; email: string },
+    input: { subject: string; email: string; name?: string | null },
   ): Promise<AuthenticationResult> {
-    const email = normalizeUserEmail(input.email);
+    let email: string;
+    try {
+      email = requireEmail(input.email);
+    } catch {
+      return { status: "invalid" };
+    }
     const subject = input.subject.trim();
-    if (!email || !subject || subject.length > 255) {
+    if (!isWorkspaceEmail(email) || !subject || subject.length > 255) {
       return { status: "invalid" };
     }
 
     return this.unitOfWork.transaction(
       async ({ users, externalIdentities }) => {
+        await externalIdentities.lockProvisioning("google", subject, email);
         let user = await externalIdentities.findUserBySubject(
           "google",
           subject,
         );
         if (!user) {
           user = await users.findByNormalizedEmailForUpdate(email);
-          if (!user || user.deletedAt) return { status: "invalid" };
-          if (!user.active) return { status: "blocked" };
+          if (!user) {
+            const createdAt = this.clock.now();
+            user = await users.insert({
+              id: this.ids.create(),
+              email,
+              fullName: externalIdentityName(input.name, email),
+              role: "employee",
+              phone: null,
+              emailVerified: true,
+              active: true,
+              createdAt,
+            });
+          } else {
+            if (user.deletedAt) return { status: "invalid" };
+            if (!user.active) return { status: "blocked" };
+          }
 
           const existingIdentity = await externalIdentities.findByUser(
             "google",
@@ -140,6 +160,7 @@ export class UserService {
           user: authenticatedAccount(user),
         };
       },
+      { isolation: "read-committed" },
     );
   }
 
@@ -489,6 +510,14 @@ export function normalizeUserEmail(value: string): string {
 
 function isWorkspaceEmail(email: string) {
   return email.endsWith("@yu.edu.kz");
+}
+
+function externalIdentityName(value: string | null | undefined, email: string) {
+  const name = value?.trim();
+  if (name && name.length >= 2 && name.length <= 120) return name;
+  const localPart = email.split("@", 1)[0]?.trim();
+  const fallback = localPart && localPart.length >= 2 ? localPart : "YU user";
+  return fallback.slice(0, 120);
 }
 
 function requireEmail(value: string): string {

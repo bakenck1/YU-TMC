@@ -79,6 +79,11 @@ export interface ExternalIdentityRecord {
 }
 
 export interface ExternalIdentityRepository {
+  lockProvisioning(
+    provider: ExternalIdentityProvider,
+    subject: string,
+    email: string,
+  ): Promise<void>;
   findUserBySubject(
     provider: ExternalIdentityProvider,
     subject: string,

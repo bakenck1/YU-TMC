@@ -217,6 +217,23 @@ class PostgresExternalIdentityRepository
 {
   constructor(private readonly source: PostgresRepositorySource) {}
 
+  async lockProvisioning(
+    provider: ExternalIdentityRecord["provider"],
+    subject: string,
+    email: string,
+  ): Promise<void> {
+    const keys = [
+      `external-identity:${provider}:subject:${subject}`,
+      `external-identity:${provider}:email:${email}`,
+    ].sort();
+    for (const key of keys) {
+      await this.source.query(
+        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [key],
+      );
+    }
+  }
+
   async findUserBySubject(
     provider: ExternalIdentityRecord["provider"],
     subject: string,
