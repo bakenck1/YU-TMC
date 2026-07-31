@@ -45,6 +45,13 @@ export function permissionForPath(pathname: string): AppPermission | null {
 }
 
 export function canAccessPath(role: unknown, pathname: string) {
+  const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
+  if (matchesRoute(pathOnly, "/items/decommissioned")) {
+    return (
+      hasPermission(role, "inventory.item.read_all") ||
+      hasPermission(role, "inventory.item.read_assigned")
+    );
+  }
   const permission = permissionForPath(pathname);
   return permission !== null && hasPermission(role, permission);
 }

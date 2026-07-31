@@ -9,6 +9,7 @@ import type {
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 import { toDecommissionedInventoryItemView } from "../lib/inventory-item-view";
+import { canAccessPath } from "../lib/security/authorization";
 
 const DECOMMISSIONED_ITEM: InventoryItemRecord = {
   id: "item-1",
@@ -100,4 +101,11 @@ test("uses the assigned archive query for an employee", async () => {
 
   assert.equal(requestedUserId, "employee-1");
   assert.equal(result.length, 1);
+});
+
+test("archive route is only visible to roles that can read inventory items", () => {
+  assert.equal(canAccessPath("admin", "/items/decommissioned"), true);
+  assert.equal(canAccessPath("warehouse", "/items/decommissioned"), true);
+  assert.equal(canAccessPath("employee", "/items/decommissioned"), true);
+  assert.equal(canAccessPath("owner", "/items/decommissioned"), false);
 });
