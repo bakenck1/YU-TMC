@@ -55,7 +55,7 @@ const DECOR: string[] = [
   "position:absolute;left:4.3%;top:230px;width:13px;height:13px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
   "position:absolute;left:7.03%;top:330px;width:14px;height:14px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
   "position:absolute;left:4.69%;top:390px;width:12px;height:12px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
-  "position:absolute;left:37.03%;top:246px;width:30.47%;height:238px;background:#f3f0e5;border:2px dashed #b6abd1;border-radius:8px;",
+  "position:absolute;left:36.25%;top:236px;width:37.5%;height:270px;background:#f3f0e5;border:2px dashed #8ea9d6;border-radius:10px;",
   "position:absolute;left:39.06%;top:270px;width:90px;height:70px;background:#d3e7ab;border-radius:55% 45% 50% 60%;",
   "position:absolute;left:50%;top:300px;width:110px;height:80px;background:#d3e7ab;border-radius:45% 55% 60% 45%;",
   "position:absolute;left:59.38%;top:390px;width:80px;height:65px;background:#d3e7ab;border-radius:50% 60% 45% 55%;",
@@ -68,9 +68,6 @@ const DECOR: string[] = [
   "position:absolute;left:43.36%;top:425px;width:12px;height:12px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
   "position:absolute;left:48.44%;top:390px;width:12px;height:12px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
   "position:absolute;left:58.59%;top:280px;width:12px;height:12px;border-radius:50%;background:radial-gradient(#8fbf6a,#6da34e);",
-  "position:absolute;left:69.53%;top:250px;width:56px;height:230px;background:#ddedbd;border:2px solid #aacd7f;border-radius:4px;",
-  "position:absolute;left:70.16%;top:290px;width:40px;height:60px;border:2px solid #aacd7f;border-radius:3px;",
-  "position:absolute;left:70.16%;top:390px;width:40px;height:60px;border:2px solid #aacd7f;border-radius:3px;",
   "position:absolute;left:41.41%;top:545px;width:60px;height:44px;background:#e5e2d7;border-radius:5px;",
   "position:absolute;left:68.75%;top:640px;width:56px;height:42px;background:#e5e2d7;border-radius:5px;",
 ];
@@ -151,10 +148,10 @@ const BUILDINGS: BuildingCfg[] = [
   {
     id: "kgise",
     // KGISE is located in the south-west part of the campus plan.
-    wrap: "position:absolute;left:13.5%;top:555px;width:96px;height:84px;",
+    wrap: "position:absolute;left:3.5%;top:555px;width:96px;height:84px;",
     hoverY: 5,
-    labelCss: "position:absolute;left:50%;top:-54px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
-    tooltipCss: "position:absolute;left:50%;top:104px;transform:translateX(-50%);",
+    labelCss: "position:absolute;left:0;top:-54px;white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
+    tooltipCss: "position:absolute;left:0;top:104px;",
     selRing: "position:absolute;left:-8px;right:-8px;top:-34px;bottom:-8px;border:3px solid #002060;border-radius:18px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
     shape: (
       <>
@@ -218,6 +215,59 @@ const BUILDINGS: BuildingCfg[] = [
           <div style={css("position:absolute;left:10px;right:10px;top:33%;height:2px;background:rgba(130,120,90,.12);")} />
           <div style={css("position:absolute;left:10px;right:10px;top:66%;height:2px;background:rgba(130,120,90,.12);")} />
         </div>
+      </>
+    ),
+  },
+  {
+    id: "center-1",
+    wrap: "position:absolute;left:39%;top:260px;width:120px;height:78px;",
+    hoverY: 5,
+    labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
+    tooltipCss: "position:absolute;left:50%;top:96px;transform:translateX(-50%);",
+    selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
+    shape: (
+      <>
+        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;")} />
+        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;")} />
+        <div style={css("position:absolute;left:0;right:0;top:-22px;height:78px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
+          <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:6px;")} />
+          <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "center-2",
+    wrap: "position:absolute;left:57%;top:260px;width:120px;height:78px;",
+    hoverY: 5,
+    labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
+    tooltipCss: "position:absolute;left:50%;top:96px;transform:translateX(-50%);",
+    selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
+    shape: (
+      <>
+        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;")} />
+        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;")} />
+        <div style={css("position:absolute;left:0;right:0;top:-22px;height:78px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
+          <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:6px;")} />
+          <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "yessenov-stadium",
+    wrap: "position:absolute;left:78.13%;top:530px;width:250px;height:180px;",
+    hoverY: 4,
+    labelCss: "position:absolute;left:50%;top:-42px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
+    tooltipCss: "position:absolute;left:50%;top:-80px;transform:translateX(-50%);",
+    selRing: "position:absolute;inset:-8px;border:3px solid #002060;border-radius:50%;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
+    shape: (
+      <>
+        <div style={css("position:absolute;left:8px;right:-8px;top:10px;bottom:-10px;background:rgba(55,80,35,.18);filter:blur(11px);border-radius:50%;")} />
+        <div style={css("position:absolute;inset:0;background:#dce9bf;border:4px solid #87aa62;border-radius:50%;box-shadow:0 12px 20px rgba(55,80,35,.16);")} />
+        <div style={css("position:absolute;inset:24px;background:#8fbf6a;border:3px solid #f2f0e6;border-radius:48%;")} />
+        <div style={css("position:absolute;inset:43px;background:linear-gradient(90deg,#7fb45b,#91c66c);border-radius:46%;")} />
+        <div style={css("position:absolute;left:50%;top:43px;bottom:43px;border-left:2px solid rgba(255,255,255,.7);")} />
       </>
     ),
   },
@@ -369,12 +419,6 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
         <div style={css("position:absolute;left:37.81%;top:452px;font-size:11.5px;font-weight:700;color:#9aa392;letter-spacing:.04em;")}>Центральный парк</div>
         <div style={css("position:absolute;left:42.19%;top:300px;width:220px;height:0;border-top:2px solid #e6e1d1;transform:rotate(14deg);")} />
         <div style={css("position:absolute;left:40.63%;top:420px;width:260px;height:0;border-top:2px solid #e6e1d1;transform:rotate(-10deg);")} />
-
-        {/* stadium track (decor) */}
-        <div style={css("position:absolute;left:78.13%;top:530px;width:250px;height:180px;")}>
-          <div style={css("position:absolute;inset:0;background:#e6f0cf;border:3px solid #aacd7f;border-radius:50%;")} />
-          <div style={css("position:absolute;inset:26px;background:#cfe6a4;border:2px solid #aacd7f;border-radius:48%;")} />
-        </div>
 
         {BUILDINGS.map((b) => {
           const buildingData = data.buildings[b.id];

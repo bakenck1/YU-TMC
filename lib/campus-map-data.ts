@@ -21,7 +21,7 @@ export interface CampusMapData {
 }
 
 /**
- * Builds the home-map view from the inventory records. The seven approved
+ * Builds the home-map view from the inventory records. The approved
  * campus buildings are always shown, including floors that do not yet have
  * rooms. This keeps the map's floor plan correct before the inventory is
  * populated and lets new rooms/items appear on the next page refresh.
