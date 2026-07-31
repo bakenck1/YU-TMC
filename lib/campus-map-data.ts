@@ -34,7 +34,10 @@ export function buildCampusMapData(
   const activeBuildings = new Map(
     buildings
       .filter((building) => building.status === "active")
-      .map((building) => [building.name, building]),
+      .flatMap((building) => {
+        const preset = findCampusBuildingPreset(building.name);
+        return preset ? [[preset.id, building] as const] : [];
+      }),
   );
   const roomsByBuildingId = groupBy(
     rooms.filter((room) => room.status === "active"),
@@ -45,7 +48,7 @@ export function buildCampusMapData(
   const mapBuildings: Record<string, CampusBuilding> = {};
 
   for (const preset of CAMPUS_BUILDING_PRESETS) {
-    const storedBuilding = activeBuildings.get(preset.name);
+    const storedBuilding = activeBuildings.get(preset.id);
     const buildingRooms = storedBuilding
       ? roomsByBuildingId.get(storedBuilding.id) ?? []
       : [];

@@ -3,6 +3,7 @@ export const CAMPUS_ADDRESS = "32-й микрорайон, Актау";
 export interface CampusBuildingPreset {
   id: string;
   name: string;
+  legacyNames?: readonly string[];
   address: string;
   floorCount: number;
 }
@@ -40,13 +41,15 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
   },
   {
     id: "dormitory-1",
-    name: "Общежитие-1",
+    name: "Общежитие 3",
+    legacyNames: ["Общежитие-1"],
     address: CAMPUS_ADDRESS,
     floorCount: 5,
   },
   {
     id: "dormitory-2",
-    name: "Общежитие-2",
+    name: "Общежитие 4",
+    legacyNames: ["Общежитие-2"],
     address: CAMPUS_ADDRESS,
     floorCount: 5,
   },
@@ -55,5 +58,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
 export function findCampusBuildingPreset(
   name: string,
 ): CampusBuildingPreset | undefined {
-  return CAMPUS_BUILDING_PRESETS.find((preset) => preset.name === name);
+  return CAMPUS_BUILDING_PRESETS.find(
+    (preset) =>
+      preset.name === name || preset.legacyNames?.includes(name) === true,
+  );
 }

@@ -587,6 +587,11 @@ function BuildingFormModal({
     (preset) => preset.id === presetId,
   );
   const existingNames = new Set(existingBuildingNames);
+  const existingPresetIds = new Set(
+    existingBuildingNames
+      .map((name) => findCampusBuildingPreset(name)?.id)
+      .filter((id): id is string => Boolean(id)),
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -676,7 +681,11 @@ function BuildingFormModal({
                 <option
                   key={preset.id}
                   value={preset.id}
-                  disabled={!building && existingNames.has(preset.name)}
+                  disabled={
+                    !building &&
+                    (existingNames.has(preset.name) ||
+                      existingPresetIds.has(preset.id))
+                  }
                 >
                   {preset.name} — {preset.address}, {preset.floorCount} этажей
                 </option>
