@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Barcode,
@@ -73,6 +73,19 @@ export default function InventoryItemDetails({
   const [codeKind, setCodeKind] = useState<"barcode" | "qr">("barcode");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const actionBarRef = useRef<HTMLElement>(null);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+
+  useEffect(() => {
+    const actionBar = actionBarRef.current;
+    if (!actionBar) return;
+    const updateHeight = () =>
+      setActionBarHeight(actionBar.getBoundingClientRect().height);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(actionBar);
+    return () => observer.disconnect();
+  }, []);
 
   async function saveContent() {
     setSaving(true);
@@ -278,37 +291,47 @@ export default function InventoryItemDetails({
         </div>
       </div>
 
-      <nav aria-label="Действия с предметом" className="flex flex-wrap gap-2 rounded-xl border border-black/5 bg-white p-2 shadow-sm">
-        <button
-          type="button"
-          onClick={() => document.getElementById("item-information")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-        >
-          <FileText className="h-4 w-4" /> Информация
-        </button>
-        {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
-        <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />Штрих-код</button>
-        {canManageProtected ? (
+      <nav
+        ref={actionBarRef}
+        aria-label="Действия с предметом"
+        className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/5 bg-white/95 p-2 shadow-md backdrop-blur"
+      >
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() =>
-              protectedEditing
-                ? closeProtectedFields()
-                : openProtectedFields()
-            }
-            aria-expanded={protectedEditing}
-            aria-controls="protected-fields-panel"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            onClick={() => document.getElementById("item-information")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
-            <ShieldCheck className="h-4 w-4" />
-            Защищённые поля
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${protectedEditing ? "rotate-180" : ""}`}
-            />
+            <FileText className="h-4 w-4" /> Информация
           </button>
+          {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
+          <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />Штрих-код</button>
+          {canManageProtected ? (
+            <button
+              type="button"
+              onClick={() =>
+                protectedEditing
+                  ? closeProtectedFields()
+                  : openProtectedFields()
+              }
+              aria-expanded={protectedEditing}
+              aria-controls="protected-fields-panel"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Защищённые поля
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${protectedEditing ? "rotate-180" : ""}`}
+              />
+            </button>
+          ) : null}
+        </div>
+        {canSendToService || canManageProtected ? (
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
+            {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? "Отправка…" : item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
+            {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />Списать</button> : null}
+          </div>
         ) : null}
-        {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
-        {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><Trash2 className="h-4 w-4" />Списать</button> : null}
       </nav>
 
       {canManageProtected && protectedEditing ? (
@@ -516,7 +539,11 @@ export default function InventoryItemDetails({
           </div>
         </section>
 
-        <section id="item-information" className="scroll-mt-6 rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+        <section
+          id="item-information"
+          style={{ scrollMarginTop: actionBarHeight + 16 }}
+          className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm"
+        >
           <div className="mb-6 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-zinc-800">Карточка предмета</h2>
@@ -530,12 +557,6 @@ export default function InventoryItemDetails({
               >
                 Изменить
               </button>
-            ) : null}
-            {canSendToService || canManageProtected ? (
-              <div className="flex flex-wrap justify-end gap-2">
-                {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} className="rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50">{servicing ? "Отправка…" : item.status === "maintenance" ? "В сервисе" : "Отправить в сервис"}</button> : null}
-                {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"><span className="inline-flex items-center gap-2"><Trash2 className="h-4 w-4" />Списать и архивировать</span></button> : null}
-              </div>
             ) : null}
           </div>
 
