@@ -4,6 +4,7 @@ export interface CampusBuildingPreset {
   id: string;
   name: string;
   legacyNames?: readonly string[];
+  mapVisible?: boolean;
   address: string;
   floorCount: number;
 }
@@ -53,7 +54,25 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     address: CAMPUS_ADDRESS,
     floorCount: 5,
   },
+  {
+    id: "off-campus-dormitory-1",
+    name: "Общежитие 1",
+    mapVisible: false,
+    address: "Микрорайон 3Б, 10, Актау",
+    floorCount: 5,
+  },
+  {
+    id: "off-campus-dormitory-2",
+    name: "Общежитие 2",
+    mapVisible: false,
+    address: "27 микрорайон, 7, Актау",
+    floorCount: 5,
+  },
 ] as const;
+
+export const CAMPUS_MAP_BUILDING_PRESETS = CAMPUS_BUILDING_PRESETS.filter(
+  (preset) => preset.mapVisible !== false,
+);
 
 export function findCampusBuildingPreset(
   name: string,

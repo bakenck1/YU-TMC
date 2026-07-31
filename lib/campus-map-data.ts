@@ -1,7 +1,7 @@
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import {
-  CAMPUS_BUILDING_PRESETS,
+  CAMPUS_MAP_BUILDING_PRESETS,
   findCampusBuildingPreset,
 } from "@/lib/campus-directory";
 import type {
@@ -47,7 +47,7 @@ export function buildCampusMapData(
   const itemsById: Record<string, CampusItem> = {};
   const mapBuildings: Record<string, CampusBuilding> = {};
 
-  for (const preset of CAMPUS_BUILDING_PRESETS) {
+  for (const preset of CAMPUS_MAP_BUILDING_PRESETS) {
     const storedBuilding = activeBuildings.get(preset.id);
     const buildingRooms = storedBuilding
       ? roomsByBuildingId.get(storedBuilding.id) ?? []
@@ -111,13 +111,14 @@ export function buildCampusMapData(
         (total, building) => total + building.attn,
         0,
       ),
-      locations: CAMPUS_BUILDING_PRESETS.length,
+      locations: CAMPUS_MAP_BUILDING_PRESETS.length,
     },
   };
 }
 
 export function isCampusBuildingName(name: string): boolean {
-  return findCampusBuildingPreset(name) !== undefined;
+  const preset = findCampusBuildingPreset(name);
+  return preset !== undefined && preset.mapVisible !== false;
 }
 
 function toCampusItem(item: InventoryItemDto, buildingId: string): CampusItem {
