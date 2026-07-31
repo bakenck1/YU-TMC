@@ -269,9 +269,6 @@ function UserFormModal({
                   setValues((current) => ({
                     ...current,
                     initialPassword: event.target.value,
-                    active: user
-                      ? current.active
-                      : current.active && event.target.value.length >= 12,
                   }))
                 }
                 placeholder="Не менее 12 символов"
@@ -280,7 +277,7 @@ function UserFormModal({
               <span className="mt-1.5 block text-xs font-normal text-zinc-400">
                 {user
                   ? "Оставьте поле пустым, чтобы не менять текущий пароль."
-                  : "Без временного пароля профиль сохранится неактивным."}
+                  : t("users.passwordSsoHint")}
               </span>
             </label>
           </div>
@@ -290,9 +287,8 @@ function UserFormModal({
               <input
                 type="checkbox"
                 checked={values.active}
-                disabled={!user && values.initialPassword.length < 12}
                 onChange={(event) => setValues((current) => ({ ...current, active: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-emerald-600 disabled:opacity-50"
+                className="mt-0.5 h-4 w-4 accent-emerald-600"
               />
               <span>
                 <span className="block text-sm font-medium text-zinc-700">{t("users.isActive")}</span>
@@ -313,8 +309,7 @@ function UserFormModal({
             </label>
             {!user && (
               <p className="text-xs leading-5 text-zinc-500 sm:col-span-2">
-                Чтобы сразу активировать учётную запись, сначала задайте
-                временный пароль.
+                {t("users.ssoProvisioningHint")}
               </p>
             )}
           </div>

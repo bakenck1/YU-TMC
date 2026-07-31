@@ -3,6 +3,8 @@ import "server-only";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   AuthBootstrapRepository,
+  ExternalIdentityRecord,
+  ExternalIdentityRepository,
   InsertPasswordCredential,
   InsertUserRecord,
   PasswordCredentialRecord,
@@ -17,6 +19,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 interface MemoryState {
   users: Map<string, UserRecord>;
   credentials: Map<string, PasswordCredentialRecord>;
+  externalIdentities: Map<string, ExternalIdentityRecord>;
   bootstrap: { completedAt: Date | null; firstAdminUserId: string | null };
   nextCode: number;
 }
@@ -61,6 +64,7 @@ function createRepositories(state: MemoryState): UserRepositories {
   return {
     users: new MemoryUserRepository(state),
     credentials: new MemoryPasswordCredentialRepository(state),
+    externalIdentities: new MemoryExternalIdentityRepository(state),
     bootstrap: new MemoryAuthBootstrapRepository(state),
   };
 }
@@ -88,6 +92,12 @@ class MemoryUserRepository implements UserRepository {
       (candidate) => candidate.email === email,
     );
     return user ? cloneUser(user) : null;
+  }
+
+  async findByNormalizedEmailForUpdate(
+    email: string,
+  ): Promise<UserRecord | null> {
+    return this.findByNormalizedEmail(email);
   }
 
   async insert(input: InsertUserRecord): Promise<UserRecord> {
@@ -166,6 +176,44 @@ class MemoryUserRepository implements UserRepository {
   }
 }
 
+class MemoryExternalIdentityRepository implements ExternalIdentityRepository {
+  constructor(private readonly state: MemoryState) {}
+
+  async findUserBySubject(
+    provider: ExternalIdentityRecord["provider"],
+    subject: string,
+  ): Promise<UserRecord | null> {
+    const identity = this.state.externalIdentities.get(
+      identityKey(provider, subject),
+    );
+    if (!identity) return null;
+    const user = this.state.users.get(identity.userId);
+    return user ? cloneUser(user) : null;
+  }
+
+  async findByUser(
+    provider: ExternalIdentityRecord["provider"],
+    userId: string,
+  ): Promise<ExternalIdentityRecord | null> {
+    const identity = [...this.state.externalIdentities.values()].find(
+      (candidate) =>
+        candidate.provider === provider && candidate.userId === userId,
+    );
+    return identity ? cloneExternalIdentity(identity) : null;
+  }
+
+  async insert(input: ExternalIdentityRecord): Promise<void> {
+    const key = identityKey(input.provider, input.subject);
+    if (
+      this.state.externalIdentities.has(key) ||
+      (await this.findByUser(input.provider, input.userId))
+    ) {
+      throw new ApplicationError("conflict", "external_identity_conflict");
+    }
+    this.state.externalIdentities.set(key, cloneExternalIdentity(input));
+  }
+}
+
 class MemoryPasswordCredentialRepository
   implements PasswordCredentialRepository
 {
@@ -213,6 +261,7 @@ function emptyState(): MemoryState {
   return {
     users: new Map(),
     credentials: new Map(),
+    externalIdentities: new Map(),
     bootstrap: { completedAt: null, firstAdminUserId: null },
     nextCode: 1,
   };
@@ -229,6 +278,12 @@ function cloneState(state: MemoryState): MemoryState {
         cloneCredential(credential),
       ]),
     ),
+    externalIdentities: new Map(
+      [...state.externalIdentities].map(([key, identity]) => [
+        key,
+        cloneExternalIdentity(identity),
+      ]),
+    ),
     bootstrap: {
       completedAt: state.bootstrap.completedAt
         ? new Date(state.bootstrap.completedAt)
@@ -237,6 +292,19 @@ function cloneState(state: MemoryState): MemoryState {
     },
     nextCode: state.nextCode,
   };
+}
+
+function identityKey(
+  provider: ExternalIdentityRecord["provider"],
+  subject: string,
+) {
+  return `${provider}:${subject}`;
+}
+
+function cloneExternalIdentity(
+  identity: ExternalIdentityRecord,
+): ExternalIdentityRecord {
+  return { ...identity, createdAt: new Date(identity.createdAt) };
 }
 
 function cloneUser(user: UserRecord): UserRecord {

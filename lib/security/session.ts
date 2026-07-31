@@ -80,6 +80,41 @@ function signature(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
+export function createSignedServerValue(purpose: string, value: string) {
+  const secret = sessionSecret();
+  if (!secret) throw new Error("SESSION_SECRET must contain at least 32 characters");
+  const encodedValue = Buffer.from(value).toString("base64url");
+  const signedPayload = `${purpose}.${encodedValue}`;
+  return `${encodedValue}.${signature(signedPayload, secret)}`;
+}
+
+export function verifySignedServerValue(
+  purpose: string,
+  token: string,
+): string | null {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedValue, receivedSignature] = parts;
+  if (!encodedValue || !receivedSignature) return null;
+
+  const expectedSignature = signature(`${purpose}.${encodedValue}`, secret);
+  const receivedBuffer = Buffer.from(receivedSignature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (
+    receivedBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(receivedBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+  try {
+    return Buffer.from(encodedValue, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
 export function isSessionConfigured() {
   return sessionSecret() !== null;
 }

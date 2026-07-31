@@ -85,6 +85,64 @@ export class UserService {
     };
   }
 
+  async authenticateGoogleIdentity(
+    input: { subject: string; email: string },
+  ): Promise<AuthenticationResult> {
+    const email = normalizeUserEmail(input.email);
+    const subject = input.subject.trim();
+    if (!email || !subject || subject.length > 255) {
+      return { status: "invalid" };
+    }
+
+    return this.unitOfWork.transaction(
+      async ({ users, externalIdentities }) => {
+        let user = await externalIdentities.findUserBySubject(
+          "google",
+          subject,
+        );
+        if (!user) {
+          user = await users.findByNormalizedEmailForUpdate(email);
+          if (!user || user.deletedAt) return { status: "invalid" };
+          if (!user.active) return { status: "blocked" };
+
+          const existingIdentity = await externalIdentities.findByUser(
+            "google",
+            user.id,
+          );
+          if (existingIdentity && existingIdentity.subject !== subject) {
+            return { status: "invalid" };
+          }
+          if (!existingIdentity) {
+            try {
+              await externalIdentities.insert({
+                provider: "google",
+                subject,
+                userId: user.id,
+                emailAtLink: email,
+                createdAt: this.clock.now(),
+              });
+            } catch (error) {
+              if (
+                error instanceof ApplicationError &&
+                error.kind === "conflict"
+              ) {
+                return { status: "invalid" };
+              }
+              throw error;
+            }
+          }
+        }
+
+        if (user.deletedAt) return { status: "invalid" };
+        if (!user.active) return { status: "blocked" };
+        return {
+          status: "authenticated",
+          user: authenticatedAccount(user),
+        };
+      },
+    );
+  }
+
   async resolveSessionSubject(
     subject: string,
   ): Promise<AuthenticatedAccount | null> {
@@ -248,6 +306,9 @@ export class UserService {
     const passwordHash = initialPassword
       ? await this.passwordHasher.hash(initialPassword)
       : null;
+    if (input.active === true && !passwordHash && !isWorkspaceEmail(email)) {
+      throw new ApplicationError("conflict", "user_login_not_configured");
+    }
 
     return this.unitOfWork.transaction(async ({ users, credentials }) => {
       const actor = await requireActiveActor(users, actorUserId);
@@ -264,7 +325,7 @@ export class UserService {
         phone,
         role: input.role,
         emailVerified: input.emailVerified === true,
-        active: passwordHash !== null && input.active === true,
+        active: input.active === true,
         createdAt,
       });
       if (passwordHash) {
@@ -314,13 +375,14 @@ export class UserService {
       }
       const existingCredential =
         await repositories.credentials.findByUserId(current.id);
-      if (!current.active && input.active) {
-        if (!existingCredential && !passwordHash) {
-          throw new ApplicationError(
-            "conflict",
-            "user_login_not_configured",
-          );
-        }
+      if (
+        !current.active &&
+        input.active &&
+        !existingCredential &&
+        !passwordHash &&
+        !isWorkspaceEmail(current.email)
+      ) {
+        throw new ApplicationError("conflict", "user_login_not_configured");
       }
       if (passwordHash) {
         const credentialInput = {
@@ -423,6 +485,10 @@ function toUserDto(user: UserRecord): UserDto {
 
 export function normalizeUserEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function isWorkspaceEmail(email: string) {
+  return email.endsWith("@yu.edu.kz");
 }
 
 function requireEmail(value: string): string {

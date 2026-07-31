@@ -17,10 +17,13 @@ import {
   defaultPathForRole,
   isSafeReturnPath,
 } from "@/lib/security/authorization";
+import type { TranslationKey } from "@/lib/i18n";
 
 interface LoginFormProps {
   returnTo?: string;
   registrationAvailable?: boolean;
+  googleSsoAvailable?: boolean;
+  googleError?: string;
 }
 
 interface FieldErrors {
@@ -33,6 +36,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginForm({
   returnTo,
   registrationAvailable = false,
+  googleSsoAvailable = false,
+  googleError,
 }: LoginFormProps) {
   const { t } = useAppSettings();
   const { refreshSession } = useAuth();
@@ -41,7 +46,9 @@ export default function LoginForm({
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(() =>
+    googleError ? t(googleErrorKey(googleError)) : null,
+  );
   const [loading, setLoading] = useState(false);
 
   function validate() {
@@ -128,7 +135,44 @@ export default function LoginForm({
         </p>
       </div>
 
-      <form className="mt-9 space-y-5" onSubmit={handleSubmit} noValidate>
+      <a
+        href={
+          googleSsoAvailable
+            ? `/api/auth/google${
+                returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""
+              }`
+            : undefined
+        }
+        aria-disabled={!googleSsoAvailable}
+        className={`mt-9 flex h-13 w-full items-center justify-center gap-3 rounded-2xl border px-5 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-emerald-100 ${
+          googleSsoAvailable
+            ? "border-zinc-200 bg-white text-zinc-800 hover:border-emerald-300 hover:bg-emerald-50"
+            : "pointer-events-none border-zinc-100 bg-zinc-50 text-zinc-400"
+        }`}
+      >
+        <span
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-sm font-bold text-blue-600"
+          aria-hidden="true"
+        >
+          G
+        </span>
+        {t("auth.signInWithGoogle")}
+      </a>
+      {!googleSsoAvailable ? (
+        <p className="mt-2 text-center text-xs text-zinc-400">
+          {t("auth.googleNotConfiguredHint")}
+        </p>
+      ) : null}
+
+      <div className="my-6 flex items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-zinc-200" />
+        <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          {t("auth.orPassword")}
+        </span>
+        <span className="h-px flex-1 bg-zinc-200" />
+      </div>
+
+      <form className="space-y-5" onSubmit={handleSubmit} noValidate>
         {formError ? (
           <div
             className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
@@ -276,4 +320,19 @@ export default function LoginForm({
       </form>
     </div>
   );
+}
+
+function googleErrorKey(error: string): TranslationKey {
+  switch (error) {
+    case "google_access_denied":
+      return "auth.googleAccessDenied";
+    case "google_account_not_provisioned":
+      return "auth.googleAccountNotProvisioned";
+    case "google_account_blocked":
+      return "auth.googleAccountBlocked";
+    case "google_not_configured":
+      return "auth.googleNotConfigured";
+    default:
+      return "auth.googleFailed";
+  }
 }

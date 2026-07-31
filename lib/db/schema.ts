@@ -193,6 +193,40 @@ export const usersTable = inventorySchema.table(
   ],
 );
 
+export const userExternalIdentitiesTable = inventorySchema.table(
+  "user_external_identities",
+  {
+    provider: varchar({ length: 32 }).notNull(),
+    subject: varchar({ length: 255 }).notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    emailAtLink: varchar({ length: 254 }).notNull(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "user_external_identities_pk",
+      columns: [table.provider, table.subject],
+    }),
+    unique("user_external_identities_provider_user_unique").on(
+      table.provider,
+      table.userId,
+    ),
+    check(
+      "user_external_identities_provider_check",
+      sql`${table.provider} = 'google'`,
+    ),
+    check(
+      "user_external_identities_email_normalized_check",
+      sql`${table.emailAtLink} = lower(btrim(${table.emailAtLink}))`,
+    ),
+  ],
+);
+
 export const userPasswordCredentialsTable = inventorySchema.table(
   "user_password_credentials",
   {

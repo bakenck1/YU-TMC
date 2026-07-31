@@ -57,6 +57,7 @@ export interface UserRepository {
   findById(id: string): Promise<UserRecord | null>;
   findByIdForUpdate(id: string): Promise<UserRecord | null>;
   findByNormalizedEmail(email: string): Promise<UserRecord | null>;
+  findByNormalizedEmailForUpdate(email: string): Promise<UserRecord | null>;
   insert(input: InsertUserRecord): Promise<UserRecord>;
   update(input: UpdateUserRecord): Promise<UserRecord | null>;
   softDelete(
@@ -65,6 +66,28 @@ export interface UserRepository {
     deletedAt: Date,
   ): Promise<UserRecord | null>;
   countActiveAdminsForUpdate(): Promise<number>;
+}
+
+export type ExternalIdentityProvider = "google";
+
+export interface ExternalIdentityRecord {
+  provider: ExternalIdentityProvider;
+  subject: string;
+  userId: string;
+  emailAtLink: string;
+  createdAt: Date;
+}
+
+export interface ExternalIdentityRepository {
+  findUserBySubject(
+    provider: ExternalIdentityProvider,
+    subject: string,
+  ): Promise<UserRecord | null>;
+  findByUser(
+    provider: ExternalIdentityProvider,
+    userId: string,
+  ): Promise<ExternalIdentityRecord | null>;
+  insert(input: ExternalIdentityRecord): Promise<void>;
 }
 
 export interface PasswordCredentialRepository {
@@ -82,5 +105,6 @@ export interface AuthBootstrapRepository {
 export interface UserRepositories {
   users: UserRepository;
   credentials: PasswordCredentialRepository;
+  externalIdentities: ExternalIdentityRepository;
   bootstrap: AuthBootstrapRepository;
 }

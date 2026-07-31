@@ -23,6 +23,22 @@ Next.js. Docker is not required for this local fallback.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+### Google Workspace SSO
+
+Create a Google Cloud OAuth 2.0 client of type **Web application** and register
+the exact callback URL:
+
+```text
+http://localhost:3000/api/auth/google/callback
+```
+
+Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and
+`GOOGLE_WORKSPACE_DOMAIN=yu.edu.kz` in `.env.local`. Production callback URLs
+must use HTTPS. Users are provisioned and assigned roles by an administrator;
+only active users with an email in the configured Workspace domain can sign in.
+The callback verifies the ID token, nonce, audience, verified email, and
+Workspace `hd` claim before creating the application session.
+
 PostgreSQL setup, environment isolation, migration commands, and production
 deployment rules are documented in [docs/database.md](docs/database.md).
 

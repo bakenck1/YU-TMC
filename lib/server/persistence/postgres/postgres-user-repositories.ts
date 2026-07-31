@@ -4,6 +4,8 @@ import type { QueryResultRow } from "pg";
 
 import type {
   AuthBootstrapRepository,
+  ExternalIdentityRecord,
+  ExternalIdentityRepository,
   InsertPasswordCredential,
   InsertUserRecord,
   PasswordCredentialRecord,
@@ -18,6 +20,7 @@ import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres
 
 const USERS = '"yu_inventory"."users"';
 const CREDENTIALS = '"yu_inventory"."user_password_credentials"';
+const EXTERNAL_IDENTITIES = '"yu_inventory"."user_external_identities"';
 const BOOTSTRAP = '"yu_inventory"."auth_bootstrap"';
 const CODE_SEQUENCE = '"yu_inventory"."user_code_sequence"';
 
@@ -50,6 +53,7 @@ export function createPostgresUserRepositories(
   return {
     users: new PostgresUserRepository(source),
     credentials: new PostgresPasswordCredentialRepository(source),
+    externalIdentities: new PostgresExternalIdentityRepository(source),
     bootstrap: new PostgresAuthBootstrapRepository(source),
   };
 }
@@ -85,6 +89,16 @@ class PostgresUserRepository implements UserRepository {
   async findByNormalizedEmail(email: string): Promise<UserRecord | null> {
     const result = await this.source.query<UserRow>(
       `select * from ${USERS} where email = $1`,
+      [email],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  }
+
+  async findByNormalizedEmailForUpdate(
+    email: string,
+  ): Promise<UserRecord | null> {
+    const result = await this.source.query<UserRow>(
+      `select * from ${USERS} where email = $1 for update`,
       [email],
     );
     return result.rows[0] ? mapUser(result.rows[0]) : null;
@@ -195,6 +209,82 @@ class PostgresUserRepository implements UserRepository {
        for update`,
     );
     return result.rowCount ?? result.rows.length;
+  }
+}
+
+class PostgresExternalIdentityRepository
+  implements ExternalIdentityRepository
+{
+  constructor(private readonly source: PostgresRepositorySource) {}
+
+  async findUserBySubject(
+    provider: ExternalIdentityRecord["provider"],
+    subject: string,
+  ): Promise<UserRecord | null> {
+    const result = await this.source.query<UserRow>(
+      `select users.*
+       from ${USERS} as users
+       inner join ${EXTERNAL_IDENTITIES} as identities
+         on identities.user_id = users.id
+       where identities.provider = $1
+         and identities.subject = $2`,
+      [provider, subject],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  }
+
+  async findByUser(
+    provider: ExternalIdentityRecord["provider"],
+    userId: string,
+  ): Promise<ExternalIdentityRecord | null> {
+    const result = await this.source.query<
+      {
+        provider: ExternalIdentityRecord["provider"];
+        subject: string;
+        user_id: string;
+        email_at_link: string;
+        created_at: Date;
+      } & QueryResultRow
+    >(
+      `select provider, subject, user_id, email_at_link, created_at
+       from ${EXTERNAL_IDENTITIES}
+       where provider = $1 and user_id = $2`,
+      [provider, userId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          provider: row.provider,
+          subject: row.subject,
+          userId: row.user_id,
+          emailAtLink: row.email_at_link,
+          createdAt: row.created_at,
+        }
+      : null;
+  }
+
+  async insert(input: ExternalIdentityRecord): Promise<void> {
+    try {
+      await this.source.query(
+        `insert into ${EXTERNAL_IDENTITIES}
+           (provider, subject, user_id, email_at_link, created_at)
+         values ($1, $2, $3, $4, $5)`,
+        [
+          input.provider,
+          input.subject,
+          input.userId,
+          input.emailAtLink,
+          input.createdAt,
+        ],
+      );
+    } catch (error) {
+      if (postgresCode(error) === "23505") {
+        throw new ApplicationError("conflict", "external_identity_conflict", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import LoginForm from "@/components/auth/LoginForm";
 import { isSafeReturnPath } from "@/lib/security/authorization";
 import { defaultPathForRole } from "@/lib/security/authorization";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";
+import { isGoogleSsoConfigured } from "@/lib/security/google-sso";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { resolveCurrentUserToken } from "@/lib/server/security/request-user";
 import { cookies } from "next/headers";
@@ -18,7 +19,10 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string | string[] }>;
+  searchParams: Promise<{
+    returnTo?: string | string[];
+    error?: string | string[];
+  }>;
 }) {
   const cookieStore = await cookies();
   const currentUser = await resolvePageUser(
@@ -26,19 +30,26 @@ export default async function LoginPage({
   );
   if (currentUser) redirect(defaultPathForRole(currentUser.role));
 
-  const requestedReturnTo = (await searchParams).returnTo;
+  const resolvedSearchParams = await searchParams;
+  const requestedReturnTo = resolvedSearchParams.returnTo;
   const returnTo =
     typeof requestedReturnTo === "string" &&
     isSafeReturnPath(requestedReturnTo)
       ? requestedReturnTo
       : undefined;
   const registrationAvailable = await isRegistrationAvailable();
+  const googleError =
+    typeof resolvedSearchParams.error === "string"
+      ? resolvedSearchParams.error
+      : undefined;
 
   return (
     <AuthPageFrame>
       <LoginForm
         returnTo={returnTo}
         registrationAvailable={registrationAvailable}
+        googleSsoAvailable={isGoogleSsoConfigured()}
+        googleError={googleError}
       />
     </AuthPageFrame>
   );
