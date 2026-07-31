@@ -10,7 +10,7 @@ import type { AuthRole } from "@/lib/security/authorization";
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
   "/items": "nav.items",
-  "/inventory": "nav.inventory",
+  "/inventory": "nav.objects",
   "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
   "/analytics": "nav.analytics",
@@ -45,7 +45,7 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
     : pathname.startsWith("/inventory/inspections")
       ? t("nav.inspections")
       : pathname.startsWith("/inventory/")
-        ? t("nav.inventory")
+        ? t("nav.objects")
     : SECTION_TITLES[pathname]
       ? t(SECTION_TITLES[pathname])
       : settings.organizationName;
