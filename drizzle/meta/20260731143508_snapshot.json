@@ -1,0 +1,5505 @@
+{
+  "id": "5aea8eed-971c-462e-9608-d9ea1d165e81",
+  "prevId": "2608cdf1-cae8-445a-9f3e-4cec40025c0d",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "yu_inventory.audit_records": {
+      "name": "audit_records",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "domain_event_id": {
+          "name": "domain_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_role_snapshot": {
+          "name": "actor_role_snapshot",
+          "type": "audit_actor_role_snapshot",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject_kind": {
+          "name": "subject_kind",
+          "type": "audit_subject_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_revision": {
+          "name": "subject_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action": {
+          "name": "action",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "before_values": {
+          "name": "before_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "after_values": {
+          "name": "after_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_administrative_exception": {
+          "name": "is_administrative_exception",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "audit_records_subject_idx": {
+          "name": "audit_records_subject_idx",
+          "columns": [
+            {
+              "expression": "subject_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "audit_records_actor_idx": {
+          "name": "audit_records_actor_idx",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "audit_records_domain_event_idx": {
+          "name": "audit_records_domain_event_idx",
+          "columns": [
+            {
+              "expression": "domain_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "audit_records_actor_id_users_id_fk": {
+          "name": "audit_records_actor_id_users_id_fk",
+          "tableFrom": "audit_records",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "audit_records_actor_snapshot_check": {
+          "name": "audit_records_actor_snapshot_check",
+          "value": "(\"yu_inventory\".\"audit_records\".\"actor_id\" IS NULL) = (\"yu_inventory\".\"audit_records\".\"actor_role_snapshot\" IS NULL)"
+        },
+        "audit_records_action_check": {
+          "name": "audit_records_action_check",
+          "value": "btrim(\"yu_inventory\".\"audit_records\".\"action\") <> ''"
+        },
+        "audit_records_snapshot_check": {
+          "name": "audit_records_snapshot_check",
+          "value": "\"yu_inventory\".\"audit_records\".\"before_values\" IS NOT NULL OR \"yu_inventory\".\"audit_records\".\"after_values\" IS NOT NULL"
+        },
+        "audit_records_subject_revision_check": {
+          "name": "audit_records_subject_revision_check",
+          "value": "\"yu_inventory\".\"audit_records\".\"subject_revision\" IS NULL OR \"yu_inventory\".\"audit_records\".\"subject_revision\" > 0"
+        },
+        "audit_records_reason_check": {
+          "name": "audit_records_reason_check",
+          "value": "(\n            \"yu_inventory\".\"audit_records\".\"reason\" IS NULL\n            AND \"yu_inventory\".\"audit_records\".\"is_administrative_exception\" = false\n          ) OR (\n            \"yu_inventory\".\"audit_records\".\"reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"audit_records\".\"reason\") <> ''\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.auth_bootstrap": {
+      "name": "auth_bootstrap",
+      "schema": "yu_inventory",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_admin_user_id": {
+          "name": "first_admin_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "auth_bootstrap_first_admin_user_id_users_id_fk": {
+          "name": "auth_bootstrap_first_admin_user_id_users_id_fk",
+          "tableFrom": "auth_bootstrap",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "first_admin_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "auth_bootstrap_singleton_check": {
+          "name": "auth_bootstrap_singleton_check",
+          "value": "\"yu_inventory\".\"auth_bootstrap\".\"singleton\" = true"
+        },
+        "auth_bootstrap_completion_check": {
+          "name": "auth_bootstrap_completion_check",
+          "value": "(\"yu_inventory\".\"auth_bootstrap\".\"completed_at\" IS NULL) = (\"yu_inventory\".\"auth_bootstrap\".\"first_admin_user_id\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.buildings": {
+      "name": "buildings",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_key": {
+          "name": "name_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address_key": {
+          "name": "address_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "record_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_by": {
+          "name": "archived_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "buildings_status_idx": {
+          "name": "buildings_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "buildings_name_address_key_idx": {
+          "name": "buildings_name_address_key_idx",
+          "columns": [
+            {
+              "expression": "name_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "address_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "buildings_created_by_idx": {
+          "name": "buildings_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "buildings_updated_by_idx": {
+          "name": "buildings_updated_by_idx",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "buildings_created_by_users_id_fk": {
+          "name": "buildings_created_by_users_id_fk",
+          "tableFrom": "buildings",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "buildings_updated_by_users_id_fk": {
+          "name": "buildings_updated_by_users_id_fk",
+          "tableFrom": "buildings",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "buildings_archived_by_users_id_fk": {
+          "name": "buildings_archived_by_users_id_fk",
+          "tableFrom": "buildings",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "archived_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "buildings_display_values_check": {
+          "name": "buildings_display_values_check",
+          "value": "btrim(\"yu_inventory\".\"buildings\".\"name\") <> '' AND btrim(\"yu_inventory\".\"buildings\".\"name_key\") <> '' AND btrim(\"yu_inventory\".\"buildings\".\"address\") <> '' AND btrim(\"yu_inventory\".\"buildings\".\"address_key\") <> ''"
+        },
+        "buildings_archive_state_check": {
+          "name": "buildings_archive_state_check",
+          "value": "(\"yu_inventory\".\"buildings\".\"status\" = 'active' AND \"yu_inventory\".\"buildings\".\"archived_at\" IS NULL AND \"yu_inventory\".\"buildings\".\"archived_by\" IS NULL)\n          OR (\"yu_inventory\".\"buildings\".\"status\" = 'archived' AND \"yu_inventory\".\"buildings\".\"archived_at\" IS NOT NULL AND \"yu_inventory\".\"buildings\".\"archived_by\" IS NOT NULL)"
+        },
+        "buildings_version_check": {
+          "name": "buildings_version_check",
+          "value": "\"yu_inventory\".\"buildings\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.deviation_decisions": {
+      "name": "deviation_decisions",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "result_id": {
+          "name": "result_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_revision_number": {
+          "name": "result_revision_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_decision_id": {
+          "name": "previous_decision_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipient_kind": {
+          "name": "recipient_kind",
+          "type": "decision_recipient_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_id": {
+          "name": "recipient_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "decision_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acted_at": {
+          "name": "acted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acted_by": {
+          "name": "acted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "comment": {
+          "name": "comment",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "decision_resolution",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "administrative_reason": {
+          "name": "administrative_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "deviation_decisions_pending_result_unique": {
+          "name": "deviation_decisions_pending_result_unique",
+          "columns": [
+            {
+              "expression": "result_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"deviation_decisions\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "deviation_decisions_recipient_status_idx": {
+          "name": "deviation_decisions_recipient_status_idx",
+          "columns": [
+            {
+              "expression": "recipient_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "deviation_decisions_result_status_idx": {
+          "name": "deviation_decisions_result_status_idx",
+          "columns": [
+            {
+              "expression": "result_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "result_revision_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "deviation_decisions_status_created_at_idx": {
+          "name": "deviation_decisions_status_created_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "deviation_decisions_previous_idx": {
+          "name": "deviation_decisions_previous_idx",
+          "columns": [
+            {
+              "expression": "previous_decision_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "deviation_decisions_created_by_idx": {
+          "name": "deviation_decisions_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "deviation_decisions_recipient_id_users_id_fk": {
+          "name": "deviation_decisions_recipient_id_users_id_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "recipient_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_created_by_users_id_fk": {
+          "name": "deviation_decisions_created_by_users_id_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_acted_by_users_id_fk": {
+          "name": "deviation_decisions_acted_by_users_id_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "acted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_result_revision_fk": {
+          "name": "deviation_decisions_result_revision_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "item_result_revisions",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "result_id",
+            "result_revision_number"
+          ],
+          "columnsTo": [
+            "result_id",
+            "revision_number"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_previous_result_fk": {
+          "name": "deviation_decisions_previous_result_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "deviation_decisions",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "previous_decision_id",
+            "result_id"
+          ],
+          "columnsTo": [
+            "id",
+            "result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_recipient_kind_snapshot_fk": {
+          "name": "deviation_decisions_recipient_kind_snapshot_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "item_results",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "result_id",
+            "recipient_kind"
+          ],
+          "columnsTo": [
+            "id",
+            "decision_recipient_kind_at_scan"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "deviation_decisions_recipient_user_snapshot_fk": {
+          "name": "deviation_decisions_recipient_user_snapshot_fk",
+          "tableFrom": "deviation_decisions",
+          "tableTo": "item_results",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "result_id",
+            "recipient_id"
+          ],
+          "columnsTo": [
+            "id",
+            "responsible_id_at_scan"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "deviation_decisions_id_result_unique": {
+          "name": "deviation_decisions_id_result_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "result_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "deviation_decisions_recipient_check": {
+          "name": "deviation_decisions_recipient_check",
+          "value": "(\"yu_inventory\".\"deviation_decisions\".\"recipient_kind\" = 'user' AND \"yu_inventory\".\"deviation_decisions\".\"recipient_id\" IS NOT NULL)\n          OR (\"yu_inventory\".\"deviation_decisions\".\"recipient_kind\" = 'admin_queue' AND \"yu_inventory\".\"deviation_decisions\".\"recipient_id\" IS NULL)"
+        },
+        "deviation_decisions_state_check": {
+          "name": "deviation_decisions_state_check",
+          "value": "(\n            \"yu_inventory\".\"deviation_decisions\".\"status\" = 'pending'\n            AND \"yu_inventory\".\"deviation_decisions\".\"acted_at\" IS NULL\n            AND \"yu_inventory\".\"deviation_decisions\".\"acted_by\" IS NULL\n            AND \"yu_inventory\".\"deviation_decisions\".\"resolution\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"deviation_decisions\".\"status\" <> 'pending'\n            AND \"yu_inventory\".\"deviation_decisions\".\"acted_at\" IS NOT NULL\n            AND \"yu_inventory\".\"deviation_decisions\".\"acted_by\" IS NOT NULL\n          )"
+        },
+        "deviation_decisions_resolution_check": {
+          "name": "deviation_decisions_resolution_check",
+          "value": "(\"yu_inventory\".\"deviation_decisions\".\"status\" = 'resolved_by_admin') = (\"yu_inventory\".\"deviation_decisions\".\"resolution\" IS NOT NULL)"
+        },
+        "deviation_decisions_recipient_actor_check": {
+          "name": "deviation_decisions_recipient_actor_check",
+          "value": "\"yu_inventory\".\"deviation_decisions\".\"status\" NOT IN ('confirmed', 'disputed')\n          OR (\n            \"yu_inventory\".\"deviation_decisions\".\"recipient_kind\" = 'user'\n            AND \"yu_inventory\".\"deviation_decisions\".\"acted_by\" = \"yu_inventory\".\"deviation_decisions\".\"recipient_id\"\n          )"
+        },
+        "deviation_decisions_dispute_comment_check": {
+          "name": "deviation_decisions_dispute_comment_check",
+          "value": "\"yu_inventory\".\"deviation_decisions\".\"status\" <> 'disputed'\n          OR (\n            \"yu_inventory\".\"deviation_decisions\".\"comment\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"deviation_decisions\".\"comment\") <> ''\n          )"
+        },
+        "deviation_decisions_administrative_reason_scope_check": {
+          "name": "deviation_decisions_administrative_reason_scope_check",
+          "value": "(\n            \"yu_inventory\".\"deviation_decisions\".\"status\" = 'resolved_by_admin'\n            AND \"yu_inventory\".\"deviation_decisions\".\"administrative_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"deviation_decisions\".\"administrative_reason\") <> ''\n          ) OR (\n            \"yu_inventory\".\"deviation_decisions\".\"status\" <> 'resolved_by_admin'\n            AND \"yu_inventory\".\"deviation_decisions\".\"administrative_reason\" IS NULL\n          )"
+        },
+        "deviation_decisions_comment_check": {
+          "name": "deviation_decisions_comment_check",
+          "value": "\"yu_inventory\".\"deviation_decisions\".\"comment\" IS NULL OR btrim(\"yu_inventory\".\"deviation_decisions\".\"comment\") <> ''"
+        },
+        "deviation_decisions_previous_not_self_check": {
+          "name": "deviation_decisions_previous_not_self_check",
+          "value": "\"yu_inventory\".\"deviation_decisions\".\"previous_decision_id\" IS NULL OR \"yu_inventory\".\"deviation_decisions\".\"previous_decision_id\" <> \"yu_inventory\".\"deviation_decisions\".\"id\""
+        },
+        "deviation_decisions_version_check": {
+          "name": "deviation_decisions_version_check",
+          "value": "\"yu_inventory\".\"deviation_decisions\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.idempotency_requests": {
+      "name": "idempotency_requests",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation": {
+          "name": "operation",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "idempotency_state",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'processing'"
+        },
+        "response_status": {
+          "name": "response_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_body": {
+          "name": "response_body",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idempotency_requests_actor_operation_key_unique": {
+          "name": "idempotency_requests_actor_operation_key_unique",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idempotency_requests_expiry_idx": {
+          "name": "idempotency_requests_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "idempotency_requests_actor_id_users_id_fk": {
+          "name": "idempotency_requests_actor_id_users_id_fk",
+          "tableFrom": "idempotency_requests",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "idempotency_requests_values_check": {
+          "name": "idempotency_requests_values_check",
+          "value": "btrim(\"yu_inventory\".\"idempotency_requests\".\"operation\") <> ''\n          AND btrim(\"yu_inventory\".\"idempotency_requests\".\"idempotency_key\") <> ''\n          AND \"yu_inventory\".\"idempotency_requests\".\"request_hash\" ~ '^[0-9a-f]{64}$'\n          AND \"yu_inventory\".\"idempotency_requests\".\"expires_at\" > \"yu_inventory\".\"idempotency_requests\".\"created_at\""
+        },
+        "idempotency_requests_state_check": {
+          "name": "idempotency_requests_state_check",
+          "value": "(\n            \"yu_inventory\".\"idempotency_requests\".\"state\" = 'processing'\n            AND \"yu_inventory\".\"idempotency_requests\".\"response_status\" IS NULL\n            AND \"yu_inventory\".\"idempotency_requests\".\"response_body\" IS NULL\n            AND \"yu_inventory\".\"idempotency_requests\".\"completed_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"idempotency_requests\".\"state\" = 'completed'\n            AND \"yu_inventory\".\"idempotency_requests\".\"response_status\" BETWEEN 100 AND 599\n            AND \"yu_inventory\".\"idempotency_requests\".\"response_body\" IS NOT NULL\n            AND \"yu_inventory\".\"idempotency_requests\".\"completed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"idempotency_requests\".\"completed_at\" >= \"yu_inventory\".\"idempotency_requests\".\"created_at\"\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.inspection_room_items": {
+      "name": "inspection_room_items",
+      "schema": "yu_inventory",
+      "columns": {
+        "inspection_room_id": {
+          "name": "inspection_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_room_id": {
+          "name": "registry_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responsible_user_id": {
+          "name": "responsible_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_name_snapshot": {
+          "name": "item_name_snapshot",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_kind_snapshot": {
+          "name": "inventory_number_kind_snapshot",
+          "type": "inventory_number_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_snapshot": {
+          "name": "inventory_number_snapshot",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "building_name_snapshot": {
+          "name": "building_name_snapshot",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_designation_snapshot": {
+          "name": "room_designation_snapshot",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "captured_at": {
+          "name": "captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inspection_room_items_item_idx": {
+          "name": "inspection_room_items_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspection_room_items_registry_room_idx": {
+          "name": "inspection_room_items_registry_room_idx",
+          "columns": [
+            {
+              "expression": "registry_room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspection_room_items_responsible_user_idx": {
+          "name": "inspection_room_items_responsible_user_idx",
+          "columns": [
+            {
+              "expression": "responsible_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inspection_room_items_item_id_items_id_fk": {
+          "name": "inspection_room_items_item_id_items_id_fk",
+          "tableFrom": "inspection_room_items",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_room_items_responsible_user_id_users_id_fk": {
+          "name": "inspection_room_items_responsible_user_id_users_id_fk",
+          "tableFrom": "inspection_room_items",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "responsible_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_room_items_room_context_fk": {
+          "name": "inspection_room_items_room_context_fk",
+          "tableFrom": "inspection_room_items",
+          "tableTo": "inspection_rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "inspection_room_id",
+            "registry_room_id"
+          ],
+          "columnsTo": [
+            "id",
+            "room_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "inspection_room_items_pk": {
+          "name": "inspection_room_items_pk",
+          "columns": [
+            "inspection_room_id",
+            "item_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inspection_room_items_snapshot_check": {
+          "name": "inspection_room_items_snapshot_check",
+          "value": "btrim(\"yu_inventory\".\"inspection_room_items\".\"item_name_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"inspection_room_items\".\"inventory_number_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"inspection_room_items\".\"building_name_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"inspection_room_items\".\"room_designation_snapshot\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.inspection_rooms": {
+      "name": "inspection_rooms",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "inspection_id": {
+          "name": "inspection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "building_id": {
+          "name": "building_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "building_name_snapshot": {
+          "name": "building_name_snapshot",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "building_address_snapshot": {
+          "name": "building_address_snapshot",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_designation_snapshot": {
+          "name": "room_designation_snapshot",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_floor_number_snapshot": {
+          "name": "room_floor_number_snapshot",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_floor_label_snapshot": {
+          "name": "room_floor_label_snapshot",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "added_by": {
+          "name": "added_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inspected_at": {
+          "name": "inspected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspected_by": {
+          "name": "inspected_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "inspection_rooms_inspection_idx": {
+          "name": "inspection_rooms_inspection_idx",
+          "columns": [
+            {
+              "expression": "inspection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspection_rooms_room_idx": {
+          "name": "inspection_rooms_room_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspection_rooms_building_idx": {
+          "name": "inspection_rooms_building_idx",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspection_rooms_added_by_idx": {
+          "name": "inspection_rooms_added_by_idx",
+          "columns": [
+            {
+              "expression": "added_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inspection_rooms_inspection_id_inspections_id_fk": {
+          "name": "inspection_rooms_inspection_id_inspections_id_fk",
+          "tableFrom": "inspection_rooms",
+          "tableTo": "inspections",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "inspection_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_rooms_building_id_buildings_id_fk": {
+          "name": "inspection_rooms_building_id_buildings_id_fk",
+          "tableFrom": "inspection_rooms",
+          "tableTo": "buildings",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "building_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_rooms_added_by_users_id_fk": {
+          "name": "inspection_rooms_added_by_users_id_fk",
+          "tableFrom": "inspection_rooms",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "added_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_rooms_inspected_by_users_id_fk": {
+          "name": "inspection_rooms_inspected_by_users_id_fk",
+          "tableFrom": "inspection_rooms",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "inspected_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspection_rooms_room_building_fk": {
+          "name": "inspection_rooms_room_building_fk",
+          "tableFrom": "inspection_rooms",
+          "tableTo": "rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "room_id",
+            "building_id"
+          ],
+          "columnsTo": [
+            "id",
+            "building_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inspection_rooms_inspection_room_unique": {
+          "name": "inspection_rooms_inspection_room_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "inspection_id",
+            "room_id"
+          ]
+        },
+        "inspection_rooms_id_inspection_unique": {
+          "name": "inspection_rooms_id_inspection_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "inspection_id"
+          ]
+        },
+        "inspection_rooms_id_room_unique": {
+          "name": "inspection_rooms_id_room_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "room_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inspection_rooms_snapshot_check": {
+          "name": "inspection_rooms_snapshot_check",
+          "value": "btrim(\"yu_inventory\".\"inspection_rooms\".\"building_name_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"inspection_rooms\".\"building_address_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"inspection_rooms\".\"room_designation_snapshot\") <> ''\n          AND \"yu_inventory\".\"inspection_rooms\".\"room_floor_number_snapshot\" BETWEEN -5 AND 200\n          AND (\n            \"yu_inventory\".\"inspection_rooms\".\"room_floor_label_snapshot\" IS NULL\n            OR btrim(\"yu_inventory\".\"inspection_rooms\".\"room_floor_label_snapshot\") <> ''\n          )"
+        },
+        "inspection_rooms_inspected_state_check": {
+          "name": "inspection_rooms_inspected_state_check",
+          "value": "(\"yu_inventory\".\"inspection_rooms\".\"inspected_at\" IS NULL) = (\"yu_inventory\".\"inspection_rooms\".\"inspected_by\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.inspections": {
+      "name": "inspections",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "technician_id": {
+          "name": "technician_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "inspection_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "walkthrough_completed_at": {
+          "name": "walkthrough_completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by": {
+          "name": "cancelled_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancel_reason": {
+          "name": "cancel_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "inspections_technician_status_idx": {
+          "name": "inspections_technician_status_idx",
+          "columns": [
+            {
+              "expression": "technician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspections_status_created_at_idx": {
+          "name": "inspections_status_created_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inspections_created_by_idx": {
+          "name": "inspections_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inspections_technician_id_users_id_fk": {
+          "name": "inspections_technician_id_users_id_fk",
+          "tableFrom": "inspections",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "technician_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspections_created_by_users_id_fk": {
+          "name": "inspections_created_by_users_id_fk",
+          "tableFrom": "inspections",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "inspections_cancelled_by_users_id_fk": {
+          "name": "inspections_cancelled_by_users_id_fk",
+          "tableFrom": "inspections",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "cancelled_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inspections_name_check": {
+          "name": "inspections_name_check",
+          "value": "btrim(\"yu_inventory\".\"inspections\".\"name\") <> ''"
+        },
+        "inspections_state_check": {
+          "name": "inspections_state_check",
+          "value": "(\n            \"yu_inventory\".\"inspections\".\"status\" = 'draft'\n            AND \"yu_inventory\".\"inspections\".\"walkthrough_completed_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"confirmed_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_by\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancel_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"inspections\".\"status\" = 'awaiting_decisions'\n            AND \"yu_inventory\".\"inspections\".\"walkthrough_completed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"inspections\".\"confirmed_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_by\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancel_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"inspections\".\"status\" = 'confirmed'\n            AND \"yu_inventory\".\"inspections\".\"walkthrough_completed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"inspections\".\"confirmed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_by\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancel_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"inspections\".\"status\" = 'cancelled'\n            AND \"yu_inventory\".\"inspections\".\"walkthrough_completed_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"confirmed_at\" IS NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_at\" IS NOT NULL\n            AND \"yu_inventory\".\"inspections\".\"cancelled_by\" IS NOT NULL\n            AND \"yu_inventory\".\"inspections\".\"cancel_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"inspections\".\"cancel_reason\") <> ''\n          )"
+        },
+        "inspections_version_check": {
+          "name": "inspections_version_check",
+          "value": "\"yu_inventory\".\"inspections\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.item_inventory_number_history": {
+      "name": "item_inventory_number_history",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "inventory_number_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comparison_key": {
+          "name": "comparison_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_at": {
+          "name": "assigned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "assigned_by": {
+          "name": "assigned_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "replaced_at": {
+          "name": "replaced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "replaced_by": {
+          "name": "replaced_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "item_inventory_number_history_item_idx": {
+          "name": "item_inventory_number_history_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "assigned_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_inventory_number_history_key_idx": {
+          "name": "item_inventory_number_history_key_idx",
+          "columns": [
+            {
+              "expression": "comparison_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_inventory_number_history_key_unique": {
+          "name": "item_inventory_number_history_key_unique",
+          "columns": [
+            {
+              "expression": "comparison_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_inventory_number_history_open_item_unique": {
+          "name": "item_inventory_number_history_open_item_unique",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"item_inventory_number_history\".\"replaced_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_inventory_number_history_assigned_by_idx": {
+          "name": "item_inventory_number_history_assigned_by_idx",
+          "columns": [
+            {
+              "expression": "assigned_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "item_inventory_number_history_item_id_items_id_fk": {
+          "name": "item_inventory_number_history_item_id_items_id_fk",
+          "tableFrom": "item_inventory_number_history",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_inventory_number_history_assigned_by_users_id_fk": {
+          "name": "item_inventory_number_history_assigned_by_users_id_fk",
+          "tableFrom": "item_inventory_number_history",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "assigned_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_inventory_number_history_replaced_by_users_id_fk": {
+          "name": "item_inventory_number_history_replaced_by_users_id_fk",
+          "tableFrom": "item_inventory_number_history",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "replaced_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "item_inventory_number_history_value_check": {
+          "name": "item_inventory_number_history_value_check",
+          "value": "btrim(\"yu_inventory\".\"item_inventory_number_history\".\"value\") <> '' AND btrim(\"yu_inventory\".\"item_inventory_number_history\".\"comparison_key\") <> ''"
+        },
+        "item_inventory_number_history_replacement_check": {
+          "name": "item_inventory_number_history_replacement_check",
+          "value": "(\n            \"yu_inventory\".\"item_inventory_number_history\".\"replaced_at\" IS NULL\n            AND \"yu_inventory\".\"item_inventory_number_history\".\"replaced_by\" IS NULL\n            AND \"yu_inventory\".\"item_inventory_number_history\".\"reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"item_inventory_number_history\".\"replaced_at\" IS NOT NULL\n            AND \"yu_inventory\".\"item_inventory_number_history\".\"replaced_by\" IS NOT NULL\n            AND \"yu_inventory\".\"item_inventory_number_history\".\"replaced_at\" >= \"yu_inventory\".\"item_inventory_number_history\".\"assigned_at\"\n            AND \"yu_inventory\".\"item_inventory_number_history\".\"reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"item_inventory_number_history\".\"reason\") <> ''\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.item_result_revisions": {
+      "name": "item_result_revisions",
+      "schema": "yu_inventory",
+      "columns": {
+        "result_id": {
+          "name": "result_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision_number": {
+          "name": "revision_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result": {
+          "name": "result",
+          "type": "item_result_value",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inspection_room_id": {
+          "name": "inspection_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_room_id": {
+          "name": "observed_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "administrative_reason": {
+          "name": "administrative_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "item_result_revisions_observed_room_idx": {
+          "name": "item_result_revisions_observed_room_idx",
+          "columns": [
+            {
+              "expression": "inspection_room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "observed_room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_result_revisions_created_by_idx": {
+          "name": "item_result_revisions_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "item_result_revisions_created_by_users_id_fk": {
+          "name": "item_result_revisions_created_by_users_id_fk",
+          "tableFrom": "item_result_revisions",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_result_revisions_result_context_fk": {
+          "name": "item_result_revisions_result_context_fk",
+          "tableFrom": "item_result_revisions",
+          "tableTo": "item_results",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "result_id",
+            "inspection_room_id"
+          ],
+          "columnsTo": [
+            "id",
+            "inspection_room_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_result_revisions_observed_room_context_fk": {
+          "name": "item_result_revisions_observed_room_context_fk",
+          "tableFrom": "item_result_revisions",
+          "tableTo": "inspection_rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "inspection_room_id",
+            "observed_room_id"
+          ],
+          "columnsTo": [
+            "id",
+            "room_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "item_result_revisions_pk": {
+          "name": "item_result_revisions_pk",
+          "columns": [
+            "result_id",
+            "revision_number"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "item_result_revisions_number_check": {
+          "name": "item_result_revisions_number_check",
+          "value": "\"yu_inventory\".\"item_result_revisions\".\"revision_number\" > 0"
+        },
+        "item_result_revisions_comment_check": {
+          "name": "item_result_revisions_comment_check",
+          "value": "\"yu_inventory\".\"item_result_revisions\".\"comment\" IS NULL OR btrim(\"yu_inventory\".\"item_result_revisions\".\"comment\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.item_results": {
+      "name": "item_results",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "inspection_id": {
+          "name": "inspection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inspection_room_id": {
+          "name": "inspection_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_room_id_at_scan": {
+          "name": "registry_room_id_at_scan",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responsible_id_at_scan": {
+          "name": "responsible_id_at_scan",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_recipient_kind_at_scan": {
+          "name": "decision_recipient_kind_at_scan",
+          "type": "decision_recipient_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_name_snapshot": {
+          "name": "item_name_snapshot",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_kind_snapshot": {
+          "name": "inventory_number_kind_snapshot",
+          "type": "inventory_number_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_snapshot": {
+          "name": "inventory_number_snapshot",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "building_name_snapshot": {
+          "name": "building_name_snapshot",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "room_designation_snapshot": {
+          "name": "room_designation_snapshot",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_new_item": {
+          "name": "is_new_item",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "item_results_inspection_idx": {
+          "name": "item_results_inspection_idx",
+          "columns": [
+            {
+              "expression": "inspection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_results_inspection_room_idx": {
+          "name": "item_results_inspection_room_idx",
+          "columns": [
+            {
+              "expression": "inspection_room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_results_item_idx": {
+          "name": "item_results_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_results_responsible_at_scan_idx": {
+          "name": "item_results_responsible_at_scan_idx",
+          "columns": [
+            {
+              "expression": "responsible_id_at_scan",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_results_registry_room_idx": {
+          "name": "item_results_registry_room_idx",
+          "columns": [
+            {
+              "expression": "registry_room_id_at_scan",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "item_results_inspection_item_unique": {
+          "name": "item_results_inspection_item_unique",
+          "columns": [
+            {
+              "expression": "inspection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "item_results_item_id_items_id_fk": {
+          "name": "item_results_item_id_items_id_fk",
+          "tableFrom": "item_results",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_results_registry_room_id_at_scan_rooms_id_fk": {
+          "name": "item_results_registry_room_id_at_scan_rooms_id_fk",
+          "tableFrom": "item_results",
+          "tableTo": "rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "registry_room_id_at_scan"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_results_responsible_id_at_scan_users_id_fk": {
+          "name": "item_results_responsible_id_at_scan_users_id_fk",
+          "tableFrom": "item_results",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "responsible_id_at_scan"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_results_created_by_users_id_fk": {
+          "name": "item_results_created_by_users_id_fk",
+          "tableFrom": "item_results",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "item_results_inspection_room_context_fk": {
+          "name": "item_results_inspection_room_context_fk",
+          "tableFrom": "item_results",
+          "tableTo": "inspection_rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "inspection_room_id",
+            "inspection_id"
+          ],
+          "columnsTo": [
+            "id",
+            "inspection_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "item_results_id_inspection_room_unique": {
+          "name": "item_results_id_inspection_room_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "inspection_room_id"
+          ]
+        },
+        "item_results_id_recipient_kind_unique": {
+          "name": "item_results_id_recipient_kind_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "decision_recipient_kind_at_scan"
+          ]
+        },
+        "item_results_id_responsible_unique": {
+          "name": "item_results_id_responsible_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "responsible_id_at_scan"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "item_results_snapshot_check": {
+          "name": "item_results_snapshot_check",
+          "value": "btrim(\"yu_inventory\".\"item_results\".\"item_name_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"item_results\".\"inventory_number_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"item_results\".\"building_name_snapshot\") <> ''\n          AND btrim(\"yu_inventory\".\"item_results\".\"room_designation_snapshot\") <> ''"
+        },
+        "item_results_recipient_snapshot_check": {
+          "name": "item_results_recipient_snapshot_check",
+          "value": "(\n            \"yu_inventory\".\"item_results\".\"decision_recipient_kind_at_scan\" = 'user'\n            AND \"yu_inventory\".\"item_results\".\"responsible_id_at_scan\" IS NOT NULL\n          ) OR (\n            \"yu_inventory\".\"item_results\".\"decision_recipient_kind_at_scan\" = 'admin_queue'\n            AND \"yu_inventory\".\"item_results\".\"responsible_id_at_scan\" IS NULL\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.items": {
+      "name": "items",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ТМЦ'"
+        },
+        "brand": {
+          "name": "brand",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_kind": {
+          "name": "inventory_number_kind",
+          "type": "inventory_number_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number": {
+          "name": "inventory_number",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory_number_key": {
+          "name": "inventory_number_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "item_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_in_inspection_id": {
+          "name": "created_in_inspection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_by": {
+          "name": "archived_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "items_inventory_number_key_unique": {
+          "name": "items_inventory_number_key_unique",
+          "columns": [
+            {
+              "expression": "inventory_number_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_room_status_idx": {
+          "name": "items_room_status_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_status_idx": {
+          "name": "items_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_inventory_number_key_idx": {
+          "name": "items_inventory_number_key_idx",
+          "columns": [
+            {
+              "expression": "inventory_number_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_created_in_inspection_idx": {
+          "name": "items_created_in_inspection_idx",
+          "columns": [
+            {
+              "expression": "created_in_inspection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_created_by_idx": {
+          "name": "items_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "items_updated_by_idx": {
+          "name": "items_updated_by_idx",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "items_room_id_rooms_id_fk": {
+          "name": "items_room_id_rooms_id_fk",
+          "tableFrom": "items",
+          "tableTo": "rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "items_created_in_inspection_id_inspections_id_fk": {
+          "name": "items_created_in_inspection_id_inspections_id_fk",
+          "tableFrom": "items",
+          "tableTo": "inspections",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_in_inspection_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "items_created_by_users_id_fk": {
+          "name": "items_created_by_users_id_fk",
+          "tableFrom": "items",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "items_updated_by_users_id_fk": {
+          "name": "items_updated_by_users_id_fk",
+          "tableFrom": "items",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "items_archived_by_users_id_fk": {
+          "name": "items_archived_by_users_id_fk",
+          "tableFrom": "items",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "archived_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "items_display_values_check": {
+          "name": "items_display_values_check",
+          "value": "btrim(\"yu_inventory\".\"items\".\"name\") <> ''\n          AND (\"yu_inventory\".\"items\".\"description\" IS NULL OR btrim(\"yu_inventory\".\"items\".\"description\") <> '')\n          AND btrim(\"yu_inventory\".\"items\".\"item_type\") <> ''\n          AND btrim(\"yu_inventory\".\"items\".\"inventory_number\") <> ''\n          AND btrim(\"yu_inventory\".\"items\".\"inventory_number_key\") <> ''\n          AND \"yu_inventory\".\"items\".\"quantity\" > 0\n          AND \"yu_inventory\".\"items\".\"unit_price\" >= 0"
+        },
+        "items_archive_state_check": {
+          "name": "items_archive_state_check",
+          "value": "(\"yu_inventory\".\"items\".\"archived_at\" IS NULL) = (\"yu_inventory\".\"items\".\"archived_by\" IS NULL)"
+        },
+        "items_version_check": {
+          "name": "items_version_check",
+          "value": "\"yu_inventory\".\"items\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.notification_deliveries": {
+      "name": "notification_deliveries",
+      "schema": "yu_inventory",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_id": {
+          "name": "recipient_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mailbox_sequence": {
+          "name": "mailbox_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "notification_deliveries_recipient_sequence_unique": {
+          "name": "notification_deliveries_recipient_sequence_unique",
+          "columns": [
+            {
+              "expression": "recipient_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "mailbox_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_deliveries_recipient_feed_idx": {
+          "name": "notification_deliveries_recipient_feed_idx",
+          "columns": [
+            {
+              "expression": "recipient_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_deliveries_event_id_notification_events_id_fk": {
+          "name": "notification_deliveries_event_id_notification_events_id_fk",
+          "tableFrom": "notification_deliveries",
+          "tableTo": "notification_events",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "restrict"
+        },
+        "notification_deliveries_recipient_id_users_id_fk": {
+          "name": "notification_deliveries_recipient_id_users_id_fk",
+          "tableFrom": "notification_deliveries",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "recipient_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notification_deliveries_pk": {
+          "name": "notification_deliveries_pk",
+          "columns": [
+            "event_id",
+            "recipient_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_deliveries_sequence_check": {
+          "name": "notification_deliveries_sequence_check",
+          "value": "\"yu_inventory\".\"notification_deliveries\".\"mailbox_sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.notification_events": {
+      "name": "notification_events",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "domain_event_id": {
+          "name": "domain_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "notification_event_type",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject_kind": {
+          "name": "subject_kind",
+          "type": "notification_subject_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_revision": {
+          "name": "subject_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "audience_kind": {
+          "name": "audience_kind",
+          "type": "notification_audience_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "safe_payload": {
+          "name": "safe_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "admin_queue_sequence": {
+          "name": "admin_queue_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "notification_events_domain_identity_unique": {
+          "name": "notification_events_domain_identity_unique",
+          "columns": [
+            {
+              "expression": "domain_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_revision",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "audience_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_events_feed_idx": {
+          "name": "notification_events_feed_idx",
+          "columns": [
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_events_admin_queue_idx": {
+          "name": "notification_events_admin_queue_idx",
+          "columns": [
+            {
+              "expression": "audience_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "admin_queue_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_events_admin_queue_sequence_unique": {
+          "name": "notification_events_admin_queue_sequence_unique",
+          "columns": [
+            {
+              "expression": "admin_queue_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"notification_events\".\"audience_kind\" = 'admin_queue'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_events_actor_idx": {
+          "name": "notification_events_actor_idx",
+          "columns": [
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_events_actor_id_users_id_fk": {
+          "name": "notification_events_actor_id_users_id_fk",
+          "tableFrom": "notification_events",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_events_subject_revision_check": {
+          "name": "notification_events_subject_revision_check",
+          "value": "\"yu_inventory\".\"notification_events\".\"subject_revision\" > 0"
+        },
+        "notification_events_audience_sequence_check": {
+          "name": "notification_events_audience_sequence_check",
+          "value": "(\n            \"yu_inventory\".\"notification_events\".\"audience_kind\" = 'direct_user'\n            AND \"yu_inventory\".\"notification_events\".\"admin_queue_sequence\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"notification_events\".\"audience_kind\" = 'admin_queue'\n            AND \"yu_inventory\".\"notification_events\".\"admin_queue_sequence\" IS NOT NULL\n            AND \"yu_inventory\".\"notification_events\".\"admin_queue_sequence\" > 0\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.notification_mailboxes": {
+      "name": "notification_mailboxes",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "notification_mailbox_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_sequence": {
+          "name": "next_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "1"
+        }
+      },
+      "indexes": {
+        "notification_mailboxes_direct_user_unique": {
+          "name": "notification_mailboxes_direct_user_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"notification_mailboxes\".\"kind\" = 'direct_user'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_mailboxes_admin_queue_unique": {
+          "name": "notification_mailboxes_admin_queue_unique",
+          "columns": [
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"notification_mailboxes\".\"kind\" = 'admin_queue'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_mailboxes_user_id_users_id_fk": {
+          "name": "notification_mailboxes_user_id_users_id_fk",
+          "tableFrom": "notification_mailboxes",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_mailboxes_owner_check": {
+          "name": "notification_mailboxes_owner_check",
+          "value": "(\"yu_inventory\".\"notification_mailboxes\".\"kind\" = 'direct_user' AND \"yu_inventory\".\"notification_mailboxes\".\"user_id\" IS NOT NULL)\n          OR (\"yu_inventory\".\"notification_mailboxes\".\"kind\" = 'admin_queue' AND \"yu_inventory\".\"notification_mailboxes\".\"user_id\" IS NULL)"
+        },
+        "notification_mailboxes_sequence_check": {
+          "name": "notification_mailboxes_sequence_check",
+          "value": "\"yu_inventory\".\"notification_mailboxes\".\"next_sequence\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.notification_receipts": {
+      "name": "notification_receipts",
+      "schema": "yu_inventory",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "notification_receipts_user_read_idx": {
+          "name": "notification_receipts_user_read_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_receipts_event_id_notification_events_id_fk": {
+          "name": "notification_receipts_event_id_notification_events_id_fk",
+          "tableFrom": "notification_receipts",
+          "tableTo": "notification_events",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "restrict"
+        },
+        "notification_receipts_user_id_users_id_fk": {
+          "name": "notification_receipts_user_id_users_id_fk",
+          "tableFrom": "notification_receipts",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notification_receipts_pk": {
+          "name": "notification_receipts_pk",
+          "columns": [
+            "event_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "yu_inventory.photos": {
+      "name": "photos",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "photo_purpose",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "photo_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'reserved'"
+        },
+        "uploaded_by": {
+          "name": "uploaded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_object_key": {
+          "name": "original_object_key",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preview_object_key": {
+          "name": "preview_object_key",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trusted_mime_type": {
+          "name": "trusted_mime_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checksum_sha256": {
+          "name": "checksum_sha256",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "binary_data": {
+          "name": "binary_data",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reserved_at": {
+          "name": "reserved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attached_at": {
+          "name": "attached_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "superseded_at": {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "binary_deleted_at": {
+          "name": "binary_deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "result_id": {
+          "name": "result_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "result_revision_number": {
+          "name": "result_revision_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_id": {
+          "name": "decision_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "photos_expiry_status_idx": {
+          "name": "photos_expiry_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "photos_item_status_idx": {
+          "name": "photos_item_status_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "photos_result_status_idx": {
+          "name": "photos_result_status_idx",
+          "columns": [
+            {
+              "expression": "result_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "result_revision_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "photos_decision_status_idx": {
+          "name": "photos_decision_status_idx",
+          "columns": [
+            {
+              "expression": "decision_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "photos_uploaded_by_status_idx": {
+          "name": "photos_uploaded_by_status_idx",
+          "columns": [
+            {
+              "expression": "uploaded_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "photos_uploaded_by_users_id_fk": {
+          "name": "photos_uploaded_by_users_id_fk",
+          "tableFrom": "photos",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "uploaded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "photos_item_id_items_id_fk": {
+          "name": "photos_item_id_items_id_fk",
+          "tableFrom": "photos",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "photos_decision_id_deviation_decisions_id_fk": {
+          "name": "photos_decision_id_deviation_decisions_id_fk",
+          "tableFrom": "photos",
+          "tableTo": "deviation_decisions",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "decision_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "photos_result_revision_fk": {
+          "name": "photos_result_revision_fk",
+          "tableFrom": "photos",
+          "tableTo": "item_result_revisions",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "result_id",
+            "result_revision_number"
+          ],
+          "columnsTo": [
+            "result_id",
+            "revision_number"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "photos_object_keys_check": {
+          "name": "photos_object_keys_check",
+          "value": "btrim(\"yu_inventory\".\"photos\".\"original_object_key\") <> ''\n          AND (\n            \"yu_inventory\".\"photos\".\"preview_object_key\" IS NULL\n            OR btrim(\"yu_inventory\".\"photos\".\"preview_object_key\") <> ''\n          )"
+        },
+        "photos_media_type_check": {
+          "name": "photos_media_type_check",
+          "value": "\"yu_inventory\".\"photos\".\"trusted_mime_type\" IS NULL\n          OR \"yu_inventory\".\"photos\".\"trusted_mime_type\" IN ('image/jpeg', 'image/png', 'image/webp')"
+        },
+        "photos_size_check": {
+          "name": "photos_size_check",
+          "value": "\"yu_inventory\".\"photos\".\"byte_size\" IS NULL\n          OR \"yu_inventory\".\"photos\".\"byte_size\" BETWEEN 1 AND 10485760"
+        },
+        "photos_dimensions_check": {
+          "name": "photos_dimensions_check",
+          "value": "(\n            \"yu_inventory\".\"photos\".\"width\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"height\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"width\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"height\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"width\" BETWEEN 1 AND 8192\n            AND \"yu_inventory\".\"photos\".\"height\" BETWEEN 1 AND 8192\n            AND \"yu_inventory\".\"photos\".\"width\"::bigint * \"yu_inventory\".\"photos\".\"height\"::bigint <= 20000000\n          )"
+        },
+        "photos_checksum_check": {
+          "name": "photos_checksum_check",
+          "value": "\"yu_inventory\".\"photos\".\"checksum_sha256\" IS NULL\n          OR \"yu_inventory\".\"photos\".\"checksum_sha256\" ~ '^[0-9a-f]{64}$'"
+        },
+        "photos_expiration_check": {
+          "name": "photos_expiration_check",
+          "value": "\"yu_inventory\".\"photos\".\"expires_at\" > \"yu_inventory\".\"photos\".\"reserved_at\""
+        },
+        "photos_parent_check": {
+          "name": "photos_parent_check",
+          "value": "(\n            \"yu_inventory\".\"photos\".\"status\" IN ('reserved', 'expired')\n            AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" NOT IN ('reserved', 'expired')\n            AND (\n              (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'item'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'inspection_result'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'decision_dispute'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NOT NULL\n              )\n            )\n          )"
+        },
+        "photos_attached_metadata_check": {
+          "name": "photos_attached_metadata_check",
+          "value": "\"yu_inventory\".\"photos\".\"status\" IN ('reserved', 'expired')\n          OR (\n            \"yu_inventory\".\"photos\".\"preview_object_key\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"trusted_mime_type\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"byte_size\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"width\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"height\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"checksum_sha256\" IS NOT NULL\n          )"
+        },
+        "photos_lifecycle_check": {
+          "name": "photos_lifecycle_check",
+          "value": "(\n            \"yu_inventory\".\"photos\".\"status\" = 'reserved'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"superseded_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"removed_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" = 'expired'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"superseded_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"removed_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" = 'attached'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"superseded_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"removed_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" = 'superseded'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"superseded_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"removed_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" = 'removed'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"superseded_at\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"removed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" = 'purged'\n            AND \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n            AND \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NOT NULL\n            AND num_nonnulls(\"yu_inventory\".\"photos\".\"superseded_at\", \"yu_inventory\".\"photos\".\"removed_at\") = 1\n          )"
+        },
+        "photos_time_order_check": {
+          "name": "photos_time_order_check",
+          "value": "(\n            \"yu_inventory\".\"photos\".\"attached_at\" IS NULL\n            OR (\n              \"yu_inventory\".\"photos\".\"attached_at\" >= \"yu_inventory\".\"photos\".\"reserved_at\"\n              AND \"yu_inventory\".\"photos\".\"attached_at\" <= \"yu_inventory\".\"photos\".\"expires_at\"\n            )\n          )\n          AND (\n            \"yu_inventory\".\"photos\".\"superseded_at\" IS NULL\n            OR (\n              \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n              AND \"yu_inventory\".\"photos\".\"superseded_at\" >= \"yu_inventory\".\"photos\".\"attached_at\"\n            )\n          )\n          AND (\n            \"yu_inventory\".\"photos\".\"removed_at\" IS NULL\n            OR (\n              \"yu_inventory\".\"photos\".\"attached_at\" IS NOT NULL\n              AND \"yu_inventory\".\"photos\".\"removed_at\" >= \"yu_inventory\".\"photos\".\"attached_at\"\n            )\n          )\n          AND (\n            \"yu_inventory\".\"photos\".\"binary_deleted_at\" IS NULL\n            OR \"yu_inventory\".\"photos\".\"binary_deleted_at\" >= coalesce(\n              \"yu_inventory\".\"photos\".\"superseded_at\",\n              \"yu_inventory\".\"photos\".\"removed_at\",\n              \"yu_inventory\".\"photos\".\"attached_at\",\n              \"yu_inventory\".\"photos\".\"expires_at\"\n            )\n          )"
+        },
+        "photos_version_check": {
+          "name": "photos_version_check",
+          "value": "\"yu_inventory\".\"photos\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.qr_identifiers": {
+      "name": "qr_identifiers",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "original_value": {
+          "name": "original_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_key": {
+          "name": "canonical_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "qr_format",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_kind": {
+          "name": "target_kind",
+          "type": "qr_target_kind",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "qr_role",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "qr_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "building_id": {
+          "name": "building_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "revoked_by": {
+          "name": "revoked_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoke_reason": {
+          "name": "revoke_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "qr_identifiers_canonical_key_unique": {
+          "name": "qr_identifiers_canonical_key_unique",
+          "columns": [
+            {
+              "expression": "canonical_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_active_primary_building_unique": {
+          "name": "qr_identifiers_active_primary_building_unique",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"qr_identifiers\".\"status\" = 'active' AND \"yu_inventory\".\"qr_identifiers\".\"role\" = 'primary' AND \"yu_inventory\".\"qr_identifiers\".\"building_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_active_primary_room_unique": {
+          "name": "qr_identifiers_active_primary_room_unique",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"qr_identifiers\".\"status\" = 'active' AND \"yu_inventory\".\"qr_identifiers\".\"role\" = 'primary' AND \"yu_inventory\".\"qr_identifiers\".\"room_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_active_primary_item_unique": {
+          "name": "qr_identifiers_active_primary_item_unique",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"qr_identifiers\".\"status\" = 'active' AND \"yu_inventory\".\"qr_identifiers\".\"role\" = 'primary' AND \"yu_inventory\".\"qr_identifiers\".\"item_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_building_status_idx": {
+          "name": "qr_identifiers_building_status_idx",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_room_status_idx": {
+          "name": "qr_identifiers_room_status_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_item_status_idx": {
+          "name": "qr_identifiers_item_status_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "qr_identifiers_created_by_idx": {
+          "name": "qr_identifiers_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "qr_identifiers_building_id_buildings_id_fk": {
+          "name": "qr_identifiers_building_id_buildings_id_fk",
+          "tableFrom": "qr_identifiers",
+          "tableTo": "buildings",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "building_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "qr_identifiers_room_id_rooms_id_fk": {
+          "name": "qr_identifiers_room_id_rooms_id_fk",
+          "tableFrom": "qr_identifiers",
+          "tableTo": "rooms",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "qr_identifiers_item_id_items_id_fk": {
+          "name": "qr_identifiers_item_id_items_id_fk",
+          "tableFrom": "qr_identifiers",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "qr_identifiers_created_by_users_id_fk": {
+          "name": "qr_identifiers_created_by_users_id_fk",
+          "tableFrom": "qr_identifiers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "qr_identifiers_revoked_by_users_id_fk": {
+          "name": "qr_identifiers_revoked_by_users_id_fk",
+          "tableFrom": "qr_identifiers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "revoked_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "qr_identifiers_values_check": {
+          "name": "qr_identifiers_values_check",
+          "value": "btrim(\"yu_inventory\".\"qr_identifiers\".\"original_value\") <> ''\n          AND btrim(\"yu_inventory\".\"qr_identifiers\".\"canonical_key\") <> ''\n          AND octet_length(\"yu_inventory\".\"qr_identifiers\".\"original_value\") <= 512\n          AND octet_length(\"yu_inventory\".\"qr_identifiers\".\"canonical_key\") <= 512"
+        },
+        "qr_identifiers_target_check": {
+          "name": "qr_identifiers_target_check",
+          "value": "num_nonnulls(\"yu_inventory\".\"qr_identifiers\".\"building_id\", \"yu_inventory\".\"qr_identifiers\".\"room_id\", \"yu_inventory\".\"qr_identifiers\".\"item_id\") = 1\n          AND (\n            (\"yu_inventory\".\"qr_identifiers\".\"target_kind\" = 'building' AND \"yu_inventory\".\"qr_identifiers\".\"building_id\" IS NOT NULL)\n            OR (\"yu_inventory\".\"qr_identifiers\".\"target_kind\" = 'room' AND \"yu_inventory\".\"qr_identifiers\".\"room_id\" IS NOT NULL)\n            OR (\"yu_inventory\".\"qr_identifiers\".\"target_kind\" = 'item' AND \"yu_inventory\".\"qr_identifiers\".\"item_id\" IS NOT NULL)\n          )"
+        },
+        "qr_identifiers_revocation_check": {
+          "name": "qr_identifiers_revocation_check",
+          "value": "(\n            \"yu_inventory\".\"qr_identifiers\".\"status\" = 'active'\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoked_by\" IS NULL\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoked_at\" IS NULL\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoke_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"qr_identifiers\".\"status\" = 'revoked'\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoked_by\" IS NOT NULL\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoked_at\" IS NOT NULL\n            AND \"yu_inventory\".\"qr_identifiers\".\"revoke_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"qr_identifiers\".\"revoke_reason\") <> ''\n          )"
+        },
+        "qr_identifiers_generated_format_check": {
+          "name": "qr_identifiers_generated_format_check",
+          "value": "\"yu_inventory\".\"qr_identifiers\".\"format\" <> 'generated_v1'\n          OR (\n            \"yu_inventory\".\"qr_identifiers\".\"role\" = 'primary'\n            AND \"yu_inventory\".\"qr_identifiers\".\"canonical_key\" ~ '^YUQ1:[0-9A-HJKMNP-TV-Z]{26}$'\n          )"
+        },
+        "qr_identifiers_version_check": {
+          "name": "qr_identifiers_version_check",
+          "value": "\"yu_inventory\".\"qr_identifiers\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.responsibility_periods": {
+      "name": "responsibility_periods",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responsible_user_id": {
+          "name": "responsible_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "responsibility_source",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "started_by": {
+          "name": "started_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ended_by": {
+          "name": "ended_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_reason": {
+          "name": "end_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "responsibility_periods_item_time_idx": {
+          "name": "responsibility_periods_item_time_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "responsibility_periods_user_open_idx": {
+          "name": "responsibility_periods_user_open_idx",
+          "columns": [
+            {
+              "expression": "responsible_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ended_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "responsibility_periods_started_by_idx": {
+          "name": "responsibility_periods_started_by_idx",
+          "columns": [
+            {
+              "expression": "started_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "responsibility_periods_open_item_unique": {
+          "name": "responsibility_periods_open_item_unique",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"responsibility_periods\".\"ended_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "responsibility_periods_item_id_items_id_fk": {
+          "name": "responsibility_periods_item_id_items_id_fk",
+          "tableFrom": "responsibility_periods",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "responsibility_periods_responsible_user_id_users_id_fk": {
+          "name": "responsibility_periods_responsible_user_id_users_id_fk",
+          "tableFrom": "responsibility_periods",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "responsible_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "responsibility_periods_started_by_users_id_fk": {
+          "name": "responsibility_periods_started_by_users_id_fk",
+          "tableFrom": "responsibility_periods",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "started_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "responsibility_periods_ended_by_users_id_fk": {
+          "name": "responsibility_periods_ended_by_users_id_fk",
+          "tableFrom": "responsibility_periods",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "ended_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "responsibility_periods_acceptance_actor_check": {
+          "name": "responsibility_periods_acceptance_actor_check",
+          "value": "\"yu_inventory\".\"responsibility_periods\".\"source\" <> 'accepted'\n          OR \"yu_inventory\".\"responsibility_periods\".\"started_by\" = \"yu_inventory\".\"responsibility_periods\".\"responsible_user_id\""
+        },
+        "responsibility_periods_end_state_check": {
+          "name": "responsibility_periods_end_state_check",
+          "value": "(\n            \"yu_inventory\".\"responsibility_periods\".\"ended_at\" IS NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_by\" IS NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"end_reason\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"responsibility_periods\".\"ended_at\" IS NOT NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_by\" IS NOT NULL\n            AND \"yu_inventory\".\"responsibility_periods\".\"ended_at\" >= \"yu_inventory\".\"responsibility_periods\".\"started_at\"\n            AND \"yu_inventory\".\"responsibility_periods\".\"end_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"responsibility_periods\".\"end_reason\") <> ''\n          )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.rooms": {
+      "name": "rooms",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "building_id": {
+          "name": "building_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "designation": {
+          "name": "designation",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "designation_key": {
+          "name": "designation_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "floor_number": {
+          "name": "floor_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "floor_label": {
+          "name": "floor_label",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "record_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_by": {
+          "name": "archived_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "rooms_building_idx": {
+          "name": "rooms_building_idx",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rooms_building_status_idx": {
+          "name": "rooms_building_status_idx",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rooms_lookup_idx": {
+          "name": "rooms_lookup_idx",
+          "columns": [
+            {
+              "expression": "building_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "floor_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "designation_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rooms_created_by_idx": {
+          "name": "rooms_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rooms_updated_by_idx": {
+          "name": "rooms_updated_by_idx",
+          "columns": [
+            {
+              "expression": "updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "rooms_building_id_buildings_id_fk": {
+          "name": "rooms_building_id_buildings_id_fk",
+          "tableFrom": "rooms",
+          "tableTo": "buildings",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "building_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "rooms_created_by_users_id_fk": {
+          "name": "rooms_created_by_users_id_fk",
+          "tableFrom": "rooms",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "rooms_updated_by_users_id_fk": {
+          "name": "rooms_updated_by_users_id_fk",
+          "tableFrom": "rooms",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "rooms_archived_by_users_id_fk": {
+          "name": "rooms_archived_by_users_id_fk",
+          "tableFrom": "rooms",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "archived_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "rooms_id_building_unique": {
+          "name": "rooms_id_building_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "building_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "rooms_display_values_check": {
+          "name": "rooms_display_values_check",
+          "value": "btrim(\"yu_inventory\".\"rooms\".\"designation\") <> '' AND btrim(\"yu_inventory\".\"rooms\".\"designation_key\") <> ''\n          AND (\"yu_inventory\".\"rooms\".\"floor_label\" IS NULL OR btrim(\"yu_inventory\".\"rooms\".\"floor_label\") <> '')"
+        },
+        "rooms_floor_number_check": {
+          "name": "rooms_floor_number_check",
+          "value": "\"yu_inventory\".\"rooms\".\"floor_number\" BETWEEN -5 AND 200"
+        },
+        "rooms_archive_state_check": {
+          "name": "rooms_archive_state_check",
+          "value": "(\"yu_inventory\".\"rooms\".\"status\" = 'active' AND \"yu_inventory\".\"rooms\".\"archived_at\" IS NULL AND \"yu_inventory\".\"rooms\".\"archived_by\" IS NULL)\n          OR (\"yu_inventory\".\"rooms\".\"status\" = 'archived' AND \"yu_inventory\".\"rooms\".\"archived_at\" IS NOT NULL AND \"yu_inventory\".\"rooms\".\"archived_by\" IS NOT NULL)"
+        },
+        "rooms_version_check": {
+          "name": "rooms_version_check",
+          "value": "\"yu_inventory\".\"rooms\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.transfers": {
+      "name": "transfers",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proposed_responsible_id": {
+          "name": "proposed_responsible_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_responsible_id_at_request": {
+          "name": "current_responsible_id_at_request",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "transfer_status",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending_current_owner'"
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_by": {
+          "name": "closed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_comment": {
+          "name": "decision_comment",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "administrative_reason": {
+          "name": "administrative_reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "override_outcome": {
+          "name": "override_outcome",
+          "type": "transfer_override_outcome",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "override_responsible_id": {
+          "name": "override_responsible_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {
+        "transfers_pending_item_unique": {
+          "name": "transfers_pending_item_unique",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"yu_inventory\".\"transfers\".\"status\" = 'pending_current_owner'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_item_status_idx": {
+          "name": "transfers_item_status_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_current_owner_status_idx": {
+          "name": "transfers_current_owner_status_idx",
+          "columns": [
+            {
+              "expression": "current_responsible_id_at_request",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_proposed_owner_status_idx": {
+          "name": "transfers_proposed_owner_status_idx",
+          "columns": [
+            {
+              "expression": "proposed_responsible_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_requested_by_idx": {
+          "name": "transfers_requested_by_idx",
+          "columns": [
+            {
+              "expression": "requested_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_override_responsible_idx": {
+          "name": "transfers_override_responsible_idx",
+          "columns": [
+            {
+              "expression": "override_responsible_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transfers_item_id_items_id_fk": {
+          "name": "transfers_item_id_items_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "items",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "transfers_requested_by_users_id_fk": {
+          "name": "transfers_requested_by_users_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "transfers_proposed_responsible_id_users_id_fk": {
+          "name": "transfers_proposed_responsible_id_users_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "proposed_responsible_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "transfers_current_responsible_id_at_request_users_id_fk": {
+          "name": "transfers_current_responsible_id_at_request_users_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "current_responsible_id_at_request"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "transfers_closed_by_users_id_fk": {
+          "name": "transfers_closed_by_users_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "closed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        },
+        "transfers_override_responsible_id_users_id_fk": {
+          "name": "transfers_override_responsible_id_users_id_fk",
+          "tableFrom": "transfers",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "override_responsible_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "transfers_requester_is_proposed_check": {
+          "name": "transfers_requester_is_proposed_check",
+          "value": "\"yu_inventory\".\"transfers\".\"requested_by\" = \"yu_inventory\".\"transfers\".\"proposed_responsible_id\""
+        },
+        "transfers_distinct_responsible_users_check": {
+          "name": "transfers_distinct_responsible_users_check",
+          "value": "\"yu_inventory\".\"transfers\".\"proposed_responsible_id\" <> \"yu_inventory\".\"transfers\".\"current_responsible_id_at_request\""
+        },
+        "transfers_state_check": {
+          "name": "transfers_state_check",
+          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"decision_comment\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_outcome\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'pending_current_owner'\n            AND \"yu_inventory\".\"transfers\".\"closed_at\" IS NOT NULL\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" IS NOT NULL\n          )"
+        },
+        "transfers_closure_actor_check": {
+          "name": "transfers_closure_actor_check",
+          "value": "\"yu_inventory\".\"transfers\".\"status\" = 'pending_current_owner'\n          OR (\n            \"yu_inventory\".\"transfers\".\"status\" IN ('confirmed', 'rejected')\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" = \"yu_inventory\".\"transfers\".\"current_responsible_id_at_request\"\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" = 'cancelled'\n            AND \"yu_inventory\".\"transfers\".\"closed_by\" = \"yu_inventory\".\"transfers\".\"requested_by\"\n          ) OR \"yu_inventory\".\"transfers\".\"status\" = 'overridden'"
+        },
+        "transfers_decision_comment_check": {
+          "name": "transfers_decision_comment_check",
+          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'rejected'\n            AND \"yu_inventory\".\"transfers\".\"decision_comment\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"transfers\".\"decision_comment\") <> ''\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'rejected'\n            AND \"yu_inventory\".\"transfers\".\"decision_comment\" IS NULL\n          )"
+        },
+        "transfers_override_state_check": {
+          "name": "transfers_override_state_check",
+          "value": "(\n            \"yu_inventory\".\"transfers\".\"status\" = 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NOT NULL\n            AND btrim(\"yu_inventory\".\"transfers\".\"administrative_reason\") <> ''\n            AND (\n              (\n                \"yu_inventory\".\"transfers\".\"override_outcome\" = 'assigned'\n                AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NOT NULL\n              ) OR (\n                \"yu_inventory\".\"transfers\".\"override_outcome\" = 'released'\n                AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n              )\n            )\n          ) OR (\n            \"yu_inventory\".\"transfers\".\"status\" <> 'overridden'\n            AND \"yu_inventory\".\"transfers\".\"administrative_reason\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_outcome\" IS NULL\n            AND \"yu_inventory\".\"transfers\".\"override_responsible_id\" IS NULL\n          )"
+        },
+        "transfers_version_check": {
+          "name": "transfers_version_check",
+          "value": "\"yu_inventory\".\"transfers\".\"version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.user_external_identities": {
+      "name": "user_external_identities",
+      "schema": "yu_inventory",
+      "columns": {
+        "provider": {
+          "name": "provider",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_at_link": {
+          "name": "email_at_link",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_external_identities_user_id_users_id_fk": {
+          "name": "user_external_identities_user_id_users_id_fk",
+          "tableFrom": "user_external_identities",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_external_identities_pk": {
+          "name": "user_external_identities_pk",
+          "columns": [
+            "provider",
+            "subject"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "user_external_identities_provider_user_unique": {
+          "name": "user_external_identities_provider_user_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "user_external_identities_provider_check": {
+          "name": "user_external_identities_provider_check",
+          "value": "\"yu_inventory\".\"user_external_identities\".\"provider\" = 'google'"
+        },
+        "user_external_identities_email_normalized_check": {
+          "name": "user_external_identities_email_normalized_check",
+          "value": "\"yu_inventory\".\"user_external_identities\".\"email_at_link\" = lower(btrim(\"yu_inventory\".\"user_external_identities\".\"email_at_link\"))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.user_password_credentials": {
+      "name": "user_password_credentials",
+      "schema": "yu_inventory",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "algorithm": {
+          "name": "algorithm",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'scrypt'"
+        },
+        "salt": {
+          "name": "salt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scrypt_n": {
+          "name": "scrypt_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 16384
+        },
+        "scrypt_r": {
+          "name": "scrypt_r",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 8
+        },
+        "scrypt_p": {
+          "name": "scrypt_p",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "key_length": {
+          "name": "key_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 64
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_password_credentials_user_id_users_id_fk": {
+          "name": "user_password_credentials_user_id_users_id_fk",
+          "tableFrom": "user_password_credentials",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "user_password_credentials_algorithm_check": {
+          "name": "user_password_credentials_algorithm_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"algorithm\" = 'scrypt'"
+        },
+        "user_password_credentials_hash_check": {
+          "name": "user_password_credentials_hash_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"hash\" ~ '^[0-9a-f]{128}$'"
+        },
+        "user_password_credentials_parameters_check": {
+          "name": "user_password_credentials_parameters_check",
+          "value": "\"yu_inventory\".\"user_password_credentials\".\"scrypt_n\" = 16384 AND \"yu_inventory\".\"user_password_credentials\".\"scrypt_r\" = 8 AND \"yu_inventory\".\"user_password_credentials\".\"scrypt_p\" = 1 AND \"yu_inventory\".\"user_password_credentials\".\"key_length\" = 64"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.users": {
+      "name": "users",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "auth_role",
+          "typeSchema": "yu_inventory",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_code_unique": {
+          "name": "users_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_email_normalized_check": {
+          "name": "users_email_normalized_check",
+          "value": "\"yu_inventory\".\"users\".\"email\" = lower(btrim(\"yu_inventory\".\"users\".\"email\"))"
+        },
+        "users_version_positive_check": {
+          "name": "users_version_positive_check",
+          "value": "\"yu_inventory\".\"users\".\"version\" > 0"
+        },
+        "users_deactivated_state_check": {
+          "name": "users_deactivated_state_check",
+          "value": "\"yu_inventory\".\"users\".\"is_active\" OR \"yu_inventory\".\"users\".\"deactivated_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "yu_inventory.web_push_subscriptions": {
+      "name": "web_push_subscriptions",
+      "schema": "yu_inventory",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "endpoint": {
+          "name": "endpoint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "p256dh": {
+          "name": "p256dh",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auth": {
+          "name": "auth",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expiration_time": {
+          "name": "expiration_time",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ru'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "web_push_subscriptions_endpoint_unique": {
+          "name": "web_push_subscriptions_endpoint_unique",
+          "columns": [
+            {
+              "expression": "endpoint",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "web_push_subscriptions_user_updated_idx": {
+          "name": "web_push_subscriptions_user_updated_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "web_push_subscriptions_user_id_users_id_fk": {
+          "name": "web_push_subscriptions_user_id_users_id_fk",
+          "tableFrom": "web_push_subscriptions",
+          "tableTo": "users",
+          "schemaTo": "yu_inventory",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "web_push_subscriptions_language_check": {
+          "name": "web_push_subscriptions_language_check",
+          "value": "\"yu_inventory\".\"web_push_subscriptions\".\"language\" in ('ru', 'kk', 'en')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "yu_inventory.audit_actor_role_snapshot": {
+      "name": "audit_actor_role_snapshot",
+      "schema": "yu_inventory",
+      "values": [
+        "admin",
+        "warehouse",
+        "employee",
+        "owner"
+      ]
+    },
+    "yu_inventory.audit_subject_kind": {
+      "name": "audit_subject_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "user",
+        "building",
+        "room",
+        "item",
+        "qr_identifier",
+        "photo",
+        "responsibility",
+        "transfer",
+        "inspection",
+        "inspection_room",
+        "item_result",
+        "deviation_decision",
+        "notification"
+      ]
+    },
+    "yu_inventory.auth_role": {
+      "name": "auth_role",
+      "schema": "yu_inventory",
+      "values": [
+        "admin",
+        "warehouse",
+        "employee"
+      ]
+    },
+    "yu_inventory.decision_recipient_kind": {
+      "name": "decision_recipient_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "user",
+        "admin_queue"
+      ]
+    },
+    "yu_inventory.decision_resolution": {
+      "name": "decision_resolution",
+      "schema": "yu_inventory",
+      "values": [
+        "confirm_result",
+        "dismiss_to_present"
+      ]
+    },
+    "yu_inventory.decision_status": {
+      "name": "decision_status",
+      "schema": "yu_inventory",
+      "values": [
+        "pending",
+        "confirmed",
+        "disputed",
+        "superseded",
+        "resolved_by_admin"
+      ]
+    },
+    "yu_inventory.idempotency_state": {
+      "name": "idempotency_state",
+      "schema": "yu_inventory",
+      "values": [
+        "processing",
+        "completed"
+      ]
+    },
+    "yu_inventory.inspection_status": {
+      "name": "inspection_status",
+      "schema": "yu_inventory",
+      "values": [
+        "draft",
+        "awaiting_decisions",
+        "confirmed",
+        "cancelled"
+      ]
+    },
+    "yu_inventory.inventory_number_kind": {
+      "name": "inventory_number_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "official",
+        "temporary"
+      ]
+    },
+    "yu_inventory.item_result_value": {
+      "name": "item_result_value",
+      "schema": "yu_inventory",
+      "values": [
+        "present",
+        "missing",
+        "moved",
+        "broken",
+        "undetermined"
+      ]
+    },
+    "yu_inventory.item_status": {
+      "name": "item_status",
+      "schema": "yu_inventory",
+      "values": [
+        "active",
+        "maintenance",
+        "decommissioned"
+      ]
+    },
+    "yu_inventory.notification_audience_kind": {
+      "name": "notification_audience_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "direct_user",
+        "admin_queue"
+      ]
+    },
+    "yu_inventory.notification_event_type": {
+      "name": "notification_event_type",
+      "schema": "yu_inventory",
+      "values": [
+        "transfer.requested",
+        "transfer.confirmed",
+        "transfer.rejected",
+        "transfer.cancelled",
+        "transfer.overridden",
+        "decision.created",
+        "decision.admin_queue_created",
+        "decision.disputed",
+        "decision.recheck_requested",
+        "decision.closed_present",
+        "decision.resolved_by_admin",
+        "decision.admin_queue_resolved",
+        "inspection.confirmed"
+      ]
+    },
+    "yu_inventory.notification_mailbox_kind": {
+      "name": "notification_mailbox_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "direct_user",
+        "admin_queue"
+      ]
+    },
+    "yu_inventory.notification_subject_kind": {
+      "name": "notification_subject_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "item",
+        "transfer",
+        "decision",
+        "inspection"
+      ]
+    },
+    "yu_inventory.photo_purpose": {
+      "name": "photo_purpose",
+      "schema": "yu_inventory",
+      "values": [
+        "item",
+        "inspection_result",
+        "decision_dispute"
+      ]
+    },
+    "yu_inventory.photo_status": {
+      "name": "photo_status",
+      "schema": "yu_inventory",
+      "values": [
+        "reserved",
+        "attached",
+        "superseded",
+        "removed",
+        "expired",
+        "purged"
+      ]
+    },
+    "yu_inventory.qr_format": {
+      "name": "qr_format",
+      "schema": "yu_inventory",
+      "values": [
+        "generated_v1",
+        "legacy_raw",
+        "legacy_url"
+      ]
+    },
+    "yu_inventory.qr_role": {
+      "name": "qr_role",
+      "schema": "yu_inventory",
+      "values": [
+        "primary",
+        "alias"
+      ]
+    },
+    "yu_inventory.qr_status": {
+      "name": "qr_status",
+      "schema": "yu_inventory",
+      "values": [
+        "active",
+        "revoked"
+      ]
+    },
+    "yu_inventory.qr_target_kind": {
+      "name": "qr_target_kind",
+      "schema": "yu_inventory",
+      "values": [
+        "building",
+        "room",
+        "item"
+      ]
+    },
+    "yu_inventory.record_status": {
+      "name": "record_status",
+      "schema": "yu_inventory",
+      "values": [
+        "active",
+        "archived"
+      ]
+    },
+    "yu_inventory.responsibility_source": {
+      "name": "responsibility_source",
+      "schema": "yu_inventory",
+      "values": [
+        "accepted",
+        "transfer",
+        "admin_override",
+        "migration"
+      ]
+    },
+    "yu_inventory.transfer_override_outcome": {
+      "name": "transfer_override_outcome",
+      "schema": "yu_inventory",
+      "values": [
+        "assigned",
+        "released"
+      ]
+    },
+    "yu_inventory.transfer_status": {
+      "name": "transfer_status",
+      "schema": "yu_inventory",
+      "values": [
+        "pending_current_owner",
+        "confirmed",
+        "rejected",
+        "cancelled",
+        "overridden"
+      ]
+    }
+  },
+  "schemas": {
+    "yu_inventory": "yu_inventory"
+  },
+  "sequences": {
+    "yu_inventory.user_code_sequence": {
+      "name": "user_code_sequence",
+      "schema": "yu_inventory",
+      "increment": "1",
+      "startWith": "1",
+      "minValue": "1",
+      "maxValue": "9223372036854775807",
+      "cache": "1",
+      "cycle": false
+    }
+  },
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

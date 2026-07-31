@@ -24,7 +24,7 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: "YU Inventory",
-  description: "Университеттің тауарлық-материалдық құндылықтарын есепке алу жүйесі",
+  description: "Система учёта товарно-материальных ценностей университета",
   applicationName: "YU Inventory",
   appleWebApp: {
     capable: true,
@@ -48,7 +48,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="kk"
+      lang="ru"
       className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="h-full" suppressHydrationWarning>

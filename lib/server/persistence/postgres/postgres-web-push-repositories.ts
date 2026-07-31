@@ -21,6 +21,7 @@ interface SubscriptionRow extends QueryResultRow {
   auth: string;
   expiration_time: Date | null;
   user_agent: string | null;
+  language: "ru" | "kk" | "en";
   created_at: Date;
   updated_at: Date;
 }
@@ -51,17 +52,18 @@ class PostgresWebPushSubscriptionRepository
     const result = await this.source.query<SubscriptionRow>(
       `insert into ${SUBSCRIPTIONS}
          (id, user_id, endpoint, p256dh, auth, expiration_time, user_agent,
-          created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+          language, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
        on conflict (endpoint) do update
        set user_id = excluded.user_id,
            p256dh = excluded.p256dh,
            auth = excluded.auth,
            expiration_time = excluded.expiration_time,
            user_agent = excluded.user_agent,
+           language = excluded.language,
            updated_at = excluded.updated_at
        returning id, user_id, endpoint, p256dh, auth, expiration_time,
-                 user_agent, created_at, updated_at`,
+                 user_agent, language, created_at, updated_at`,
       [
         input.id,
         input.userId,
@@ -70,6 +72,7 @@ class PostgresWebPushSubscriptionRepository
         input.auth,
         input.expirationTime,
         input.userAgent,
+        input.language,
         input.now,
       ],
     );
@@ -82,7 +85,7 @@ class PostgresWebPushSubscriptionRepository
     const result = await this.source.query<SubscriptionRow>(
       `select s.id, s.user_id, s.endpoint, s.p256dh, s.auth,
               s.expiration_time,
-              s.user_agent, s.created_at, s.updated_at
+              s.user_agent, s.language, s.created_at, s.updated_at
          from ${SUBSCRIPTIONS} s
          join ${USERS} u on u.id = s.user_id
         where s.user_id = $1
@@ -126,6 +129,7 @@ class PostgresWebPushSubscriptionRepository
       | "p256dh"
       | "auth"
       | "expirationTime"
+      | "language"
       | "updatedAt"
     >,
   ): Promise<void> {
@@ -137,7 +141,8 @@ class PostgresWebPushSubscriptionRepository
           and p256dh = $4
           and auth = $5
           and expiration_time is not distinct from $6
-          and updated_at = $7`,
+          and language = $7
+          and updated_at = $8`,
       [
         subscription.id,
         subscription.userId,
@@ -145,6 +150,7 @@ class PostgresWebPushSubscriptionRepository
         subscription.p256dh,
         subscription.auth,
         subscription.expirationTime,
+        subscription.language,
         subscription.updatedAt,
       ],
     );
@@ -160,6 +166,7 @@ function mapSubscription(row: SubscriptionRow): WebPushSubscriptionRecord {
     auth: row.auth,
     expirationTime: row.expiration_time,
     userAgent: row.user_agent,
+    language: row.language,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

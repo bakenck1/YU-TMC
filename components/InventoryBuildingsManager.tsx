@@ -26,6 +26,7 @@ import { hasPermission } from "@/lib/security/permissions";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
+import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 
 const INPUT_CLASS =
   "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10";
@@ -37,7 +38,7 @@ export default function InventoryBuildingsManager({
   actorRole: UserRole;
   initialBuildings: BuildingDto[];
 }) {
-  const { t } = useAppSettings();
+  const { language, t } = useAppSettings();
   const [buildings, setBuildings] = useState(initialBuildings);
   const [editing, setEditing] = useState<BuildingDto | "create" | null>(null);
   const [rooms, setRooms] = useState<Record<string, RoomDto[]>>({});
@@ -105,7 +106,9 @@ export default function InventoryBuildingsManager({
   }
 
   async function archiveBuilding(building: BuildingDto) {
-    if (!window.confirm(`Архивировать корпус «${building.name}»? Сначала в нём не должно остаться активных кабинетов.`)) return;
+    if (!window.confirm(t("building.archiveBuildingConfirm", {
+      name: translateCampusBuilding(language, building.name),
+    }))) return;
     setArchivingId(building.id);
     setActionError(null);
     try {
@@ -115,7 +118,7 @@ export default function InventoryBuildingsManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ version: building.version }),
       });
-      if (!response.ok) throw new Error(await readArchiveError(response));
+      if (!response.ok) throw new Error(await readArchiveError(response, t));
       setBuildings((current) => current.filter((value) => value.id !== building.id));
       setRooms((current) => {
         const next = { ...current };
@@ -123,14 +126,14 @@ export default function InventoryBuildingsManager({
         return next;
       });
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Не удалось архивировать корпус.");
+      setActionError(error instanceof Error ? error.message : t("building.saveError"));
     } finally {
       setArchivingId(null);
     }
   }
 
   async function archiveRoom(room: RoomDto) {
-    if (!window.confirm(`Архивировать кабинет «${room.designation}»? Активные предметы сначала нужно списать или перенести.`)) return;
+    if (!window.confirm(t("building.archiveRoomConfirm", { name: room.designation }))) return;
     setArchivingId(room.id);
     setActionError(null);
     try {
@@ -140,7 +143,7 @@ export default function InventoryBuildingsManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ version: room.version }),
       });
-      if (!response.ok) throw new Error(await readArchiveError(response));
+      if (!response.ok) throw new Error(await readArchiveError(response, t));
       setRooms((current) => ({
         ...current,
         [room.buildingId]: (current[room.buildingId] ?? []).filter(
@@ -153,7 +156,7 @@ export default function InventoryBuildingsManager({
           : building,
       ));
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Не удалось архивировать кабинет.");
+      setActionError(error instanceof Error ? error.message : t("building.saveError"));
     } finally {
       setArchivingId(null);
     }
@@ -201,7 +204,7 @@ export default function InventoryBuildingsManager({
                   </span>
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-zinc-900">
-                      {building.name}
+                      {translateCampusBuilding(language, building.name)}
                     </h3>
                     <p className="mt-1 flex items-start gap-1.5 text-sm text-zinc-500">
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
@@ -245,7 +248,7 @@ export default function InventoryBuildingsManager({
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Архивировать корпус
+                    {t("building.archiveBuilding")}
                   </button>
                 ) : null}
               </div>
@@ -282,7 +285,7 @@ export default function InventoryBuildingsManager({
                             type="button"
                             onClick={() => void archiveRoom(room)}
                             disabled={archivingId === room.id}
-                            aria-label={`Архивировать кабинет ${room.designation}`}
+                            aria-label={t("building.archiveRoom", { name: room.designation })}
                             className="rounded-md p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -320,7 +323,7 @@ export default function InventoryBuildingsManager({
                 {findCampusBuildingPreset(building.name) ? (
                   <div>
                     <dt className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                      Этажей
+                      {t("building.floors")}
                     </dt>
                     <dd className="mt-1 font-semibold text-zinc-700">
                       {findCampusBuildingPreset(building.name)!.floorCount}
@@ -363,7 +366,7 @@ export default function InventoryBuildingsManager({
           className="fixed bottom-6 right-6 z-30 inline-flex min-h-12 items-center gap-2 rounded-full bg-zinc-900 px-5 text-sm font-semibold text-white shadow-xl hover:bg-zinc-700"
         >
           <ScanLine className="h-4 w-4" />
-          Сканировать кабинет
+          {t("building.scanRoom")}
         </button>
       ) : null}
       {scannerOpen ? (
@@ -401,20 +404,23 @@ export default function InventoryBuildingsManager({
   );
 }
 
-async function readArchiveError(response: Response): Promise<string> {
+async function readArchiveError(
+  response: Response,
+  t: (key: TranslationKey) => string,
+): Promise<string> {
   const body = (await response.json().catch(() => null)) as
     | { error?: string }
     | null;
   if (body?.error === "building_has_active_rooms") {
-    return "Сначала архивируйте все кабинеты этого корпуса.";
+    return t("building.activeRoomsError");
   }
   if (body?.error === "room_has_active_items") {
-    return "В кабинете есть активные предметы. Сначала перенесите или спишите их.";
+    return t("building.activeItemsError");
   }
   if (body?.error === "version_conflict") {
-    return "Запись изменилась у другого пользователя. Обновите страницу и повторите действие.";
+    return t("building.conflictError");
   }
-  return "Не удалось сохранить изменение. Повторите попытку.";
+  return t("building.saveError");
 }
 
 function RoomFormModal({
@@ -531,7 +537,7 @@ function RoomFormModal({
               {Array.from({ length: floorCount }, (_, index) => index + 1).map(
                 (floor) => (
                   <option key={floor} value={floor}>
-                    {floor} этаж
+                    {floor} {t("inventory.floorShort")}
                   </option>
                 ),
               )}
@@ -577,7 +583,7 @@ function BuildingFormModal({
   onClose: () => void;
   onSave: (building: BuildingDto) => void;
 }) {
-  const { t } = useAppSettings();
+  const { language, t } = useAppSettings();
   const [presetId, setPresetId] = useState(
     findCampusBuildingPreset(building?.name ?? "")?.id ?? "",
   );
@@ -667,7 +673,7 @@ function BuildingFormModal({
 
         <div className="mt-5 space-y-4">
           <label className="block text-sm font-medium text-zinc-700">
-            Выберите корпус
+            {t("building.select")}
             <select
               value={presetId}
               onChange={(event) => setPresetId(event.target.value)}
@@ -676,7 +682,7 @@ function BuildingFormModal({
               className={INPUT_CLASS}
               disabled={Boolean(building)}
             >
-              <option value="">Выберите из списка</option>
+              <option value="">{t("building.selectFromList")}</option>
               {CAMPUS_BUILDING_PRESETS.map((preset) => (
                 <option
                   key={preset.id}
@@ -687,16 +693,20 @@ function BuildingFormModal({
                       existingPresetIds.has(preset.id))
                   }
                 >
-                  {preset.name} — {preset.address}, {preset.floorCount} этажей
+                  {t("building.presetSummary", {
+                    name: translateCampusBuilding(language, preset.name),
+                    address: preset.address,
+                    count: preset.floorCount,
+                  })}
                 </option>
               ))}
             </select>
           </label>
           {selectedPreset ? (
             <dl className="rounded-2xl bg-emerald-50 p-4 text-sm text-zinc-700">
-              <div className="flex justify-between gap-4"><dt className="text-zinc-500">Наименование</dt><dd className="text-right font-semibold">{selectedPreset.name}</dd></div>
-              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">Адрес</dt><dd className="text-right font-semibold">{selectedPreset.address}</dd></div>
-              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">Этажей</dt><dd className="font-semibold">{selectedPreset.floorCount}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-zinc-500">{t("inventory.buildingName")}</dt><dd className="text-right font-semibold">{translateCampusBuilding(language, selectedPreset.name)}</dd></div>
+              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">{t("inventory.buildingAddress")}</dt><dd className="text-right font-semibold">{selectedPreset.address}</dd></div>
+              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">{t("building.floors")}</dt><dd className="font-semibold">{selectedPreset.floorCount}</dd></div>
             </dl>
           ) : null}
         </div>

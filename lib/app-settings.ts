@@ -15,13 +15,13 @@ export interface AppSettings {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   organizationName: "YU Inventory",
-  language: "kk",
+  language: "ru",
   emailNotifications: true,
   pushNotifications: false,
   maintenanceAlerts: true,
 };
 
-export const SUPPORTED_LANGUAGES: AppLanguage[] = ["kk", "ru", "en"];
+export const SUPPORTED_LANGUAGES: AppLanguage[] = ["ru", "kk", "en"];
 
 export function isAppLanguage(value: unknown): value is AppLanguage {
   return typeof value === "string" && SUPPORTED_LANGUAGES.includes(value as AppLanguage);

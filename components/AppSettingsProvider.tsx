@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -25,6 +26,7 @@ import {
   type TranslationKey,
   type TranslationParams,
 } from "@/lib/i18n";
+import { syncPushSubscriptionLanguage } from "@/lib/client-push-subscription";
 
 const STORAGE_KEY = "yu-inventory-settings-v1";
 
@@ -124,6 +126,7 @@ function InitialLoading({
 export default function AppSettingsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const languageRef = useRef<AppLanguage>(DEFAULT_APP_SETTINGS.language);
   const [loading, setLoading] = useState(true);
   const [notificationLoading, setNotificationLoading] = useState<NotificationKey[]>([]);
   const [organizationSaving, setOrganizationSaving] = useState(false);
@@ -160,11 +163,21 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
         const serverSettings: unknown = await response.json();
         if (!isAppSettings(serverSettings)) throw new Error("invalid_settings");
         if (!cancelled) {
-          setSettings(serverSettings);
-          saveLocalSettings(serverSettings);
+          const mergedSettings = {
+            ...serverSettings,
+            language:
+              localSettings?.language ?? DEFAULT_APP_SETTINGS.language,
+          };
+          languageRef.current = mergedSettings.language;
+          setSettings(mergedSettings);
+          saveLocalSettings(mergedSettings);
         }
       } catch {
-        if (!cancelled) setSettings(localSettings ?? DEFAULT_APP_SETTINGS);
+        if (!cancelled) {
+          const fallbackSettings = localSettings ?? DEFAULT_APP_SETTINGS;
+          languageRef.current = fallbackSettings.language;
+          setSettings(fallbackSettings);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -180,6 +193,11 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
     document.documentElement.lang = settings.language;
   }, [settings.language]);
 
+  useEffect(() => {
+    if (loading) return;
+    void syncPushSubscriptionLanguage(settings.language).catch(() => undefined);
+  }, [loading, settings.language]);
+
   const persistPatch = useCallback(
     async (patch: Partial<AppSettings>, optimisticSettings: AppSettings): Promise<PersistResult> => {
       try {
@@ -191,12 +209,20 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
         if (!response.ok) throw new Error("settings_save_failed");
         const serverSettings: unknown = await response.json();
         if (!isAppSettings(serverSettings)) throw new Error("invalid_settings");
-        setSettings(serverSettings);
-        saveLocalSettings(serverSettings);
+        const mergedSettings = {
+          ...serverSettings,
+          language: languageRef.current,
+        };
+        setSettings(mergedSettings);
+        saveLocalSettings(mergedSettings);
         return "server";
       } catch {
-        if (saveLocalSettings(optimisticSettings)) {
-          setSettings(optimisticSettings);
+        const mergedSettings = {
+          ...optimisticSettings,
+          language: languageRef.current,
+        };
+        if (saveLocalSettings(mergedSettings)) {
+          setSettings(mergedSettings);
           return "local";
         }
         return "error";
@@ -210,10 +236,10 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
       if (language === settings.language) return;
       const previous = settings;
       const optimistic = { ...settings, language };
+      languageRef.current = language;
       setSettings(optimistic);
-      const result = await persistPatch({ language }, optimistic);
-
-      if (result === "error") {
+      if (!saveLocalSettings(optimistic)) {
+        languageRef.current = previous.language;
         setSettings(previous);
         pushToast({
           type: "error",
@@ -222,13 +248,12 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
         });
         return;
       }
-
       pushToast({
-        type: result === "local" ? "info" : "success",
-        title: result === "local" ? "settings.savedLocally" : "settings.languageChanged",
+        type: "success",
+        title: "settings.languageChanged",
       });
     },
-    [persistPatch, pushToast, settings],
+    [pushToast, settings],
   );
 
   const changeNotification = useCallback(
@@ -242,7 +267,7 @@ export default function AppSettingsProvider({ children }: { children: ReactNode 
       setNotificationLoading((current) => current.filter((item) => item !== key));
 
       if (result === "error") {
-        setSettings(previous);
+        setSettings((current) => ({ ...current, [key]: previous[key] }));
         pushToast({
           type: "error",
           title: "settings.saveFailed",

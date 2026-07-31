@@ -2,6 +2,7 @@
 
 import { Bell, BellOff, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useAppSettings } from "@/components/AppSettingsProvider";
 
 import {
   currentPushSubscription,
@@ -24,6 +25,7 @@ type PushState =
   | "error";
 
 export default function PushNotificationControl() {
+  const { language, t } = useAppSettings();
   const [configuration, setConfiguration] =
     useState<PushPublicConfiguration | null>(null);
   const [state, setState] = useState<PushState>("loading");
@@ -57,7 +59,7 @@ export default function PushNotificationControl() {
       const subscription = await currentPushSubscription();
       if (cancelled) return;
       if (subscription) {
-        const synced = await syncExistingPushSubscription(config.publicKey);
+        const synced = await syncExistingPushSubscription(config.publicKey, language);
         if (!synced) {
           setState("disabled");
           return;
@@ -67,13 +69,13 @@ export default function PushNotificationControl() {
         setState("disabled");
       }
     }
-  }, []);
+  }, [language]);
 
   async function enable() {
     if (!configuration?.publicKey || busy) return;
     setBusy(true);
     try {
-      await enablePushNotifications(configuration.publicKey);
+      await enablePushNotifications(configuration.publicKey, language);
       setState("enabled");
     } catch (error) {
       if (error instanceof Error && error.message === "push_permission_denied") {
@@ -108,7 +110,7 @@ export default function PushNotificationControl() {
     return (
       <div className="inline-flex items-center gap-2 text-sm text-zinc-500">
         <LoaderCircle className="h-4 w-4 animate-spin" />
-        Проверяем push-уведомления…
+        {t("push.checking")}
       </div>
     );
   }
@@ -116,9 +118,7 @@ export default function PushNotificationControl() {
   if (state === "unsupported" || state === "unconfigured") {
     return (
       <p className="text-sm text-zinc-500">
-        {state === "unsupported"
-          ? "Push-уведомления не поддерживаются этим браузером."
-          : "Push-уведомления ещё не настроены администратором сервера."}
+        {t(state === "unsupported" ? "push.unsupported" : "push.unconfigured")}
       </p>
     );
   }
@@ -142,23 +142,23 @@ export default function PushNotificationControl() {
         ) : (
           <BellOff className="h-4 w-4" />
         )}
-        {state === "enabled" ? "Push включены" : "Включить push"}
+        {t(state === "enabled" ? "push.enabled" : "push.enable")}
       </button>
       {state === "denied" ? (
         <p role="status" className="text-sm text-amber-700">
-          Разрешите уведомления в настройках браузера.
+          {t("push.denied")}
         </p>
       ) : state === "dismissed" ? (
         <p role="status" className="text-sm text-zinc-500">
-          Разрешение не изменено. Нажмите ещё раз, чтобы повторить.
+          {t("push.dismissed")}
         </p>
       ) : state === "error" ? (
         <p role="alert" className="text-sm text-red-700">
-          Не удалось обновить push-подписку. Повторите попытку.
+          {t("push.error")}
         </p>
       ) : (
         <p className="text-sm text-zinc-500">
-          Уведомим, когда вам назначат инвентаризацию.
+          {t("push.assignmentHint")}
         </p>
       )}
     </div>

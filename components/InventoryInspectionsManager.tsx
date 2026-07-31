@@ -25,6 +25,8 @@ import {
   type BarcodeScannerSession,
 } from "@/lib/browser-barcode-scanner";
 import PushNotificationControl from "@/components/PushNotificationControl";
+import { useAppSettings } from "@/components/AppSettingsProvider";
+import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 
 interface InspectionTechnician {
   id: string;
@@ -47,6 +49,7 @@ export default function InventoryInspectionsManager({
   rooms: RoomDto[];
   technicians: InspectionTechnician[];
 }) {
+  const { language, locale, t } = useAppSettings();
   const [inspections, setInspections] = useState(initialInspections);
   const [name, setName] = useState("");
   const [selectedTechnician, setSelectedTechnician] = useState(
@@ -113,7 +116,8 @@ export default function InventoryInspectionsManager({
       setSelectedInspectionRoom("");
       setName("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "create_failed");
+      void cause;
+      setError(t("inspections.operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -148,7 +152,8 @@ export default function InventoryInspectionsManager({
       );
       setSelectedInspectionRoom(body.room.roomId);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "room_failed");
+      void cause;
+      setError(t("inspections.operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -173,7 +178,8 @@ export default function InventoryInspectionsManager({
       }
       setResolution(body.resolution);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "qr_resolve_failed");
+      void cause;
+      setError(t("inspections.operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -186,7 +192,7 @@ export default function InventoryInspectionsManager({
     );
     const itemId = resolution?.target?.kind === "item" ? resolution.target.id : null;
     if (!inspection || !inspectionRoom || !itemId) {
-      setError("Выберите черновик проверки и кабинет, добавленный в него.");
+      setError(t("inspections.selectDraftError"));
       return;
     }
     setBusy(true);
@@ -218,7 +224,8 @@ export default function InventoryInspectionsManager({
         ),
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "result_record_failed");
+      void cause;
+      setError(t("inspections.operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -237,7 +244,7 @@ export default function InventoryInspectionsManager({
     const requestId = ++cameraRequestRef.current;
     setCameraError("");
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Камера не поддерживается этим браузером.");
+      setCameraError(t("inspections.cameraUnsupported"));
       return;
     }
     try {
@@ -266,8 +273,8 @@ export default function InventoryInspectionsManager({
         stopCamera();
         setCameraError(
           cause instanceof DOMException && cause.name === "NotAllowedError"
-            ? "Доступ к камере отклонён. Разрешите камеру или используйте ручной ввод."
-            : "Не удалось открыть камеру.",
+            ? t("inspections.cameraDenied")
+            : t("inspections.cameraFailed"),
         );
       }
     }
@@ -279,9 +286,11 @@ export default function InventoryInspectionsManager({
         <div className="flex items-center gap-3">
           <ClipboardCheck className="h-6 w-6 text-emerald-500" />
           <div>
-            <h1 className="text-xl font-semibold text-zinc-800">Инвентаризация</h1>
+            <h1 className="text-xl font-semibold text-zinc-800">
+              {t("inspections.title")}
+            </h1>
             <p className="text-sm text-zinc-500">
-              Черновики и завершённые проверки техника
+              {t("inspections.subtitle")}
             </p>
           </div>
         </div>
@@ -290,26 +299,30 @@ export default function InventoryInspectionsManager({
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Название проверки"
+              placeholder={t("inspections.namePlaceholder")}
               className="min-w-0 rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500"
             />
             {actorRole === "admin" ? (
               <select
                 value={selectedTechnician}
                 onChange={(event) => setSelectedTechnician(event.target.value)}
-                aria-label="Ответственный техник"
+                aria-label={t("inspections.assignee")}
                 className="min-w-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
               >
                 {technicians.map((technician) => (
                   <option key={technician.id} value={technician.id}>
                     {technician.fullName} ·{" "}
-                    {technician.role === "warehouse" ? "Кладовщик" : "Сотрудник"}
+                    {t(
+                      technician.role === "warehouse"
+                        ? "inspections.roleWarehouse"
+                        : "inspections.roleEmployee",
+                    )}
                   </option>
                 ))}
               </select>
             ) : (
               <div className="flex items-center rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-600">
-                Исполнитель: вы
+                {t("inspections.assigneeSelf")}
               </div>
             )}
             <button
@@ -318,7 +331,7 @@ export default function InventoryInspectionsManager({
               disabled={busy || !name.trim() || !selectedTechnician}
               className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
-              <Plus className="h-4 w-4" /> Создать проверку
+              <Plus className="h-4 w-4" /> {t("inspections.create")}
             </button>
           </div>
         ) : null}
@@ -331,9 +344,11 @@ export default function InventoryInspectionsManager({
 
       <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
         <div className="mb-3">
-          <h2 className="font-semibold text-zinc-800">Уведомления о назначениях</h2>
+          <h2 className="font-semibold text-zinc-800">
+            {t("inspections.notificationsTitle")}
+          </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Подписка действует на этом устройстве и отключается при выходе.
+            {t("inspections.notificationsHint")}
           </p>
         </div>
         <PushNotificationControl />
@@ -342,7 +357,9 @@ export default function InventoryInspectionsManager({
       <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">
           <ScanLine className="h-5 w-5 text-emerald-500" />
-          <h2 className="font-semibold text-zinc-800">Сканирование кода ТМЦ</h2>
+          <h2 className="font-semibold text-zinc-800">
+            {t("inspections.scanTitle")}
+          </h2>
         </div>
         <div className="mt-4 grid max-w-sm grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1">
           <button
@@ -370,7 +387,7 @@ export default function InventoryInspectionsManager({
         </div>
         {!online ? (
           <p role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            <WifiOff className="h-4 w-4" /> Для распознавания требуется подключение к сети.
+            <WifiOff className="h-4 w-4" /> {t("inspections.offline")}
           </p>
         ) : null}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -380,7 +397,7 @@ export default function InventoryInspectionsManager({
             onKeyDown={(event) => {
               if (event.key === "Enter") void resolveQr();
             }}
-            placeholder="Инвентарный номер, YUQ1:… или старый код"
+            placeholder={t("inspections.codePlaceholder")}
             className="min-w-0 flex-1 rounded-xl border border-black/10 px-3 py-2.5 font-mono text-sm outline-none focus:border-emerald-500"
           />
           <button
@@ -389,7 +406,7 @@ export default function InventoryInspectionsManager({
             disabled={busy || !online || !qrValue.trim()}
             className="rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
-            Распознать
+            {t("inspections.resolve")}
           </button>
           <button
             type="button"
@@ -397,7 +414,7 @@ export default function InventoryInspectionsManager({
             disabled={busy || !online}
             className="flex items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium text-zinc-700 disabled:opacity-50"
           >
-            <Camera className="h-4 w-4" /> Камера
+            <Camera className="h-4 w-4" /> {t("inspections.camera")}
           </button>
         </div>
         {cameraError ? (
@@ -411,7 +428,7 @@ export default function InventoryInspectionsManager({
             <button
               type="button"
               onClick={stopCamera}
-              aria-label="Закрыть камеру"
+              aria-label={t("inspections.closeCamera")}
               className="absolute right-3 top-3 rounded-full bg-black/60 p-2 text-white"
             >
               <X className="h-5 w-5" />
@@ -422,13 +439,19 @@ export default function InventoryInspectionsManager({
         {resolution ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm">
             <p className="font-medium text-zinc-800">
-              {resolution.status === "resolved"
-                ? `${resolution.target?.kind}: ${resolution.target?.title}`
-                : resolution.status}
+              {resolution.status === "resolved" && resolution.target
+                ? `${t(TARGET_KIND_KEYS[resolution.target.kind])}: ${resolution.target.title}`
+                : t(
+                    resolution.status === "resolved"
+                      ? "inspections.resolution.unknown"
+                      : RESOLUTION_STATUS_KEYS[resolution.status],
+                  )}
             </p>
             {resolution.target ? (
               <p className="mt-1 text-zinc-500">
-                {resolution.target.buildingName ?? ""}
+                {resolution.target.buildingName
+                  ? translateCampusBuilding(language, resolution.target.buildingName)
+                  : ""}
                 {resolution.target.roomDesignation
                   ? ` · ${resolution.target.roomDesignation}`
                   : ""}
@@ -438,15 +461,19 @@ export default function InventoryInspectionsManager({
               </p>
             ) : (
               <p className="mt-1 text-zinc-500">
-                Объект не найден; текущая проверка и выбранные кабинеты сохранены.
+                {t("inspections.notFound")}
               </p>
             )}
             {resolution.target?.kind === "item" ? (
               <div className="mt-4 border-t border-black/5 pt-4">
-                <p className="text-sm font-medium text-zinc-700">Результат проверки</p>
+                <p className="text-sm font-medium text-zinc-700">
+                  {t("inspections.resultTitle")}
+                </p>
                 {recordedResult ? (
                   <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                    Сохранено: {resultLabel(recordedResult.result)}
+                    {t("inspections.savedResult", {
+                      result: resultLabel(recordedResult.result, t),
+                    })}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -455,7 +482,7 @@ export default function InventoryInspectionsManager({
                       onChange={(event) => setResultComment(event.target.value)}
                       maxLength={1000}
                       rows={2}
-                      placeholder="Комментарий (необязательно)"
+                      placeholder={t("inspections.commentPlaceholder")}
                       className="w-full resize-none rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-emerald-500"
                     />
                     {!selectedInspection || !inspections
@@ -464,7 +491,7 @@ export default function InventoryInspectionsManager({
                         (room) => room.roomId === selectedInspectionRoom,
                       ) ? (
                       <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                        Сначала создайте или выберите черновик проверки и добавьте в него нужный кабинет. После этого результат будет сохранён.
+                        {t("inspections.selectDraftRoom")}
                       </p>
                     ) : null}
                     <div className="flex flex-wrap gap-2">
@@ -476,7 +503,7 @@ export default function InventoryInspectionsManager({
                           disabled={busy}
                           className="rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-50"
                         >
-                          {option.label}
+                          {t(option.labelKey)}
                         </button>
                       ))}
                     </div>
@@ -490,7 +517,7 @@ export default function InventoryInspectionsManager({
 
       {inspections.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-black/10 bg-white p-10 text-center text-sm text-zinc-500">
-          Проверок пока нет.
+          {t("inspections.empty")}
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -519,30 +546,30 @@ export default function InventoryInspectionsManager({
                     <p className="mt-1 text-xs text-zinc-400">
                       {technicians.find(
                         (technician) => technician.id === inspection.technicianId,
-                      )?.fullName ?? "Назначенный техник"}{" "}
-                      · {new Date(inspection.updatedAt).toLocaleString()}
+                      )?.fullName ?? t("inspections.assignedTechnician")}{" "}
+                      · {new Date(inspection.updatedAt).toLocaleString(locale)}
                     </p>
                   </div>
                   <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
-                    {inspection.status}
+                    {t(INSPECTION_STATUS_KEYS[inspection.status])}
                   </span>
                 </div>
               </button>
               <div className="mt-4 border-t border-black/5 pt-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                  Кабинеты ({inspection.rooms.length})
+                  {t("inspections.rooms", { count: inspection.rooms.length })}
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-zinc-600">
                   {inspection.rooms.map((room) => (
                     <li key={room.id}>
-                      {room.buildingName} · {room.roomDesignation}
+                      {translateCampusBuilding(language, room.buildingName)} · {room.roomDesignation}
                     </li>
                   ))}
                 </ul>
                 {selectedInspection === inspection.id &&
                 inspection.rooms.length > 0 ? (
                   <label className="mt-4 block text-xs font-medium text-zinc-500">
-                    Кабинет для сканирования
+                    {t("inspections.scanRoom")}
                     <select
                       value={selectedInspectionRoom}
                       onChange={(event) =>
@@ -552,7 +579,7 @@ export default function InventoryInspectionsManager({
                     >
                       {inspection.rooms.map((room) => (
                         <option key={room.id} value={room.roomId}>
-                          {room.buildingName} · {room.roomDesignation}
+                          {translateCampusBuilding(language, room.buildingName)} · {room.roomDesignation}
                         </option>
                       ))}
                     </select>
@@ -561,12 +588,16 @@ export default function InventoryInspectionsManager({
                 {inspection.results.length ? (
                   <div className="mt-4">
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                      Зафиксированные предметы ({inspection.results.length})
+                      {t("inspections.recordedItems", {
+                        count: inspection.results.length,
+                      })}
                     </p>
                     <ul className="mt-2 space-y-1 text-sm text-zinc-600">
                       {inspection.results.map((result) => (
                         <li key={result.id}>
-                          {result.itemName} · {result.inventoryNumber} · {resultLabel(result.result)} · {new Date(result.createdAt).toLocaleString()}
+                          {result.itemName} · {result.inventoryNumber} ·{" "}
+                          {resultLabel(result.result, t)} ·{" "}
+                          {new Date(result.createdAt).toLocaleString(locale)}
                         </li>
                       ))}
                     </ul>
@@ -585,7 +616,10 @@ export default function InventoryInspectionsManager({
                     >
                       {rooms.map((room) => (
                         <option key={room.id} value={room.id}>
-                          {room.designation} · этаж {room.floorNumber}
+                          {room.designation} ·{" "}
+                          {t("inspections.floor", {
+                            floor: room.floorNumber,
+                          })}
                         </option>
                       ))}
                     </select>
@@ -595,7 +629,7 @@ export default function InventoryInspectionsManager({
                       disabled={busy}
                       className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
                     >
-                      Добавить
+                      {t("inspections.add")}
                     </button>
                   </div>
                 ) : null}
@@ -610,15 +644,47 @@ export default function InventoryInspectionsManager({
 
 const RESULT_OPTIONS: Array<{
   value: RecordItemResultInput["result"];
-  label: string;
+  labelKey: TranslationKey;
 }> = [
-  { value: "present", label: "На месте" },
-  { value: "missing", label: "Отсутствует" },
-  { value: "moved", label: "Перемещён" },
-  { value: "broken", label: "Неисправен" },
-  { value: "undetermined", label: "Не удалось определить" },
+  { value: "present", labelKey: "inspections.result.present" },
+  { value: "missing", labelKey: "inspections.result.missing" },
+  { value: "moved", labelKey: "inspections.result.moved" },
+  { value: "broken", labelKey: "inspections.result.broken" },
+  { value: "undetermined", labelKey: "inspections.result.undetermined" },
 ];
 
-function resultLabel(value: RecordItemResultInput["result"]) {
-  return RESULT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+const INSPECTION_STATUS_KEYS: Record<
+  InspectionDto["status"],
+  TranslationKey
+> = {
+  draft: "inspections.status.draft",
+  awaiting_decisions: "inspections.status.awaiting_decisions",
+  confirmed: "inspections.status.confirmed",
+  cancelled: "inspections.status.cancelled",
+};
+
+const TARGET_KIND_KEYS: Record<
+  NonNullable<QrResolutionDto["target"]>["kind"],
+  TranslationKey
+> = {
+  item: "inspections.target.item",
+  room: "inspections.target.room",
+  building: "inspections.target.building",
+};
+
+const RESOLUTION_STATUS_KEYS: Record<
+  Exclude<QrResolutionDto["status"], "resolved">,
+  TranslationKey
+> = {
+  revoked: "inspections.resolution.revoked",
+  unissued_system_code: "inspections.resolution.unissued_system_code",
+  unknown: "inspections.resolution.unknown",
+};
+
+function resultLabel(
+  value: RecordItemResultInput["result"],
+  t: ReturnType<typeof useAppSettings>["t"],
+) {
+  const key = RESULT_OPTIONS.find((option) => option.value === value)?.labelKey;
+  return key ? t(key) : value;
 }

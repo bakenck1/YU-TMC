@@ -259,7 +259,7 @@ function UserFormModal({
               </select>
             </label>
             <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
-              {user ? "Новый временный пароль" : "Временный пароль"}
+              {t(user ? "users.newTemporaryPassword" : "users.temporaryPassword")}
               <input
                 type="password"
                 minLength={12}
@@ -271,12 +271,12 @@ function UserFormModal({
                     initialPassword: event.target.value,
                   }))
                 }
-                placeholder="Не менее 12 символов"
+                placeholder={t("users.passwordPlaceholder")}
                 className={INPUT_CLASS}
               />
               <span className="mt-1.5 block text-xs font-normal text-zinc-400">
                 {user
-                  ? "Оставьте поле пустым, чтобы не менять текущий пароль."
+                  ? t("users.keepPasswordHint")
                   : t("users.passwordSsoHint")}
               </span>
             </label>
@@ -556,7 +556,7 @@ export default function UsersManager({
   const rangeStart = filteredUsers.length === 0 ? 0 : startIndex + 1;
   const rangeEnd = Math.min(startIndex + pageSize, filteredUsers.length);
   const hasActiveFilters = roleFilter !== "all" || emailFilter !== "all";
-  const suggestedCode = "Назначается автоматически";
+  const suggestedCode = t("users.codeAutomatic");
 
   function resetPage() {
     setPage(1);
@@ -615,7 +615,7 @@ export default function UsersManager({
       },
     );
     if (!response.ok) {
-      setMutationError(await userMutationError(response));
+      setMutationError(await userMutationError(response, t));
       return;
     }
     const payload = (await response.json()) as { user: UserDto };
@@ -647,7 +647,7 @@ export default function UsersManager({
       }),
     });
     if (!response.ok) {
-      setMutationError(await userMutationError(response));
+      setMutationError(await userMutationError(response, t));
       return;
     }
     const payload = (await response.json()) as { user: UserDto };
@@ -669,7 +669,7 @@ export default function UsersManager({
       { method: "DELETE" },
     );
     if (!response.ok) {
-      setMutationError(await userMutationError(response));
+      setMutationError(await userMutationError(response, t));
       return;
     }
     setRecords((current) => current.filter((user) => user.id !== deleteId));
@@ -976,27 +976,30 @@ function normalizeUser(user: UserDto): AppUser {
   };
 }
 
-async function userMutationError(response: Response): Promise<string> {
+async function userMutationError(
+  response: Response,
+  t: (key: TranslationKey) => string,
+): Promise<string> {
   const payload = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
   if (payload?.error === "user_version_conflict") {
-    return "Запись уже изменена другим сотрудником. Обновите страницу.";
+    return t("users.conflictError");
   }
   if (payload?.error === "last_active_admin") {
-    return "Нельзя отключить или удалить последнего активного администратора.";
+    return t("users.lastAdminError");
   }
   if (payload?.error === "email_already_exists") {
-    return "Пользователь с таким email уже существует.";
+    return t("users.duplicateEmailError");
   }
   if (payload?.error === "user_login_not_configured") {
-    return "Сначала настройте пользователю способ входа.";
+    return t("users.loginMethodError");
   }
   if (payload?.error === "invalid_initial_password") {
-    return "Временный пароль должен содержать от 12 до 128 символов.";
+    return t("users.passwordLengthError");
   }
   if (response.status === 403) {
-    return "У вас нет прав для изменения этой учётной записи.";
+    return t("users.forbiddenError");
   }
-  return "Не удалось сохранить изменения. Попробуйте ещё раз.";
+  return t("users.saveError");
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import {
   Boxes,
   Languages,
@@ -14,19 +15,33 @@ import {
 } from "lucide-react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { AppLanguage } from "@/lib/app-settings";
+import type { TranslationKey } from "@/lib/i18n";
 
 const LANGUAGE_OPTIONS: Array<{
   value: AppLanguage;
   short: string;
   labelKey: "settings.kazakh" | "settings.russian" | "settings.english";
 }> = [
-  { value: "kk", short: "ҚАЗ", labelKey: "settings.kazakh" },
   { value: "ru", short: "РУС", labelKey: "settings.russian" },
+  { value: "kk", short: "ҚАЗ", labelKey: "settings.kazakh" },
   { value: "en", short: "ENG", labelKey: "settings.english" },
 ];
 
+const AUTH_PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
+  "/login": "auth.loginTitle",
+  "/register": "auth.registerTitle",
+  "/forgot-password": "auth.forgotTitle",
+  "/reset-password": "auth.resetTitle",
+};
+
 export default function AuthPageFrame({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const { settings, language, changeLanguage, t } = useAppSettings();
+
+  useEffect(() => {
+    const titleKey = AUTH_PAGE_TITLE_KEYS[pathname];
+    if (titleKey) document.title = `${t(titleKey)} | YU Inventory`;
+  }, [pathname, t]);
 
   return (
     <main className="min-h-screen bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
@@ -41,7 +56,7 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
                 <p className="truncate text-sm font-semibold text-zinc-900">
                   {settings.organizationName}
                 </p>
-                <p className="text-xs text-zinc-400">Inventory</p>
+                <p className="text-xs text-zinc-400">{t("auth.inventoryLabel")}</p>
               </div>
             </div>
 
@@ -107,7 +122,7 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
                     <Monitor className="h-5 w-5" />
                   </div>
                   <span className="rounded-full bg-emerald-300/15 px-3 py-1 text-xs font-medium text-emerald-200">
-                    online
+                    {t("auth.online")}
                   </span>
                 </div>
                 <div className="mt-auto grid grid-cols-3 gap-2">

@@ -1798,6 +1798,7 @@ export const webPushSubscriptionsTable = inventorySchema.table(
     auth: varchar({ length: 255 }).notNull(),
     expirationTime: timestamp({ withTimezone: true, mode: "date" }),
     userAgent: varchar({ length: 500 }),
+    language: varchar({ length: 2 }).notNull().default("ru"),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
@@ -1806,6 +1807,10 @@ export const webPushSubscriptionsTable = inventorySchema.table(
       .defaultNow(),
   },
   (table) => [
+    check(
+      "web_push_subscriptions_language_check",
+      sql`${table.language} in ('ru', 'kk', 'en')`,
+    ),
     uniqueIndex("web_push_subscriptions_endpoint_unique").on(table.endpoint),
     index("web_push_subscriptions_user_updated_idx").on(
       table.userId,

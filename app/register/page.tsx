@@ -11,7 +11,7 @@ import { cookies } from "next/headers";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Тіркелу | YU Inventory",
+  title: "Регистрация | YU Inventory",
 };
 
 export default async function RegisterPage() {

@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
-import type { TranslationKey } from "@/lib/i18n";
+import {
+  translateCampusBuilding,
+  translateCampusBuildingDescription,
+  type TranslationKey,
+} from "@/lib/i18n";
 import {
   buildQrMatrix,
   QR_SIZE,
@@ -276,7 +280,16 @@ const BUILDINGS: BuildingCfg[] = [
 type View = "loading" | "building" | "floor" | "item";
 
 export default function CampusMap({ data }: { data: CampusMapData }) {
-  const { t } = useAppSettings();
+  const { dataLabel, language, t } = useAppSettings();
+  const buildingLabel = useCallback(
+    (name: string) => translateCampusBuilding(language, name),
+    [language],
+  );
+  const buildingDescription = useCallback(
+    (name: string, fallback: string) =>
+      translateCampusBuildingDescription(language, name, fallback),
+    [language],
+  );
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,12 +388,12 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
       { label: t("map.campus"), action: "close" },
     ];
     if (view === "building") {
-      list.push({ label: building.name, active: true });
+      list.push({ label: buildingLabel(building.name), active: true });
     } else if (view === "floor" && floorN != null) {
-      list.push({ label: building.name, action: "building" });
+      list.push({ label: buildingLabel(building.name), action: "building" });
       list.push({ label: t("map.floor", { n: floorN }), active: true });
     } else if (view === "item" && item) {
-      list.push({ label: building.name, action: "building" });
+      list.push({ label: buildingLabel(building.name), action: "building" });
       list.push({
         label: t("map.floor", { n: item.floorN }),
         action: { floor: item.floorN },
@@ -388,7 +401,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
       list.push({ label: item.name, active: true });
     }
     return list;
-  }, [building, view, floorN, item, t]);
+  }, [building, buildingLabel, view, floorN, item, t]);
 
   const keyItems = useMemo(() => {
     if (!building) return [];
@@ -416,7 +429,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
         {DECOR.map((d, i) => (
           <div key={i} style={css(d)} />
         ))}
-        <div style={css("position:absolute;left:37.81%;top:452px;font-size:11.5px;font-weight:700;color:#9aa392;letter-spacing:.04em;")}>Центральный парк</div>
+        <div style={css("position:absolute;left:37.81%;top:452px;font-size:11.5px;font-weight:700;color:#9aa392;letter-spacing:.04em;")}>{t("map.centralPark")}</div>
         <div style={css("position:absolute;left:42.19%;top:300px;width:220px;height:0;border-top:2px solid #e6e1d1;transform:rotate(14deg);")} />
         <div style={css("position:absolute;left:40.63%;top:420px;width:260px;height:0;border-top:2px solid #e6e1d1;transform:rotate(-10deg);")} />
 
@@ -447,7 +460,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                   ...(isHovered ? { background: "#002060", color: "#fff" } : {}),
                 }}
               >
-                {buildingData.name}
+                {buildingLabel(buildingData.name)}
               </div>
               {isHovered ? (
                 <div
@@ -464,7 +477,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                     zIndex: 30,
                   }}
                 >
-                  {t("map.tooltip", { name: buildingData.name, count: buildingData.total })}
+                  {t("map.tooltip", { name: buildingLabel(buildingData.name), count: buildingData.total })}
                 </div>
               ) : null}
             </div>
@@ -535,8 +548,8 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
               {/* BUILDING */}
               {view === "building" && building ? (
                 <div style={{ ...css("padding:22px 24px 34px;"), animation: "campusFadeUp .3s ease" }}>
-                  <div style={css("font-size:12px;font-weight:700;color:#002060;letter-spacing:.06em;text-transform:uppercase;")}>{building.sub}</div>
-                  <div style={css("font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:4px;")}>{building.name}</div>
+                  <div style={css("font-size:12px;font-weight:700;color:#002060;letter-spacing:.06em;text-transform:uppercase;")}>{buildingDescription(building.name, building.sub)}</div>
+                  <div style={css("font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:4px;")}>{buildingLabel(building.name)}</div>
 
                   <div style={css("display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:20px;")}>
                     <div style={css("background:#fff;border:1px solid #eaefec;border-radius:14px;padding:15px;box-shadow:0 2px 6px rgba(20,40,25,.04);")}>
@@ -586,7 +599,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                         >
                           <div style={css("flex:1;min-width:0;")}>
                             <div style={css("font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{it.name}</div>
-                            <div style={css("font-size:11.5px;color:#8a948e;margin-top:2px;")}>{it.room}</div>
+                            <div style={css("font-size:11.5px;color:#8a948e;margin-top:2px;")}>{t("itemDetails.room")} {it.code}</div>
                           </div>
                           <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, padding: "4px 9px", borderRadius: "20px", color: st.color, background: st.bg }}>
                             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: st.color }} />
@@ -597,7 +610,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                     })}
                   </div>
                   {keyItems.length === 0 ? (
-                    <div style={css("margin-top:2px;border:1px dashed #d9e2dc;border-radius:12px;padding:14px;color:#6b7671;font-size:13px;")}>В этом корпусе пока нет добавленных ТМЦ.</div>
+                    <div style={css("margin-top:2px;border:1px dashed #d9e2dc;border-radius:12px;padding:14px;color:#6b7671;font-size:13px;")}>{t("map.emptyBuilding")}</div>
                   ) : null}
                 </div>
               ) : null}
@@ -613,7 +626,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                       <div key={r.code} style={css("background:#fff;border:1px solid #eaefec;border-radius:15px;overflow:hidden;box-shadow:0 2px 6px rgba(20,40,25,.04);")}>
                         <div style={css("display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid #f1f4f2;background:#f8faf8;")}>
                           <div style={css("font-weight:800;font-size:13px;color:#002060;background:#e6ecf7;border-radius:8px;padding:4px 9px;")}>{r.code}</div>
-                          <div style={css("font-weight:700;font-size:14px;")}>{r.name}</div>
+                          <div style={css("font-weight:700;font-size:14px;")}>{t("itemDetails.room")} {r.code}</div>
                           <div style={css("margin-left:auto;font-size:12px;color:#8a948e;font-weight:600;")}>{t("map.roomUnits", { count: r.items.length })}</div>
                         </div>
                         {r.items.map((it) => {
@@ -640,14 +653,14 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                     ))}
                   </div>
                   {floor.rooms.length === 0 ? (
-                    <div style={css("border:1px dashed #d9e2dc;border-radius:14px;padding:16px;color:#6b7671;font-size:13px;line-height:1.5;")}>На этом этаже пока нет кабинетов. Добавьте кабинет в разделе «Управление инвентарём», и он появится здесь.</div>
+                    <div style={css("border:1px dashed #d9e2dc;border-radius:14px;padding:16px;color:#6b7671;font-size:13px;line-height:1.5;")}>{t("map.emptyFloor")}</div>
                   ) : null}
                 </div>
               ) : null}
 
               {/* ITEM */}
               {view === "item" && item ? (
-                <ItemCard item={item} buildingName={building?.name ?? ""} t={t} />
+                <ItemCard item={item} buildingName={buildingLabel(building?.name ?? "")} t={t} category={dataLabel(item.category)} responsible={dataLabel(item.responsible)} />
               ) : null}
             </div>
           </div>
@@ -661,10 +674,14 @@ function ItemCard({
   item,
   buildingName,
   t,
+  category,
+  responsible,
 }: {
   item: CampusItem;
   buildingName: string;
   t: ReturnType<typeof useAppSettings>["t"];
+  category: string;
+  responsible: string;
 }) {
   const st = statusMeta(item.status);
   const qr = useMemo(() => buildQrMatrix(item.id), [item.id]);
@@ -676,7 +693,7 @@ function ItemCard({
 
       <div style={css("display:flex;align-items:flex-start;gap:14px;margin-top:18px;")}>
         <div style={css("flex:1;")}>
-          <div style={css("font-size:12px;font-weight:700;color:#002060;letter-spacing:.05em;text-transform:uppercase;")}>{item.category}</div>
+          <div style={css("font-size:12px;font-weight:700;color:#002060;letter-spacing:.05em;text-transform:uppercase;")}>{category}</div>
           <div style={css("font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:4px;line-height:1.2;")}>{item.name}</div>
           <div style={css("font-size:13px;color:#6b7671;margin-top:6px;font-variant-numeric:tabular-nums;font-weight:600;")}>{t("map.invNo", { no: item.invNo })}</div>
         </div>
@@ -700,11 +717,11 @@ function ItemCard({
       <div style={css("display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;")}>
         <div style={css("background:#fff;border:1px solid #eaefec;border-radius:13px;padding:14px;")}>
           <div style={css("font-size:11px;color:#8a948e;font-weight:700;letter-spacing:.03em;text-transform:uppercase;")}>{t("map.location")}</div>
-          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{buildingName}, каб. {item.code}</div>
+          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{buildingName}, {t("map.roomShort")} {item.code}</div>
         </div>
         <div style={css("background:#fff;border:1px solid #eaefec;border-radius:13px;padding:14px;")}>
           <div style={css("font-size:11px;color:#8a948e;font-weight:700;letter-spacing:.03em;text-transform:uppercase;")}>{t("map.responsible")}</div>
-          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{item.responsible}</div>
+          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{responsible}</div>
         </div>
       </div>
 

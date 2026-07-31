@@ -1,0 +1,2 @@
+ALTER TABLE "yu_inventory"."web_push_subscriptions" ADD COLUMN "language" varchar(2) DEFAULT 'ru' NOT NULL;--> statement-breakpoint
+ALTER TABLE "yu_inventory"."web_push_subscriptions" ADD CONSTRAINT "web_push_subscriptions_language_check" CHECK ("yu_inventory"."web_push_subscriptions"."language" in ('ru', 'kk', 'en'));

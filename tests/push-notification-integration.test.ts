@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { pushPermissionError } from "../lib/client-push-subscription";
 import { syncExistingPushSubscription } from "../lib/client-push-subscription";
+import { syncPushSubscriptionLanguage } from "../lib/client-push-subscription";
 import { firstInspectionRoomId } from "../lib/inventory-inspection-selection";
 
 const ROOT = new URL("../", import.meta.url);
@@ -99,9 +100,89 @@ test("VAPID key rotation removes an incompatible browser subscription", async ()
 
   try {
     const newPublicKey = Buffer.alloc(65, 2).toString("base64url");
-    assert.equal(await syncExistingPushSubscription(newPublicKey), null);
+    assert.equal(await syncExistingPushSubscription(newPublicKey, "ru"), null);
     assert.deepEqual(methods, ["DELETE"]);
     assert.equal(unsubscribed, true);
+  } finally {
+    restoreGlobal("window", originalWindow);
+    restoreGlobal("navigator", originalNavigator);
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rapid language changes persist the newest push locale last", async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const originalFetch = globalThis.fetch;
+  const languages: string[] = [];
+  let releaseFirstLookup!: () => void;
+  const firstLookup = new Promise<void>((resolve) => {
+    releaseFirstLookup = resolve;
+  });
+  let releaseFirstRequest!: () => void;
+  const firstRequest = new Promise<void>((resolve) => {
+    releaseFirstRequest = resolve;
+  });
+  const subscription = {
+    endpoint: "https://fcm.googleapis.com/subscription/current",
+    toJSON() {
+      return {
+        endpoint: this.endpoint,
+        expirationTime: null,
+        keys: { p256dh: "P".repeat(65), auth: "A".repeat(22) },
+      };
+    },
+  } as unknown as PushSubscription;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      isSecureContext: true,
+      PushManager: class {},
+      Notification: class {},
+    },
+  });
+  let lookupCount = 0;
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      serviceWorker: {
+        async getRegistration() {
+          lookupCount += 1;
+          if (lookupCount === 1) await firstLookup;
+          return {
+            pushManager: {
+              async getSubscription() {
+                return subscription;
+              },
+            },
+          };
+        },
+      },
+    },
+  });
+  let requestCount = 0;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { language: string };
+    languages.push(body.language);
+    requestCount += 1;
+    if (requestCount === 1) await firstRequest;
+    return new Response(null, { status: 204 });
+  };
+
+  try {
+    const first = syncPushSubscriptionLanguage("kk");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = syncPushSubscriptionLanguage("en");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(lookupCount, 1);
+    releaseFirstLookup();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(lookupCount, 1);
+    assert.deepEqual(languages, ["kk"]);
+    releaseFirstRequest();
+    await Promise.all([first, second]);
+    assert.deepEqual(languages, ["kk", "en"]);
   } finally {
     restoreGlobal("window", originalWindow);
     restoreGlobal("navigator", originalNavigator);
@@ -163,8 +244,8 @@ test("assignment data flows from admin selection to notifier after persistence",
   ]);
 
   assert.match(manager, /technicianId: selectedTechnician/);
-  assert.match(manager, /aria-label="Ответственный техник"/);
-  assert.match(manager, /Кабинет для сканирования/);
+  assert.match(manager, /aria-label=\{t\("inspections\.assignee"\)\}/);
+  assert.match(manager, /t\("inspections\.scanRoom"\)/);
   assert.match(manager, /selectedInspectionRoom/);
   assert.match(page, /searchParams: Promise/);
   assert.match(page, /initialInspectionId/);

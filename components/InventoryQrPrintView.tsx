@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import { useAppSettings } from "@/components/AppSettingsProvider";
+import { translateCampusBuilding } from "@/lib/i18n";
 
 export default function InventoryQrPrintView({
   item,
@@ -13,6 +15,7 @@ export default function InventoryQrPrintView({
   item: InventoryItemDto;
   kind: "barcode" | "qr";
 }) {
+  const { language, t } = useAppSettings();
   const codeUrl = `/api/inventory/items/${item.id}/qr?kind=${kind}&format=svg`;
   const isBarcode = kind === "barcode";
   return (
@@ -23,32 +26,32 @@ export default function InventoryQrPrintView({
           onClick={() => window.print()}
           className="flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white"
         >
-          <Printer className="h-4 w-4" /> Печать
+          <Printer className="h-4 w-4" /> {t("itemDetails.print")}
         </button>
         <a
           href={`/api/inventory/items/${item.id}/qr?kind=${kind}&format=${isBarcode ? "svg" : "png"}&download=1`}
           className="flex items-center gap-2 rounded-lg border border-black/10 px-4 py-2 text-sm font-semibold"
         >
-          <Download className="h-4 w-4" /> Скачать {isBarcode ? "SVG" : "PNG"}
+          <Download className="h-4 w-4" /> {t("itemDetails.download")} {isBarcode ? "SVG" : "PNG"}
         </a>
         <Link
           href={`/items/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
           className="rounded-lg border border-black/10 px-4 py-2 text-sm"
         >
-          {isBarcode ? "Показать QR" : "Показать штрих-код"}
+          {isBarcode ? t("print.showQr") : t("print.showBarcode")}
         </Link>
         <Link
           href={`/items/${item.id}`}
           className="rounded-lg border border-black/10 px-4 py-2 text-sm"
         >
-          Назад к предмету
+          {t("print.backToItem")}
         </Link>
       </div>
       <div className="grid gap-5 print:gap-0">
       <section className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:border-black">
         <Image
           src={codeUrl}
-          alt={`${isBarcode ? "Штрих-код Code 39" : "QR-код"}: ${item.name}`}
+          alt={`${isBarcode ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}: ${item.name}`}
           width={isBarcode ? 420 : 280}
           height={isBarcode ? 160 : 280}
           unoptimized
@@ -62,17 +65,17 @@ export default function InventoryQrPrintView({
           <h1 className="mt-3 break-words text-2xl font-bold">{item.name}</h1>
           <dl className="mt-5 space-y-2 text-sm">
             <div>
-              <dt className="text-zinc-500">Тип ТМЦ</dt>
+              <dt className="text-zinc-500">{t("items.type")}</dt>
               <dd className="font-semibold">{item.itemType}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Инвентарный номер</dt>
+              <dt className="text-zinc-500">{t("items.inventoryNumber")}</dt>
               <dd className="font-semibold">{item.inventoryNumber}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Локация</dt>
+              <dt className="text-zinc-500">{t("items.location")}</dt>
               <dd className="font-semibold">
-                {item.room.buildingName}, {item.room.designation}
+                {translateCampusBuilding(language, item.room.buildingName)}, {item.room.designation}
               </dd>
             </div>
           </dl>

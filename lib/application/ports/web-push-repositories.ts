@@ -6,6 +6,7 @@ export interface WebPushSubscriptionRecord {
   auth: string;
   expirationTime: Date | null;
   userAgent: string | null;
+  language: "ru" | "kk" | "en";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,6 +19,7 @@ export interface UpsertWebPushSubscriptionRecord {
   auth: string;
   expirationTime: Date | null;
   userAgent: string | null;
+  language: "ru" | "kk" | "en";
   now: Date;
 }
 
@@ -38,6 +40,7 @@ export interface WebPushSubscriptionRepository {
       | "p256dh"
       | "auth"
       | "expirationTime"
+      | "language"
       | "updatedAt"
     >,
   ): Promise<void>;

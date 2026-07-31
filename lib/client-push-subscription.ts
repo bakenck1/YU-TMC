@@ -1,3 +1,7 @@
+import type { AppLanguage } from "@/lib/app-settings";
+
+let pushLifecycleQueue: Promise<unknown> = Promise.resolve();
+
 export interface PushPublicConfiguration {
   configured: boolean;
   publicKey: string | null;
@@ -29,7 +33,17 @@ export async function currentPushSubscription() {
   return registration.pushManager.getSubscription();
 }
 
-export async function enablePushNotifications(publicKey: string) {
+export async function enablePushNotifications(
+  publicKey: string,
+  language: AppLanguage,
+) {
+  return enqueuePushLifecycle(() => enablePushNotificationsNow(publicKey, language));
+}
+
+async function enablePushNotificationsNow(
+  publicKey: string,
+  language: AppLanguage,
+) {
   if (!supportsWebPush()) throw new Error("push_unsupported");
   const permission = await Notification.requestPermission();
   const permissionError = pushPermissionError(permission);
@@ -57,7 +71,7 @@ export async function enablePushNotifications(publicKey: string) {
     created = true;
   }
   try {
-    await savePushSubscription(subscription);
+    await persistPushSubscription(subscription, language);
   } catch (error) {
     if (created) await subscription.unsubscribe().catch(() => false);
     throw error;
@@ -72,22 +86,36 @@ export function pushPermissionError(permission: NotificationPermission) {
 }
 
 export async function disablePushNotifications() {
-  const subscription = await currentPushSubscription();
-  if (!subscription) return;
-  await removeStoredPushSubscription(subscription);
+  return enqueuePushLifecycle(async () => {
+    const subscription = await currentPushSubscription();
+    if (!subscription) return;
+    await removeStoredPushSubscription(subscription);
+  });
 }
 
-export async function syncExistingPushSubscription(publicKey: string) {
-  const subscription = await currentPushSubscription();
-  if (
-    subscription &&
-    !subscriptionUsesApplicationServerKey(subscription, publicKey)
-  ) {
-    await removeStoredPushSubscription(subscription);
-    return null;
-  }
-  if (subscription) await savePushSubscription(subscription);
-  return subscription;
+export async function syncExistingPushSubscription(
+  publicKey: string,
+  language: AppLanguage,
+) {
+  return enqueuePushLifecycle(async () => {
+    const subscription = await currentPushSubscription();
+    if (
+      subscription &&
+      !subscriptionUsesApplicationServerKey(subscription, publicKey)
+    ) {
+      await removeStoredPushSubscription(subscription);
+      return null;
+    }
+    if (subscription) await persistPushSubscription(subscription, language);
+    return subscription;
+  });
+}
+
+export async function syncPushSubscriptionLanguage(language: AppLanguage) {
+  return enqueuePushLifecycle(async () => {
+    const subscription = await currentPushSubscription();
+    if (subscription) await persistPushSubscription(subscription, language);
+  });
 }
 
 async function removeStoredPushSubscription(
@@ -110,12 +138,24 @@ export async function removePushSubscriptionBeforeLogout() {
   await disablePushNotifications().catch(() => undefined);
 }
 
-async function savePushSubscription(subscription: PushSubscription) {
+function enqueuePushLifecycle<T>(operation: () => Promise<T>) {
+  const result = pushLifecycleQueue.then(operation, operation);
+  pushLifecycleQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+async function persistPushSubscription(
+  subscription: PushSubscription,
+  language: AppLanguage,
+) {
   const response = await fetch("/api/push/subscriptions", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(subscription.toJSON()),
+    body: JSON.stringify({ ...subscription.toJSON(), language }),
   });
   if (!response.ok) throw new Error("push_subscription_save_failed");
 }

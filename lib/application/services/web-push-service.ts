@@ -8,6 +8,8 @@ import {
   hasPermission,
   type AuthorizationActor,
 } from "@/lib/security/permissions";
+import { isAppLanguage } from "@/lib/app-settings";
+import { translate } from "@/lib/i18n";
 
 export interface WebPushConfiguration {
   publicKey: string;
@@ -43,6 +45,7 @@ export interface WebPushSubscriptionInput {
   endpoint?: unknown;
   expirationTime?: unknown;
   keys?: unknown;
+  language?: unknown;
 }
 
 export interface InspectionAssignmentPush {
@@ -125,21 +128,13 @@ export class WebPushService {
       (subscription) =>
         subscription.expirationTime && subscription.expirationTime <= now,
     );
-    const payload = JSON.stringify({
-      title: "Новая инвентаризация",
-      body: `Вам назначена «${input.inspectionName}»`,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      tag: `inspection-assignment-${input.inspectionId}`,
-      url: `/inventory/inspections?inspection=${encodeURIComponent(input.inspectionId)}`,
-    });
     const staleSubscriptions = [...expired];
 
     const outcomes = await Promise.all(
       active.map(async (subscription) => {
         const outcome = await this.deliverWithRetry(
           subscription,
-          payload,
+          inspectionAssignmentPayload(input, subscription.language),
           input,
         );
         if (outcome === "stale") {
@@ -276,7 +271,25 @@ function normalizeSubscription(input: WebPushSubscriptionInput) {
     p256dh,
     auth,
     expirationTime,
+    language: isAppLanguage(input.language) ? input.language : "ru",
   };
+}
+
+function inspectionAssignmentPayload(
+  input: InspectionAssignmentPush,
+  languageInput: unknown,
+) {
+  const language = isAppLanguage(languageInput) ? languageInput : "ru";
+  return JSON.stringify({
+    title: translate(language, "push.assignmentTitle"),
+    body: translate(language, "push.assignmentBody", {
+      name: input.inspectionName,
+    }),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `inspection-assignment-${input.inspectionId}`,
+    url: `/inventory/inspections?inspection=${encodeURIComponent(input.inspectionId)}`,
+  });
 }
 
 function normalizeEndpoint(value: unknown) {

@@ -41,6 +41,7 @@ test("binds a browser subscription to the authenticated account", async () => {
         p256dh: "P".repeat(65),
         auth: "A".repeat(22),
       },
+      language: "en",
     },
     EMPLOYEE,
     "Mobile Browser",
@@ -50,6 +51,7 @@ test("binds a browser subscription to the authenticated account", async () => {
   assert.equal(stored.length, 1);
   assert.equal(stored[0]?.userId, EMPLOYEE.userId);
   assert.equal(stored[0]?.userAgent, "Mobile Browser");
+  assert.equal(stored[0]?.language, "en");
   assert.deepEqual(fixture.service.publicConfiguration(), {
     configured: true,
     publicKey: CONFIGURATION.publicKey,
@@ -124,6 +126,7 @@ test("delivers assignment payload and prunes expired push endpoints", async () =
   fixture.addSubscription("active", null);
   fixture.addSubscription("gone", null);
   fixture.addSubscription("temporary", null);
+  fixture.addSubscription("kazakh", null, "kk");
   fixture.addSubscription(
     "expired",
     new Date("2026-07-31T09:59:59.000Z"),
@@ -145,7 +148,7 @@ test("delivers assignment payload and prunes expired push endpoints", async () =
     technicianId: EMPLOYEE.userId,
   });
 
-  assert.equal(payloads.length, 5);
+  assert.equal(payloads.length, 6);
   assert.equal(
     payloads.filter(({ endpoint }) => endpoint.endsWith("/temporary")).length,
     3,
@@ -157,6 +160,11 @@ test("delivers assignment payload and prunes expired push endpoints", async () =
   };
   assert.equal(payload.title, "Новая инвентаризация");
   assert.match(payload.body, /Technopark — July/);
+  const kazakhPayload = JSON.parse(
+    payloads.find(({ endpoint }) => endpoint.endsWith("/kazakh"))!.payload,
+  ) as { title: string; body: string };
+  assert.equal(kazakhPayload.title, "Жаңа түгендеу");
+  assert.equal(kazakhPayload.body, "Сізге «Technopark — July» тағайындалды");
   assert.equal(
     payload.url,
     "/inventory/inspections?inspection=22222222-2222-4222-8222-222222222222",
@@ -220,6 +228,28 @@ test("stale cleanup preserves refreshed keys with the same timestamp", async () 
   });
 
   assert.equal(fixture.records.get(endpoint)?.auth, "N".repeat(22));
+});
+
+test("stale cleanup preserves a same-timestamp language refresh", async () => {
+  const fixture = createFixture();
+  fixture.addSubscription("locale-refresh", null, "ru");
+  const endpoint = fixture.endpoint("locale-refresh");
+  fixture.sender.send = async (subscription) => {
+    const previous = fixture.records.get(subscription.endpoint)!;
+    fixture.records.set(subscription.endpoint, {
+      ...previous,
+      language: "en",
+    });
+    throw Object.assign(new Error("gone"), { statusCode: 410 });
+  };
+
+  await fixture.service.notifyInspectionAssignment({
+    inspectionId: "22222222-2222-4222-8222-222222222222",
+    inspectionName: "Locale race",
+    technicianId: EMPLOYEE.userId,
+  });
+
+  assert.equal(fixture.records.get(endpoint)?.language, "en");
 });
 
 test("does not attempt delivery when VAPID is not configured", async () => {
@@ -308,6 +338,7 @@ function createFixture(
         current.auth === subscription.auth &&
         current.expirationTime?.getTime() ===
           subscription.expirationTime?.getTime() &&
+        current.language === subscription.language &&
         current.updatedAt.getTime() === subscription.updatedAt.getTime()
       ) {
         records.delete(subscription.endpoint);
@@ -373,7 +404,11 @@ function createFixture(
         },
       };
     },
-    addSubscription(suffix: string, expirationTime: Date | null) {
+    addSubscription(
+      suffix: string,
+      expirationTime: Date | null,
+      language: "ru" | "kk" | "en" = "ru",
+    ) {
       const value: WebPushSubscriptionRecord = {
         id: `subscription-${suffix}`,
         userId: EMPLOYEE.userId,
@@ -382,6 +417,7 @@ function createFixture(
         auth: "A".repeat(22),
         expirationTime,
         userAgent: null,
+        language,
         createdAt: NOW,
         updatedAt: NOW,
       };
@@ -402,6 +438,7 @@ function toRecord(
     auth: input.auth,
     expirationTime: input.expirationTime,
     userAgent: input.userAgent,
+    language: input.language,
     createdAt: existing?.createdAt ?? input.now,
     updatedAt: input.now,
   };

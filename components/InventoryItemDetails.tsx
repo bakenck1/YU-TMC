@@ -29,6 +29,7 @@ import InventoryItemQrDialogs from "@/components/InventoryItemQrDialogs";
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
+import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 
 export default function InventoryItemDetails({
   initialItem,
@@ -45,7 +46,7 @@ export default function InventoryItemDetails({
   canManageProtected: boolean;
   rooms: RoomDto[];
 }) {
-  const { t } = useAppSettings();
+  const { language, locale, t } = useAppSettings();
   const router = useRouter();
   const [item, setItem] = useState(initialItem);
   const [editing, setEditing] = useState(false);
@@ -122,7 +123,7 @@ export default function InventoryItemDetails({
       setEditing(false);
       setSaved(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "save_failed");
+      setError(localizeItemError(cause, t));
     } finally {
       setSaving(false);
     }
@@ -166,7 +167,7 @@ export default function InventoryItemDetails({
       setQrReplaceReason("");
       setSaved(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "save_failed");
+      setError(localizeItemError(cause, t));
     } finally {
       setSaving(false);
     }
@@ -206,7 +207,7 @@ export default function InventoryItemDetails({
       router.push("/items");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "archive_failed");
+      setError(localizeItemError(cause, t));
       setArchiving(false);
     }
   }
@@ -237,7 +238,7 @@ export default function InventoryItemDetails({
       setServiceDialogOpen(false);
       setSaved(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "service_failed");
+      setError(localizeItemError(cause, t));
     } finally {
       setServicing(false);
     }
@@ -264,7 +265,7 @@ export default function InventoryItemDetails({
       setItem(body.item);
       setSaved(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "photo_save_failed");
+      setError(localizeItemError(cause, t));
     } finally {
       setCapturingPhoto(false);
     }
@@ -272,10 +273,10 @@ export default function InventoryItemDetails({
 
   const statusLabel =
     item.status === "maintenance"
-      ? "На обслуживании"
+      ? t("itemDetails.statusMaintenance")
       : item.status === "decommissioned"
-        ? "Списан"
-        : "Активен";
+        ? t("itemDetails.statusDecommissioned")
+        : t("itemDetails.statusActive");
 
   return (
     <div className="space-y-5">
@@ -293,7 +294,7 @@ export default function InventoryItemDetails({
 
       <nav
         ref={actionBarRef}
-        aria-label="Действия с предметом"
+        aria-label={t("itemDetails.actions")}
         className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/5 bg-white/95 p-2 shadow-md backdrop-blur"
       >
         <div className="flex flex-wrap gap-2">
@@ -302,10 +303,10 @@ export default function InventoryItemDetails({
             onClick={() => document.getElementById("item-information")?.scrollIntoView({ behavior: "smooth", block: "start" })}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
-            <FileText className="h-4 w-4" /> Информация
+            <FileText className="h-4 w-4" /> {t("items.information")}
           </button>
-          {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />Редактировать</button> : null}
-          <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />Штрих-код</button>
+          {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
+          <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button>
           {canManageProtected ? (
             <button
               type="button"
@@ -319,7 +320,7 @@ export default function InventoryItemDetails({
               className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             >
               <ShieldCheck className="h-4 w-4" />
-              Защищённые поля
+              {t("itemDetails.protectedFields")}
               <ChevronDown
                 className={`h-4 w-4 transition-transform ${protectedEditing ? "rotate-180" : ""}`}
               />
@@ -328,8 +329,8 @@ export default function InventoryItemDetails({
         </div>
         {canSendToService || canManageProtected ? (
           <div className="ml-auto flex flex-wrap justify-end gap-2">
-            {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} title={item.status === "maintenance" ? "Предмет уже находится в сервисе" : "Отправить предмет в сервис"} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? "Отправка…" : item.status === "maintenance" ? "В сервисе" : "В сервис"}</button> : null}
-            {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />Списать</button> : null}
+            {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} title={item.status === "maintenance" ? t("itemDetails.alreadyInService") : t("items.sendToService")} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? t("itemDetails.sending") : item.status === "maintenance" ? t("itemDetails.inService") : t("items.sendToService")}</button> : null}
+            {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("items.writeOff")}</button> : null}
           </div>
         ) : null}
       </nav>
@@ -342,15 +343,15 @@ export default function InventoryItemDetails({
         >
           <div>
             <h2 id="protected-fields-title" className="font-semibold text-zinc-800">
-              Защищённые поля
+              {t("itemDetails.protectedFields")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Изменения доступны только администратору и сохраняются в аудите.
+              {t("itemDetails.protectedHint")}
             </p>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-zinc-600">Кабинет</span>
+              <span className="text-zinc-600">{t("itemDetails.room")}</span>
               <select
                 value={protectedRoomId}
                 onChange={(event) => setProtectedRoomId(event.target.value)}
@@ -358,13 +359,13 @@ export default function InventoryItemDetails({
               >
                 {rooms.map((room) => (
                   <option key={room.id} value={room.id}>
-                    {room.designation} · этаж {room.floorNumber}
+                    {room.designation} · {t("inventory.floorShort")} {room.floorNumber}
                   </option>
                 ))}
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-600">Официальный номер</span>
+              <span className="text-zinc-600">{t("itemDetails.officialNumber")}</span>
               <input
                 value={inventoryNumber}
                 onChange={(event) => setInventoryNumber(event.target.value)}
@@ -372,7 +373,7 @@ export default function InventoryItemDetails({
               />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-600">Статус</span>
+              <span className="text-zinc-600">{t("items.status")}</span>
               <select
                 value={status}
                 onChange={(event) =>
@@ -380,9 +381,9 @@ export default function InventoryItemDetails({
                 }
                 className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
               >
-                <option value="active">Активен</option>
-                <option value="maintenance">На обслуживании</option>
-                <option value="decommissioned">Списан</option>
+                <option value="active">{t("itemDetails.statusActive")}</option>
+                <option value="maintenance">{t("itemDetails.statusMaintenance")}</option>
+                <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option>
               </select>
             </label>
             <div className="space-y-2 text-sm">
@@ -392,13 +393,13 @@ export default function InventoryItemDetails({
                   checked={replaceQr}
                   onChange={(event) => setReplaceQr(event.target.checked)}
                 />
-                Заменить QR-код / штрих-код
+                {t("itemDetails.replaceCode")}
               </label>
               {replaceQr ? (
                 <input
                   value={qrReplaceReason}
                   onChange={(event) => setQrReplaceReason(event.target.value)}
-                  placeholder="Обязательная причина замены"
+                  placeholder={t("itemDetails.replaceReason")}
                   maxLength={1000}
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
                 />
@@ -416,14 +417,14 @@ export default function InventoryItemDetails({
                 }
                 className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {saving ? "Сохранение…" : "Сохранить"}
+                {saving ? t("itemDetails.saving") : t("common.save")}
               </button>
               <button
                 type="button"
                 onClick={closeProtectedFields}
                 className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-zinc-600"
               >
-                Отмена
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -437,7 +438,7 @@ export default function InventoryItemDetails({
       ) : null}
       {saved ? (
         <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          <Check className="h-4 w-4" /> Сохранено
+          <Check className="h-4 w-4" /> {t("itemDetails.saved")}
         </p>
       ) : null}
       <InventoryItemQrDialogs
@@ -477,7 +478,7 @@ export default function InventoryItemDetails({
             ) : (
               <div className="flex flex-col items-center gap-2 text-sm text-zinc-400">
                 <ImageIcon className="h-10 w-10" />
-                Фото не добавлено
+                {t("items.photoMissing")}
               </div>
             )}
             {canEditContent ? (
@@ -488,7 +489,7 @@ export default function InventoryItemDetails({
                 className="absolute bottom-3 right-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
               >
                 <Camera className="h-4 w-4" />
-                {capturingPhoto ? "Сохранение…" : "Фото"}
+                {capturingPhoto ? t("itemDetails.saving") : t("items.photo")}
               </button>
             ) : null}
           </div>
@@ -497,7 +498,7 @@ export default function InventoryItemDetails({
               {codeKind === "barcode" || item.qrCode ? (
                 <Image
                   src={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=svg`}
-                  alt={`${codeKind === "barcode" ? "Штрих-код Code 39" : "QR-код"}: ${item.name}`}
+                  alt={`${codeKind === "barcode" ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}: ${item.name}`}
                   width={codeKind === "barcode" ? 240 : 96}
                   height={96}
                   unoptimized
@@ -505,9 +506,9 @@ export default function InventoryItemDetails({
                 />
               ) : null}
               <div className="min-w-0">
-                <p className="text-xs text-zinc-400">{codeKind === "barcode" ? "Штрих-код Code 39" : "QR-код"}</p>
+                <p className="text-xs text-zinc-400">{codeKind === "barcode" ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}</p>
                 <p className="break-all font-mono text-xs text-zinc-700">
-                  {codeKind === "barcode" ? item.inventoryNumber : item.qrCode ?? "Не назначен"}
+                  {codeKind === "barcode" ? item.inventoryNumber : item.qrCode ?? t("itemDetails.notAssigned")}
                 </p>
               </div>
             </div>
@@ -521,20 +522,20 @@ export default function InventoryItemDetails({
                   href={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=${codeKind === "barcode" ? "svg" : "png"}&download=1`}
                   className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
                 >
-                  <Download className="h-4 w-4" /> Скачать
+                  <Download className="h-4 w-4" /> {t("itemDetails.download")}
                 </a>
                 <Link
                   href={`/items/${item.id}/qr?kind=${codeKind}`}
                   className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
                 >
-                  <Printer className="h-4 w-4" /> Печать
+                  <Printer className="h-4 w-4" /> {t("itemDetails.print")}
                 </Link>
               </div>
             ) : null}
             <div className="mt-3 grid gap-2 text-xs print:hidden">
-              <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="rounded-lg bg-emerald-500 px-3 py-2 font-semibold text-white hover:bg-emerald-600">Генерация штрих-кода</button>
-              <button type="button" onClick={() => setQrDialog("scan")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Как сканировать код?</button>
-              <button type="button" onClick={() => setQrDialog("purpose")} className="text-left font-medium text-emerald-700 underline underline-offset-2">Для чего нужен код ТМЦ?</button>
+              <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="rounded-lg bg-emerald-500 px-3 py-2 font-semibold text-white hover:bg-emerald-600">{t("itemDetails.generateBarcode")}</button>
+              <button type="button" onClick={() => setQrDialog("scan")} className="text-left font-medium text-emerald-700 underline underline-offset-2">{t("itemDetails.scanHelp")}</button>
+              <button type="button" onClick={() => setQrDialog("purpose")} className="text-left font-medium text-emerald-700 underline underline-offset-2">{t("itemDetails.codePurpose")}</button>
             </div>
           </div>
         </section>
@@ -546,8 +547,8 @@ export default function InventoryItemDetails({
         >
           <div className="mb-6 flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-800">Карточка предмета</h2>
-              <p className="mt-1 text-sm text-zinc-500">Актуальные данные из реестра</p>
+              <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.card")}</h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("itemDetails.currentRegistryData")}</p>
             </div>
             {canEditContent && !editing ? (
               <button
@@ -555,7 +556,7 @@ export default function InventoryItemDetails({
                 onClick={() => setEditing(true)}
                 className="rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
               >
-                Изменить
+                {t("itemDetails.change")}
               </button>
             ) : null}
           </div>
@@ -567,19 +568,19 @@ export default function InventoryItemDetails({
                 <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm"><span className="text-zinc-500">Тип ТМЦ</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Бренд</span><input value={brand} onChange={(event) => setBrand(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Модель</span><input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Количество</span><input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">Цена за единицу, ₸</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               </div>
               <label className="block text-sm">
-                <span className="text-zinc-500">Описание</span>
+                <span className="text-zinc-500">{t("itemDetails.description")}</span>
                 <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
               </label>
               <div className="flex gap-2">
                 <button type="button" onClick={() => void saveContent()} disabled={saving} className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                  <Save className="h-4 w-4" /> {saving ? "Сохранение…" : t("common.save")}
+                  <Save className="h-4 w-4" /> {saving ? t("itemDetails.saving") : t("common.save")}
                 </button>
                 <button type="button" onClick={() => { setEditing(false); setName(item.name); setDescription(item.description ?? ""); setItemType(item.itemType); setBrand(item.brand ?? ""); setModel(item.model ?? ""); setQuantity(String(item.quantity)); setUnitPrice(String(item.unitPrice)); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">
                   {t("common.cancel")}
@@ -589,19 +590,19 @@ export default function InventoryItemDetails({
           ) : (
             <dl className="grid gap-4 sm:grid-cols-2">
               <Field label={t("items.name")} value={item.name} />
-              <Field label="Тип ТМЦ" value={item.itemType} />
-              <Field label="Бренд / модель" value={[item.brand, item.model].filter(Boolean).join(" / ") || "Не указано"} />
-              <Field label={t("items.inventoryNumber")} value={`${item.inventoryNumber}${item.inventoryNumberKind === "temporary" ? " (требует присвоения)" : ""}`} />
-              <Field label="Кабинет" value={`${item.room.buildingName}, ${item.room.designation}`} />
-              <Field label="Этаж" value={String(item.room.floorNumber)} />
+              <Field label={t("items.type")} value={item.itemType} />
+              <Field label={t("items.brandModelShort")} value={[item.brand, item.model].filter(Boolean).join(" / ") || t("common.notSpecified")} />
+              <Field label={t("items.inventoryNumber")} value={`${item.inventoryNumber}${item.inventoryNumberKind === "temporary" ? ` (${t("itemDetails.temporaryNumber")})` : ""}`} />
+              <Field label={t("itemDetails.room")} value={`${translateCampusBuilding(language, item.room.buildingName)}, ${item.room.designation}`} />
+              <Field label={t("inventory.floor")} value={String(item.room.floorNumber)} />
               <Field label={t("items.status")} value={statusLabel} />
               <Field label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
-              <Field label="Количество" value={String(item.quantity)} />
-              <Field label="Цена за единицу" value={`${item.unitPrice.toFixed(2)} ₸`} />
-              <Field label="Версия записи" value={String(item.version)} />
-              <Field label={t("items.updated")} value={new Date(item.updatedAt).toLocaleString()} />
+              <Field label={t("items.quantity")} value={String(item.quantity)} />
+              <Field label={t("itemDetails.unitPrice")} value={`${item.unitPrice.toFixed(2)} ₸`} />
+              <Field label={t("itemDetails.recordVersion")} value={String(item.version)} />
+              <Field label={t("items.updated")} value={new Date(item.updatedAt).toLocaleString(locale)} />
               <div className="sm:col-span-2">
-                <Field label="Описание" value={item.description || t("common.notSpecified")} />
+                <Field label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
               </div>
             </dl>
           )}
@@ -610,21 +611,21 @@ export default function InventoryItemDetails({
 
       {timeline.length ? (
         <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-zinc-800">История ответственности</h2>
+          <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.responsibilityHistory")}</h2>
           <ol className="mt-4 space-y-3">
             {timeline.map((entry) => (
               <li key={`${entry.kind}-${entry.id}`} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="font-medium text-zinc-800">
-                    {timelineTitle(entry)}
+                    {timelineTitle(entry, t)}
                   </p>
                   <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
-                    {new Date(entry.occurredAt).toLocaleString()}
+                    {new Date(entry.occurredAt).toLocaleString(locale)}
                   </time>
                 </div>
                 <p className="mt-1 text-zinc-500">
                   {entry.actorName ? `${entry.actorName} → ` : ""}
-                  {entry.responsibleName ?? "Не назначен"}
+                  {entry.responsibleName ?? t("common.notAssigned")}
                   {entry.detail ? ` · ${entry.detail}` : ""}
                 </p>
               </li>
@@ -636,22 +637,33 @@ export default function InventoryItemDetails({
   );
 }
 
-function timelineTitle(entry: ResponsibilityTimelineEntryDto) {
+function timelineTitle(
+  entry: ResponsibilityTimelineEntryDto,
+  t: (key: TranslationKey) => string,
+) {
   if (entry.kind === "responsibility") {
     return entry.status === "transfer"
-      ? "Ответственность передана"
+      ? t("itemDetails.responsibilityTransferred")
       : entry.status === "admin_override"
-        ? "Ответственность изменена администратором"
-        : "Ответственность принята";
+        ? t("itemDetails.responsibilityOverridden")
+        : t("itemDetails.responsibilityAccepted");
   }
-  const labels: Record<string, string> = {
-    pending_current_owner: "Запрошена передача",
-    confirmed: "Передача подтверждена",
-    rejected: "Передача отклонена",
-    cancelled: "Передача отменена",
-    overridden: "Передача изменена администратором",
+  const labels: Record<string, TranslationKey> = {
+    pending_current_owner: "itemDetails.transferRequested",
+    confirmed: "itemDetails.transferConfirmed",
+    rejected: "itemDetails.transferRejected",
+    cancelled: "itemDetails.transferCancelled",
+    overridden: "itemDetails.transferOverridden",
   };
-  return labels[entry.status] ?? "Передача ответственности";
+  return t(labels[entry.status] ?? "itemDetails.responsibilityTransfer");
+}
+
+function localizeItemError(
+  cause: unknown,
+  t: (key: TranslationKey) => string,
+) {
+  void cause;
+  return t("itemDetails.error");
 }
 
 function Field({ label, value }: { label: string; value: string }) {

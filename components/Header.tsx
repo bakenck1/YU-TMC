@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Languages, Menu } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
 import { useAuth } from "./AuthProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import type { AuthRole } from "@/lib/security/authorization";
+import type { AppLanguage } from "@/lib/app-settings";
 
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
@@ -35,7 +36,7 @@ function initials(name: string, email: string) {
 
 export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   const pathname = usePathname();
-  const { settings, t } = useAppSettings();
+  const { settings, language, changeLanguage, t } = useAppSettings();
   const { user, loading } = useAuth();
   const title = pathname === "/items/decommissioned"
     ? t("nav.decommissioned")
@@ -63,6 +64,22 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
       </div>
 
       <div className="flex items-center gap-3">
+        <label className="relative flex items-center">
+          <span className="sr-only">{t("auth.language")}</span>
+          <Languages className="pointer-events-none absolute left-2.5 h-4 w-4 text-zinc-400" />
+          <select
+            value={language}
+            onChange={(event) =>
+              void changeLanguage(event.target.value as AppLanguage)
+            }
+            aria-label={t("auth.language")}
+            className="h-9 appearance-none rounded-lg border border-zinc-200 bg-white pl-8 pr-7 text-xs font-semibold uppercase text-zinc-600 outline-none focus:border-emerald-500"
+          >
+            <option value="ru">RU</option>
+            <option value="kk">KK</option>
+            <option value="en">EN</option>
+          </select>
+        </label>
         <div className="hidden text-right sm:block">
           <p className="max-w-56 truncate text-sm font-medium text-zinc-800">
             {loading ? "…" : user?.name ?? "—"}

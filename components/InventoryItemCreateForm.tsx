@@ -27,7 +27,7 @@ export default function InventoryItemCreateForm({
   const [open, setOpen] = useState(openInitially);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [itemType, setItemType] = useState("ТМЦ");
+  const [itemType, setItemType] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -64,7 +64,7 @@ export default function InventoryItemCreateForm({
       setOpen(false);
       setName("");
       setDescription("");
-      setItemType("ТМЦ");
+      setItemType("");
       setBrand("");
       setModel("");
       setQuantity("1");
@@ -73,7 +73,8 @@ export default function InventoryItemCreateForm({
       onCreated?.();
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "create_failed");
+      void cause;
+      setError(t("itemDetails.error"));
     } finally {
       setSaving(false);
     }
@@ -83,34 +84,34 @@ export default function InventoryItemCreateForm({
     <>
       {!hideTrigger ? (
       <button type="button" onClick={() => setOpen(true)} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">
-        <Plus className="h-4 w-4" /> Добавить предмет
+        <Plus className="h-4 w-4" /> {t("createItem.add")}
       </button>
       ) : null}
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label="Добавить предмет">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label={t("createItem.add")}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-zinc-800">Новый предмет</h2>
+              <h2 className="text-lg font-semibold text-zinc-800">{t("createItem.new")}</h2>
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} aria-label={t("common.close")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />Сканировать код предмета</button>
+              <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")}</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm"><span className="text-zinc-500">Тип ТМЦ</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder="Например, моноблок" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Бренд</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Например, HP" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Модель</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder="Например, ProOne 440" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">Количество</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">Цена за единицу, ₸</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               </div>
-              <label className="block text-sm"><span className="text-zinc-500">Описание</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">Кабинет</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{rooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · этаж {room.floorNumber}</option>)}</select></label>
-              <label className="block text-sm"><span className="text-zinc-500">Официальный инвентарный номер <span className="text-zinc-400">(необязательно)</span></span><input value={inventoryNumber} onChange={(event) => setInventoryNumber(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{rooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("createItem.officialNumber")} <span className="text-zinc-400">({t("createItem.optional")})</span></span><input value={inventoryNumber} onChange={(event) => setInventoryNumber(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !roomId} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Создание…" : "Создать"}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
             {codeScannerOpen ? (
               <InventoryItemCodeScanner

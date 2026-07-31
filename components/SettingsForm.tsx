@@ -106,8 +106,8 @@ export default function SettingsForm() {
   }
 
   const languages: { value: AppLanguage; label: string }[] = [
-    { value: "kk", label: t("settings.kazakh") },
     { value: "ru", label: t("settings.russian") },
+    { value: "kk", label: t("settings.kazakh") },
     { value: "en", label: t("settings.english") },
   ];
 

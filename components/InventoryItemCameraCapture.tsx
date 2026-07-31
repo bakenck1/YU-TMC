@@ -2,6 +2,7 @@
 
 import { Camera, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useAppSettings } from "@/components/AppSettingsProvider";
 
 export default function InventoryItemCameraCapture({
   open,
@@ -12,9 +13,10 @@ export default function InventoryItemCameraCapture({
   onClose(): void;
   onCapture(photo: { imageDataUrl: string; width: number; height: number }): void;
 }) {
+  const { t } = useAppSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [message, setMessage] = useState("Нажмите «Открыть камеру», затем сделайте снимок предмета.");
+  const [messageKey, setMessageKey] = useState<Parameters<typeof t>[0]>("camera.initial");
   const [starting, setStarting] = useState(false);
 
   function stopCamera() {
@@ -24,11 +26,11 @@ export default function InventoryItemCameraCapture({
 
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setMessage("Камера недоступна в этом браузере. Откройте сайт через HTTPS или localhost.");
+      setMessageKey("camera.unavailable");
       return;
     }
     setStarting(true);
-    setMessage("Запрашиваем доступ к камере…");
+    setMessageKey("camera.requesting");
     stopCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -44,9 +46,9 @@ export default function InventoryItemCameraCapture({
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      setMessage("Наведите камеру на предмет и сделайте снимок.");
+      setMessageKey("camera.aim");
     } catch {
-      setMessage("Не удалось открыть камеру. Разрешите доступ к камере и повторите попытку.");
+      setMessageKey("camera.denied");
     } finally {
       setStarting(false);
     }
@@ -60,7 +62,7 @@ export default function InventoryItemCameraCapture({
   function capture() {
     const video = videoRef.current;
     if (!video || video.videoWidth < 1 || video.videoHeight < 1) {
-      setMessage("Камера ещё не готова. Подождите секунду или перезапустите её.");
+      setMessageKey("camera.notReady");
       return;
     }
     const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
@@ -71,7 +73,7 @@ export default function InventoryItemCameraCapture({
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) {
-      setMessage("Не удалось подготовить снимок. Попробуйте ещё раз.");
+      setMessageKey("camera.prepareFailed");
       return;
     }
     context.drawImage(video, 0, 0, width, height);
@@ -88,19 +90,19 @@ export default function InventoryItemCameraCapture({
       <section className="w-full max-w-xl rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="item-camera-title" className="text-lg font-semibold text-zinc-900">Фотографировать предмет</h2>
-            <p className="mt-1 text-sm text-zinc-500">Файл выбрать нельзя: используется только камера устройства.</p>
+            <h2 id="item-camera-title" className="text-lg font-semibold text-zinc-900">{t("camera.itemTitle")}</h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("camera.onlyDevice")}</p>
           </div>
-          <button type="button" onClick={close} aria-label="Закрыть" className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={close} aria-label={t("common.close")} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
         </div>
         <div className="relative mt-5 overflow-hidden rounded-2xl bg-zinc-950">
           <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full object-cover" />
           <div className="pointer-events-none absolute inset-x-4 inset-y-5 rounded-xl border-2 border-white/70" />
         </div>
-        <p className="mt-3 text-center text-sm text-zinc-600">{message}</p>
+        <p className="mt-3 text-center text-sm text-zinc-600">{t(messageKey)}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button type="button" onClick={() => void startCamera()} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"><RefreshCw className="h-4 w-4" />Открыть камеру</button>
-          <button type="button" onClick={capture} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><Camera className="h-4 w-4" />Сделать фото</button>
+          <button type="button" onClick={() => void startCamera()} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"><RefreshCw className="h-4 w-4" />{t("camera.open")}</button>
+          <button type="button" onClick={capture} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><Camera className="h-4 w-4" />{t("camera.capture")}</button>
         </div>
       </section>
     </div>
