@@ -1,6 +1,7 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
+import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
 import { getApplicationServices } from "@/lib/server/application";
@@ -12,6 +13,7 @@ export default async function ItemsPage() {
   const user = await requireAuthorizedPage("/items");
   const actor = authorizationActor(user);
   const serverItems = await getApplicationServices().items.listItems(actor);
+  const items = serverItems.map(toInventoryItemView);
   let rooms: RoomDto[] = [];
   if (hasPermission(user.role, "inventory.item.create")) {
     const buildings = await getApplicationServices().locations.listBuildings(actor);
@@ -30,7 +32,8 @@ export default async function ItemsPage() {
           <InventoryItemCreateForm rooms={rooms} />
         </div>
       ) : null}
-      <ItemsTable items={serverItems.map(toInventoryItemView)} />
+      <InventorySummaryAccordions items={items} />
+      <ItemsTable items={items} />
     </div>
   );
 }
