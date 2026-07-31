@@ -26,6 +26,7 @@ const ITEMS = '"yu_inventory"."items"';
 const RESPONSIBILITY = '"yu_inventory"."responsibility_periods"';
 const ITEM_RESULTS = '"yu_inventory"."item_results"';
 const ITEM_RESULT_REVISIONS = '"yu_inventory"."item_result_revisions"';
+const USERS = '"yu_inventory"."users"';
 
 interface InspectionRow extends QueryResultRow {
   id: string;
@@ -35,6 +36,11 @@ interface InspectionRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+}
+
+interface AssignableTechnicianRow extends QueryResultRow {
+  id: string;
+  role: "warehouse" | "employee";
 }
 
 interface InspectionRoomRow extends QueryResultRow {
@@ -110,6 +116,20 @@ class PostgresInventoryInspectionRepository
       [id],
     );
     return result.rows[0] ? mapInspection(result.rows[0]) : null;
+  }
+
+  async findAssignableTechnician(id: string) {
+    const result = await this.source.query<AssignableTechnicianRow>(
+      `select id, role
+         from ${USERS}
+        where id = $1
+          and is_active = true
+          and deleted_at is null
+          and role in ('warehouse', 'employee')
+        for share`,
+      [id],
+    );
+    return result.rows[0] ?? null;
   }
 
   async listRooms(inspectionId: string): Promise<InspectionRoomRecord[]> {

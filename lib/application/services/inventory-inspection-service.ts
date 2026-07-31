@@ -34,10 +34,7 @@ export class InventoryInspectionService {
       if (hasPermission(actor.role, "inventory.inspection.read_all")) {
         return inspections.listInspections();
       }
-      if (
-        actor.role === "warehouse" &&
-        hasPermission(actor.role, "inventory.inspection.read_own")
-      ) {
+      if (hasPermission(actor.role, "inventory.inspection.read_own")) {
         return inspections.listInspections(actor.userId);
       }
       throw forbidden();
@@ -60,27 +57,39 @@ export class InventoryInspectionService {
       throw forbidden();
     }
     const name = normalizeName(input.name);
+    const technicianId = hasPermission(
+      actor.role,
+      "inventory.inspection.create_for_technician",
+    )
+      ? normalizeTechnicianId(input.technicianId)
+      : actor.userId;
     const createdAt = this.clock.now();
-    return this.unitOfWork.transaction(async ({ inspections }) => {
-      const record = await inspections.insertInspection({
-        id: this.ids.create(),
-        name,
-        technicianId: actor.userId,
-        createdBy: actor.userId,
-        createdAt,
-      });
-      await inspections.appendAudit(
-        audit({
+    const inspection = await this.unitOfWork.transaction(
+      async ({ inspections }) => {
+        if (!(await inspections.findAssignableTechnician(technicianId))) {
+          throw notFound("technician_not_found");
+        }
+        const record = await inspections.insertInspection({
           id: this.ids.create(),
-          actor,
-          subjectId: record.id,
-          action: "inspection.created",
-          afterValues: { name, technicianId: actor.userId, status: "draft" },
-          occurredAt: createdAt,
-        }),
-      );
-      return this.toDto(record, inspections);
-    });
+          name,
+          technicianId,
+          createdBy: actor.userId,
+          createdAt,
+        });
+        await inspections.appendAudit(
+          audit({
+            id: this.ids.create(),
+            actor,
+            subjectId: record.id,
+            action: "inspection.created",
+            afterValues: { name, technicianId, status: "draft" },
+            occurredAt: createdAt,
+          }),
+        );
+        return this.toDto(record, inspections);
+      },
+    );
+    return inspection;
   }
 
   async addRoom(
@@ -95,7 +104,6 @@ export class InventoryInspectionService {
     if (
       !canMutateAll &&
       !(
-        actor.role === "warehouse" &&
         hasPermission(actor.role, "inventory.inspection.mutate_own_draft")
       )
     ) {
@@ -153,7 +161,6 @@ export class InventoryInspectionService {
     if (
       !canRecordAll &&
       !(
-        actor.role === "warehouse" &&
         hasPermission(actor.role, "inventory.result.record_own_inspection")
       )
     ) {
@@ -277,6 +284,18 @@ function normalizeName(value: unknown) {
     throw new ApplicationError("validation", "invalid_inspection_name");
   }
   return name;
+}
+
+function normalizeTechnicianId(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  ) {
+    throw new ApplicationError("validation", "invalid_technician_id");
+  }
+  return value;
 }
 
 function forbidden() {

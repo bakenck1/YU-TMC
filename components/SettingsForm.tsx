@@ -10,13 +10,13 @@ import {
   LoaderCircle,
   Mail,
   Save,
-  Smartphone,
   Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { AppLanguage, NotificationKey } from "@/lib/app-settings";
+import PushNotificationControl from "@/components/PushNotificationControl";
 
 function SettingsToggle({
   settingKey,
@@ -197,12 +197,12 @@ export default function SettingsForm() {
                 description={t("settings.emailNotificationsHint")}
                 icon={Mail}
               />
-              <SettingsToggle
-                settingKey="pushNotifications"
-                title={t("settings.pushNotifications")}
-                description={t("settings.pushNotificationsHint")}
-                icon={Smartphone}
-              />
+              <div className="px-3 py-4">
+                <p className="mb-2 text-sm font-medium text-zinc-800">
+                  {t("settings.pushNotifications")}
+                </p>
+                <PushNotificationControl />
+              </div>
               <SettingsToggle
                 settingKey="maintenanceAlerts"
                 title={t("settings.maintenanceAlerts")}

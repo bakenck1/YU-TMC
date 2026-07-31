@@ -15,6 +15,7 @@ const NOW = new Date("2026-07-31T08:00:00.000Z");
 const BUILDING_ID = "building-1";
 const ROOM_ID = "room-1";
 const ITEM_ID = "item-1";
+const TECHNICIAN_ID = "11111111-1111-4111-8111-111111111111";
 
 test("administrator can create, populate and record an inspection", async () => {
   const inspections = new Map<string, InspectionRecord>();
@@ -23,6 +24,8 @@ test("administrator can create, populate and record an inspection", async () => 
   const repository: InventoryInspectionRepository = {
     listInspections: async () => [...inspections.values()],
     findInspection: async (id) => inspections.get(id) ?? null,
+    findAssignableTechnician: async (id) =>
+      id === TECHNICIAN_ID ? { id, role: "employee" } : null,
     listRooms: async (inspectionId) =>
       [...rooms.values()].filter((room) => room.inspectionId === inspectionId),
     findInspectionRoom: async (inspectionId, roomId) => {
@@ -133,7 +136,10 @@ test("administrator can create, populate and record an inspection", async () => 
   );
   const actor = { userId: "admin-1", role: "admin" as const };
 
-  const inspection = await service.create({ name: "Admin check" }, actor);
+  const inspection = await service.create(
+    { name: "Admin check", technicianId: TECHNICIAN_ID },
+    actor,
+  );
   const room = await service.addRoom(
     inspection.id,
     { buildingId: BUILDING_ID, roomId: ROOM_ID },
@@ -146,7 +152,7 @@ test("administrator can create, populate and record an inspection", async () => 
     actor,
   );
 
-  assert.equal(inspection.technicianId, actor.userId);
+  assert.equal(inspection.technicianId, TECHNICIAN_ID);
   assert.equal(room.roomId, ROOM_ID);
   assert.equal(result.result, "present");
 });

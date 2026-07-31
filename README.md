@@ -40,6 +40,30 @@ account.
 The callback verifies the ID token, nonce, audience, verified email, and
 Workspace `hd` claim before creating the application session.
 
+### Web Push
+
+Generate one VAPID key pair and store it in the deployment secret store:
+
+```bash
+npx web-push generate-vapid-keys --json
+```
+
+Set `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, and
+`WEB_PUSH_VAPID_SUBJECT` (an HTTPS URL or `mailto:` contact). After installing
+the PWA, each technician enables notifications on the Inventory page. The
+subscription is bound to the signed-in account and removed from the device on
+logout.
+
+Assignment notifications are best-effort: the inspection is committed first
+and is never rolled back because a push provider is unavailable. Transient
+network, HTTP 429, and HTTP 5xx failures are retried up to three times in a
+Next.js `after()` callback, so delivery does not delay the creation response.
+Final delivery and subscription-cleanup failures are written to the server
+error log. This keeps the inventory workflow authoritative while making push
+failures observable, but it is not a durable delivery queue. Self-hosted
+deployments must use graceful `SIGINT`/`SIGTERM` shutdown so pending `after()`
+callbacks can finish.
+
 PostgreSQL setup, environment isolation, migration commands, and production
 deployment rules are documented in [docs/database.md](docs/database.md).
 

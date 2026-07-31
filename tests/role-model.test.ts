@@ -4,7 +4,10 @@ import test from "node:test";
 
 import { USER_ROLES } from "../lib/contracts/users";
 import { translate } from "../lib/i18n";
-import { isAuthRole } from "../lib/security/authorization";
+import {
+  canAccessPath,
+  isAuthRole,
+} from "../lib/security/authorization";
 import {
   canManageUser,
   hasPermission,
@@ -55,6 +58,30 @@ test("warehouse can scan and record presence without inventory mutation rights",
     canManageUser("warehouse", { nextRole: "employee" }),
     false,
   );
+});
+
+test("employee can open and complete an assigned inventory session", () => {
+  const allowed = [
+    "inventory.inspection.read_own",
+    "inventory.result.read_own_inspection",
+    "inventory.result.record_own_inspection",
+    "inventory.notification.read",
+  ] as const;
+
+  allowed.forEach((permission) => {
+    assert.equal(hasPermission("employee", permission), true, permission);
+  });
+  assert.equal(
+    hasPermission("employee", "inventory.inspection.create_for_technician"),
+    false,
+  );
+  assert.equal(
+    hasPermission("employee", "inventory.inspection.mutate_own_draft"),
+    false,
+  );
+  assert.equal(hasPermission("employee", "inventory.workspace.read"), false);
+  assert.equal(canAccessPath("employee", "/inventory/inspections"), true);
+  assert.equal(canAccessPath("employee", "/inventory"), false);
 });
 
 test("role migration converts active owners before replacing the auth enum", () => {

@@ -1783,6 +1783,37 @@ export const notificationReceiptsTable = inventorySchema.table(
   ],
 );
 
+export const webPushSubscriptionsTable = inventorySchema.table(
+  "web_push_subscriptions",
+  {
+    id: uuid().primaryKey(),
+    userId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "cascade",
+        onUpdate: "restrict",
+      }),
+    endpoint: text().notNull(),
+    p256dh: varchar({ length: 255 }).notNull(),
+    auth: varchar({ length: 255 }).notNull(),
+    expirationTime: timestamp({ withTimezone: true, mode: "date" }),
+    userAgent: varchar({ length: 500 }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("web_push_subscriptions_endpoint_unique").on(table.endpoint),
+    index("web_push_subscriptions_user_updated_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const auditRecordsTable = inventorySchema.table(
   "audit_records",
   {

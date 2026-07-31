@@ -28,6 +28,7 @@ export interface InspectionDto {
 
 export interface CreateInspectionInput {
   name: string;
+  technicianId?: string;
 }
 
 export interface AddInspectionRoomInput {

@@ -2,6 +2,7 @@ import type { CreateInspectionInput } from "@/lib/contracts/inventory-inspection
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { after } from "next/server";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -9,6 +10,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET(request: Request) {
   try {
@@ -33,9 +35,22 @@ export async function POST(request: Request) {
     ) {
       throw new ApplicationError("validation", "invalid_request");
     }
-    const inspection = await getApplicationServices().inspections.create(
-      { name: (body as { name: string }).name } satisfies CreateInspectionInput,
+    const services = getApplicationServices();
+    const inspection = await services.inspections.create(
+      {
+        name: (body as { name: string }).name,
+        technicianId: (body as { technicianId?: unknown }).technicianId as
+          | string
+          | undefined,
+      } satisfies CreateInspectionInput,
       authorizationActor(user),
+    );
+    after(() =>
+      services.push.notifyInspectionAssignment({
+        inspectionId: inspection.id,
+        inspectionName: inspection.name,
+        technicianId: inspection.technicianId,
+      }),
     );
     return Response.json({ inspection }, { status: 201 });
   } catch (error) {

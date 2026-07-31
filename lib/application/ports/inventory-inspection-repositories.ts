@@ -15,6 +15,11 @@ export interface InspectionRecord {
   updatedAt: Date;
 }
 
+export interface AssignableTechnicianRecord {
+  id: string;
+  role: "warehouse" | "employee";
+}
+
 export interface InspectionRoomRecord {
   id: string;
   inspectionId: string;
@@ -115,6 +120,9 @@ export interface AppendInspectionAuditRecord {
 export interface InventoryInspectionRepository {
   listInspections(technicianId?: string): Promise<InspectionRecord[]>;
   findInspection(id: string): Promise<InspectionRecord | null>;
+  findAssignableTechnician(
+    id: string,
+  ): Promise<AssignableTechnicianRecord | null>;
   listRooms(inspectionId: string): Promise<InspectionRoomRecord[]>;
   findInspectionRoom(
     inspectionId: string,

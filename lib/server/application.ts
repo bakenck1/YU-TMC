@@ -7,6 +7,7 @@ import { InventoryItemService } from "@/lib/application/services/inventory-item-
 import { QrResolutionService } from "@/lib/application/services/qr-resolution-service";
 import { InventoryResponsibilityService } from "@/lib/application/services/inventory-responsibility-service";
 import { InventoryInspectionService } from "@/lib/application/services/inventory-inspection-service";
+import { WebPushService } from "@/lib/application/services/web-push-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
 import { FileSettingsRepository } from "@/lib/server/persistence/file/file-settings-repository";
@@ -17,8 +18,13 @@ import { createPostgresInventoryItemRepositories } from "@/lib/server/persistenc
 import { createPostgresQrResolutionRepositories } from "@/lib/server/persistence/postgres/postgres-qr-resolution-repositories";
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
 import { createPostgresInventoryInspectionRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-inspection-repositories";
+import { createPostgresWebPushRepositories } from "@/lib/server/persistence/postgres/postgres-web-push-repositories";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
+import {
+  NodeWebPushSender,
+  readWebPushConfiguration,
+} from "@/lib/server/web-push-sender";
 
 export interface ApplicationServices {
   readonly items: InventoryItemService;
@@ -26,6 +32,7 @@ export interface ApplicationServices {
   readonly qr: QrResolutionService;
   readonly responsibility: InventoryResponsibilityService;
   readonly inspections: InventoryInspectionService;
+  readonly push: WebPushService;
   readonly settings: SettingsService;
   readonly users: UserService;
 }
@@ -60,6 +67,14 @@ function createApplicationServices(): ApplicationServices {
         new MemoryUserUnitOfWork())
     : createPostgresUnitOfWork(createPostgresUserRepositories);
 
+  const push = new WebPushService(
+    createPostgresUnitOfWork(createPostgresWebPushRepositories),
+    new NodeWebPushSender(),
+    readWebPushConfiguration(),
+    { now: () => new Date() },
+    { create: () => randomUUID() },
+  );
+
   return {
     items: new InventoryItemService(
       createPostgresUnitOfWork(createPostgresInventoryItemRepositories),
@@ -92,6 +107,7 @@ function createApplicationServices(): ApplicationServices {
       { now: () => new Date() },
       { create: () => randomUUID() },
     ),
+    push,
     settings: new SettingsService(new FileSettingsRepository()),
     users: new UserService(
       userUnitOfWork,

@@ -57,6 +57,13 @@
       "when": 1785491786856,
       "tag": "20260731095626_rare_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785494966993,
+      "tag": "20260731104926_lethal_malice",
+      "breakpoints": true
     }
   ]
 }

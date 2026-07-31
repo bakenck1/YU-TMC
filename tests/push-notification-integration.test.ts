@@ -1,0 +1,211 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+import { pushPermissionError } from "../lib/client-push-subscription";
+import { syncExistingPushSubscription } from "../lib/client-push-subscription";
+import { firstInspectionRoomId } from "../lib/inventory-inspection-selection";
+
+const ROOT = new URL("../", import.meta.url);
+
+test("service worker displays assignment pushes and opens only app-local URLs", async () => {
+  const worker = await source("public/sw.js");
+
+  assert.match(worker, /addEventListener\("push"/);
+  assert.match(worker, /registration\.showNotification/);
+  assert.match(worker, /addEventListener\("notificationclick"/);
+  assert.match(worker, /clients\.openWindow\(targetUrl\)/);
+  assert.match(worker, /safeAppPath\(event\.notification\.data\?\.url\)/);
+  assert.match(worker, /url\.origin === self\.location\.origin/);
+});
+
+test("subscription lifecycle is authenticated and removed before logout", async () => {
+  const [subscriptionRoute, client, authProvider] = await Promise.all([
+    source("app/api/push/subscriptions/route.ts"),
+    source("lib/client-push-subscription.ts"),
+    source("components/AuthProvider.tsx"),
+  ]);
+
+  assert.match(subscriptionRoute, /requireCurrentUser\(request\)/);
+  assert.match(subscriptionRoute, /authorizationActor\(user\)/);
+  assert.match(client, /pushManager\.subscribe\(\{/);
+  assert.match(client, /userVisibleOnly: true/);
+  assert.match(client, /method: "DELETE"/);
+  assert.match(client, /subscription\.unsubscribe\(\)/);
+  assert.match(authProvider, /removePushSubscriptionBeforeLogout\(\)/);
+});
+
+test("dismissed notification permission remains retryable", async () => {
+  const control = await source("components/PushNotificationControl.tsx");
+
+  assert.equal(pushPermissionError("default"), "push_permission_dismissed");
+  assert.equal(pushPermissionError("denied"), "push_permission_denied");
+  assert.equal(pushPermissionError("granted"), null);
+  assert.match(control, /\| "dismissed"/);
+  assert.match(control, /disabled=\{busy\}/);
+  assert.match(control, /state === "dismissed"/);
+});
+
+test("VAPID key rotation removes an incompatible browser subscription", async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const originalFetch = globalThis.fetch;
+  const methods: string[] = [];
+  let unsubscribed = false;
+  const subscription = {
+    endpoint: "https://fcm.googleapis.com/subscription/old-key",
+    options: {
+      applicationServerKey: Uint8Array.from({ length: 65 }, () => 1).buffer,
+    },
+    async unsubscribe() {
+      unsubscribed = true;
+      return true;
+    },
+  } as unknown as PushSubscription;
+  const registration = {
+    pushManager: {
+      async getSubscription() {
+        return subscription;
+      },
+    },
+  };
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      isSecureContext: true,
+      PushManager: class {},
+      Notification: class {},
+      atob: globalThis.atob,
+    },
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      serviceWorker: {
+        async getRegistration() {
+          return registration;
+        },
+      },
+    },
+  });
+  globalThis.fetch = async (_input, init) => {
+    methods.push(init?.method ?? "GET");
+    return new Response(null, { status: 204 });
+  };
+
+  try {
+    const newPublicKey = Buffer.alloc(65, 2).toString("base64url");
+    assert.equal(await syncExistingPushSubscription(newPublicKey), null);
+    assert.deepEqual(methods, ["DELETE"]);
+    assert.equal(unsubscribed, true);
+  } finally {
+    restoreGlobal("window", originalWindow);
+    restoreGlobal("navigator", originalNavigator);
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an assigned employee starts with a room from the selected inspection", () => {
+  const roomId = firstInspectionRoomId(
+    [
+      {
+        id: "inspection-1",
+        rooms: [
+          {
+            id: "inspection-room-1",
+            inspectionId: "inspection-1",
+            buildingId: "building-1",
+            roomId: "room-1",
+            buildingName: "Main",
+            buildingAddress: "Campus",
+            roomDesignation: "101",
+            floorNumber: 1,
+            floorLabel: null,
+            addedAt: "2026-07-31T10:00:00.000Z",
+            inspectedAt: null,
+          },
+        ],
+      },
+    ],
+    "inspection-1",
+  );
+
+  assert.equal(roomId, "room-1");
+});
+
+test("assignment data flows from admin selection to notifier after persistence", async () => {
+  const [
+    manager,
+    page,
+    route,
+    service,
+    inspectionRepository,
+    pushRepository,
+    schemaContract,
+    migration,
+  ] = await Promise.all([
+    source("components/InventoryInspectionsManager.tsx"),
+    source("app/(protected)/inventory/inspections/page.tsx"),
+    source("app/api/inventory/inspections/route.ts"),
+    source("lib/application/services/inventory-inspection-service.ts"),
+    source(
+      "lib/server/persistence/postgres/postgres-inventory-inspection-repositories.ts",
+    ),
+    source(
+      "lib/server/persistence/postgres/postgres-web-push-repositories.ts",
+    ),
+    source("lib/db/schema-contract.ts"),
+    source("drizzle/20260731104926_lethal_malice.sql"),
+  ]);
+
+  assert.match(manager, /technicianId: selectedTechnician/);
+  assert.match(manager, /aria-label="Ответственный техник"/);
+  assert.match(manager, /Кабинет для сканирования/);
+  assert.match(manager, /selectedInspectionRoom/);
+  assert.match(page, /searchParams: Promise/);
+  assert.match(page, /initialInspectionId/);
+  assert.match(route, /technicianId/);
+  assert.match(service, /findAssignableTechnician\(technicianId\)/);
+  assert.doesNotMatch(service, /assignmentNotifier/);
+  assert.match(route, /after\(\(\) =>/);
+  assert.match(route, /services\.push\.notifyInspectionAssignment/);
+  assert.match(route, /export const maxDuration = 30/);
+  assert.match(inspectionRepository, /and is_active = true/);
+  assert.match(inspectionRepository, /for share/);
+  assert.doesNotMatch(inspectionRepository, /and active = true/);
+  assert.match(pushRepository, /join \$\{USERS\} u on u\.id = s\.user_id/);
+  assert.match(pushRepository, /and u\.is_active = true/);
+  assert.match(
+    pushRepository,
+    /delete from \$\{SUBSCRIPTIONS\}\s+where user_id = \$1\s+and id in/,
+  );
+  assert.match(pushRepository, /and p256dh = \$4/);
+  assert.match(pushRepository, /and auth = \$5/);
+  assert.match(pushRepository, /expiration_time is not distinct from \$6/);
+  assert.match(schemaContract, /grant select, insert, update on all tables/);
+  assert.match(
+    schemaContract,
+    /grant delete on table "yu_inventory"\."web_push_subscriptions"/,
+  );
+  assert.match(migration, /CREATE TABLE "yu_inventory"\."web_push_subscriptions"/);
+  assert.match(migration, /web_push_subscriptions_endpoint_unique/);
+});
+
+async function source(relativePath: string) {
+  return readFile(new URL(relativePath, ROOT), "utf8");
+}
+
+function restoreGlobal(
+  name: "window" | "navigator",
+  descriptor: PropertyDescriptor | undefined,
+) {
+  if (descriptor) {
+    Object.defineProperty(globalThis, name, descriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, name);
+  }
+}

@@ -56,13 +56,9 @@ export type AppPermission = (typeof APP_PERMISSIONS)[number];
 
 const ALL_ROLES: readonly UserRole[] = USER_ROLES;
 const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
-const INVENTORY_ROLES: readonly UserRole[] = [
-  "admin",
-  "warehouse",
-  "employee",
-];
 const ADMIN_ONLY: readonly UserRole[] = ["admin"];
 const TECHNICIAN_ONLY: readonly UserRole[] = ["warehouse"];
+const ASSIGNABLE_TECHNICIANS: readonly UserRole[] = ["warehouse", "employee"];
 const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
 
 export const PERMISSION_ROLES = {
@@ -96,23 +92,23 @@ export const PERMISSION_ROLES = {
   "inventory.transfer.override": ADMIN_ONLY,
   "inventory.inspection.create_self": TECHNICIAN_ONLY,
   "inventory.inspection.create_for_technician": ADMIN_ONLY,
-  "inventory.inspection.read_own": TECHNICIAN_ONLY,
+  "inventory.inspection.read_own": ASSIGNABLE_TECHNICIANS,
   "inventory.inspection.read_all": ADMIN_ONLY,
   "inventory.inspection.mutate_own_draft": TECHNICIAN_ONLY,
   "inventory.inspection.mutate_all": ADMIN_ONLY,
-  "inventory.result.read_own_inspection": TECHNICIAN_ONLY,
+  "inventory.result.read_own_inspection": ASSIGNABLE_TECHNICIANS,
   "inventory.result.read_assigned_item": EMPLOYEE_ONLY,
   "inventory.result.read_all": ADMIN_ONLY,
-  "inventory.result.record_own_inspection": TECHNICIAN_ONLY,
+  "inventory.result.record_own_inspection": ASSIGNABLE_TECHNICIANS,
   "inventory.result.record_all": ADMIN_ONLY,
   "inventory.decision.respond_as_recipient": EMPLOYEE_ONLY,
   "inventory.decision.resolve": ADMIN_ONLY,
-  "inventory.notification.read": INVENTORY_ROLES,
-  "inventory.photo.item_preview": INVENTORY_ROLES,
+  "inventory.notification.read": ALL_ROLES,
+  "inventory.photo.item_preview": ALL_ROLES,
   "inventory.photo.item_original": ADMIN_WAREHOUSE,
-  "inventory.photo.inspection_preview": INVENTORY_ROLES,
+  "inventory.photo.inspection_preview": ALL_ROLES,
   "inventory.photo.inspection_original": ADMIN_WAREHOUSE,
-  "inventory.photo.dispute_preview": INVENTORY_ROLES,
+  "inventory.photo.dispute_preview": ALL_ROLES,
   "inventory.photo.dispute_original": ["admin", "employee"],
   "inventory.report.export": ADMIN_ONLY,
 } as const satisfies Record<AppPermission, readonly UserRole[]>;

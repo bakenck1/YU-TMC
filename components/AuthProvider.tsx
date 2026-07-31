@@ -13,6 +13,7 @@ import {
   isAuthRole,
   type AuthenticatedUser,
 } from "@/lib/security/authorization";
+import { removePushSubscriptionBeforeLogout } from "@/lib/client-push-subscription";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
@@ -83,6 +84,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    await removePushSubscriptionBeforeLogout();
     const response = await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "same-origin",
