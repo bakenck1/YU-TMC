@@ -572,6 +572,42 @@ export const itemsTable = inventorySchema.table(
   ],
 );
 
+export const itemComponentsTable = inventorySchema.table(
+  "item_components",
+  {
+    leftItemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    rightItemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    createdBy: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.leftItemId, table.rightItemId] }),
+    check(
+      "item_components_canonical_order_check",
+      sql`${table.leftItemId} < ${table.rightItemId}`,
+    ),
+    index("item_components_right_item_idx").on(table.rightItemId),
+    index("item_components_created_by_idx").on(table.createdBy),
+  ],
+);
+
 export const itemInventoryNumberHistoryTable = inventorySchema.table(
   "item_inventory_number_history",
   {

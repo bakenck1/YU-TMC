@@ -126,6 +126,13 @@ export interface AppendItemAuditRecord {
   occurredAt: Date;
 }
 
+export interface ChangeItemComponentRecord {
+  leftItemId: string;
+  rightItemId: string;
+  actorId: string;
+  occurredAt: Date;
+}
+
 export interface InventoryItemAuditRecord {
   id: string;
   actorId: string | null;
@@ -147,6 +154,14 @@ export interface InventoryItemRepository {
     userId: string,
   ): Promise<InventoryItemRecord[]>;
   findItemById(id: string): Promise<InventoryItemRecord | null>;
+  listComponents(itemId: string): Promise<InventoryItemRecord[]>;
+  searchComponentCandidates(
+    itemId: string,
+    query: string,
+    limit: number,
+  ): Promise<InventoryItemRecord[]>;
+  insertComponent(input: ChangeItemComponentRecord): Promise<void>;
+  deleteComponent(input: ChangeItemComponentRecord): Promise<boolean>;
   insertItem(input: InsertInventoryItemRecord): Promise<InventoryItemRecord>;
   updateItemContent(
     input: UpdateInventoryItemContentRecord,

@@ -71,6 +71,13 @@
       "when": 1785508508797,
       "tag": "20260731143508_odd_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785583378779,
+      "tag": "20260801112258_brainy_magdalene",
+      "breakpoints": true
     }
   ]
 }

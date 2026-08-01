@@ -102,6 +102,131 @@ export class InventoryItemService {
     return toItemDto(item);
   }
 
+  async listComponents(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    const normalizedId = normalizeItemId(id);
+    const records = await this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(normalizedId);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+      assertItemReadable(item, actor);
+      const components = await items.listComponents(normalizedId);
+      return hasPermission(actor.role, "inventory.item.read_all")
+        ? components
+        : components.filter(
+            (component) => component.responsibleId === actor.userId,
+          );
+    });
+    return records.map(toItemDto);
+  }
+
+  async addComponent(
+    id: string,
+    componentId: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    requirePermission(actor, "inventory.item.manage_components");
+    const [leftItemId, rightItemId] = canonicalComponentPair(id, componentId);
+    const occurredAt = this.clock.now();
+    const records = await this.unitOfWork.transaction(async ({ items }) => {
+      const [leftItem, rightItem] = await Promise.all([
+        items.findItemById(leftItemId),
+        items.findItemById(rightItemId),
+      ]);
+      if (!leftItem || !rightItem) {
+        throw new ApplicationError("not_found", "item_not_found");
+      }
+      if (
+        leftItem.status === "decommissioned" ||
+        rightItem.status === "decommissioned"
+      ) {
+        throw new ApplicationError(
+          "validation",
+          "item_component_decommissioned",
+        );
+      }
+      await items.insertComponent({
+        leftItemId,
+        rightItemId,
+        actorId: actor.userId,
+        occurredAt,
+      });
+      await appendComponentAudits(
+        items,
+        this.ids,
+        actor,
+        leftItem,
+        rightItem,
+        "item.component_added",
+        "afterValues",
+        occurredAt,
+      );
+      return items.listComponents(normalizeItemId(id));
+    });
+    return records.map(toItemDto);
+  }
+
+  async searchComponentCandidates(
+    id: string,
+    query: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    requirePermission(actor, "inventory.item.manage_components");
+    const itemId = normalizeItemId(id);
+    const normalizedQuery = query.trim();
+    if ([...normalizedQuery].length > 100) {
+      throw new ApplicationError("validation", "item_component_query_too_long");
+    }
+    const records = await this.unitOfWork.read(async ({ items }) => {
+      if (!(await items.findItemById(itemId))) {
+        throw new ApplicationError("not_found", "item_not_found");
+      }
+      return items.searchComponentCandidates(itemId, normalizedQuery, 50);
+    });
+    return records.map(toItemDto);
+  }
+
+  async removeComponent(
+    id: string,
+    componentId: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    requirePermission(actor, "inventory.item.manage_components");
+    const [leftItemId, rightItemId] = canonicalComponentPair(id, componentId);
+    const occurredAt = this.clock.now();
+    const records = await this.unitOfWork.transaction(async ({ items }) => {
+      const [leftItem, rightItem] = await Promise.all([
+        items.findItemById(leftItemId),
+        items.findItemById(rightItemId),
+      ]);
+      if (!leftItem || !rightItem) {
+        throw new ApplicationError("not_found", "item_not_found");
+      }
+      const removed = await items.deleteComponent({
+        leftItemId,
+        rightItemId,
+        actorId: actor.userId,
+        occurredAt,
+      });
+      if (!removed) {
+        throw new ApplicationError("not_found", "item_component_not_found");
+      }
+      await appendComponentAudits(
+        items,
+        this.ids,
+        actor,
+        leftItem,
+        rightItem,
+        "item.component_removed",
+        "beforeValues",
+        occurredAt,
+      );
+      return items.listComponents(normalizeItemId(id));
+    });
+    return records.map(toItemDto);
+  }
+
   async listAudit(
     id: string,
     actor: AuthorizationActor,
@@ -586,9 +711,89 @@ function requirePermission(
     | "inventory.item.create"
     | "inventory.item.edit_content"
     | "inventory.item.send_to_service"
-    | "inventory.item.manage_protected_fields",
+    | "inventory.item.manage_protected_fields"
+    | "inventory.item.manage_components",
 ) {
   if (!hasPermission(actor.role, permission)) throw forbidden();
+}
+
+function normalizeItemId(id: string): string {
+  const normalized = id.toLowerCase();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      normalized,
+    )
+  ) {
+    throw new ApplicationError("validation", "invalid_id");
+  }
+  return normalized;
+}
+
+function canonicalComponentPair(id: string, componentId: string): [string, string] {
+  const itemId = normalizeItemId(id);
+  const normalizedComponentId = normalizeItemId(componentId);
+  if (itemId === normalizedComponentId) {
+    throw new ApplicationError("validation", "item_cannot_contain_itself");
+  }
+  return itemId < normalizedComponentId
+    ? [itemId, normalizedComponentId]
+    : [normalizedComponentId, itemId];
+}
+
+function assertItemReadable(
+  item: InventoryItemRecord,
+  actor: AuthorizationActor,
+): void {
+  if (
+    !hasPermission(actor.role, "inventory.item.read_all") &&
+    !(
+      hasPermission(actor.role, "inventory.item.read_assigned") &&
+      item.responsibleId === actor.userId
+    )
+  ) {
+    throw forbidden();
+  }
+}
+
+async function appendComponentAudits(
+  items: InventoryItemRepositories["items"],
+  ids: InventoryItemIds,
+  actor: AuthorizationActor,
+  leftItem: InventoryItemRecord,
+  rightItem: InventoryItemRecord,
+  action: "item.component_added" | "item.component_removed",
+  snapshotKind: "beforeValues" | "afterValues",
+  occurredAt: Date,
+): Promise<void> {
+  const counterpartValues = (counterpart: InventoryItemRecord) => ({
+    componentId: counterpart.id,
+    componentName: counterpart.name,
+    componentInventoryNumber: counterpart.inventoryNumber,
+  });
+  await Promise.all([
+    items.appendAudit(
+      createAudit({
+        id: ids.create(),
+        actor,
+        subjectId: leftItem.id,
+        subjectRevision: leftItem.version,
+        action,
+        [snapshotKind]: counterpartValues(rightItem),
+        occurredAt,
+      }),
+    ),
+    items.appendAudit(
+      createAudit({
+        id: ids.create(),
+        actor,
+        subjectId: rightItem.id,
+        subjectRevision: rightItem.version,
+        action,
+        [snapshotKind]: counterpartValues(leftItem),
+        occurredAt,
+      }),
+    ),
+  ]);
 }
 
 function forbidden() {

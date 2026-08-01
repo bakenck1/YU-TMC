@@ -40,6 +40,7 @@ test("warehouse can scan and record presence without inventory mutation rights",
     "inventory.item.edit_content",
     "inventory.item.send_to_service",
     "inventory.item.manage_protected_fields",
+    "inventory.item.manage_components",
     "inventory.item.bulk_manage",
     "inventory.transfer.override",
   ] as const;

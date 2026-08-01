@@ -6,6 +6,7 @@ import type { QueryResultRow } from "pg";
 import type {
   AppendItemAuditRecord,
   ArchiveInventoryItemRecord,
+  ChangeItemComponentRecord,
   InsertInventoryItemRecord,
   InsertItemQrRecord,
   InventoryItemRecord,
@@ -29,6 +30,7 @@ const QR = '"yu_inventory"."qr_identifiers"';
 const PHOTOS = '"yu_inventory"."photos"';
 const HISTORY = '"yu_inventory"."item_inventory_number_history"';
 const AUDIT = '"yu_inventory"."audit_records"';
+const COMPONENTS = '"yu_inventory"."item_components"';
 
 interface ItemRow extends QueryResultRow {
   id: string;
@@ -117,6 +119,84 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       [id],
     );
     return result.rows[0] ? mapItem(result.rows[0]) : null;
+  }
+
+  async listComponents(itemId: string): Promise<InventoryItemRecord[]> {
+    const result = await this.source.query<ItemRow>(
+      itemSelect(
+        `where i.id in (
+           select case
+                    when left_item_id = $1 then right_item_id
+                    else left_item_id
+                  end
+             from ${COMPONENTS}
+            where left_item_id = $1 or right_item_id = $1
+         )`,
+      ),
+      [itemId],
+    );
+    return result.rows.map(mapItem);
+  }
+
+  async searchComponentCandidates(
+    itemId: string,
+    query: string,
+    limit: number,
+  ): Promise<InventoryItemRecord[]> {
+    const pattern = `%${query}%`;
+    const result = await this.source.query<ItemRow>(
+      itemSelect(
+        `where i.id <> $1
+           and i.status <> 'decommissioned'
+           and not exists (
+             select 1
+               from ${COMPONENTS} component
+              where (component.left_item_id = $1 and component.right_item_id = i.id)
+                 or (component.right_item_id = $1 and component.left_item_id = i.id)
+           )
+           and ($2 = '%%'
+             or i.name ilike $2
+             or i.item_type ilike $2
+             or coalesce(i.brand, '') ilike $2
+             or coalesce(i.model, '') ilike $2
+             or i.inventory_number ilike $2)`,
+        "limit $3",
+      ),
+      [itemId, pattern, limit],
+    );
+    return result.rows.map(mapItem);
+  }
+
+  async insertComponent(input: ChangeItemComponentRecord): Promise<void> {
+    try {
+      await this.source.query(
+        `insert into ${COMPONENTS}
+           (left_item_id, right_item_id, created_by, created_at)
+         values ($1, $2, $3, $4)`,
+        [
+          input.leftItemId,
+          input.rightItemId,
+          input.actorId,
+          input.occurredAt,
+        ],
+      );
+    } catch (error) {
+      if (postgresCode(error) === "23505") {
+        throw new ApplicationError("conflict", "item_component_already_exists", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
+  async deleteComponent(input: ChangeItemComponentRecord): Promise<boolean> {
+    const result = await this.source.query(
+      `delete from ${COMPONENTS}
+        where left_item_id = $1 and right_item_id = $2`,
+      [input.leftItemId, input.rightItemId],
+    );
+    return result.rowCount === 1;
   }
 
   async insertItem(input: InsertInventoryItemRecord): Promise<InventoryItemRecord> {
@@ -431,7 +511,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 }
 
-function itemSelect(where: string) {
+function itemSelect(where: string, limit = "") {
   return `
     select i.id, i.name, i.description, i.item_type, i.brand, i.model,
            i.quantity, i.unit_price, i.room_id,
@@ -469,7 +549,8 @@ function itemSelect(where: string) {
          limit 1
       ) p on true
       ${where}
-     order by i.updated_at desc, i.id`;
+     order by i.updated_at desc, i.id
+     ${limit}`;
 }
 
 function mapItem(row: ItemRow): InventoryItemRecord {

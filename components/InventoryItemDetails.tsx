@@ -29,6 +29,7 @@ import InventoryItemQrDialogs from "@/components/InventoryItemQrDialogs";
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
+import InventoryItemComposition from "@/components/InventoryItemComposition";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 
 export default function InventoryItemDetails({
@@ -39,6 +40,8 @@ export default function InventoryItemDetails({
   audit,
   canManageProtected,
   rooms,
+  initialComponents,
+  canManageComponents,
 }: {
   initialItem: InventoryItemDto;
   canEditContent: boolean;
@@ -47,6 +50,8 @@ export default function InventoryItemDetails({
   audit: InventoryItemAuditDto[];
   canManageProtected: boolean;
   rooms: RoomDto[];
+  initialComponents: InventoryItemDto[];
+  canManageComponents: boolean;
 }) {
   const { language, locale, t } = useAppSettings();
   const router = useRouter();
@@ -611,6 +616,13 @@ export default function InventoryItemDetails({
         </section>
       </div>
 
+      <InventoryItemComposition
+        key={item.id}
+        itemId={item.id}
+        initialComponents={initialComponents}
+        canManage={canManageComponents}
+      />
+
       {timeline.length ? (
         <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.responsibilityHistory")}</h2>
@@ -698,6 +710,8 @@ function auditActionLabel(
     "item.protected_fields_updated": "itemDetails.auditProtectedUpdated",
     "item.archived": "itemDetails.auditArchived",
     "item.sent_to_service": "itemDetails.auditSentToService",
+    "item.component_added": "itemDetails.auditComponentAdded",
+    "item.component_removed": "itemDetails.auditComponentRemoved",
   };
   return t(labels[action] ?? "itemDetails.auditUnknownAction");
 }

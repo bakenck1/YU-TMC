@@ -27,6 +27,11 @@ export default async function ItemPage({
       user.role,
       "inventory.item.manage_protected_fields",
     );
+    const canManageComponents = hasPermission(
+      user.role,
+      "inventory.item.manage_components",
+    );
+    const components = await services.items.listComponents(id, actor);
     const timeline = canReadHistory
       ? await services.responsibility.listTimeline(id, actor)
       : [];
@@ -51,6 +56,8 @@ export default async function ItemPage({
         audit={audit}
         canManageProtected={canManageProtected}
         rooms={rooms}
+        initialComponents={components}
+        canManageComponents={canManageComponents}
       />
     );
   }
