@@ -15,6 +15,23 @@ import {
   visibleItemStatus,
   type VisibleItemStatus,
 } from "@/lib/inventory-list";
+import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
+
+function loadSearchHistory(storageKey: string) {
+  try {
+    return parseSearchHistory(window.localStorage.getItem(storageKey));
+  } catch {
+    return [];
+  }
+}
+
+function saveSearchHistory(storageKey: string, history: string[]) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(history));
+  } catch {
+    // Private browsing and embedded webviews may deny local storage.
+  }
+}
 
 // Item photos are private API resources. Rendering them directly preserves the
 // user's session cookie and avoids sending a versioned URL through the image
@@ -75,21 +92,55 @@ export default function ItemsTable({
   items,
   showFilters = true,
   dateLabel,
+  searchHistoryScope,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
   dateLabel?: string;
+  searchHistoryScope?: string;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [category, setCategory] = useState("all");
   const [statusKey, setStatusKey] = useState("all");
   const [location, setLocation] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const searchFocusTimeoutRef = useRef<number | null>(null);
   const pageSize = 10;
+  const searchHistoryStorageKey = searchHistoryScope
+    ? `yu-inventory:item-search-history:v1:${searchHistoryScope}`
+    : null;
+
+  useEffect(() => {
+    if (!searchHistoryStorageKey) return;
+    const timeout = window.setTimeout(
+      () => setSearchHistory(loadSearchHistory(searchHistoryStorageKey)),
+      0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchHistoryStorageKey]);
+
+  useEffect(() => () => {
+    if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    const value = query.trim();
+    if (!value || !searchHistoryStorageKey) return;
+    const timeout = window.setTimeout(() => {
+      setSearchHistory((current) => {
+        const next = addSearchHistoryEntry(current, value);
+        saveSearchHistory(searchHistoryStorageKey, next);
+        return next;
+      });
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [query, searchHistoryStorageKey]);
 
   const categories = useMemo(
     () => Array.from(new Set(items.map((item) => item.category))),
@@ -138,6 +189,22 @@ export default function ItemsTable({
     });
   }
 
+  function selectSearchQuery(value: string) {
+    setQuery(value);
+    setPage(1);
+    setSearchFocused(false);
+  }
+
+  function clearSearchHistory() {
+    setSearchHistory([]);
+    if (!searchHistoryStorageKey) return;
+    try {
+      window.localStorage.removeItem(searchHistoryStorageKey);
+    } catch {
+      // Private browsing and embedded webviews may deny local storage.
+    }
+  }
+
   function toggleAllVisible() {
     setSelected((current) => {
       const next = new Set(current);
@@ -151,15 +218,46 @@ export default function ItemsTable({
     <div className="space-y-4">
       {showFilters ? (
       <div className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white p-4 lg:flex-row lg:items-center">
-        <div className="relative min-w-[260px] flex-1">
+        <div
+          className="relative min-w-[260px] flex-1"
+          onFocus={() => {
+            if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
+            setSearchFocused(true);
+          }}
+          onBlur={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) return;
+            searchFocusTimeoutRef.current = window.setTimeout(() => setSearchFocused(false), 0);
+          }}
+        >
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             value={query}
             onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setSearchFocused(false);
+            }}
+            onClick={() => setSearchFocused(true)}
             placeholder={t("common.search")}
             aria-label={t("common.search")}
             className="w-full rounded-xl border border-black/10 bg-zinc-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
+          {searchFocused && !query.trim() && searchHistory.length ? (
+            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg">
+              <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-zinc-500">
+                <span>{t("items.recentSearches")}</span>
+                <button type="button" onClick={clearSearchHistory} className="rounded text-emerald-700 hover:underline">{t("items.clearRecentSearches")}</button>
+              </div>
+              <ul className="border-t border-black/5 py-1">
+                {searchHistory.map((entry) => (
+                  <li key={entry}>
+                    <button type="button" onClick={() => selectSearchQuery(entry)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50">
+                      <Search className="h-3.5 w-3.5 text-zinc-400" /> {entry}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
         <select aria-label={t("items.allCategories")} value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-accent">
           <option value="all">{t("items.allCategories")}</option>
