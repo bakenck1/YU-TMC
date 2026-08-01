@@ -10,6 +10,11 @@ export interface InventoryListFilters {
   category: string;
   location: string;
   statusKey: string;
+  brand?: string;
+  model?: string;
+  itemType?: string;
+  building?: string;
+  responsible?: string;
 }
 
 export function visibleItemStatus(item: InventoryItem): VisibleItemStatus {
@@ -36,16 +41,32 @@ export function inventoryStatusOptions(
 
 export function filterInventoryItems(items: InventoryItem[], filters: InventoryListFilters) {
   const query = filters.query.trim().toLowerCase();
+  const brand = filters.brand?.trim().toLowerCase() ?? "";
+  const model = filters.model?.trim().toLowerCase() ?? "";
+  const itemType = filters.itemType?.trim().toLowerCase() ?? "";
+  const building = filters.building?.trim().toLowerCase() ?? "";
+  const responsible = filters.responsible?.trim().toLowerCase() ?? "";
   return items.filter((item) => {
     const matchesQuery =
       !query ||
       item.name.toLowerCase().includes(query) ||
       item.inventoryNumber.toLowerCase().includes(query) ||
       item.qrCode?.toLowerCase().includes(query);
+    const itemBrand = (item.brand ?? item.brandModel ?? "").toLowerCase();
+    const itemModel = (item.model ?? item.brandModel ?? "").toLowerCase();
+    const itemBuilding = (item.building ?? item.location.split("/")[0] ?? "").trim().toLowerCase();
     return Boolean(
       matchesQuery &&
         (filters.category === "all" || item.category === filters.category) &&
-        (filters.location === "all" || item.location === filters.location) &&
+        (filters.location === "all" ||
+          (item.room ?? item.location)
+            .toLowerCase()
+            .includes(filters.location.trim().toLowerCase())) &&
+        (!brand || itemBrand.includes(brand)) &&
+        (!model || itemModel.includes(model)) &&
+        (!itemType || (item.itemType ?? item.category).toLowerCase().includes(itemType)) &&
+        (!building || itemBuilding.includes(building)) &&
+        (!responsible || item.responsible.toLowerCase().includes(responsible)) &&
         matchesStatusFilter(item, filters.statusKey),
     );
   });

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import NextImage, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Search } from "lucide-react";
+import { ImageIcon, Search, SlidersHorizontal } from "lucide-react";
 import StatusBadge from "./StatusBadge";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { InventoryItem } from "@/lib/types";
@@ -88,6 +88,38 @@ function itemLinkLabel(item: InventoryItem) {
   return `${item.name} — ${identifier}`;
 }
 
+function FilterInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-sm text-zinc-600">
+      <span className="mb-1 block text-xs font-medium text-zinc-500">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent"
+      />
+    </label>
+  );
+}
+
+const EMPTY_TABLE_FILTERS = {
+  category: "all",
+  location: "all",
+  statusKey: "all",
+  brand: "",
+  model: "",
+  itemType: "",
+  building: "",
+  responsible: "",
+};
+
 export default function ItemsTable({
   items,
   showFilters = true,
@@ -104,12 +136,13 @@ export default function ItemsTable({
   const [query, setQuery] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [category, setCategory] = useState("all");
-  const [statusKey, setStatusKey] = useState("all");
-  const [location, setLocation] = useState("all");
+  const [filters, setFilters] = useState(EMPTY_TABLE_FILTERS);
+  const [draftFilters, setDraftFilters] = useState(EMPTY_TABLE_FILTERS);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const searchFocusTimeoutRef = useRef<number | null>(null);
   const pageSize = 10;
   const searchHistoryStorageKey = searchHistoryScope
@@ -142,24 +175,18 @@ export default function ItemsTable({
     return () => window.clearTimeout(timeout);
   }, [query, searchHistoryStorageKey]);
 
-  const categories = useMemo(
-    () => Array.from(new Set(items.map((item) => item.category))),
-    [items],
-  );
-  const locations = useMemo(
-    () => Array.from(new Set(items.map((item) => item.location))),
-    [items],
-  );
   const statusOptions = useMemo(() => inventoryStatusOptions(items), [items]);
 
   const filtered = useMemo(() => {
     return filterInventoryItems(items, {
       query,
-      category,
-      location,
-      statusKey,
+      ...filters,
     });
-  }, [items, query, category, statusKey, location]);
+  }, [items, query, filters]);
+
+  const activeFilterCount = Object.entries(filters).filter(
+    ([key, value]) => value !== "" && value !== "all" && key !== "category",
+  ).length;
 
   const pagination = paginateInventoryItems(filtered, page, pageSize);
   const {
@@ -205,6 +232,23 @@ export default function ItemsTable({
     }
   }
 
+  function updateDraftFilter(name: keyof typeof EMPTY_TABLE_FILTERS, value: string) {
+    setDraftFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  function applyFilters() {
+    setFilters(draftFilters);
+    setPage(1);
+    setFilterPanelOpen(false);
+    filterButtonRef.current?.focus();
+  }
+
+  function clearFilters() {
+    setDraftFilters(EMPTY_TABLE_FILTERS);
+    setFilters(EMPTY_TABLE_FILTERS);
+    setPage(1);
+  }
+
   function toggleAllVisible() {
     setSelected((current) => {
       const next = new Set(current);
@@ -217,8 +261,9 @@ export default function ItemsTable({
   return (
     <div className="space-y-4">
       {showFilters ? (
-      <div className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white p-4 lg:flex-row lg:items-center">
-        <div
+      <div className="rounded-2xl border border-black/5 bg-white p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div
           className="relative min-w-[260px] flex-1"
           onFocus={() => {
             if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
@@ -258,19 +303,46 @@ export default function ItemsTable({
               </ul>
             </div>
           ) : null}
+          </div>
+          <button
+            ref={filterButtonRef}
+            type="button"
+            aria-expanded={filterPanelOpen}
+            aria-controls="inventory-advanced-filters"
+            onClick={() => {
+              if (!filterPanelOpen) setDraftFilters(filters);
+              setFilterPanelOpen((value) => !value);
+            }}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {t("items.filters")}
+            {activeFilterCount ? <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs text-white">{activeFilterCount}</span> : null}
+          </button>
         </div>
-        <select aria-label={t("items.allCategories")} value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-accent">
-          <option value="all">{t("items.allCategories")}</option>
-          {categories.map((value) => <option key={value} value={value}>{dataLabel(value)}</option>)}
-        </select>
-        <select aria-label={t("items.allStatuses")} value={statusKey} onChange={(event) => { setStatusKey(event.target.value); setPage(1); }} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-accent">
-          <option value="all">{t("items.allStatuses")}</option>
-          {statusOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "display" ? dataLabel(option.value) : t(`status.${option.value}`)}</option>)}
-        </select>
-        <select aria-label={t("items.allLocations")} value={location} onChange={(event) => { setLocation(event.target.value); setPage(1); }} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-accent">
-          <option value="all">{t("items.allLocations")}</option>
-          {locations.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
+        {filterPanelOpen ? (
+          <div id="inventory-advanced-filters" className="mt-4 border-t border-black/5 pt-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <FilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} />
+              <FilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} />
+              <FilterInput label={t("items.type")} value={draftFilters.itemType} onChange={(value) => updateDraftFilter("itemType", value)} />
+              <FilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={(value) => updateDraftFilter("building", value)} />
+              <FilterInput label={t("items.filterRoom")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={(value) => updateDraftFilter("location", value || "all")} />
+              <label className="text-sm text-zinc-600">
+                <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.status")}</span>
+                <select value={draftFilters.statusKey} onChange={(event) => updateDraftFilter("statusKey", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">
+                  <option value="all">{t("items.allStatuses")}</option>
+                  {statusOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "display" ? dataLabel(option.value) : t(`status.${option.value}`)}</option>)}
+                </select>
+              </label>
+              <FilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} />
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={clearFilters} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50">{t("items.clearFilters")}</button>
+              <button type="button" onClick={applyFilters} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600">{t("items.applyFilters")}</button>
+            </div>
+          </div>
+        ) : null}
       </div>
       ) : null}
 

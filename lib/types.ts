@@ -13,6 +13,10 @@ export interface InventoryItem {
   name: string;
   inventoryNumber: string;
   category: ItemCategory;
+  brand?: string;
+  model?: string;
+  building?: string;
+  room?: string;
   location: string;
   responsible: string;
   status: ItemStatus;
