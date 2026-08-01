@@ -23,6 +23,8 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
         : undefined,
     updatedAt: new Date(item.updatedAt).toLocaleDateString(),
     updatedAtIso: item.updatedAt,
+    createdAt: new Date(item.createdAt).toLocaleDateString(),
+    additionalInfo: item.description ?? undefined,
     itemType: item.itemType,
     brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || item.name,
     quantity: item.quantity,

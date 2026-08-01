@@ -26,6 +26,8 @@ export interface InventoryItem {
   brandModel?: string;
   updatedAt?: string;
   updatedAtIso?: string;
+  createdAt?: string;
+  additionalInfo?: string;
   decommissionedOn?: string;
   quantity?: number;
   price?: number;

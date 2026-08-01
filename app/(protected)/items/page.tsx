@@ -33,7 +33,11 @@ export default async function ItemsPage() {
         </div>
       ) : null}
       <InventorySummaryAccordions items={items} />
-      <ItemsTable items={items} searchHistoryScope={user.userId} />
+      <ItemsTable
+        items={items}
+        searchHistoryScope={user.userId}
+        columnSettingsScope={user.userId}
+      />
     </div>
   );
 }

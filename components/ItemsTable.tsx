@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import NextImage, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Search, SlidersHorizontal } from "lucide-react";
+import { Columns3, ImageIcon, Search, SlidersHorizontal } from "lucide-react";
 import StatusBadge from "./StatusBadge";
 import { useAppSettings } from "./AppSettingsProvider";
 import type { InventoryItem } from "@/lib/types";
@@ -16,6 +16,12 @@ import {
   type VisibleItemStatus,
 } from "@/lib/inventory-list";
 import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
+import {
+  DEFAULT_INVENTORY_COLUMNS,
+  INVENTORY_COLUMN_KEYS,
+  parseInventoryColumnVisibility,
+  type InventoryColumnKey,
+} from "@/lib/inventory-columns";
 
 function loadSearchHistory(storageKey: string) {
   try {
@@ -28,6 +34,25 @@ function loadSearchHistory(storageKey: string) {
 function saveSearchHistory(storageKey: string, history: string[]) {
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(history));
+  } catch {
+    // Private browsing and embedded webviews may deny local storage.
+  }
+}
+
+function loadColumnVisibility(storageKey: string) {
+  try {
+    return parseInventoryColumnVisibility(window.localStorage.getItem(storageKey));
+  } catch {
+    return { ...DEFAULT_INVENTORY_COLUMNS };
+  }
+}
+
+function saveColumnVisibility(
+  storageKey: string,
+  visibility: typeof DEFAULT_INVENTORY_COLUMNS,
+) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(visibility));
   } catch {
     // Private browsing and embedded webviews may deny local storage.
   }
@@ -120,16 +145,33 @@ const EMPTY_TABLE_FILTERS = {
   responsible: "",
 };
 
+const COLUMN_LABEL_KEYS = {
+  photo: "items.photo",
+  qrCode: "items.qrCode",
+  itemType: "items.type",
+  brandModel: "items.brandModel",
+  location: "items.location",
+  status: "items.status",
+  responsible: "items.responsible",
+  additionalInfo: "items.additionalInfo",
+  updatedAt: "items.updated",
+  createdAt: "items.createdAt",
+  quantity: "items.quantity",
+  price: "items.price",
+} as const;
+
 export default function ItemsTable({
   items,
   showFilters = true,
   dateLabel,
   searchHistoryScope,
+  columnSettingsScope,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
   dateLabel?: string;
   searchHistoryScope?: string;
+  columnSettingsScope?: string;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -139,14 +181,20 @@ export default function ItemsTable({
   const [filters, setFilters] = useState(EMPTY_TABLE_FILTERS);
   const [draftFilters, setDraftFilters] = useState(EMPTY_TABLE_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_INVENTORY_COLUMNS);
+  const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const columnSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const searchFocusTimeoutRef = useRef<number | null>(null);
   const pageSize = 10;
   const searchHistoryStorageKey = searchHistoryScope
     ? `yu-inventory:item-search-history:v1:${searchHistoryScope}`
+    : null;
+  const columnSettingsStorageKey = columnSettingsScope
+    ? `yu-inventory:item-columns:v1:${columnSettingsScope}`
     : null;
 
   useEffect(() => {
@@ -157,6 +205,15 @@ export default function ItemsTable({
     );
     return () => window.clearTimeout(timeout);
   }, [searchHistoryStorageKey]);
+
+  useEffect(() => {
+    if (!columnSettingsStorageKey) return;
+    const timeout = window.setTimeout(
+      () => setVisibleColumns(loadColumnVisibility(columnSettingsStorageKey)),
+      0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [columnSettingsStorageKey]);
 
   useEffect(() => () => {
     if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
@@ -189,6 +246,7 @@ export default function ItemsTable({
   ).length;
 
   const pagination = paginateInventoryItems(filtered, page, pageSize);
+  const visibleColumnCount = Object.values(visibleColumns).filter(Boolean).length;
   const {
     page: currentPage,
     pageCount,
@@ -247,6 +305,20 @@ export default function ItemsTable({
     setDraftFilters(EMPTY_TABLE_FILTERS);
     setFilters(EMPTY_TABLE_FILTERS);
     setPage(1);
+  }
+
+  function toggleColumn(key: InventoryColumnKey) {
+    setVisibleColumns((current) => {
+      const next = { ...current, [key]: !current[key] };
+      if (columnSettingsStorageKey) saveColumnVisibility(columnSettingsStorageKey, next);
+      return next;
+    });
+  }
+
+  function resetColumns() {
+    const next = { ...DEFAULT_INVENTORY_COLUMNS };
+    setVisibleColumns(next);
+    if (columnSettingsStorageKey) saveColumnVisibility(columnSettingsStorageKey, next);
   }
 
   function toggleAllVisible() {
@@ -319,6 +391,50 @@ export default function ItemsTable({
             {t("items.filters")}
             {activeFilterCount ? <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs text-white">{activeFilterCount}</span> : null}
           </button>
+          <div
+            className="relative"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setColumnSettingsOpen(false);
+              }
+            }}
+          >
+            <button
+              ref={columnSettingsButtonRef}
+              type="button"
+              aria-expanded={columnSettingsOpen}
+              aria-controls="inventory-column-settings"
+              onClick={() => setColumnSettingsOpen((value) => !value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setColumnSettingsOpen(false);
+              }}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+            >
+              <Columns3 className="h-4 w-4" /> {t("items.columnSettings")}
+            </button>
+            {columnSettingsOpen ? (
+              <div
+                id="inventory-column-settings"
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setColumnSettingsOpen(false);
+                    columnSettingsButtonRef.current?.focus();
+                  }
+                }}
+                className="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-black/10 bg-white p-3 shadow-xl"
+              >
+                <div className="space-y-1">
+                  {INVENTORY_COLUMN_KEYS.map((key) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
+                      <input type="checkbox" checked={visibleColumns[key]} onChange={() => toggleColumn(key)} className="h-4 w-4 accent-emerald-500" />
+                      {t(COLUMN_LABEL_KEYS[key])}
+                    </label>
+                  ))}
+                </div>
+                <button type="button" onClick={resetColumns} className="mt-2 w-full rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50">{t("items.resetColumns")}</button>
+              </div>
+            ) : null}
+          </div>
         </div>
         {filterPanelOpen ? (
           <div id="inventory-advanced-filters" className="mt-4 border-t border-black/5 pt-4">
@@ -356,16 +472,18 @@ export default function ItemsTable({
           <thead>
             <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-zinc-400">
               <th className="w-14 px-4 py-4 text-center"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-4 w-4 accent-emerald-500" /></th>
-              <th className="px-3 py-4 font-medium">{t("items.photo")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.type")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.brandModel")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.location")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.status")}</th>
-              <th className="px-3 py-4 font-medium">{t("items.responsible")}</th>
-              <th className="px-3 py-4 font-medium">{dateLabel ?? t("items.updated")}</th>
-              <th className="px-3 py-4 text-center font-medium">{t("items.quantity")}</th>
-              <th className="px-4 py-4 text-right font-medium">{t("items.price")}</th>
+              {visibleColumns.photo ? <th className="px-3 py-4 font-medium">{t("items.photo")}</th> : null}
+              {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th> : null}
+              {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
+              {visibleColumns.brandModel ? <th className="px-3 py-4 font-medium">{t("items.brandModel")}</th> : null}
+              {visibleColumns.location ? <th className="px-3 py-4 font-medium">{t("items.location")}</th> : null}
+              {visibleColumns.status ? <th className="px-3 py-4 font-medium">{t("items.status")}</th> : null}
+              {visibleColumns.responsible ? <th className="px-3 py-4 font-medium">{t("items.responsible")}</th> : null}
+              {visibleColumns.additionalInfo ? <th className="px-3 py-4 font-medium">{t("items.additionalInfo")}</th> : null}
+              {visibleColumns.updatedAt ? <th className="px-3 py-4 font-medium">{dateLabel ?? t("items.updated")}</th> : null}
+              {visibleColumns.createdAt ? <th className="px-3 py-4 font-medium">{t("items.createdAt")}</th> : null}
+              {visibleColumns.quantity ? <th className="px-3 py-4 text-center font-medium">{t("items.quantity")}</th> : null}
+              {visibleColumns.price ? <th className="px-4 py-4 text-right font-medium">{t("items.price")}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -378,20 +496,22 @@ export default function ItemsTable({
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
                   <td className="px-4 py-4 text-center" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-4 w-4 accent-emerald-500" /></td>
-                  <td className="px-3 py-4"><Thumb color={item.photoColor} photo={item.photo} /></td>
-                  <td className="px-3 py-4 text-zinc-500">{item.qrCode ?? item.inventoryNumber}</td>
-                  <td className="px-3 py-4"><p className="font-medium text-zinc-800">{dataLabel(item.itemType ?? details.type)}</p><p className="mt-1 text-zinc-500">{t("common.electronics")}</p></td>
-                  <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></td>
-                  <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td>
-                  <td className="px-3 py-4"><VisibleStatus status={visibleItemStatus(item)} /></td>
-                  <td className="px-3 py-4 text-zinc-600">{item.responsible}</td>
-                  <td className="whitespace-nowrap px-3 py-4 text-zinc-600">{item.updatedAt ?? "—"}</td>
-                  <td className="px-3 py-4 text-center text-zinc-700">{item.quantity ?? 1}</td>
-                  <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-zinc-800">{(item.price ?? 0).toFixed(2)}<br /><span className="text-xs">{t("common.currency")}</span></td>
+                  {visibleColumns.photo ? <td className="px-3 py-4"><Thumb color={item.photoColor} photo={item.photo} /></td> : null}
+                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{item.qrCode ?? item.inventoryNumber}</td> : null}
+                  {visibleColumns.itemType ? <td className="px-3 py-4"><p className="font-medium text-zinc-800">{dataLabel(item.itemType ?? details.type)}</p><p className="mt-1 text-zinc-500">{t("common.electronics")}</p></td> : null}
+                  {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></td> : null}
+                  {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
+                  {visibleColumns.status ? <td className="px-3 py-4"><VisibleStatus status={visibleItemStatus(item)} /></td> : null}
+                  {visibleColumns.responsible ? <td className="px-3 py-4 text-zinc-600">{item.responsible}</td> : null}
+                  {visibleColumns.additionalInfo ? <td className="max-w-[240px] px-3 py-4 text-zinc-600">{item.additionalInfo ?? "—"}</td> : null}
+                  {visibleColumns.updatedAt ? <td className="whitespace-nowrap px-3 py-4 text-zinc-600">{item.updatedAt ?? "—"}</td> : null}
+                  {visibleColumns.createdAt ? <td className="whitespace-nowrap px-3 py-4 text-zinc-600">{item.createdAt ?? "—"}</td> : null}
+                  {visibleColumns.quantity ? <td className="px-3 py-4 text-center text-zinc-700">{item.quantity ?? 1}</td> : null}
+                  {visibleColumns.price ? <td className="whitespace-nowrap px-4 py-4 text-right font-semibold text-zinc-800">{(item.price ?? 0).toFixed(2)}<br /><span className="text-xs">{t("common.currency")}</span></td> : null}
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={11} className="px-4 py-10 text-center text-zinc-400">{t("items.empty")}</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={visibleColumnCount + 1} className="px-4 py-10 text-center text-zinc-400">{t("items.empty")}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -412,15 +532,22 @@ export default function ItemsTable({
             <article key={item.id} onClick={() => router.push(`/items/${item.id}`)} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
                 <input type="checkbox" checked={selected.has(item.id)} onClick={(event) => event.stopPropagation()} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="mt-1 h-4 w-4 accent-emerald-500" />
-                <Thumb color={item.photoColor} photo={item.photo} />
-                <div className="min-w-0 flex-1"><p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></p><p className="mt-1 text-xs text-zinc-500">{dataLabel(item.itemType ?? details.type)} · {t("common.electronics")}</p><p className="mt-1 text-xs text-zinc-400">{item.qrCode ?? item.inventoryNumber}</p></div>
-                <VisibleStatus status={visibleItemStatus(item)} />
+                {visibleColumns.photo ? <Thumb color={item.photoColor} photo={item.photo} /> : null}
+                <div className="min-w-0 flex-1">
+                  {visibleColumns.brandModel ? <p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></p> : null}
+                  {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{dataLabel(item.itemType ?? details.type)} · {t("common.electronics")}</p> : null}
+                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{item.qrCode ?? item.inventoryNumber}</p> : null}
+                  {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "—"}</p> : null}
+                </div>
+                {visibleColumns.status ? <VisibleStatus status={visibleItemStatus(item)} /> : null}
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
-                <dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd>
-                <dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd>
-                <dt className="text-zinc-400">{dateLabel ?? t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "—"}</dd>
-                <dt className="text-zinc-400">{t("items.quantityPrice")}</dt><dd className="text-right">{item.quantity ?? 1} · {(item.price ?? 0).toFixed(2)} {t("common.currency")}</dd>
+                {visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}
+                {visibleColumns.responsible ? <><dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd></> : null}
+                {visibleColumns.updatedAt ? <><dt className="text-zinc-400">{dateLabel ?? t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "—"}</dd></> : null}
+                {visibleColumns.createdAt ? <><dt className="text-zinc-400">{t("items.createdAt")}</dt><dd className="text-right">{item.createdAt ?? "—"}</dd></> : null}
+                {visibleColumns.quantity ? <><dt className="text-zinc-400">{t("items.quantity")}</dt><dd className="text-right">{item.quantity ?? 1}</dd></> : null}
+                {visibleColumns.price ? <><dt className="text-zinc-400">{t("items.price")}</dt><dd className="text-right">{(item.price ?? 0).toFixed(2)} {t("common.currency")}</dd></> : null}
               </dl>
             </article>
           );
