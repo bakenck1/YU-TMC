@@ -30,6 +30,9 @@ export default async function ItemPage({
     const timeline = canReadHistory
       ? await services.responsibility.listTimeline(id, actor)
       : [];
+    const audit = canManageProtected
+      ? await services.items.listAudit(id, actor)
+      : [];
     const rooms = canManageProtected
       ? (
           await Promise.all(
@@ -45,6 +48,7 @@ export default async function ItemPage({
         canEditContent={hasPermission(user.role, "inventory.item.edit_content")}
         canSendToService={hasPermission(user.role, "inventory.item.send_to_service")}
         timeline={timeline}
+        audit={audit}
         canManageProtected={canManageProtected}
         rooms={rooms}
       />

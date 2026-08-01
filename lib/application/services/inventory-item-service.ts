@@ -1,5 +1,6 @@
 import type {
   CreateInventoryItemInput,
+  InventoryItemAuditDto,
   InventoryItemDto,
   UpdateInventoryItemContentInput,
   UpdateInventoryItemPhotoInput,
@@ -7,6 +8,7 @@ import type {
 } from "@/lib/contracts/inventory-items";
 import type {
   AppendItemAuditRecord,
+  InventoryItemAuditRecord,
   InventoryItemRecord,
   InventoryItemRepositories,
   StoredItemPhoto,
@@ -98,6 +100,19 @@ export class InventoryItemService {
       return value;
     });
     return toItemDto(item);
+  }
+
+  async listAudit(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemAuditDto[]> {
+    requirePermission(actor, "inventory.item.manage_protected_fields");
+    await this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(id);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+    });
+    const records = await this.unitOfWork.read(({ items }) => items.listAudit(id));
+    return records.map(toAuditDto);
   }
 
   async createItem(
@@ -648,5 +663,19 @@ function itemContentAuditValues(record: InventoryItemRecord) {
     model: record.model,
     quantity: record.quantity,
     unitPrice: record.unitPrice,
+  };
+}
+
+function toAuditDto(record: InventoryItemAuditRecord): InventoryItemAuditDto {
+  return {
+    id: record.id,
+    actorId: record.actorId,
+    actorName: record.actorName,
+    actorRole: record.actorRole,
+    subjectRevision: record.subjectRevision,
+    action: record.action,
+    beforeValues: record.beforeValues,
+    afterValues: record.afterValues,
+    occurredAt: record.occurredAt.toISOString(),
   };
 }

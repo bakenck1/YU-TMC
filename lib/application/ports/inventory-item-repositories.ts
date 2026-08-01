@@ -126,6 +126,18 @@ export interface AppendItemAuditRecord {
   occurredAt: Date;
 }
 
+export interface InventoryItemAuditRecord {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  actorRole: UserRole | null;
+  subjectRevision: number | null;
+  action: string;
+  beforeValues: Record<string, unknown> | null;
+  afterValues: Record<string, unknown> | null;
+  occurredAt: Date;
+}
+
 export interface InventoryItemRepository {
   roomExists(id: string): Promise<boolean>;
   listItems(): Promise<InventoryItemRecord[]>;
@@ -153,6 +165,7 @@ export interface InventoryItemRepository {
   insertItemQr(input: InsertItemQrRecord): Promise<void>;
   replaceItemQr(input: ReplaceItemQrRecord): Promise<void>;
   appendAudit(input: AppendItemAuditRecord): Promise<void>;
+  listAudit(itemId: string): Promise<InventoryItemAuditRecord[]>;
 }
 
 export interface InventoryItemRepositories {

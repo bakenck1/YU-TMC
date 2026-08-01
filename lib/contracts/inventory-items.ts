@@ -34,6 +34,18 @@ export interface InventoryItemDto {
   archivedAt: string | null;
 }
 
+export interface InventoryItemAuditDto {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  actorRole: "admin" | "warehouse" | "employee" | null;
+  subjectRevision: number | null;
+  action: string;
+  beforeValues: Record<string, unknown> | null;
+  afterValues: Record<string, unknown> | null;
+  occurredAt: string;
+}
+
 export interface CreateInventoryItemInput {
   name: string;
   description?: string | null;

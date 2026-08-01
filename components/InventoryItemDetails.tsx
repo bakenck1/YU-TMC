@@ -21,7 +21,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import type { InventoryItemAuditDto, InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { ResponsibilityTimelineEntryDto } from "@/lib/contracts/inventory-responsibility";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
@@ -36,6 +36,7 @@ export default function InventoryItemDetails({
   canEditContent,
   canSendToService,
   timeline,
+  audit,
   canManageProtected,
   rooms,
 }: {
@@ -43,6 +44,7 @@ export default function InventoryItemDetails({
   canEditContent: boolean;
   canSendToService: boolean;
   timeline: ResponsibilityTimelineEntryDto[];
+  audit: InventoryItemAuditDto[];
   canManageProtected: boolean;
   rooms: RoomDto[];
 }) {
@@ -633,6 +635,33 @@ export default function InventoryItemDetails({
           </ol>
         </section>
       ) : null}
+
+      {audit.length ? (
+        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.auditHistory")}</h2>
+          <ol className="mt-4 space-y-3">
+            {audit.map((entry) => (
+              <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-medium text-zinc-800">{auditActionLabel(entry.action, t)}</p>
+                  <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
+                    {new Date(entry.occurredAt).toLocaleString(locale)}
+                  </time>
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {entry.actorName ?? t("itemDetails.auditUnknownActor")}
+                  {entry.actorId ? ` · ${entry.actorId}` : ""}
+                  {entry.subjectRevision ? ` · ${t("itemDetails.auditRevision", { revision: entry.subjectRevision })}` : ""}
+                </p>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                  <AuditSnapshot label={t("itemDetails.auditBefore")} values={entry.beforeValues} />
+                  <AuditSnapshot label={t("itemDetails.auditAfter")} values={entry.afterValues} />
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -656,6 +685,38 @@ function timelineTitle(
     overridden: "itemDetails.transferOverridden",
   };
   return t(labels[entry.status] ?? "itemDetails.responsibilityTransfer");
+}
+
+function auditActionLabel(
+  action: string,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+) {
+  const labels: Record<string, TranslationKey> = {
+    "item.created": "itemDetails.auditCreated",
+    "item.content_updated": "itemDetails.auditContentUpdated",
+    "item.photo_captured": "itemDetails.auditPhotoCaptured",
+    "item.protected_fields_updated": "itemDetails.auditProtectedUpdated",
+    "item.archived": "itemDetails.auditArchived",
+    "item.sent_to_service": "itemDetails.auditSentToService",
+  };
+  return t(labels[action] ?? "itemDetails.auditUnknownAction");
+}
+
+function AuditSnapshot({
+  label,
+  values,
+}: {
+  label: string;
+  values: Record<string, unknown> | null;
+}) {
+  return (
+    <div className="rounded-lg bg-white p-2">
+      <p className="font-semibold text-zinc-400">{label}</p>
+      <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words text-zinc-600">
+        {values ? JSON.stringify(values, null, 2) : "—"}
+      </pre>
+    </div>
+  );
 }
 
 function localizeItemError(

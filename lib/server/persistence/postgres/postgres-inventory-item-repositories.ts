@@ -9,6 +9,7 @@ import type {
   InsertInventoryItemRecord,
   InsertItemQrRecord,
   InventoryItemRecord,
+  InventoryItemAuditRecord,
   InventoryItemRepositories,
   InventoryItemRepository,
   ReplaceItemQrRecord,
@@ -393,6 +394,40 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         input.occurredAt,
       ],
     );
+  }
+
+  async listAudit(itemId: string): Promise<InventoryItemAuditRecord[]> {
+    const result = await this.source.query<{
+      id: string;
+      actor_id: string | null;
+      actor_name: string | null;
+      actor_role_snapshot: InventoryItemAuditRecord["actorRole"];
+      subject_revision: number | null;
+      action: string;
+      before_values: Record<string, unknown> | null;
+      after_values: Record<string, unknown> | null;
+      occurred_at: Date;
+    }>(
+      `select a.id, a.actor_id, u.full_name as actor_name,
+              a.actor_role_snapshot, a.subject_revision, a.action,
+              a.before_values, a.after_values, a.occurred_at
+         from ${AUDIT} a
+         left join ${USERS} u on u.id = a.actor_id
+        where a.subject_kind = 'item' and a.subject_id = $1
+        order by a.occurred_at desc, a.id desc`,
+      [itemId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      actorId: row.actor_id,
+      actorName: row.actor_name,
+      actorRole: row.actor_role_snapshot,
+      subjectRevision: row.subject_revision,
+      action: row.action,
+      beforeValues: row.before_values,
+      afterValues: row.after_values,
+      occurredAt: row.occurred_at,
+    }));
   }
 }
 
