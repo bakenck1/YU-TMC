@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createInventoryExportPayload } from "../lib/inventory-export";
@@ -12,7 +12,6 @@ const itemsPage = readFileSync("app/(protected)/items/page.tsx", "utf8");
 const itemsTable = readFileSync("components/ItemsTable.tsx", "utf8");
 const exportButton = readFileSync("components/InventoryExportButton.tsx", "utf8");
 const analyticsCharts = readFileSync("components/AnalyticsCharts.tsx", "utf8");
-const analyticsTools = readFileSync("components/AnalyticsExcelTools.tsx", "utf8");
 const excelRoute = readFileSync("app/api/inventory/excel/route.ts", "utf8");
 
 test("admin and warehouse retain inventory export permission", () => {
@@ -91,8 +90,8 @@ test("inventory export reports progress and errors and downloads the workbook", 
 });
 
 test("analytics has no export controls or analytics export dataset", () => {
-  assert.doesNotMatch(analyticsCharts, /exportReport|analytics\.exportReport|canExport/);
-  assert.doesNotMatch(analyticsTools, /InventoryExportButton|canExport/);
+  assert.doesNotMatch(analyticsCharts, /AnalyticsExcelTools|exportReport|analytics\.exportReport|canBulkManage|canExport/);
+  assert.equal(existsSync("components/AnalyticsExcelTools.tsx"), false);
   assert.doesNotMatch(excelRoute, /dataset === ["']analytics["']|exportAnalyticsReport/);
 });
 

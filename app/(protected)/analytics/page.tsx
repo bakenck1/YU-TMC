@@ -128,10 +128,5 @@ export default async function AnalyticsPage() {
     ),
   };
 
-  return (
-    <AnalyticsCharts
-      data={data}
-      canBulkManage={user.role === "admin"}
-    />
-  );
+  return <AnalyticsCharts data={data} />;
 }

@@ -14,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
-import AnalyticsExcelTools from "@/components/AnalyticsExcelTools";
 import { filteredDashboard, type AnalyticsDashboardData, type AnalyticsRecord, type ChartDatum } from "@/lib/analytics-dashboard";
 
 const CHART_COLORS = [
@@ -751,10 +750,8 @@ function DetailsModal({
 
 export default function AnalyticsCharts({
   data: initialData,
-  canBulkManage = false,
 }: {
   data: AnalyticsDashboardData;
-  canBulkManage?: boolean;
 }) {
   const { locale, t } = useAppSettings();
   const [building, setBuilding] = useState("all");
@@ -817,10 +814,6 @@ export default function AnalyticsCharts({
         <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} aria-label={t("analytics.dateFrom")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
         <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} aria-label={t("analytics.dateTo")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
       </section>
-
-      <AnalyticsExcelTools
-        canBulkManage={canBulkManage}
-      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
