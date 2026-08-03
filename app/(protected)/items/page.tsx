@@ -1,6 +1,7 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
+import InventoryExportButton from "@/components/InventoryExportButton";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
@@ -15,9 +16,11 @@ export default async function ItemsPage() {
   const actor = authorizationActor(user);
   const serverItems = await getApplicationServices().items.listItems(actor);
   const items = serverItems.map(toInventoryItemView);
+  const canCreate = hasPermission(user.role, "inventory.item.create");
+  const canExport = hasPermission(user.role, "inventory.report.export");
   let buildings: BuildingDto[] = [];
   let rooms: RoomDto[] = [];
-  if (hasPermission(user.role, "inventory.item.create")) {
+  if (canCreate) {
     buildings = await getApplicationServices().locations.listBuildings(actor);
     const roomLists = await Promise.all(
       buildings.map((building) =>
@@ -29,9 +32,12 @@ export default async function ItemsPage() {
 
   return (
     <div className="space-y-4">
-      {hasPermission(user.role, "inventory.item.create") ? (
-        <div className="flex justify-end">
-          <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
+      {canCreate || canExport ? (
+        <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
+          {canExport ? <InventoryExportButton dataset="items" /> : null}
+          {canCreate ? (
+            <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
+          ) : null}
         </div>
       ) : null}
       <InventorySummaryAccordions items={items} />
@@ -46,11 +52,6 @@ export default async function ItemsPage() {
           items={items}
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
-          excelDataset={
-            hasPermission(user.role, "inventory.report.export")
-              ? "items"
-              : undefined
-          }
         />
       )}
     </div>
