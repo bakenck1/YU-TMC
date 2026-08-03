@@ -1,4 +1,5 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -16,6 +17,7 @@ export async function POST(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
+    if (!isUuid(id)) throw invalidRequest();
     const body: unknown = await request.json();
     const version =
       body && typeof body === "object"
@@ -35,4 +37,8 @@ export async function POST(
       ? applicationErrorResponse(error)
       : Response.json({ error: "transfer_unavailable" }, { status: 503 });
   }
+}
+
+function invalidRequest() {
+  return new ApplicationError("validation", "invalid_request");
 }

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isIP } from "node:net";
+
 export interface RateLimitResult {
   allowed: boolean;
   limit: number;
@@ -152,15 +154,22 @@ export function rateLimitedResponse(
 }
 
 export function getClientIp(request: Request) {
-  const cloudflareIp = request.headers.get("cf-connecting-ip")?.trim();
-  if (cloudflareIp) return cloudflareIp;
+  const configuredHeader = process.env.TRUSTED_CLIENT_IP_HEADER
+    ?.trim()
+    .toLowerCase();
+  if (
+    configuredHeader !== "cf-connecting-ip" &&
+    configuredHeader !== "x-real-ip" &&
+    configuredHeader !== "x-forwarded-for"
+  ) {
+    return "unknown";
+  }
 
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  return firstForwardedIp || "unknown";
+  const rawValue = request.headers.get(configuredHeader);
+  const candidate = configuredHeader === "x-forwarded-for"
+    ? rawValue?.split(",", 1)[0]?.trim()
+    : rawValue?.trim();
+  return candidate && isIP(candidate) !== 0 ? candidate : "unknown";
 }
 
 const apiRateLimiter = new InMemoryRateLimiter({

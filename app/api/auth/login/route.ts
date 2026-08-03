@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { getApplicationServices } from "@/lib/server/application";
 import {
   checkFailedLoginLimit,
@@ -19,6 +20,11 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
 } from "@/lib/security/session";
+import { requireSameOriginMutation } from "@/lib/security/request-integrity";
+import {
+  assertLoginJsonRequest,
+  readLoginJsonRequest,
+} from "@/lib/security/login-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,13 +37,28 @@ export async function POST(request: Request) {
   const apiLimit = consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
+  try {
+    requireSameOriginMutation(request);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
+  }
+
   const ipLimit = consumeLoginIpLimit(request);
   if (!ipLimit.allowed) return rateLimitedResponse(ipLimit, "too_many_login_attempts");
 
+  try {
+    assertLoginJsonRequest(request);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readLoginJsonRequest(request);
+  } catch (error) {
+    if (error instanceof Error && error.name !== "SyntaxError") {
+      return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
+    }
     return Response.json(
       { error: "invalid_request" },
       { status: 400, headers: rateLimitHeaders(apiLimit) },
@@ -73,11 +94,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const emailLimit = checkFailedLoginLimit(email);
-  if (!emailLimit.allowed) {
-    return rateLimitedResponse(emailLimit, "too_many_login_attempts");
-  }
-
   let configured: boolean;
   try {
     configured = await getApplicationServices().users.isConfigured();
@@ -111,6 +127,10 @@ export async function POST(request: Request) {
   }
 
   if (authentication.status === "invalid") {
+    const emailLimit = checkFailedLoginLimit(email);
+    if (!emailLimit.allowed) {
+      return rateLimitedResponse(emailLimit, "too_many_login_attempts");
+    }
     const failedAttempt = recordFailedLogin(email);
     if (!failedAttempt.allowed) {
       return rateLimitedResponse(failedAttempt, "too_many_login_attempts");

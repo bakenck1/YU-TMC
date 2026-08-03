@@ -193,6 +193,39 @@ test("records protected-field before and after snapshots with the acting adminis
   });
 });
 
+test("keeps a temporary number temporary when only protected status is changed", async () => {
+  let protectedUpdate: Record<string, unknown> | undefined;
+  const temporaryItem = {
+    ...DECOMMISSIONED_ITEM,
+    inventoryNumberKind: "temporary" as const,
+    inventoryNumber: "TMP-2026-891668",
+    status: "maintenance" as const,
+  };
+  const service = createService({
+    findItemById: async () => temporaryItem,
+    roomExists: async () => true,
+    updateItemProtected: async (input) => {
+      protectedUpdate = input as unknown as Record<string, unknown>;
+      return { ...temporaryItem, status: "active" as const, version: 3 };
+    },
+    appendAudit: async () => undefined,
+  });
+
+  await service.updateProtected(
+    "item-1",
+    {
+      version: temporaryItem.version,
+      roomId: "22222222-2222-4222-8222-222222222222",
+      inventoryNumber: temporaryItem.inventoryNumber,
+      status: "active",
+    },
+    { userId: "admin-1", role: "admin" },
+  );
+
+  assert.equal(protectedUpdate?.inventoryNumberKind, "temporary");
+  assert.equal(protectedUpdate?.status, "active");
+});
+
 test("operation feed uses historical room label snapshots without live-name fallback", () => {
   const repositorySource = readFileSync(
     "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
@@ -217,12 +250,15 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   );
 
   assert.match(componentSource, /const \[photoOpen, setPhotoOpen\] = useState\(false\)/);
-  assert.match(componentSource, /lg:grid-cols-\[minmax\(340px,0\.95fr\)_minmax\(0,1\.5fr\)\]/);
+  assert.match(
+    componentSource,
+    /lg:grid-cols-\[minmax\(420px,0\.95fr\)_minmax\(0,1\.5fr\)\]/,
+  );
   assert.match(componentSource, /const photoDialogRef = useRef<HTMLDivElement>\(null\)/);
   assert.match(componentSource, /const photoTriggerRef = useRef<HTMLButtonElement>\(null\)/);
   assert.match(componentSource, /const photoCloseButtonRef = useRef<HTMLButtonElement>\(null\)/);
   assert.match(componentSource, /document\.body\.style\.overflow = "hidden"/);
-  assert.match(componentSource, /previousActiveElement \?\? photoTriggerRef\.current/);
+  assert.match(componentSource, /previousActiveElement \?\? photoTrigger/);
   assert.match(componentSource, /event\.key === "Escape"/);
   assert.match(componentSource, /event\.key !== "Tab"/);
   assert.match(componentSource, /role="dialog"/);
@@ -234,6 +270,27 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   assert.match(componentSource, /operations\.map\(\(entry\) =>/);
   assert.match(componentSource, /operationTitle\(entry, t\)/);
   assert.match(componentSource, /operationDetail\(entry, t\)/);
+  assert.match(componentSource, /aria-labelledby="item-editor-title"/);
+  assert.match(componentSource, /onClick=\{openContentEditor\}/);
+  assert.match(componentSource, /ref=\{protectedTriggerRef\}/);
+  assert.match(componentSource, /ref=\{protectedDialogRef\}/);
+  assert.match(componentSource, /aria-labelledby="protected-fields-title"/);
+  assert.match(componentSource, /t\("analytics\.buildingFilter"\)/);
+  assert.match(componentSource, /protectedBuildingRooms\.map\(\(room\) =>/);
+  assert.match(componentSource, /result\.response\.status === 409/);
+  assert.match(componentSource, /latestResponse = await fetch/);
+  assert.match(componentSource, /itemDetails\.errorInventoryNumber/);
+  assert.match(componentSource, /itemDetails\.errorInvalidFields/);
+  assert.match(componentSource, /h-\[208px\] w-full max-w-\[208px\]/);
+  assert.match(componentSource, /sm:grid-cols-\[minmax\(0,1fr\)_190px\]/);
+  assert.match(componentSource, /kind=qr&format=svg/);
+  assert.match(componentSource, /<OverviewRow label=\{t\("items\.type"\)\}/);
+  assert.doesNotMatch(componentSource, /id="item-information"/);
+  assert.ok(
+    componentSource.lastIndexOf("<InventoryItemComposition") <
+      componentSource.indexOf('{t("itemDetails.recentOperations")}'),
+    "composition should appear below the photo and code before the operation feed",
+  );
 });
 
 test("archive route is only visible to roles that can read inventory items", () => {

@@ -23,6 +23,7 @@ test("exposes exactly the three product roles", () => {
 
 test("warehouse can scan and record presence without inventory mutation rights", () => {
   const allowed = [
+    "legacy.locations.read",
     "inventory.workspace.read",
     "inventory.item.read_all",
     "inventory.qr.resolve_full",
@@ -32,7 +33,6 @@ test("warehouse can scan and record presence without inventory mutation rights",
     "inventory.result.record_own_inspection",
   ] as const;
   const denied = [
-    "legacy.locations.read",
     "legacy.analytics.read",
     "inventory.building.create",
     "inventory.room.create",
@@ -48,6 +48,8 @@ test("warehouse can scan and record presence without inventory mutation rights",
   allowed.forEach((permission) => {
     assert.equal(hasPermission("warehouse", permission), true, permission);
   });
+  assert.equal(hasPermission("warehouse", "inventory.item.comment.read"), true);
+  assert.equal(hasPermission("warehouse", "inventory.item.comment"), false);
   denied.forEach((permission) => {
     assert.equal(hasPermission("warehouse", permission), false, permission);
   });
@@ -63,6 +65,10 @@ test("warehouse can scan and record presence without inventory mutation rights",
 
 test("employee can open and complete an assigned inventory session", () => {
   const allowed = [
+    "legacy.locations.read",
+    "inventory.workspace.read",
+    "inventory.item.read_all",
+    "inventory.item.comment",
     "inventory.inspection.read_own",
     "inventory.result.read_own_inspection",
     "inventory.result.record_own_inspection",
@@ -80,9 +86,10 @@ test("employee can open and complete an assigned inventory session", () => {
     hasPermission("employee", "inventory.inspection.mutate_own_draft"),
     false,
   );
-  assert.equal(hasPermission("employee", "inventory.workspace.read"), false);
+  assert.equal(hasPermission("employee", "inventory.workspace.read"), true);
   assert.equal(canAccessPath("employee", "/inventory/inspections"), true);
-  assert.equal(canAccessPath("employee", "/inventory"), false);
+  assert.equal(canAccessPath("employee", "/inventory"), true);
+  assert.equal(canAccessPath("employee", "/locations"), true);
 });
 
 test("role migration converts active owners before replacing the auth enum", () => {

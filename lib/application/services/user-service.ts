@@ -15,6 +15,7 @@ import type { PasswordHasher } from "@/lib/application/ports/password-hasher";
 import { canManageUser } from "@/lib/security/permissions";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DUMMY_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 export interface Clock {
   now(): Date;
@@ -62,10 +63,9 @@ export class UserService {
       const user = email
         ? await repositories.users.findByNormalizedEmail(email)
         : null;
-      const credential =
-        user && !user.deletedAt
-          ? await repositories.credentials.findByUserId(user.id)
-          : null;
+      const credential = await repositories.credentials.findByUserId(
+        user?.id ?? DUMMY_USER_ID,
+      );
       return { credential, user };
     });
     const passwordMatches = await this.passwordHasher.verify(

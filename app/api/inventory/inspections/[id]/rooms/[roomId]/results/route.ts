@@ -1,5 +1,6 @@
 import type { RecordItemResultInput } from "@/lib/contracts/inventory-inspection-results";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -54,7 +55,7 @@ function parseInput(value: unknown): RecordItemResultInput {
 }
 
 function assertId(value: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(value)) throw invalidRequest();
+  if (!isUuid(value)) throw invalidRequest();
 }
 
 function invalidRequest() {

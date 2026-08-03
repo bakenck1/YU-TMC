@@ -4,6 +4,9 @@ export type ApplicationErrorKind =
   | "conflict"
   | "unauthorized"
   | "forbidden"
+  | "rate_limited"
+  | "payload_too_large"
+  | "unsupported_media_type"
   | "precondition_failed"
   | "unavailable";
 

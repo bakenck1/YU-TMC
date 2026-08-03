@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, ScanLine, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 
 export default function InventoryItemCreateForm({
   rooms,
+  buildings = [],
   initialRoomId,
   openInitially = false,
   hideTrigger = false,
@@ -16,6 +17,7 @@ export default function InventoryItemCreateForm({
   onDismiss,
 }: {
   rooms: RoomDto[];
+  buildings?: BuildingDto[];
   initialRoomId?: string;
   openInitially?: boolean;
   hideTrigger?: boolean;
@@ -32,11 +34,19 @@ export default function InventoryItemCreateForm({
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
-  const [roomId, setRoomId] = useState(initialRoomId ?? rooms[0]?.id ?? "");
+  const initialRoom = rooms.find((room) => room.id === initialRoomId) ?? rooms[0];
+  const [buildingId, setBuildingId] = useState(initialRoom?.buildingId ?? "");
+  const [roomId, setRoomId] = useState(initialRoom?.id ?? "");
   const [inventoryNumber, setInventoryNumber] = useState("");
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const buildingRooms = useMemo(
+    () => rooms.filter((room) => room.buildingId === buildingId),
+    [buildingId, rooms],
+  );
+  const showBuildingSelector = buildings.length > 0 && !initialRoomId;
+  const visibleRooms = showBuildingSelector ? buildingRooms : rooms;
 
   if (rooms.length === 0) return null;
 
@@ -106,7 +116,23 @@ export default function InventoryItemCreateForm({
                 <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               </div>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{rooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
+              {showBuildingSelector ? (
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("analytics.buildingFilter")}</span>
+                  <select
+                    value={buildingId}
+                    onChange={(event) => {
+                      const nextBuildingId = event.target.value;
+                      setBuildingId(nextBuildingId);
+                      setRoomId(rooms.find((room) => room.buildingId === nextBuildingId)?.id ?? "");
+                    }}
+                    className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"
+                  >
+                    {buildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}
+                  </select>
+                </label>
+              ) : null}
+              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("createItem.officialNumber")} <span className="text-zinc-400">({t("createItem.optional")})</span></span><input value={inventoryNumber} onChange={(event) => setInventoryNumber(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
             </div>
             <div className="mt-6 flex justify-end gap-2">

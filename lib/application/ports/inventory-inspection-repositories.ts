@@ -13,6 +13,7 @@ export interface InspectionRecord {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  deadlineAt: Date;
 }
 
 export interface AssignableTechnicianRecord {
@@ -55,6 +56,10 @@ export interface ItemSnapshotAtScan {
   roomDesignation: string;
 }
 
+export interface InspectionExpectedItemRecord extends ItemSnapshotAtScan {
+  inspectionRoomId: string;
+}
+
 export interface ItemResultRecord {
   id: string;
   inspectionId: string;
@@ -81,6 +86,7 @@ export interface InsertItemResultRecord {
 
 export interface InsertItemResultRevisionRecord {
   resultId: string;
+  revisionNumber: number;
   inspectionRoomId: string;
   observedRoomId: string;
   result: ItemResultValue;
@@ -95,6 +101,7 @@ export interface InsertInspectionRecord {
   technicianId: string;
   createdBy: string;
   createdAt: Date;
+  deadlineAt: Date;
 }
 
 export interface InsertInspectionRoomRecord {
@@ -134,19 +141,30 @@ export interface InventoryInspectionRepository {
     itemId: string,
   ): Promise<ItemResultRecord | null>;
   listItemResults(inspectionId: string): Promise<ItemResultRecord[]>;
+  listExpectedItems(inspectionId: string): Promise<InspectionExpectedItemRecord[]>;
+  findExpectedItem(
+    inspectionRoomId: string,
+    itemId: string,
+  ): Promise<ItemSnapshotAtScan | null>;
   findActiveRoomSnapshot(
     buildingId: string,
     roomId: string,
   ): Promise<RoomSnapshot | null>;
   insertInspection(input: InsertInspectionRecord): Promise<InspectionRecord>;
   insertInspectionRoom(input: InsertInspectionRoomRecord): Promise<InspectionRoomRecord>;
+  snapshotRoomItems(
+    inspectionRoomId: string,
+    roomId: string,
+    capturedAt: Date,
+  ): Promise<void>;
   insertItemResult(input: InsertItemResultRecord): Promise<ItemResultRecord>;
   insertItemResultRevision(input: InsertItemResultRevisionRecord): Promise<void>;
-  markInspectionRoomInspected(
+  markInspectionRoomCompletedIfReady(
     inspectionRoomId: string,
     inspectedBy: string,
     inspectedAt: Date,
   ): Promise<void>;
+  completeInspectionIfReady(inspectionId: string, completedAt: Date): Promise<boolean>;
   appendAudit(input: AppendInspectionAuditRecord): Promise<void>;
 }
 

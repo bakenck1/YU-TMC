@@ -2,7 +2,7 @@
 import ItemsTable from "@/components/ItemsTable";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
-import type { RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
 import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
@@ -14,9 +14,10 @@ export default async function ItemsPage() {
   const actor = authorizationActor(user);
   const serverItems = await getApplicationServices().items.listItems(actor);
   const items = serverItems.map(toInventoryItemView);
+  let buildings: BuildingDto[] = [];
   let rooms: RoomDto[] = [];
   if (hasPermission(user.role, "inventory.item.create")) {
-    const buildings = await getApplicationServices().locations.listBuildings(actor);
+    buildings = await getApplicationServices().locations.listBuildings(actor);
     const roomLists = await Promise.all(
       buildings.map((building) =>
         getApplicationServices().locations.listRooms(building.id, actor),
@@ -29,7 +30,7 @@ export default async function ItemsPage() {
     <div className="space-y-4">
       {hasPermission(user.role, "inventory.item.create") ? (
         <div className="flex justify-end">
-          <InventoryItemCreateForm rooms={rooms} />
+          <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
         </div>
       ) : null}
       <InventorySummaryAccordions items={items} />

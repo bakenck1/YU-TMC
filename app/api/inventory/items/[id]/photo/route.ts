@@ -1,7 +1,13 @@
 import type { UpdateInventoryItemPhotoInput } from "@/lib/contracts/inventory-items";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import {
+  assertPhotoJsonRequest,
+  itemPhotoResponse,
+  readPhotoJsonRequest,
+} from "@/lib/server/http/photo-request";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -22,12 +28,7 @@ export async function GET(
       id,
       authorizationActor(user),
     );
-    return new Response(photo.bytes.buffer as ArrayBuffer, {
-      headers: {
-        "cache-control": "private, max-age=31536000, immutable",
-        "content-type": photo.mimeType,
-      },
-    });
+    return itemPhotoResponse(photo.bytes, photo.mimeType);
   } catch (error) {
     return photoErrorResponse(error);
   }
@@ -41,9 +42,10 @@ export async function POST(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
+    assertPhotoJsonRequest(request);
     const item = await getApplicationServices().items.updatePhoto(
       id,
-      parsePhoto(await request.json()),
+      parsePhoto(await readPhotoJsonRequest(request)),
       authorizationActor(user),
     );
     return Response.json({ item });
@@ -72,7 +74,7 @@ function parsePhoto(value: unknown): UpdateInventoryItemPhotoInput {
 }
 
 function assertId(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+  if (!isUuid(id)) {
     throw new ApplicationError("validation", "invalid_id");
   }
 }

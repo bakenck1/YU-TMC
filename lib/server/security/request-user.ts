@@ -9,8 +9,17 @@ import {
 } from "@/lib/security/permissions";
 import { sessionFromRequest } from "@/lib/security/session";
 import { verifySessionToken } from "@/lib/security/session";
+import { consumeApiRateLimit } from "@/lib/security/rate-limiter";
+import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 
 export async function requireCurrentUser(request: Request) {
+  const limit = consumeApiRateLimit(request);
+  if (!limit.allowed) {
+    throw new ApplicationError("rate_limited", "too_many_requests", {
+      safeDetails: { retryAfterSeconds: String(limit.retryAfterSeconds) },
+    });
+  }
+  requireSameOriginMutation(request);
   const session = sessionFromRequest(request);
   if (!session) {
     throw new ApplicationError("unauthorized", "unauthorized");

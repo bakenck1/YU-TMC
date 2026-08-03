@@ -22,6 +22,7 @@ import {
   parseInventoryColumnVisibility,
   type InventoryColumnKey,
 } from "@/lib/inventory-columns";
+import InventoryExportButton from "@/components/InventoryExportButton";
 
 function loadSearchHistory(storageKey: string) {
   try {
@@ -166,12 +167,14 @@ export default function ItemsTable({
   dateLabel,
   searchHistoryScope,
   columnSettingsScope,
+  excelDataset,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
   dateLabel?: string;
   searchHistoryScope?: string;
   columnSettingsScope?: string;
+  excelDataset?: "items" | "decommissioned";
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -332,6 +335,7 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
+      {excelDataset ? <div className="flex justify-end"><InventoryExportButton dataset={excelDataset} itemIds={filtered.map((item) => item.id)} columns={visibleColumns} /></div> : null}
       {showFilters ? (
       <div className="rounded-2xl border border-black/5 bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">

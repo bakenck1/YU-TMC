@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  ArrowLeft,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import {
   Barcode,
   Camera,
   Check,
-  ChevronDown,
-  Download,
   FileText,
   Image as ImageIcon,
   MessageSquare,
   Paperclip,
   Pencil,
-  Printer,
   QrCode,
   Save,
   Send,
@@ -22,7 +24,6 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type {
@@ -58,7 +59,7 @@ export default function InventoryItemDetails({
   initialComments: InventoryItemCommentDto[];
   canComment: boolean;
   canManageProtected: boolean;
-  rooms: RoomDto[];
+  rooms: Array<RoomDto & { buildingName: string }>;
   initialComponents: InventoryItemDto[];
   canManageComponents: boolean;
 }) {
@@ -77,6 +78,7 @@ export default function InventoryItemDetails({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [protectedEditing, setProtectedEditing] = useState(false);
+  const [protectedBuildingId, setProtectedBuildingId] = useState(item.room.buildingId);
   const [protectedRoomId, setProtectedRoomId] = useState(item.room.id);
   const [inventoryNumber, setInventoryNumber] = useState(item.inventoryNumber);
   const [status, setStatus] = useState(item.status);
@@ -95,28 +97,63 @@ export default function InventoryItemDetails({
   const [comment, setComment] = useState("");
   const [commentAttachment, setCommentAttachment] = useState<File | null>(null);
   const [commentSaving, setCommentSaving] = useState(false);
-  const actionBarRef = useRef<HTMLElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const protectedDialogRef = useRef<HTMLDivElement>(null);
+  const protectedTriggerRef = useRef<HTMLButtonElement>(null);
   const photoDialogRef = useRef<HTMLDivElement>(null);
   const photoTriggerRef = useRef<HTMLButtonElement>(null);
   const photoCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const [actionBarHeight, setActionBarHeight] = useState(0);
+  const protectedBuildings = Array.from(
+    new Map(
+      rooms.map((room) => [
+        room.buildingId,
+        { id: room.buildingId, name: room.buildingName },
+      ]),
+    ).values(),
+  );
+  const protectedBuildingRooms = rooms.filter(
+    (room) => room.buildingId === protectedBuildingId,
+  );
 
   useEffect(() => {
-    const actionBar = actionBarRef.current;
-    if (!actionBar) return;
-    const updateHeight = () =>
-      setActionBarHeight(actionBar.getBoundingClientRect().height);
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(actionBar);
-    return () => observer.disconnect();
-  }, []);
+    if (!editing) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousActiveElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const editTrigger = editTriggerRef.current;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() =>
+      editDialogRef.current?.querySelector<HTMLInputElement>("input")?.focus(),
+    );
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      (previousActiveElement ?? editTrigger)?.focus();
+    };
+  }, [editing]);
+
+  useEffect(() => {
+    if (!protectedEditing) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousActiveElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const protectedTrigger = protectedTriggerRef.current;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() =>
+      protectedDialogRef.current?.querySelector<HTMLSelectElement>("select")?.focus(),
+    );
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      (previousActiveElement ?? protectedTrigger)?.focus();
+    };
+  }, [protectedEditing]);
 
   useEffect(() => {
     if (!photoOpen) return;
     const previousOverflow = document.body.style.overflow;
     const previousActiveElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const photoTrigger = photoTriggerRef.current;
     document.body.style.overflow = "hidden";
     window.requestAnimationFrame(() => photoCloseButtonRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -145,9 +182,59 @@ export default function InventoryItemDetails({
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
-      (previousActiveElement ?? photoTriggerRef.current)?.focus();
+      (previousActiveElement ?? photoTrigger)?.focus();
     };
   }, [photoOpen]);
+
+  function openContentEditor() {
+    setName(item.name);
+    setDescription(item.description ?? "");
+    setItemType(item.itemType);
+    setBrand(item.brand ?? "");
+    setModel(item.model ?? "");
+    setQuantity(String(item.quantity));
+    setUnitPrice(String(item.unitPrice));
+    setError("");
+    setSaved(false);
+    setEditing(true);
+  }
+
+  function closeContentEditor() {
+    if (saving) return;
+    setEditing(false);
+    setName(item.name);
+    setDescription(item.description ?? "");
+    setItemType(item.itemType);
+    setBrand(item.brand ?? "");
+    setModel(item.model ?? "");
+    setQuantity(String(item.quantity));
+    setUnitPrice(String(item.unitPrice));
+    setError("");
+  }
+
+  function handleEditDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeContentEditor();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      editDialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), textarea:not([disabled])",
+      ) ?? [],
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   async function saveContent() {
     setSaving(true);
@@ -168,12 +255,12 @@ export default function InventoryItemDetails({
           unitPrice: Number(unitPrice),
         }),
       });
-      const body = (await response.json()) as {
+      const body = (await response.json().catch(() => ({}))) as {
         item?: InventoryItemDto;
         error?: string;
       };
       if (!response.ok || !body.item) {
-        throw new Error(body.error ?? "save_failed");
+        throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
       setItemType(body.item.itemType);
@@ -201,26 +288,59 @@ export default function InventoryItemDetails({
     setError("");
     setSaved(false);
     try {
-      const response = await fetch(`/api/inventory/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          version: item.version,
-          roomId: protectedRoomId,
-          inventoryNumber,
-          status,
-          replaceQr,
-          qrReplaceReason: replaceQr ? qrReplaceReason : null,
-        }),
-      });
-      const body = (await response.json()) as {
-        item?: InventoryItemDto;
-        error?: string;
+      const roomChanged = protectedRoomId !== item.room.id;
+      const inventoryNumberChanged = inventoryNumber.trim() !== item.inventoryNumber;
+      const statusChanged = status !== item.status;
+      const submit = async (
+        version: number,
+        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"] },
+      ) => {
+        const response = await fetch(`/api/inventory/items/${item.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            version,
+            ...values,
+            replaceQr,
+            qrReplaceReason: replaceQr ? qrReplaceReason : null,
+          }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          item?: InventoryItemDto;
+          error?: string;
+        };
+        return { response, body };
       };
-      if (!response.ok || !body.item) {
-        throw new Error(body.error ?? "save_failed");
+      let result = await submit(item.version, {
+        roomId: protectedRoomId,
+        inventoryNumber,
+        status,
+      });
+      if (result.response.status === 409 && result.body.error === "version_conflict") {
+        const latestResponse = await fetch(`/api/inventory/items/${item.id}`);
+        const latestBody = (await latestResponse.json().catch(() => ({}))) as {
+          item?: InventoryItemDto;
+          error?: string;
+        };
+        if (!latestResponse.ok || !latestBody.item) {
+          throw new Error(latestBody.error ?? responseErrorCode(latestResponse.status));
+        }
+        const latestItem = latestBody.item;
+        setItem(latestItem);
+        result = await submit(latestItem.version, {
+          roomId: roomChanged ? protectedRoomId : latestItem.room.id,
+          inventoryNumber: inventoryNumberChanged
+            ? inventoryNumber
+            : latestItem.inventoryNumber,
+          status: statusChanged ? status : latestItem.status,
+        });
       }
+      if (!result.response.ok || !result.body.item) {
+        throw new Error(result.body.error ?? responseErrorCode(result.response.status));
+      }
+      const body = result.body as { item: InventoryItemDto };
       setItem(body.item);
+      setProtectedBuildingId(body.item.room.buildingId);
       setProtectedRoomId(body.item.room.id);
       setInventoryNumber(body.item.inventoryNumber);
       setStatus(body.item.status);
@@ -237,21 +357,51 @@ export default function InventoryItemDetails({
   }
 
   function openProtectedFields() {
+    setProtectedBuildingId(item.room.buildingId);
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
     setReplaceQr(false);
     setQrReplaceReason("");
+    setError("");
+    setSaved(false);
     setProtectedEditing(true);
   }
 
   function closeProtectedFields() {
+    if (saving) return;
+    setProtectedBuildingId(item.room.buildingId);
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
     setReplaceQr(false);
     setQrReplaceReason("");
+    setError("");
     setProtectedEditing(false);
+  }
+
+  function handleProtectedDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeProtectedFields();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      protectedDialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled])",
+      ) ?? [],
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   async function archiveItem() {
@@ -265,7 +415,7 @@ export default function InventoryItemDetails({
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "archive_failed");
+        throw new Error(body?.error ?? responseErrorCode(response.status));
       }
       router.push("/items");
       router.refresh();
@@ -290,12 +440,12 @@ export default function InventoryItemDetails({
           reason: input.reason,
         }),
       });
-      const body = (await response.json()) as {
+      const body = (await response.json().catch(() => ({}))) as {
         item?: InventoryItemDto;
         error?: string;
       };
       if (!response.ok || !body.item) {
-        throw new Error(body.error ?? "service_failed");
+        throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
       setServiceDialogOpen(false);
@@ -322,9 +472,9 @@ export default function InventoryItemDetails({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ version: item.version, ...photo }),
       });
-      const body = (await response.json()) as { item?: InventoryItemDto; error?: string };
+      const body = (await response.json().catch(() => ({}))) as { item?: InventoryItemDto; error?: string };
       if (!response.ok || !body.item) {
-        throw new Error(body.error ?? "photo_save_failed");
+        throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
       setSaved(true);
@@ -349,12 +499,12 @@ export default function InventoryItemDetails({
         method: "POST",
         body: formData,
       });
-      const body = (await response.json()) as {
+      const body = (await response.json().catch(() => ({}))) as {
         comments?: InventoryItemCommentDto[];
         error?: string;
       };
       if (!response.ok || !body.comments) {
-        throw new Error(body.error ?? "item_comments_unavailable");
+        throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setComments(body.comments);
       setComment("");
@@ -378,55 +528,40 @@ export default function InventoryItemDetails({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <Link href="/items" className="rounded-lg p-2 text-zinc-500 hover:bg-white">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-800">{item.name}</h1>
-          <span className="mt-1 inline-block rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
-            {statusLabel}
-          </span>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold text-zinc-700">{item.name}</h1>
+        <span className="rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-600">
+          {statusLabel}
+        </span>
       </div>
 
       <nav
-        ref={actionBarRef}
         aria-label={t("itemDetails.actions")}
         className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/5 bg-white/95 p-2 shadow-md backdrop-blur"
       >
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => document.getElementById("item-information")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          <span
+            aria-current="page"
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
             <FileText className="h-4 w-4" /> {t("items.information")}
-          </button>
-          {canEditContent ? <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
+          </span>
+          {canEditContent ? <button ref={editTriggerRef} type="button" onClick={openContentEditor} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
           <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button>
-          {canManageProtected ? (
-            <button
-              type="button"
-              onClick={() =>
-                protectedEditing
-                  ? closeProtectedFields()
-                  : openProtectedFields()
-              }
-              aria-expanded={protectedEditing}
-              aria-controls="protected-fields-panel"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              {t("itemDetails.protectedFields")}
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${protectedEditing ? "rotate-180" : ""}`}
-              />
-            </button>
-          ) : null}
         </div>
         {canSendToService || canManageProtected ? (
           <div className="ml-auto flex flex-wrap justify-end gap-2">
+            {canManageProtected ? (
+              <button
+                ref={protectedTriggerRef}
+                type="button"
+                onClick={openProtectedFields}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {t("itemDetails.protectedFields")}
+              </button>
+            ) : null}
             {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} title={item.status === "maintenance" ? t("itemDetails.alreadyInService") : t("items.sendToService")} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? t("itemDetails.sending") : item.status === "maintenance" ? t("itemDetails.inService") : t("items.sendToService")}</button> : null}
             {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("items.writeOff")}</button> : null}
           </div>
@@ -434,20 +569,62 @@ export default function InventoryItemDetails({
       </nav>
 
       {canManageProtected && protectedEditing ? (
-        <section
-          id="protected-fields-panel"
-          aria-labelledby="protected-fields-title"
-          className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) closeProtectedFields();
+          }}
         >
-          <div>
-            <h2 id="protected-fields-title" className="font-semibold text-zinc-800">
-              {t("itemDetails.protectedFields")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("itemDetails.protectedHint")}
-            </p>
+        <section
+          ref={protectedDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="protected-fields-title"
+          aria-describedby="protected-fields-description"
+          onKeyDown={handleProtectedDialogKeyDown}
+          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-2xl"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="protected-fields-title" className="text-lg font-semibold text-zinc-800">
+                {t("itemDetails.protectedFields")}
+              </h2>
+              <p id="protected-fields-description" className="mt-1 text-sm text-zinc-500">
+                {t("itemDetails.protectedHint")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeProtectedFields}
+              disabled={saving}
+              aria-label={t("common.close")}
+              className="rounded-lg p-2 text-zinc-500 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-zinc-600">{t("analytics.buildingFilter")}</span>
+              <select
+                value={protectedBuildingId}
+                onChange={(event) => {
+                  const buildingId = event.target.value;
+                  setProtectedBuildingId(buildingId);
+                  setProtectedRoomId(
+                    rooms.find((room) => room.buildingId === buildingId)?.id ?? "",
+                  );
+                }}
+                className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
+              >
+                {protectedBuildings.map((building) => (
+                  <option key={building.id} value={building.id}>
+                    {translateCampusBuilding(language, building.name)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block text-sm">
               <span className="text-zinc-600">{t("itemDetails.room")}</span>
               <select
@@ -455,7 +632,7 @@ export default function InventoryItemDetails({
                 onChange={(event) => setProtectedRoomId(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
               >
-                {rooms.map((room) => (
+                {protectedBuildingRooms.map((room) => (
                   <option key={room.id} value={room.id}>
                     {room.designation} · {t("inventory.floorShort")} {room.floorNumber}
                   </option>
@@ -484,7 +661,7 @@ export default function InventoryItemDetails({
                 <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option>
               </select>
             </label>
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-sm sm:col-span-2">
               <label className="flex items-center gap-2 text-zinc-700">
                 <input
                   type="checkbox"
@@ -503,7 +680,20 @@ export default function InventoryItemDetails({
                 />
               ) : null}
             </div>
-            <div className="flex gap-2 sm:col-span-2">
+            {error ? (
+              <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2">
+                {error}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2 border-t border-amber-200 pt-4 sm:col-span-2">
+              <button
+                type="button"
+                onClick={closeProtectedFields}
+                disabled={saving}
+                className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-zinc-600 disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
               <button
                 type="button"
                 onClick={() => void saveProtectedFields()}
@@ -517,16 +707,10 @@ export default function InventoryItemDetails({
               >
                 {saving ? t("itemDetails.saving") : t("common.save")}
               </button>
-              <button
-                type="button"
-                onClick={closeProtectedFields}
-                className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-zinc-600"
-              >
-                {t("common.cancel")}
-              </button>
             </div>
           </div>
         </section>
+        </div>
       ) : null}
 
       {error ? (
@@ -567,6 +751,97 @@ export default function InventoryItemDetails({
           void saveCameraPhoto(photo);
         }}
       />
+      {editing ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) closeContentEditor();
+          }}
+        >
+          <div
+            ref={editDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="item-editor-title"
+            aria-describedby="item-editor-description"
+            onKeyDown={handleEditDialogKeyDown}
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="item-editor-title" className="text-lg font-semibold text-zinc-800">
+                  {t("itemDetails.card")}
+                </h2>
+                <p id="item-editor-description" className="mt-1 text-sm text-zinc-500">
+                  {t("itemDetails.currentRegistryData")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeContentEditor}
+                disabled={saving}
+                aria-label={t("common.close")}
+                className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              className="mt-6 space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveContent();
+              }}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("items.name")}</span>
+                  <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("items.type")}</span>
+                  <input value={itemType} onChange={(event) => setItemType(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("itemDetails.brand")}</span>
+                  <input value={brand} onChange={(event) => setBrand(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("itemDetails.model")}</span>
+                  <input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("items.quantity")}</span>
+                  <input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span>
+                  <input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                </label>
+              </div>
+              <label className="block text-sm">
+                <span className="text-zinc-500">{t("itemDetails.description")}</span>
+                <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+              </label>
+              {error ? (
+                <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2 border-t border-black/5 pt-4">
+                <button type="button" onClick={closeContentEditor} disabled={saving} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600 disabled:opacity-50">
+                  {t("common.cancel")}
+                </button>
+                <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                  <Save className="h-4 w-4" /> {saving ? t("itemDetails.saving") : t("common.save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
       {photoOpen && item.photoUrl ? (
         <div
           ref={photoDialogRef}
@@ -597,152 +872,86 @@ export default function InventoryItemDetails({
         </div>
       ) : null}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.5fr)]">
-        <section className="overflow-hidden rounded-2xl border border-amber-100 bg-[#fff8ec] shadow-sm">
-          <div className="relative flex aspect-[4/3] items-center justify-center bg-zinc-100">
-            {item.photoUrl ? (
-              <button
-                ref={photoTriggerRef}
-                type="button"
-                onClick={() => setPhotoOpen(true)}
-                className="absolute inset-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
-                aria-label={t("itemDetails.openPhoto")}
-              >
-                <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
-              </button>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-sm text-zinc-400">
-                <ImageIcon className="h-10 w-10" />
-                {t("items.photoMissing")}
-              </div>
-            )}
-            {canEditContent ? (
-              <button
-                type="button"
-                onClick={() => setCameraOpen(true)}
-                disabled={capturingPhoto}
-                className="absolute bottom-3 right-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
-              >
-                <Camera className="h-4 w-4" />
-                {capturingPhoto ? t("itemDetails.saving") : t("items.photo")}
-              </button>
-            ) : null}
-          </div>
-          <div className="border-t border-amber-100 bg-[#fff7e8] p-5">
-            <div className="flex items-center justify-center gap-3 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
-              {codeKind === "barcode" || item.qrCode ? (
-                <Image
-                  src={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=svg`}
-                  alt={`${codeKind === "barcode" ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}: ${item.name}`}
-                  width={codeKind === "barcode" ? 240 : 96}
-                  height={96}
-                  unoptimized
-                  className={codeKind === "barcode" ? "max-w-[58%]" : undefined}
-                />
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(420px,0.95fr)_minmax(0,1.5fr)]">
+        <div className="space-y-5">
+        <section className="mt-12 rounded-2xl border border-amber-100 bg-[#fff4df] px-3 pb-5 shadow-sm">
+          <div className="grid items-start gap-6 sm:grid-cols-[minmax(0,1fr)_190px]">
+            <div className="relative mx-auto -mt-12 flex h-[208px] w-full max-w-[208px] items-center justify-center overflow-hidden rounded-md bg-zinc-100 shadow-lg">
+              {item.photoUrl ? (
+                <button
+                  ref={photoTriggerRef}
+                  type="button"
+                  onClick={() => setPhotoOpen(true)}
+                  className="absolute inset-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+                  aria-label={t("itemDetails.openPhoto")}
+                >
+                  <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
+                </button>
+              ) : (
+                <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-zinc-400">
+                  <ImageIcon className="h-10 w-10" />
+                  {t("items.photoMissing")}
+                </div>
+              )}
+              {canEditContent ? (
+                <button
+                  type="button"
+                  onClick={() => setCameraOpen(true)}
+                  disabled={capturingPhoto}
+                  className="absolute bottom-2 right-2 inline-flex h-11 items-center gap-2 rounded-full bg-white px-3 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
+                >
+                  <Camera className="h-4 w-4" />
+                  {capturingPhoto ? t("itemDetails.saving") : t("items.photo")}
+                </button>
               ) : null}
-              <div className="min-w-0">
-                <p className="text-xs text-zinc-400">{codeKind === "barcode" ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}</p>
-                <p className="break-all font-mono text-xs text-zinc-700">
-                  {codeKind === "barcode" ? item.inventoryNumber : item.qrCode ?? t("itemDetails.notAssigned")}
-                </p>
-              </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-white/70 p-1">
-              <button type="button" onClick={() => setCodeKind("barcode")} aria-pressed={codeKind === "barcode"} className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${codeKind === "barcode" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><Barcode className="h-4 w-4" />Code 39</button>
-              <button type="button" onClick={() => setCodeKind("qr")} aria-pressed={codeKind === "qr"} className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${codeKind === "qr" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><QrCode className="h-4 w-4" />QR</button>
-            </div>
-            {codeKind === "barcode" || item.qrCode ? (
-              <div className="mt-3 grid grid-cols-2 gap-2 print:hidden">
-                <a
-                  href={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=${codeKind === "barcode" ? "svg" : "png"}&download=1`}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
-                >
-                  <Download className="h-4 w-4" /> {t("itemDetails.download")}
-                </a>
-                <Link
-                  href={`/items/${item.id}/qr?kind=${codeKind}`}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-zinc-700"
-                >
-                  <Printer className="h-4 w-4" /> {t("itemDetails.print")}
-                </Link>
-              </div>
-            ) : null}
-            <div className="mt-3 grid gap-2 text-xs print:hidden">
-              <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="rounded-lg bg-emerald-500 px-3 py-2 font-semibold text-white hover:bg-emerald-600">{t("itemDetails.generateBarcode")}</button>
-              <button type="button" onClick={() => setQrDialog("scan")} className="text-left font-medium text-emerald-700 underline underline-offset-2">{t("itemDetails.scanHelp")}</button>
-              <button type="button" onClick={() => setQrDialog("purpose")} className="text-left font-medium text-emerald-700 underline underline-offset-2">{t("itemDetails.codePurpose")}</button>
+
+            <div className="flex flex-col items-center pt-4 text-center print:hidden">
+              {item.qrCode ? (
+                <Image
+                  src={`/api/inventory/items/${item.id}/qr?kind=qr&format=svg`}
+                  alt={`${t("items.qrCode")}: ${item.name}`}
+                  width={72}
+                  height={72}
+                  unoptimized
+                  className="h-[72px] w-[72px]"
+                />
+              ) : (
+                <QrCode className="h-[72px] w-[72px] text-zinc-600" strokeWidth={1.5} />
+              )}
+              <button
+                type="button"
+                onClick={() => { setCodeKind("qr"); setQrDialog("generate"); }}
+                className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+              >
+                {t("items.createQr")}
+              </button>
+              <button type="button" onClick={() => { setCodeKind("qr"); setQrDialog("scan"); }} className="mt-3 text-xs font-medium text-emerald-600 underline underline-offset-2">
+                {t("itemDetails.scanHelp")}
+              </button>
+              <button type="button" onClick={() => { setCodeKind("qr"); setQrDialog("purpose"); }} className="mt-1 text-xs font-medium text-emerald-600 underline underline-offset-2">
+                {t("itemDetails.codePurpose")}
+              </button>
             </div>
           </div>
+
+          <dl className="mt-8 divide-y divide-black/10 text-sm">
+            <OverviewRow label={t("items.type")} value={item.itemType} />
+            <OverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
+            <OverviewRow label={t("items.location")} value={item.room.designation} />
+            <OverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
+          </dl>
         </section>
+
+        <InventoryItemComposition
+          key={item.id}
+          itemId={item.id}
+          initialComponents={initialComponents}
+          canManage={canManageComponents}
+        />
+        </div>
 
         <div className="space-y-5">
-        <section
-          id="item-information"
-          style={{ scrollMarginTop: actionBarHeight + 16 }}
-          className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm"
-        >
-          <div className="mb-6 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.card")}</h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("itemDetails.currentRegistryData")}</p>
-            </div>
-            {canEditContent && !editing ? (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-              >
-                {t("itemDetails.change")}
-              </button>
-            ) : null}
-          </div>
-
-          {editing ? (
-            <div className="space-y-4">
-              <label className="block text-sm">
-                <span className="text-zinc-500">{t("items.name")}</span>
-                <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              </div>
-              <label className="block text-sm">
-                <span className="text-zinc-500">{t("itemDetails.description")}</span>
-                <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
-              </label>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => void saveContent()} disabled={saving} className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                  <Save className="h-4 w-4" /> {saving ? t("itemDetails.saving") : t("common.save")}
-                </button>
-                <button type="button" onClick={() => { setEditing(false); setName(item.name); setDescription(item.description ?? ""); setItemType(item.itemType); setBrand(item.brand ?? ""); setModel(item.model ?? ""); setQuantity(String(item.quantity)); setUnitPrice(String(item.unitPrice)); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">
-                  {t("common.cancel")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <Field label={t("items.name")} value={item.name} />
-              <Field label={t("items.type")} value={item.itemType} />
-              <Field label={t("items.brandModelShort")} value={[item.brand, item.model].filter(Boolean).join(" / ") || t("common.notSpecified")} />
-              <Field label={t("items.inventoryNumber")} value={`${item.inventoryNumber}${item.inventoryNumberKind === "temporary" ? ` (${t("itemDetails.temporaryNumber")})` : ""}`} />
-              <Field label={t("itemDetails.room")} value={`${translateCampusBuilding(language, item.room.buildingName)}, ${item.room.designation}`} />
-              <Field label={t("inventory.floor")} value={String(item.room.floorNumber)} />
-              <Field label={t("items.status")} value={statusLabel} />
-              <Field label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
-              <Field label={t("items.quantity")} value={String(item.quantity)} />
-              <Field label={t("itemDetails.unitPrice")} value={`${item.unitPrice.toFixed(2)} ₸`} />
-              <Field label={t("itemDetails.recordVersion")} value={String(item.version)} />
-              <Field label={t("items.updated")} value={new Date(item.updatedAt).toLocaleString(locale)} />
-              <div className="sm:col-span-2">
-                <Field label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
-              </div>
-            </dl>
-          )}
-        </section>
         <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-zinc-800">
             {t("itemDetails.recentOperations")}
@@ -853,13 +1062,15 @@ export default function InventoryItemDetails({
         </div>
       </div>
 
-      <InventoryItemComposition
-        key={item.id}
-        itemId={item.id}
-        initialComponents={initialComponents}
-        canManage={canManageComponents}
-      />
+    </div>
+  );
+}
 
+function OverviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-h-9 items-center justify-between gap-4 py-2">
+      <dt className="font-medium text-zinc-700">{label}</dt>
+      <dd className="text-right text-zinc-600">{value}</dd>
     </div>
   );
 }
@@ -961,15 +1172,54 @@ function localizeItemError(
   cause: unknown,
   t: (key: TranslationKey) => string,
 ) {
-  void cause;
+  const code = cause instanceof Error ? cause.message : "";
+  const direct: Record<string, TranslationKey> = {
+    version_conflict: "itemDetails.errorConflict",
+    forbidden: "itemDetails.errorForbidden",
+    unauthorized: "itemDetails.errorUnauthorized",
+    item_not_found: "itemDetails.errorNotFound",
+    attachment_not_found: "itemDetails.errorNotFound",
+    room_not_found: "itemDetails.errorRoomNotFound",
+    inventory_number_already_exists: "itemDetails.errorInventoryNumber",
+    qr_replace_reason_required: "itemDetails.errorQrReason",
+    invalid_camera_photo: "itemDetails.errorPhoto",
+    invalid_camera_photo_size: "itemDetails.errorPhoto",
+    invalid_photo_dimensions: "itemDetails.errorPhoto",
+    photo_save_failed: "itemDetails.errorPhoto",
+    invalid_comment: "itemDetails.errorComment",
+    invalid_comment_attachment: "itemDetails.errorComment",
+    invalid_service_name: "itemDetails.errorService",
+    invalid_service_reason: "itemDetails.errorService",
+    service_failed: "itemDetails.errorUnavailable",
+    item_comments_unavailable: "itemDetails.errorUnavailable",
+    items_unavailable: "itemDetails.errorUnavailable",
+    internal_error: "itemDetails.errorUnavailable",
+  };
+  const invalidCodes = new Set([
+    "invalid_request",
+    "invalid_version",
+    "invalid_item_name",
+    "invalid_item_description",
+    "invalid_item_type",
+    "invalid_item_brand",
+    "invalid_item_model",
+    "invalid_item_quantity",
+    "invalid_item_price",
+    "invalid_inventory_number",
+    "invalid_item_status",
+    "invalid_room_id",
+  ]);
+  if (direct[code]) return t(direct[code]);
+  if (invalidCodes.has(code)) return t("itemDetails.errorInvalidFields");
+  if (cause instanceof TypeError) return t("itemDetails.errorUnavailable");
   return t("itemDetails.error");
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 px-4 py-3">
-      <dt className="text-xs text-zinc-400">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-zinc-800">{value}</dd>
-    </div>
-  );
+function responseErrorCode(status: number) {
+  if (status === 400) return "invalid_request";
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "item_not_found";
+  if (status === 409) return "version_conflict";
+  return status >= 500 ? "items_unavailable" : "save_failed";
 }

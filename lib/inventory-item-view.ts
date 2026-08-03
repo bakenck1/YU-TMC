@@ -17,10 +17,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     photoColor: "#0ea5e9",
     qrCode: item.qrCode ?? undefined,
     photo: item.photoUrl ?? undefined,
-    displayStatus:
-      item.inventoryNumberKind === "temporary"
-        ? "Требует присвоения номера"
-        : undefined,
+    displayStatus: undefined,
     updatedAt: new Date(item.updatedAt).toLocaleDateString(),
     updatedAtIso: item.updatedAt,
     createdAt: new Date(item.createdAt).toLocaleDateString(),

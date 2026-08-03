@@ -17,7 +17,9 @@ import type {
 } from "@/lib/application/ports/inventory-inspection-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import {
+  canPerformInventoryOperation,
   hasPermission,
   type AuthorizationActor,
 } from "@/lib/security/permissions";
@@ -64,6 +66,7 @@ export class InventoryInspectionService {
       ? normalizeTechnicianId(input.technicianId)
       : actor.userId;
     const createdAt = this.clock.now();
+    const deadlineAt = normalizeDeadline(input.deadlineAt, createdAt);
     const inspection = await this.unitOfWork.transaction(
       async ({ inspections }) => {
         if (!(await inspections.findAssignableTechnician(technicianId))) {
@@ -75,6 +78,7 @@ export class InventoryInspectionService {
           technicianId,
           createdBy: actor.userId,
           createdAt,
+          deadlineAt,
         });
         await inspections.appendAudit(
           audit({
@@ -109,11 +113,19 @@ export class InventoryInspectionService {
     ) {
       throw forbidden();
     }
+    if (!isUuid(input.buildingId) || !isUuid(input.roomId)) {
+      throw new ApplicationError("validation", "invalid_request");
+    }
     return this.unitOfWork.transaction(async ({ inspections }) => {
       const inspection = await inspections.findInspection(inspectionId);
-      if (!inspection) throw notFound("inspection_not_found");
-      if (inspection.technicianId !== actor.userId && !canMutateAll) {
-        throw forbidden();
+      if (
+        !inspection ||
+        !canPerformInventoryOperation(actor, {
+          operation: "inspection.add_room",
+          technicianId: inspection.technicianId,
+        })
+      ) {
+        throw notFound("inspection_not_found");
       }
       if (inspection.status !== "draft") {
         throw new ApplicationError("conflict", "inspection_not_editable");
@@ -130,6 +142,7 @@ export class InventoryInspectionService {
         addedBy: actor.userId,
         addedAt: this.clock.now(),
       });
+      await inspections.snapshotRoomItems(room.id, room.roomId, room.addedAt);
       await inspections.appendAudit(
         audit({
           id: this.ids.create(),
@@ -174,7 +187,7 @@ export class InventoryInspectionService {
       const inspection = await inspections.findInspection(inspectionId);
       if (!inspection) throw notFound("inspection_not_found");
       if (inspection.technicianId !== actor.userId && !canRecordAll) {
-        throw forbidden();
+        throw notFound("inspection_not_found");
       }
       if (inspection.status !== "draft") {
         throw new ApplicationError("conflict", "inspection_not_editable");
@@ -184,14 +197,35 @@ export class InventoryInspectionService {
         inspectionRoomId,
       );
       if (!inspectionRoom) throw notFound("inspection_room_not_found");
-      const existing = await inspections.findItemResult(inspectionId, input.itemId);
-      if (existing) return toItemResultDto(existing);
-      const snapshot = await inspections.findItemSnapshot(input.itemId);
+      const snapshot = await inspections.findExpectedItem(
+        inspectionRoomId,
+        input.itemId,
+      );
       if (!snapshot) throw notFound("item_not_found");
+      const existing = await inspections.findItemResult(inspectionId, input.itemId);
+      const occurredAt = this.clock.now();
+      if (existing) {
+        const revisionNumber = existing.revisionNumber + 1;
+        await inspections.insertItemResultRevision({
+          resultId: existing.id,
+          revisionNumber,
+          inspectionRoomId,
+          observedRoomId: inspectionRoom.roomId,
+          result: input.result,
+          comment,
+          createdBy: actor.userId,
+          createdAt: occurredAt,
+        });
+        return toItemResultDto({
+          ...existing,
+          result: input.result,
+          comment,
+          revisionNumber,
+        });
+      }
       if (snapshot.registryRoomId !== inspectionRoom.roomId) {
         throw notFound("item_not_found");
       }
-      const occurredAt = this.clock.now();
       let created;
       try {
         created = await inspections.insertItemResult({
@@ -210,6 +244,7 @@ export class InventoryInspectionService {
       }
       await inspections.insertItemResultRevision({
         resultId: created.id,
+        revisionNumber: 1,
         inspectionRoomId,
         observedRoomId: inspectionRoom.roomId,
         result: input.result,
@@ -217,9 +252,13 @@ export class InventoryInspectionService {
         createdBy: actor.userId,
         createdAt: occurredAt,
       });
-      await inspections.markInspectionRoomInspected(
+      await inspections.markInspectionRoomCompletedIfReady(
         inspectionRoomId,
         actor.userId,
+        occurredAt,
+      );
+      const completed = await inspections.completeInspectionIfReady(
+        inspectionId,
         occurredAt,
       );
       await inspections.appendAudit(
@@ -238,6 +277,18 @@ export class InventoryInspectionService {
           occurredAt,
         }),
       );
+      if (completed) {
+        await inspections.appendAudit(
+          audit({
+            id: this.ids.create(),
+            actor,
+            subjectId: inspectionId,
+            action: "inspection.completed",
+            afterValues: { status: "awaiting_decisions" },
+            occurredAt,
+          }),
+        );
+      }
       return toItemResultDto({
         ...created,
         result: input.result,
@@ -261,6 +312,18 @@ export class InventoryInspectionService {
       : await this.unitOfWork.read(({ inspections }) =>
           inspections.listItemResults(record.id),
         );
+    const items = repository
+      ? await repository.listExpectedItems(record.id)
+      : await this.unitOfWork.read(({ inspections }) =>
+          inspections.listExpectedItems(record.id),
+        );
+    const expectedIds = new Set(items.map((item) => item.itemId));
+    const expectedResults = results.filter((result) => expectedIds.has(result.itemId));
+    const checked = expectedResults.length;
+    const total = items.length;
+    const overdue =
+      record.status === "draft" &&
+      this.clock.now().getTime() > record.deadlineAt.getTime();
     return {
       id: record.id,
       name: record.name,
@@ -269,8 +332,34 @@ export class InventoryInspectionService {
       version: record.version,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
+      deadlineAt: record.deadlineAt.toISOString(),
       rooms: rooms.map(toRoomDto),
+      items: items.map((item) => ({
+        inspectionRoomId: item.inspectionRoomId,
+        itemId: item.itemId,
+        itemName: item.itemName,
+        inventoryNumber: item.inventoryNumber,
+        buildingName: item.buildingName,
+        roomDesignation: item.roomDesignation,
+      })),
       results: results.map(toItemResultDto),
+      progress: {
+        checked,
+        total,
+        percent: total ? Math.round((checked / total) * 100) : 0,
+        present: expectedResults.filter((result) => result.result === "present").length,
+        missing: expectedResults.filter((result) => result.result === "missing").length,
+        unchecked: Math.max(0, total - checked),
+        comments: expectedResults.filter((result) => result.comment !== null).length,
+      },
+      displayStatus:
+        record.status === "awaiting_decisions" || record.status === "confirmed"
+          ? "completed"
+          : overdue
+            ? "overdue"
+            : checked > 0
+              ? "in_progress"
+              : "draft",
     };
   }
 }
@@ -296,6 +385,20 @@ function normalizeTechnicianId(value: unknown) {
     throw new ApplicationError("validation", "invalid_technician_id");
   }
   return value;
+}
+
+function normalizeDeadline(value: unknown, createdAt: Date) {
+  if (value === undefined || value === null || value === "") {
+    return new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1_000);
+  }
+  if (typeof value !== "string") {
+    throw new ApplicationError("validation", "invalid_inspection_deadline");
+  }
+  const deadline = new Date(value);
+  if (!Number.isFinite(deadline.getTime()) || deadline <= createdAt) {
+    throw new ApplicationError("validation", "invalid_inspection_deadline");
+  }
+  return deadline;
 }
 
 function forbidden() {

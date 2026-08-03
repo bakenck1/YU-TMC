@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   const config = googleSsoConfig();
   if (!config || !isSessionConfigured()) {
-    return loginRedirect(request, "google_not_configured");
+    return loginRedirect("google_not_configured");
   }
 
   const requestUrl = new URL(request.url);
@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     requestUrl.searchParams.get("returnTo"),
   );
   const response = NextResponse.redirect(transaction.url);
+  response.headers.set("cache-control", "no-store");
   const cookieOptions = {
     httpOnly: true,
     secure: new URL(config.redirectUri).protocol === "https:",
@@ -46,8 +47,13 @@ export async function GET(request: Request) {
   return response;
 }
 
-function loginRedirect(request: Request, error: string) {
-  const url = new URL("/login", request.url);
-  url.searchParams.set("error", error);
-  return NextResponse.redirect(url);
+function loginRedirect(error: string) {
+  const search = new URLSearchParams({ error });
+  return new Response(null, {
+    status: 307,
+    headers: {
+      "cache-control": "no-store",
+      location: `/login?${search}`,
+    },
+  });
 }

@@ -36,6 +36,9 @@ yarn-error.log*
 /.data/session-secret
 /.data/postgres-development/
 
+# production error monitor state
+/errors/.monitor-state.json
+
 # vercel
 .vercel
 

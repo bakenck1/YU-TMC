@@ -1,5 +1,6 @@
 import type { AddInspectionRoomInput } from "@/lib/contracts/inventory-inspections";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -19,12 +20,15 @@ export async function POST(
     const { id } = await context.params;
     assertId(id);
     const input = parseInput(await request.json());
-    const room = await getApplicationServices().inspections.addRoom(
+    const services = getApplicationServices();
+    const actor = authorizationActor(user);
+    const room = await services.inspections.addRoom(
       id,
       input,
-      authorizationActor(user),
+      actor,
     );
-    return Response.json({ room }, { status: 201 });
+    const inspection = (await services.inspections.list(actor)).find((entry) => entry.id === id);
+    return Response.json({ room, inspection }, { status: 201 });
   } catch (error) {
     return errorResponse(error instanceof SyntaxError ? invalidRequest() : error);
   }
@@ -33,14 +37,14 @@ export async function POST(
 function parseInput(value: unknown): AddInspectionRoomInput {
   if (!value || typeof value !== "object") throw invalidRequest();
   const input = value as Record<string, unknown>;
-  if (typeof input.buildingId !== "string" || typeof input.roomId !== "string") {
+  if (!isUuid(input.buildingId) || !isUuid(input.roomId)) {
     throw invalidRequest();
   }
   return { buildingId: input.buildingId, roomId: input.roomId };
 }
 
 function assertId(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+  if (!isUuid(id)) {
     throw new ApplicationError("validation", "invalid_id");
   }
 }

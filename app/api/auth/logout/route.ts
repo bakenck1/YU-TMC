@@ -1,21 +1,22 @@
 import { NextResponse } from "next/server";
-import {
-  consumeApiRateLimit,
-  rateLimitedResponse,
-  rateLimitHeaders,
-} from "@/lib/security/rate-limiter";
+import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const apiLimit = consumeApiRateLimit(request);
-  if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
+  const headers = { "cache-control": "no-store" };
+  try {
+    requireSameOriginMutation(request);
+  } catch (error) {
+    return applicationErrorResponse(error, headers);
+  }
 
   const response = NextResponse.json(
     { authenticated: false },
-    { headers: rateLimitHeaders(apiLimit) },
+    { headers },
   );
   response.cookies.set({
     name: SESSION_COOKIE_NAME,

@@ -13,6 +13,7 @@ import type {
 } from "@/lib/application/ports/inventory-responsibility-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import {
   hasPermission,
   type AuthorizationActor,
@@ -126,11 +127,11 @@ export class InventoryResponsibilityService {
     return this.unitOfWork.transaction(async ({ responsibility }) => {
       const current = await responsibility.findTransfer(id);
       if (!current) throw notFound("transfer_not_found");
+      if (current.currentResponsibleIdAtRequest !== actor.userId) {
+        throw notFound("transfer_not_found");
+      }
       if (current.status !== "pending_current_owner") {
         throw conflict("transfer_not_pending");
-      }
-      if (current.currentResponsibleIdAtRequest !== actor.userId) {
-        throw new ApplicationError("forbidden", "forbidden");
       }
       const comment =
         input.decision === "reject"
@@ -219,7 +220,7 @@ export class InventoryResponsibilityService {
       const current = await responsibility.findTransfer(id);
       if (!current) throw notFound("transfer_not_found");
       if (current.requestedBy !== actor.userId) {
-        throw new ApplicationError("forbidden", "forbidden");
+        throw notFound("transfer_not_found");
       }
       if (current.status !== "pending_current_owner") {
         throw conflict("transfer_not_pending");
@@ -351,7 +352,7 @@ function requirePermission(
 function normalizeUserId(value: unknown): string {
   if (
     typeof value !== "string" ||
-    !/^[0-9a-f-]{36}$/i.test(value)
+    !isUuid(value)
   ) {
     throw new ApplicationError("validation", "invalid_responsible_user");
   }

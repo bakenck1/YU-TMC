@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import {
   code39PayloadForItem,
   renderCode39Svg,
@@ -22,7 +23,7 @@ export async function GET(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
-    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    if (!isUuid(id)) {
       throw new ApplicationError("validation", "invalid_id");
     }
     const item = await getApplicationServices().items.findItem(

@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         technicianId: (body as { technicianId?: unknown }).technicianId as
           | string
           | undefined,
+        deadlineAt: (body as { deadlineAt?: unknown }).deadlineAt as string | undefined,
       } satisfies CreateInspectionInput,
       authorizationActor(user),
     );

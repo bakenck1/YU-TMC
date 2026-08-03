@@ -5,7 +5,10 @@ import test from "node:test";
 import { pushPermissionError } from "../lib/client-push-subscription";
 import { syncExistingPushSubscription } from "../lib/client-push-subscription";
 import { syncPushSubscriptionLanguage } from "../lib/client-push-subscription";
-import { firstInspectionRoomId } from "../lib/inventory-inspection-selection";
+import {
+  applyInspectionResult,
+  firstInspectionRoomId,
+} from "../lib/inventory-inspection-selection";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -216,6 +219,65 @@ test("an assigned employee starts with a room from the selected inspection", () 
   );
 
   assert.equal(roomId, "room-1");
+});
+
+test("recording and revising a result updates inspection progress immediately", () => {
+  const inspection = {
+    id: "inspection-1",
+    name: "August audit",
+    technicianId: "employee-1",
+    status: "in_progress",
+    version: 1,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+    deadlineAt: "2026-08-31T00:00:00.000Z",
+    rooms: [{
+      id: "inspection-room-1",
+      buildingId: "building-1",
+      roomId: "room-1",
+      buildingName: "Main",
+      buildingAddress: "Campus",
+      roomDesignation: "101",
+      floorNumber: 1,
+      floorLabel: null,
+      addedAt: "2026-08-01T00:00:00.000Z",
+      inspectedAt: null,
+    }],
+    items: [{
+      inspectionRoomId: "inspection-room-1",
+      itemId: "item-1",
+      itemName: "Monitor",
+      inventoryNumber: "INV-1",
+      buildingName: "Main",
+      roomDesignation: "101",
+    }],
+    results: [],
+    progress: { checked: 0, total: 1, percent: 0, present: 0, missing: 0, unchecked: 1, comments: 0 },
+    displayStatus: "draft",
+  } as const;
+  const firstResult = {
+    id: "result-1",
+    inspectionId: inspection.id,
+    inspectionRoomId: inspection.rooms[0].id,
+    itemId: "item-1",
+    itemName: "Monitor",
+    inventoryNumber: "INV-1",
+    registryRoomIdAtScan: "room-1",
+    responsibleIdAtScan: null,
+    result: "present",
+    comment: null,
+    revisionNumber: 1,
+    createdAt: "2026-08-02T10:00:00.000Z",
+  } as const;
+  const afterFirst = applyInspectionResult([inspection], firstResult);
+  assert.equal(afterFirst[0]?.rooms[0]?.inspectedAt, firstResult.createdAt);
+  assert.equal(afterFirst[0]?.results.length, 1);
+
+  const revised = { ...firstResult, result: "damaged", revisionNumber: 2 } as const;
+  const afterRevision = applyInspectionResult(afterFirst, revised);
+  assert.equal(afterRevision[0]?.results.length, 1);
+  assert.equal(afterRevision[0]?.results[0]?.result, "damaged");
+  assert.equal(afterRevision[0]?.results[0]?.revisionNumber, 2);
 });
 
 test("assignment data flows from admin selection to notifier after persistence", async () => {

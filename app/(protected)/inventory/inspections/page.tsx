@@ -60,6 +60,7 @@ export default async function InventoryInspectionsPage({
       }
       rooms={roomLists.flat()}
       technicians={assignableUsers}
+      canExport={user.role === "admin"}
     />
   );
 }

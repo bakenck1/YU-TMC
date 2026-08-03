@@ -4,7 +4,10 @@ import {
   isPasswordLoginConfigured,
 } from "@/lib/security/credentials";
 import { normalizeEmail } from "@/lib/security/login-protection";
-import { consumeRegistrationLimit } from "@/lib/security/registration-protection";
+import {
+  consumeRegistrationLimit,
+  isAuthorizedBootstrapRequest,
+} from "@/lib/security/registration-protection";
 import {
   consumeApiRateLimit,
   rateLimitedResponse,
@@ -30,6 +33,13 @@ function validName(value: string) {
 export async function POST(request: Request) {
   const apiLimit = consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
+
+  if (!isAuthorizedBootstrapRequest(request)) {
+    return Response.json(
+      { error: "registration_not_authorized" },
+      { status: 403, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
 
   const registrationLimit = consumeRegistrationLimit(request);
   if (!registrationLimit.allowed) {

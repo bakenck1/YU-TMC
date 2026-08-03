@@ -431,6 +431,7 @@ export const inspectionsTable = inventorySchema.table(
     updatedAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
+    deadlineAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
     walkthroughCompletedAt: timestamp({
       withTimezone: true,
       mode: "date",
@@ -1915,6 +1916,35 @@ export const auditRecordsTable = inventorySchema.table(
     ),
     index("audit_records_actor_idx").on(table.actorId, table.occurredAt),
     index("audit_records_domain_event_idx").on(table.domainEventId),
+  ],
+);
+
+export const itemCommentAttachmentsTable = inventorySchema.table(
+  "item_comment_attachments",
+  {
+    id: uuid().primaryKey(),
+    commentId: uuid()
+      .notNull()
+      .references(() => auditRecordsTable.id, {
+        onDelete: "cascade",
+        onUpdate: "restrict",
+      }),
+    fileName: varchar({ length: 180 }).notNull(),
+    mediaType: varchar({ length: 127 }).notNull(),
+    sizeBytes: integer().notNull(),
+    binaryData: binaryData("binary_data").notNull(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("item_comment_attachments_comment_unique").on(table.commentId),
+    check("item_comment_attachments_file_name_check", sql`btrim(${table.fileName}) <> ''`),
+    check("item_comment_attachments_media_type_check", sql`btrim(${table.mediaType}) <> ''`),
+    check(
+      "item_comment_attachments_size_check",
+      sql`${table.sizeBytes} > 0 AND ${table.sizeBytes} <= 2097152 AND octet_length(${table.binaryData}) = ${table.sizeBytes}`,
+    ),
   ],
 );
 

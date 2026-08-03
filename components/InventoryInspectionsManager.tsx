@@ -5,6 +5,7 @@ import {
   Barcode,
   Camera,
   ClipboardCheck,
+  FileSpreadsheet,
   Plus,
   QrCode,
   ScanLine,
@@ -19,7 +20,10 @@ import type {
   RecordItemResultInput,
 } from "@/lib/contracts/inventory-inspection-results";
 import type { UserRole } from "@/lib/contracts/users";
-import { firstInspectionRoomId } from "@/lib/inventory-inspection-selection";
+import {
+  applyInspectionResult,
+  firstInspectionRoomId,
+} from "@/lib/inventory-inspection-selection";
 import {
   startBarcodeScanner,
   type BarcodeScannerSession,
@@ -41,6 +45,7 @@ export default function InventoryInspectionsManager({
   initialInspectionId,
   rooms,
   technicians,
+  canExport,
 }: {
   actorRole: UserRole;
   currentUserId: string;
@@ -48,10 +53,12 @@ export default function InventoryInspectionsManager({
   initialInspectionId: string | null;
   rooms: RoomDto[];
   technicians: InspectionTechnician[];
+  canExport: boolean;
 }) {
   const { language, locale, t } = useAppSettings();
   const [inspections, setInspections] = useState(initialInspections);
   const [name, setName] = useState("");
+  const [deadline, setDeadline] = useState("");
   const [selectedTechnician, setSelectedTechnician] = useState(
     actorRole === "admin" ? technicians[0]?.id ?? "" : currentUserId,
   );
@@ -102,7 +109,7 @@ export default function InventoryInspectionsManager({
       const response = await fetch("/api/inventory/inspections", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, technicianId: selectedTechnician }),
+        body: JSON.stringify({ name, technicianId: selectedTechnician, deadlineAt: deadline ? new Date(`${deadline}T23:59:59`).toISOString() : undefined }),
       });
       const body = (await response.json()) as {
         inspection?: InspectionDto;
@@ -115,6 +122,7 @@ export default function InventoryInspectionsManager({
       setSelectedInspection(body.inspection.id);
       setSelectedInspectionRoom("");
       setName("");
+      setDeadline("");
     } catch (cause) {
       void cause;
       setError(t("inspections.operationFailed"));
@@ -140,13 +148,14 @@ export default function InventoryInspectionsManager({
       );
       const body = (await response.json()) as {
         room?: InspectionDto["rooms"][number];
+        inspection?: InspectionDto;
         error?: string;
       };
       if (!response.ok || !body.room) throw new Error(body.error ?? "room_failed");
       setInspections((current) =>
         current.map((entry) =>
           entry.id === inspection.id
-            ? { ...entry, rooms: [...entry.rooms, body.room!] }
+            ? body.inspection ?? { ...entry, rooms: [...entry.rooms, body.room!] }
             : entry,
         ),
       );
@@ -215,14 +224,7 @@ export default function InventoryInspectionsManager({
       }
       setRecordedResult(body.result);
       setResultComment("");
-      setInspections((current) =>
-        current.map((entry) =>
-          entry.id === inspection.id &&
-          !entry.results.some((existing) => existing.id === body.result!.id)
-            ? { ...entry, results: [...entry.results, body.result!] }
-            : entry,
-        ),
-      );
+      setInspections((current) => applyInspectionResult(current, body.result!));
     } catch (cause) {
       void cause;
       setError(t("inspections.operationFailed"));
@@ -283,7 +285,8 @@ export default function InventoryInspectionsManager({
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
           <ClipboardCheck className="h-6 w-6 text-emerald-500" />
           <div>
             <h1 className="text-xl font-semibold text-zinc-800">
@@ -293,9 +296,11 @@ export default function InventoryInspectionsManager({
               {t("inspections.subtitle")}
             </p>
           </div>
+          </div>
+          {canExport ? <a href="/api/inventory/excel?action=export&dataset=inspection-results" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700"><FileSpreadsheet className="h-4 w-4" />{t("excel.exportResults")}</a> : null}
         </div>
         {actorRole !== "employee" ? (
-          <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,0.7fr)_auto]">
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(13rem,0.7fr)_12rem_auto]">
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -325,10 +330,11 @@ export default function InventoryInspectionsManager({
                 {t("inspections.assigneeSelf")}
               </div>
             )}
+            <input type="date" value={deadline} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDeadline(event.target.value)} aria-label={t("inspections.deadline")} className="min-w-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500" />
             <button
               type="button"
               onClick={() => void createInspection()}
-              disabled={busy || !name.trim() || !selectedTechnician}
+              disabled={busy || !name.trim() || !selectedTechnician || !deadline}
               className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               <Plus className="h-4 w-4" /> {t("inspections.create")}
@@ -548,14 +554,22 @@ export default function InventoryInspectionsManager({
                         (technician) => technician.id === inspection.technicianId,
                       )?.fullName ?? t("inspections.assignedTechnician")}{" "}
                       · {new Date(inspection.updatedAt).toLocaleString(locale)}
+                      {" · "}{t("inspections.deadline")}: {new Date(inspection.deadlineAt).toLocaleDateString(locale)}
                     </p>
                   </div>
                   <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
-                    {t(INSPECTION_STATUS_KEYS[inspection.status])}
+                    {t(INSPECTION_DISPLAY_STATUS_KEYS[inspection.displayStatus])}
                   </span>
                 </div>
               </button>
               <div className="mt-4 border-t border-black/5 pt-4">
+                <InspectionProgress inspection={inspection} />
+                <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                  <ReportMetric label={t("inspections.reportPresent")} value={inspection.progress.present} />
+                  <ReportMetric label={t("inspections.reportMissing")} value={inspection.progress.missing} />
+                  <ReportMetric label={t("inspections.reportUnchecked")} value={inspection.progress.unchecked} />
+                  <ReportMetric label={t("inspections.reportComments")} value={inspection.progress.comments} />
+                </div>
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
                   {t("inspections.rooms", { count: inspection.rooms.length })}
                 </p>
@@ -566,6 +580,17 @@ export default function InventoryInspectionsManager({
                     </li>
                   ))}
                 </ul>
+                {inspection.items.length ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">{t("inspections.itemStatuses")}</p>
+                    <ul className="mt-2 max-h-52 space-y-1 overflow-y-auto text-sm">
+                      {inspection.items.map((expected) => {
+                        const result = inspection.results.find((entry) => entry.itemId === expected.itemId);
+                        return <li key={expected.itemId} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"><span className="truncate text-zinc-700">{expected.itemName} · {expected.inventoryNumber}</span><span className={result?.result === "missing" ? "text-red-600" : result ? "text-emerald-600" : "text-zinc-400"}>{result?.result === "missing" ? t("inspections.reportMissing") : result ? t("inspections.reportChecked") : t("inspections.reportUnchecked")}</span></li>;
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
                 {selectedInspection === inspection.id &&
                 inspection.rooms.length > 0 ? (
                   <label className="mt-4 block text-xs font-medium text-zinc-500">
@@ -642,6 +667,33 @@ export default function InventoryInspectionsManager({
   );
 }
 
+function InspectionProgress({ inspection }: { inspection: InspectionDto }) {
+  const { t } = useAppSettings();
+  const { checked: completed, total, percent } = inspection.progress;
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between text-xs text-zinc-500">
+        <span>{t("inspections.progress")}</span>
+        <span>{t("inspections.progressItems", { completed, total })} · {percent}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={t("inspections.progress")}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
+      >
+        <div className="h-full rounded-full bg-emerald-500 transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ReportMetric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-lg bg-slate-50 px-3 py-2"><p className="text-zinc-400">{label}</p><p className="mt-1 font-semibold text-zinc-800">{value}</p></div>;
+}
+
 const RESULT_OPTIONS: Array<{
   value: RecordItemResultInput["result"];
   labelKey: TranslationKey;
@@ -653,14 +705,14 @@ const RESULT_OPTIONS: Array<{
   { value: "undetermined", labelKey: "inspections.result.undetermined" },
 ];
 
-const INSPECTION_STATUS_KEYS: Record<
-  InspectionDto["status"],
+const INSPECTION_DISPLAY_STATUS_KEYS: Record<
+  InspectionDto["displayStatus"],
   TranslationKey
 > = {
   draft: "inspections.status.draft",
-  awaiting_decisions: "inspections.status.awaiting_decisions",
-  confirmed: "inspections.status.confirmed",
-  cancelled: "inspections.status.cancelled",
+  in_progress: "inspections.status.inProgress",
+  completed: "inspections.status.completed",
+  overdue: "inspections.status.overdue",
 };
 
 const TARGET_KIND_KEYS: Record<

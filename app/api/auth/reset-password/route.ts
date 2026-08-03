@@ -7,6 +7,7 @@ import {
   consumePasswordResetConfirmationLimit,
   verifyAndConsumePasswordResetCode,
 } from "@/lib/security/password-reset";
+import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import {
   consumeApiRateLimit,
   rateLimitedResponse,
@@ -23,6 +24,15 @@ function validEmail(email: string) {
 export async function POST(request: Request) {
   const apiLimit = consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
+
+  try {
+    requireSameOriginMutation(request);
+  } catch {
+    return Response.json(
+      { error: "cross_site_request_blocked" },
+      { status: 403, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
 
   const confirmationLimit = consumePasswordResetConfirmationLimit(request);
   if (!confirmationLimit.allowed) {

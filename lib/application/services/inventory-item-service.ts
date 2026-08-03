@@ -20,13 +20,16 @@ import type {
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
 import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import {
+  canPerformInventoryOperation,
   hasPermission,
   type AuthorizationActor,
 } from "@/lib/security/permissions";
 import type { ItemStatus } from "@/lib/contracts/inventory-domain";
+import sharp from "sharp";
 
 export interface InventoryItemClock {
   now(): Date;
@@ -547,7 +550,7 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.edit_content");
-    const photo = normalizeCameraPhoto(input);
+    const photo = await normalizeCameraPhoto(input);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
@@ -588,10 +591,32 @@ export class InventoryItemService {
     id: string,
     actor: AuthorizationActor,
   ): Promise<StoredItemPhoto> {
-    await this.findItem(id, actor);
-    const photo = await this.unitOfWork.read(({ items }) => items.findItemPhoto(id));
-    if (!photo) throw new ApplicationError("not_found", "item_photo_not_found");
-    return photo;
+    return this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(id);
+      const hasParentAccess = Boolean(
+        item &&
+          (hasPermission(actor.role, "inventory.item.read_all") ||
+            (hasPermission(actor.role, "inventory.item.read_assigned") &&
+              item.responsibleId === actor.userId)),
+      );
+      if (
+        !item ||
+        !canPerformInventoryOperation(actor, {
+          operation: "photo.item.preview",
+          currentResponsibleId: item.responsibleId,
+          technicianHasParentAccess: hasParentAccess,
+          viaAuthorizedActiveItemScan: false,
+          hasParentAccess,
+        })
+      ) {
+        throw new ApplicationError("not_found", "item_photo_not_found");
+      }
+      const photo = await items.findItemPhoto(id);
+      if (!photo) {
+        throw new ApplicationError("not_found", "item_photo_not_found");
+      }
+      return photo;
+    });
   }
 
   async updateProtected(
@@ -615,9 +640,14 @@ export class InventoryItemService {
       if (!(await items.roomExists(values.roomId))) {
         throw new ApplicationError("not_found", "room_not_found");
       }
+      const inventoryNumberKind =
+        values.inventoryNumber === current.inventoryNumber
+          ? current.inventoryNumberKind
+          : "official";
       const updated = await items.updateItemProtected({
         id,
         ...values,
+        inventoryNumberKind,
         actorId: actor.userId,
         expectedVersion: input.version,
         occurredAt: this.clock.now(),
@@ -818,7 +848,6 @@ function normalizeOptionalPrice(value: unknown) {
 function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
   return {
     roomId: normalizeId(input.roomId, "invalid_room_id"),
-    inventoryNumberKind: "official" as const,
     inventoryNumber: normalizeText(
       input.inventoryNumber,
       64,
@@ -836,20 +865,9 @@ function normalizeServiceInput(input: SendItemToServiceInput) {
   };
 }
 
-function normalizeCameraPhoto(input: UpdateInventoryItemPhotoInput) {
+async function normalizeCameraPhoto(input: UpdateInventoryItemPhotoInput) {
   if (!Number.isInteger(input.version) || input.version < 1) {
     throw new ApplicationError("validation", "invalid_version");
-  }
-  if (
-    !Number.isInteger(input.width) ||
-    !Number.isInteger(input.height) ||
-    input.width < 1 ||
-    input.height < 1 ||
-    input.width > 1920 ||
-    input.height > 1920 ||
-    input.width * input.height > 2_500_000
-  ) {
-    throw new ApplicationError("validation", "invalid_photo_dimensions");
   }
   if (typeof input.imageDataUrl !== "string") {
     throw new ApplicationError("validation", "invalid_camera_photo");
@@ -868,7 +886,55 @@ function normalizeCameraPhoto(input: UpdateInventoryItemPhotoInput) {
   if (bytes.byteLength < 1 || bytes.byteLength > 5 * 1024 * 1024) {
     throw new ApplicationError("validation", "invalid_camera_photo_size");
   }
-  return { bytes, width: input.width, height: input.height };
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
+    throw new ApplicationError("validation", "invalid_camera_photo");
+  }
+
+  try {
+    const source = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const image = sharp(source, {
+      failOn: "warning",
+      limitInputPixels: 2_500_000,
+      limitInputChannels: 4,
+      sequentialRead: true,
+      unlimited: false,
+    });
+    const metadata = await image.metadata();
+    if (metadata.format !== "jpeg") {
+      throw new ApplicationError("validation", "invalid_camera_photo");
+    }
+    const processed = await image
+      .autoOrient()
+      .jpeg({ quality: 90 })
+      .toBuffer({ resolveWithObject: true });
+    const { width, height } = processed.info;
+    if (
+      width < 1 ||
+      height < 1 ||
+      width > 1920 ||
+      height > 1920 ||
+      width * height > 2_500_000
+    ) {
+      throw new ApplicationError("validation", "invalid_photo_dimensions");
+    }
+    if (processed.data.byteLength > 5 * 1024 * 1024) {
+      throw new ApplicationError("validation", "invalid_camera_photo_size");
+    }
+    return {
+      bytes: new Uint8Array(
+        processed.data.buffer,
+        processed.data.byteOffset,
+        processed.data.byteLength,
+      ),
+      width,
+      height,
+    };
+  } catch (error) {
+    if (error instanceof ApplicationError) throw error;
+    throw new ApplicationError("validation", "invalid_camera_photo", {
+      cause: error,
+    });
+  }
 }
 
 function normalizeText(value: unknown, max: number, code: string) {
@@ -920,7 +986,7 @@ function normalizeCommentAttachment(input: InventoryItemCommentAttachmentInput) 
 
 function normalizeId(value: unknown, code: string) {
   const normalized = normalizeText(value, 64, code);
-  if (!/^[0-9a-f-]{36}$/i.test(normalized)) {
+  if (!isUuid(normalized)) {
     throw new ApplicationError("validation", code);
   }
   return normalized;

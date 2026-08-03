@@ -13,8 +13,10 @@ import type { InventoryItem } from "@/lib/types";
 
 export default function DecommissionedItemsView({
   items,
+  canExport,
 }: {
   items: InventoryItem[];
+  canExport: boolean;
 }) {
   const { t } = useAppSettings();
   const [query, setQuery] = useState("");
@@ -131,6 +133,7 @@ export default function DecommissionedItemsView({
         items={filtered}
         showFilters={false}
         dateLabel={t("decommissioned.decommissionedAt")}
+        excelDataset={canExport ? "decommissioned" : undefined}
       />
     </div>
   );

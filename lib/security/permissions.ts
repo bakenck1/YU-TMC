@@ -21,6 +21,8 @@ export const APP_PERMISSIONS = [
   "inventory.item.send_to_service",
   "inventory.item.manage_protected_fields",
   "inventory.item.manage_components",
+  "inventory.item.comment.read",
+  "inventory.item.comment",
   "inventory.item.bulk_manage",
   "inventory.qr.resolve_full",
   "inventory.qr.resolve_item",
@@ -65,24 +67,26 @@ const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
 export const PERMISSION_ROLES = {
   "legacy.dashboard.read": ALL_ROLES,
   "legacy.items.read": ALL_ROLES,
-  "legacy.locations.read": ADMIN_ONLY,
+  "legacy.locations.read": ALL_ROLES,
   "legacy.analytics.read": ADMIN_ONLY,
   "legacy.users.read": ADMIN_ONLY,
   "legacy.users.manage": ADMIN_ONLY,
   "legacy.users.manage_privileged": ADMIN_ONLY,
   "legacy.settings.manage": ADMIN_ONLY,
-  "inventory.workspace.read": ADMIN_WAREHOUSE,
+  "inventory.workspace.read": ALL_ROLES,
   "inventory.building.create": ADMIN_ONLY,
   "inventory.building.manage": ADMIN_ONLY,
   "inventory.room.create": ADMIN_ONLY,
   "inventory.room.manage": ADMIN_ONLY,
-  "inventory.item.read_all": ADMIN_WAREHOUSE,
+  "inventory.item.read_all": ALL_ROLES,
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
   "inventory.item.create": ADMIN_ONLY,
   "inventory.item.edit_content": ADMIN_ONLY,
   "inventory.item.send_to_service": ADMIN_ONLY,
   "inventory.item.manage_protected_fields": ADMIN_ONLY,
   "inventory.item.manage_components": ADMIN_ONLY,
+  "inventory.item.comment.read": ALL_ROLES,
+  "inventory.item.comment": ["admin", "employee"],
   "inventory.item.bulk_manage": ADMIN_ONLY,
   "inventory.qr.resolve_full": ADMIN_WAREHOUSE,
   "inventory.qr.resolve_item": EMPLOYEE_ONLY,
@@ -133,6 +137,10 @@ export type InventoryAuthorizationRequest =
       operation: "inspection.mutate";
       technicianId: string;
       administrativeReason?: string;
+    }
+  | {
+      operation: "inspection.add_room";
+      technicianId: string;
     }
   | {
       operation: "result.read";
@@ -274,6 +282,15 @@ export function canPerformInventoryOperation(
           )) ||
         (hasAdministrativeReason(request.administrativeReason) &&
           hasPermission(actor.role, "inventory.inspection.mutate_all"))
+      );
+    case "inspection.add_room":
+      return (
+        (actor.userId === request.technicianId &&
+          hasPermission(
+            actor.role,
+            "inventory.inspection.mutate_own_draft",
+          )) ||
+        hasPermission(actor.role, "inventory.inspection.mutate_all")
       );
     case "result.read":
       return (

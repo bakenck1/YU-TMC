@@ -4,6 +4,7 @@ import type { QueryResultRow } from "pg";
 import type {
   AppendInspectionAuditRecord,
   InspectionRecord,
+  InspectionExpectedItemRecord,
   InspectionRoomRecord,
   ItemResultRecord,
   ItemSnapshotAtScan,
@@ -19,6 +20,7 @@ import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres
 
 const INSPECTIONS = '"yu_inventory"."inspections"';
 const INSPECTION_ROOMS = '"yu_inventory"."inspection_rooms"';
+const INSPECTION_ROOM_ITEMS = '"yu_inventory"."inspection_room_items"';
 const ROOMS = '"yu_inventory"."rooms"';
 const BUILDINGS = '"yu_inventory"."buildings"';
 const AUDIT = '"yu_inventory"."audit_records"';
@@ -36,6 +38,7 @@ interface InspectionRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  deadline_at: Date;
 }
 
 interface AssignableTechnicianRow extends QueryResultRow {
@@ -98,7 +101,8 @@ class PostgresInventoryInspectionRepository
 
   async listInspections(technicianId?: string): Promise<InspectionRecord[]> {
     const result = await this.source.query<InspectionRow>(
-      `select id, name, technician_id, status, version, created_at, updated_at
+      `select id, name, technician_id, status, version, created_at, updated_at,
+              coalesce(deadline_at, created_at + interval '30 days') as deadline_at
          from ${INSPECTIONS}
         ${technicianId ? "where technician_id = $1" : ""}
         order by updated_at desc, id
@@ -110,7 +114,8 @@ class PostgresInventoryInspectionRepository
 
   async findInspection(id: string): Promise<InspectionRecord | null> {
     const result = await this.source.query<InspectionRow>(
-      `select id, name, technician_id, status, version, created_at, updated_at
+      `select id, name, technician_id, status, version, created_at, updated_at,
+              coalesce(deadline_at, created_at + interval '30 days') as deadline_at
          from ${INSPECTIONS}
         where id = $1`,
       [id],
@@ -220,6 +225,63 @@ class PostgresInventoryInspectionRepository
     return result.rows.map(mapItemResult);
   }
 
+  async listExpectedItems(inspectionId: string): Promise<InspectionExpectedItemRecord[]> {
+    const result = await this.source.query<ItemSnapshotRow & { inspection_room_id: string }>(
+      `select snapshot.inspection_room_id, snapshot.item_id,
+              snapshot.registry_room_id, snapshot.responsible_user_id,
+              snapshot.item_name_snapshot as item_name,
+              snapshot.inventory_number_kind_snapshot as inventory_number_kind,
+              snapshot.inventory_number_snapshot as inventory_number,
+              snapshot.building_name_snapshot as building_name,
+              snapshot.room_designation_snapshot as room_designation
+         from ${INSPECTION_ROOM_ITEMS} snapshot
+         join ${INSPECTION_ROOMS} room on room.id = snapshot.inspection_room_id
+        where room.inspection_id = $1
+        order by snapshot.building_name_snapshot, snapshot.room_designation_snapshot,
+                 snapshot.item_name_snapshot, snapshot.item_id`,
+      [inspectionId],
+    );
+    return result.rows.map((row) => ({
+      inspectionRoomId: row.inspection_room_id,
+      itemId: row.item_id,
+      registryRoomId: row.registry_room_id,
+      responsibleUserId: row.responsible_user_id,
+      itemName: row.item_name,
+      inventoryNumberKind: row.inventory_number_kind,
+      inventoryNumber: row.inventory_number,
+      buildingName: row.building_name,
+      roomDesignation: row.room_designation,
+    }));
+  }
+
+  async findExpectedItem(
+    inspectionRoomId: string,
+    itemId: string,
+  ): Promise<ItemSnapshotAtScan | null> {
+    const result = await this.source.query<ItemSnapshotRow>(
+      `select item_id, registry_room_id, responsible_user_id,
+              item_name_snapshot as item_name,
+              inventory_number_kind_snapshot as inventory_number_kind,
+              inventory_number_snapshot as inventory_number,
+              building_name_snapshot as building_name,
+              room_designation_snapshot as room_designation
+         from ${INSPECTION_ROOM_ITEMS}
+        where inspection_room_id = $1 and item_id = $2`,
+      [inspectionRoomId, itemId],
+    );
+    const row = result.rows[0];
+    return row ? {
+      itemId: row.item_id,
+      registryRoomId: row.registry_room_id,
+      responsibleUserId: row.responsible_user_id,
+      itemName: row.item_name,
+      inventoryNumberKind: row.inventory_number_kind,
+      inventoryNumber: row.inventory_number,
+      buildingName: row.building_name,
+      roomDesignation: row.room_designation,
+    } : null;
+  }
+
   async findActiveRoomSnapshot(
     buildingId: string,
     roomId: string,
@@ -261,15 +323,16 @@ class PostgresInventoryInspectionRepository
   ): Promise<InspectionRecord> {
     const result = await this.source.query<InspectionRow>(
       `insert into ${INSPECTIONS}
-         (id, name, technician_id, created_by, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $5)
-       returning id, name, technician_id, status, version, created_at, updated_at`,
+         (id, name, technician_id, created_by, created_at, updated_at, deadline_at)
+       values ($1, $2, $3, $4, $5, $5, $6)
+       returning id, name, technician_id, status, version, created_at, updated_at, deadline_at`,
       [
         input.id,
         input.name,
         input.technicianId,
         input.createdBy,
         input.createdAt,
+        input.deadlineAt,
       ],
     );
     const row = result.rows[0];
@@ -311,6 +374,32 @@ class PostgresInventoryInspectionRepository
     const row = result.rows[0];
     if (!row) throw new Error("inspection_room_insert_failed");
     return mapRoom(row);
+  }
+
+  async snapshotRoomItems(
+    inspectionRoomId: string,
+    roomId: string,
+    capturedAt: Date,
+  ): Promise<void> {
+    await this.source.query(
+      `insert into ${INSPECTION_ROOM_ITEMS}
+         (inspection_room_id, item_id, registry_room_id, responsible_user_id,
+          item_name_snapshot, inventory_number_kind_snapshot, inventory_number_snapshot,
+          building_name_snapshot, room_designation_snapshot, captured_at)
+       select $1, item.id, item.room_id, responsibility.responsible_user_id,
+              item.name, item.inventory_number_kind, item.inventory_number,
+              building.name, room.designation, $3
+         from ${ITEMS} item
+         join ${ROOMS} room on room.id = item.room_id
+         join ${BUILDINGS} building on building.id = room.building_id
+         left join lateral (
+           select responsible_user_id from ${RESPONSIBILITY}
+            where item_id = item.id and ended_at is null limit 1
+         ) responsibility on true
+        where item.room_id = $2 and item.status <> 'decommissioned'
+       on conflict do nothing`,
+      [inspectionRoomId, roomId, capturedAt],
+    );
   }
 
   async insertItemResult(input: InsertItemResultRecord): Promise<ItemResultRecord> {
@@ -375,9 +464,10 @@ class PostgresInventoryInspectionRepository
       `insert into ${ITEM_RESULT_REVISIONS}
          (result_id, revision_number, result, inspection_room_id, observed_room_id,
           comment, created_by, created_at)
-       values ($1, 1, $2, $3, $4, $5, $6, $7)`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         input.resultId,
+        input.revisionNumber,
         input.result,
         input.inspectionRoomId,
         input.observedRoomId,
@@ -388,18 +478,52 @@ class PostgresInventoryInspectionRepository
     );
   }
 
-  async markInspectionRoomInspected(
+  async markInspectionRoomCompletedIfReady(
     inspectionRoomId: string,
     inspectedBy: string,
     inspectedAt: Date,
   ): Promise<void> {
     await this.source.query(
-      `update ${INSPECTION_ROOMS}
+      `update ${INSPECTION_ROOMS} room
           set inspected_at = coalesce(inspected_at, $2),
               inspected_by = coalesce(inspected_by, $1)
-        where id = $3`,
+        where room.id = $3
+          and exists (select 1 from ${INSPECTION_ROOM_ITEMS} expected where expected.inspection_room_id = room.id)
+          and not exists (
+            select 1 from ${INSPECTION_ROOM_ITEMS} expected
+             where expected.inspection_room_id = room.id
+               and not exists (
+                 select 1 from ${ITEM_RESULTS} result
+                  where result.inspection_room_id = room.id and result.item_id = expected.item_id
+               )
+          )`,
       [inspectedBy, inspectedAt, inspectionRoomId],
     );
+  }
+
+  async completeInspectionIfReady(inspectionId: string, completedAt: Date): Promise<boolean> {
+    const result = await this.source.query(
+      `update ${INSPECTIONS} inspection
+          set status = 'awaiting_decisions', walkthrough_completed_at = $2,
+              updated_at = $2, version = version + 1
+        where inspection.id = $1 and inspection.status = 'draft'
+          and exists (
+            select 1 from ${INSPECTION_ROOM_ITEMS} expected
+            join ${INSPECTION_ROOMS} room on room.id = expected.inspection_room_id
+            where room.inspection_id = inspection.id
+          )
+          and not exists (
+            select 1 from ${INSPECTION_ROOM_ITEMS} expected
+            join ${INSPECTION_ROOMS} room on room.id = expected.inspection_room_id
+            where room.inspection_id = inspection.id
+              and not exists (
+                select 1 from ${ITEM_RESULTS} result
+                where result.inspection_id = inspection.id and result.item_id = expected.item_id
+              )
+          )`,
+      [inspectionId, completedAt],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async appendAudit(input: AppendInspectionAuditRecord): Promise<void> {
@@ -432,6 +556,7 @@ function mapInspection(row: InspectionRow): InspectionRecord {
     version: Number(row.version),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    deadlineAt: new Date(row.deadline_at),
   };
 }
 

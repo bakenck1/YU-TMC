@@ -81,6 +81,34 @@ function hashCode(email: string, code: string) {
     .digest("hex");
 }
 
+export function createPasswordResetUrl(publicOrigin: string, email: string) {
+  let origin: URL;
+  try {
+    origin = new URL(publicOrigin);
+  } catch {
+    throw new Error("invalid_password_reset_public_origin");
+  }
+  const localDevelopmentOrigin =
+    origin.protocol === "http:" &&
+    (origin.hostname === "localhost" ||
+      origin.hostname === "127.0.0.1" ||
+      origin.hostname === "[::1]");
+  if (
+    (origin.protocol !== "https:" && !localDevelopmentOrigin) ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== "/" ||
+    origin.search ||
+    origin.hash
+  ) {
+    throw new Error("invalid_password_reset_public_origin");
+  }
+
+  const resetUrl = new URL("/reset-password", origin.origin);
+  resetUrl.searchParams.set("email", normalizeEmail(email));
+  return resetUrl.toString();
+}
+
 export function consumePasswordResetRequestLimits(
   request: Request,
   email: string,

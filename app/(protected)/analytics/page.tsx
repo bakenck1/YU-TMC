@@ -1,141 +1,111 @@
 // Authentication for this route group is enforced by the adjacent layout.
-import AnalyticsCharts, {
-  type AnalyticsDashboardData,
-  type ChartDatum,
-  type AnalyticsRecord,
-} from "@/components/AnalyticsCharts";
-import { items } from "@/lib/data";
-import type { InventoryItem } from "@/lib/types";
+import AnalyticsCharts from "@/components/AnalyticsCharts";
+import type {
+  AnalyticsDashboardData,
+  AnalyticsRecord,
+  ChartDatum,
+} from "@/lib/analytics-dashboard";
+import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import { getApplicationServices } from "@/lib/server/application";
+import { activeInventoryItems } from "@/lib/server/excel/inventory-excel";
+import { hasPermission } from "@/lib/security/permissions";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
+import { authorizationActor } from "@/lib/server/security/request-user";
 
-const INVENTORY_TARGET = 1140;
+const INVENTORY_TARGET = 2_000;
 
-function toAnalyticsRecord(item: InventoryItem): AnalyticsRecord {
+function toAnalyticsRecord(item: InventoryItemDto): AnalyticsRecord {
   return {
     id: item.id,
     name: item.name,
-    qrCode: item.qrCode ?? item.inventoryNumber ?? "",
-    itemType: item.itemType ?? item.name,
-    brandModel: item.brandModel ?? "",
-    location: item.location,
-    responsible: item.responsible,
-    quantity: item.quantity ?? 1,
-    price: item.price ?? 0,
+    qrCode: item.qrCode ?? item.inventoryNumber,
+    itemType: item.itemType,
+    brandModel: [item.brand, item.model].filter(Boolean).join(" "),
+    location: `${item.room.buildingName} / ${item.room.designation}`,
+    building: item.room.buildingName,
+    responsible: item.responsible?.name ?? "-",
+    quantity: item.quantity,
+    price: item.unitPrice * item.quantity,
+    createdAt: item.createdAt,
+    status: item.status,
+    hasPhoto: item.photoUrl !== null,
   };
 }
 
 function countBy(
-  source: InventoryItem[],
-  selector: (item: InventoryItem) => string,
+  source: InventoryItemDto[],
+  selector: (item: InventoryItemDto) => string,
 ): ChartDatum[] {
   const counts = new Map<string, ChartDatum>();
-
   source.forEach((item) => {
     const name = selector(item).trim() || "Не указано";
     const current = counts.get(name);
-
     if (current) {
-      current.value += item.quantity ?? 1;
+      current.value += item.quantity;
       current.records.push(toAnalyticsRecord(item));
-      return;
+    } else {
+      counts.set(name, {
+        name,
+        value: item.quantity,
+        records: [toAnalyticsRecord(item)],
+      });
     }
-
-    counts.set(name, {
-      name,
-      value: item.quantity ?? 1,
-      records: [toAnalyticsRecord(item)],
-    });
   });
-
-  return Array.from(counts.values()).sort(
-    (a, b) => b.value - a.value,
-  );
+  return Array.from(counts.values()).sort((left, right) => right.value - left.value);
 }
 
 function topWithOther(data: ChartDatum[], limit = 7): ChartDatum[] {
   if (data.length <= limit) return data;
-
   const top = data.slice(0, limit);
-  const other = data.slice(limit).reduce((sum, entry) => sum + entry.value, 0);
-  const otherRecords = data.slice(limit).flatMap((entry) => entry.records);
-  return [...top, { name: "Остальные", value: other, records: otherRecords }];
+  const remainder = data.slice(limit);
+  return [
+    ...top,
+    {
+      name: "Остальные",
+      value: remainder.reduce((sum, entry) => sum + entry.value, 0),
+      records: remainder.flatMap((entry) => entry.records),
+    },
+  ];
 }
 
-function brandName(item: InventoryItem) {
-  const brand = item.brandModel?.trim();
-  if (!brand) return "Без бренда";
-
-  const firstWord = brand.split(/[\s·]+/)[0];
-  const aliases: Record<string, string> = {
-    hp: "HP",
-    lenovo: "Lenovo",
-    samsung: "Samsung",
-    epson: "Epson",
-    acer: "Acer",
-    grandstream: "GRANDSTREAM",
-    optoma: "OPTOMA",
-    proscreen: "PROscreen",
-  };
-
-  return aliases[firstWord.toLowerCase()] ?? firstWord;
+function valueByType(items: InventoryItemDto[]): ChartDatum[] {
+  const totals = new Map<string, ChartDatum>();
+  items.forEach((item) => {
+    const name = item.itemType.trim() || "Без типа";
+    const value = item.unitPrice * item.quantity;
+    const current = totals.get(name);
+    if (current) {
+      current.value += value;
+      current.records.push(toAnalyticsRecord(item));
+    } else {
+      totals.set(name, { name, value, records: [toAnalyticsRecord(item)] });
+    }
+  });
+  return Array.from(totals.values())
+    .filter((entry) => entry.value > 0)
+    .sort((left, right) => right.value - left.value);
 }
 
-function objectName(item: InventoryItem) {
-  if (item.location.startsWith("32 мкр")) return "32 мкр";
-  if (item.location.startsWith("11 мкр")) return "11 мкр";
-  return item.location.split(" / ")[0];
-}
-
-function locationName(item: InventoryItem) {
-  const parts = item.location.split(" / ");
-  if (parts.length > 1) return parts.at(-1) ?? item.location;
-
-  return item.location
-    .replace(/^32 мкр\s*/i, "")
-    .replace(/^11 мкр\s*/i, "") || item.location;
-}
-
-function statusName(item: InventoryItem) {
-  if (item.displayStatus) return item.displayStatus;
+function statusName(item: InventoryItemDto) {
   if (item.status === "maintenance") return "На обслуживании";
   if (item.status === "decommissioned") return "Списано";
   return "Активен";
 }
 
-function valueByType(): ChartDatum[] {
-  const totals = new Map<string, ChartDatum>();
-
-  items.forEach((item) => {
-    const type = item.itemType?.trim() || "Без типа";
-    const current = totals.get(type);
-
-    if (current) {
-      current.value += item.price ?? 0;
-      current.records.push(toAnalyticsRecord(item));
-      return;
-    }
-
-    totals.set(type, {
-      name: type,
-      value: item.price ?? 0,
-      records: [toAnalyticsRecord(item)],
-    });
-  });
-
-  return Array.from(totals.values())
-    .filter((entry) => entry.value > 0)
-    .sort((a, b) => b.value - a.value);
-}
-
 export default async function AnalyticsPage() {
-  await requireAuthorizedPage("/analytics");
-  const totalValue = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
-  const assigned = items.filter(
-    (item) => item.responsible.trim() && item.responsible !== "-",
-  ).length;
-  const withPhoto = items.filter((item) => Boolean(item.photo)).length;
+  const user = await requireAuthorizedPage("/analytics");
+  const items = activeInventoryItems(await getApplicationServices().items.listItems(
+    authorizationActor(user),
+  ));
+  const totalValue = items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0,
+  );
+  const assigned = items.filter((item) => item.responsible !== null).length;
+  const withPhoto = items.filter((item) => item.photoUrl !== null).length;
 
   const data: AnalyticsDashboardData = {
+    records: items.map(toAnalyticsRecord),
     summary: {
       totalItems: items.length,
       targetItems: INVENTORY_TARGET,
@@ -144,22 +114,26 @@ export default async function AnalyticsPage() {
       withPhoto,
       completion: (items.length / INVENTORY_TARGET) * 100,
     },
-    types: topWithOther(countBy(items, (item) => item.itemType ?? "Без типа")),
-    brands: topWithOther(countBy(items, brandName)),
-    objects: countBy(items, objectName),
-    locations: topWithOther(countBy(items, locationName), 8),
+    types: topWithOther(countBy(items, (item) => item.itemType)),
+    brands: topWithOther(countBy(items, (item) => item.brand ?? "Без бренда")),
+    objects: countBy(items, (item) => item.room.buildingName),
+    locations: topWithOther(countBy(items, (item) => item.room.designation), 8),
     statuses: countBy(items, statusName),
-    valueByType: valueByType(),
+    valueByType: valueByType(items),
     responsibles: topWithOther(
       countBy(
-        items.filter(
-          (item) => item.responsible.trim() && item.responsible !== "-",
-        ),
-        (item) => item.responsible,
+        items.filter((item) => item.responsible !== null),
+        (item) => item.responsible?.name ?? "-",
       ),
       6,
     ),
   };
 
-  return <AnalyticsCharts data={data} />;
+  return (
+    <AnalyticsCharts
+      data={data}
+      canBulkManage={hasPermission(user.role, "inventory.item.bulk_manage")}
+      canExport={hasPermission(user.role, "inventory.report.export")}
+    />
+  );
 }

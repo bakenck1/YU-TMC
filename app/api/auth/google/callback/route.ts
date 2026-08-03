@@ -140,17 +140,28 @@ function finish(
   destination: string | null,
   error?: string,
 ) {
-  const applicationOrigin = configuredRedirectUri
+  const configuredOrigin = configuredRedirectUri
     ? new URL(configuredRedirectUri).origin
-    : request.nextUrl.origin;
-  const url = new URL(destination ?? "/login", applicationOrigin);
+    : null;
+  const url = new URL(
+    destination ?? "/login",
+    configuredOrigin ?? "https://relative.invalid",
+  );
   if (error) url.searchParams.set("error", error);
-  const response = NextResponse.redirect(url);
+  const response = configuredOrigin
+    ? NextResponse.redirect(url)
+    : new NextResponse(null, {
+        status: 307,
+        headers: { location: `${url.pathname}${url.search}${url.hash}` },
+      });
+  response.headers.set("cache-control", "no-store");
   response.cookies.set({
     name: GOOGLE_SSO_TRANSACTION_COOKIE,
     value: "",
     httpOnly: true,
-    secure: new URL(applicationOrigin).protocol === "https:",
+    secure: configuredOrigin
+      ? new URL(configuredOrigin).protocol === "https:"
+      : request.nextUrl.protocol === "https:",
     sameSite: "lax",
     path: GOOGLE_SSO_COOKIE_PATH,
     maxAge: 0,

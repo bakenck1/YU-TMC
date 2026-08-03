@@ -8,47 +8,15 @@ import {
   Boxes,
   Camera,
   ExternalLink,
+  FileSpreadsheet,
   PackageSearch,
   UserCheck,
   Users,
   X,
 } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
-export interface ChartDatum {
-  name: string;
-  value: number;
-  records: AnalyticsRecord[];
-}
-
-export interface AnalyticsRecord {
-  id: string;
-  name: string;
-  qrCode: string;
-  itemType: string;
-  brandModel: string;
-  location: string;
-  responsible: string;
-  quantity: number;
-  price: number;
-}
-
-export interface AnalyticsDashboardData {
-  summary: {
-    totalItems: number;
-    targetItems: number;
-    totalValue: number;
-    assigned: number;
-    withPhoto: number;
-    completion: number;
-  };
-  types: ChartDatum[];
-  brands: ChartDatum[];
-  objects: ChartDatum[];
-  locations: ChartDatum[];
-  statuses: ChartDatum[];
-  valueByType: ChartDatum[];
-  responsibles: ChartDatum[];
-}
+import AnalyticsExcelTools from "@/components/AnalyticsExcelTools";
+import { filteredDashboard, type AnalyticsDashboardData, type AnalyticsRecord, type ChartDatum } from "@/lib/analytics-dashboard";
 
 const CHART_COLORS = [
   "#16a34a",
@@ -782,8 +750,25 @@ function DetailsModal({
   );
 }
 
-export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardData }) {
+export default function AnalyticsCharts({
+  data: initialData,
+  canBulkManage = false,
+  canExport = false,
+}: {
+  data: AnalyticsDashboardData;
+  canBulkManage?: boolean;
+  canExport?: boolean;
+}) {
   const { locale, t } = useAppSettings();
+  const [building, setBuilding] = useState("all");
+  const [itemType, setItemType] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const data = useMemo(() => filteredDashboard(initialData, { building, itemType, dateFrom, dateTo }), [building, dateFrom, dateTo, initialData, itemType]);
+  const buildings = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.building))).sort(), [initialData.records]);
+  const itemTypes = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.itemType))).sort(), [initialData.records]);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const assignedPercent = data.summary.totalItems
@@ -792,6 +777,20 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardData
   const photoPercent = data.summary.totalItems
     ? (data.summary.withPhoto / data.summary.totalItems) * 100
     : 0;
+
+  async function exportReport() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError("");
+    try {
+      const response = await fetch("/api/inventory/excel?action=export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataset: "analytics", itemIds: data.records.map((record) => record.id) }) });
+      if (!response.ok) throw new Error("export_failed");
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = "analytics-report.xlsx"; anchor.click(); URL.revokeObjectURL(url);
+    } catch {
+      setExportError(t("excel.requestFailed"));
+    } finally { setExporting(false); }
+  }
 
   return (
     <div className="space-y-5">
@@ -829,7 +828,26 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardData
             </div>
           </div>
         </div>
+        {canExport ? (
+          <div className="relative mt-5 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => void exportReport()} disabled={exporting} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-300/50 px-4 text-sm font-semibold text-emerald-200 hover:bg-white/10 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" />{t("analytics.exportReport")}</button>
+            {exportError ? <p role="alert" className="text-sm text-rose-200">{exportError}</p> : null}
+          </div>
+        ) : null}
       </section>
+
+      <section aria-label={t("analytics.filters")} className="grid gap-3 rounded-2xl border border-black/5 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <select value={building} onChange={(event) => setBuilding(event.target.value)} aria-label={t("analytics.buildingFilter")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm"><option value="all">{t("analytics.allBuildings")}</option>{buildings.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+        <select value={itemType} onChange={(event) => setItemType(event.target.value)} aria-label={t("analytics.itemTypeFilter")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm"><option value="all">{t("analytics.allItemTypes")}</option>{itemTypes.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+        <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} aria-label={t("analytics.dateFrom")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
+        <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} aria-label={t("analytics.dateTo")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
+      </section>
+
+      <AnalyticsExcelTools
+        canBulkManage={canBulkManage}
+        canExport={canExport}
+        itemIds={data.records.map((record) => record.id)}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
