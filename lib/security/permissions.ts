@@ -78,7 +78,7 @@ export const PERMISSION_ROLES = {
   "inventory.building.manage": ADMIN_ONLY,
   "inventory.room.create": ADMIN_ONLY,
   "inventory.room.manage": ADMIN_ONLY,
-  "inventory.item.read_all": ALL_ROLES,
+  "inventory.item.read_all": ADMIN_WAREHOUSE,
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
   "inventory.item.create": ADMIN_ONLY,
   "inventory.item.edit_content": ADMIN_ONLY,
