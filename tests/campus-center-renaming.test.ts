@@ -35,3 +35,16 @@ test("service center keeps its position with a reduced map footprint", () => {
     /id: "center-1",[\s\S]*?width:120px;height:78px/,
   );
 });
+
+test("Sherqala uses a crescent footprint and is shifted right of the service center", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+
+  const center2 = source.match(/id: "center-2",([\s\S]*?)(?=\n  \{\n    id:|\n\];)/)?.[1] ?? "";
+  assert.match(center2, /wrap: "position:absolute;left:59%;top:260px;width:120px;height:84px;"/);
+  assert.match(center2, /clip-path:ellipse\(50% 50% at 50% 50%\)/);
+  assert.match(center2, /background:#f3f0e5;border-radius:50%/);
+  assert.ok(source.indexOf('id: "center-2"') > source.indexOf('id: "center-1"'));
+});
