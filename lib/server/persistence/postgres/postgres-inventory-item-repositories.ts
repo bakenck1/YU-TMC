@@ -8,12 +8,16 @@ import type {
   ArchiveInventoryItemRecord,
   ChangeItemComponentRecord,
   InsertInventoryItemRecord,
+  InsertInventoryItemCommentAttachmentRecord,
   InsertItemQrRecord,
   InventoryItemRecord,
   InventoryItemAuditRecord,
+  InventoryItemCommentRecord,
+  InventoryItemOperationRecord,
   InventoryItemRepositories,
   InventoryItemRepository,
   ReplaceItemQrRecord,
+  StoredInventoryItemCommentAttachment,
   UpdateInventoryItemContentRecord,
   UpdateInventoryItemPhotoRecord,
   UpdateInventoryItemProtectedRecord,
@@ -31,6 +35,7 @@ const PHOTOS = '"yu_inventory"."photos"';
 const HISTORY = '"yu_inventory"."item_inventory_number_history"';
 const AUDIT = '"yu_inventory"."audit_records"';
 const COMPONENTS = '"yu_inventory"."item_components"';
+const COMMENT_ATTACHMENTS = '"yu_inventory"."item_comment_attachments"';
 
 interface ItemRow extends QueryResultRow {
   id: string;
@@ -136,6 +141,205 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       [itemId],
     );
     return result.rows.map(mapItem);
+  }
+
+  async listOperations(itemId: string): Promise<InventoryItemOperationRecord[]> {
+    const result = await this.source.query<{
+      id: string;
+      kind: InventoryItemOperationRecord["kind"];
+      action: string;
+      actorName: string | null;
+      actorEmail: string | null;
+      targetName: string | null;
+      fromLocation: string | null;
+      toLocation: string | null;
+      occurredAt: Date;
+      beforeValues: Record<string, unknown> | null;
+      afterValues: Record<string, unknown> | null;
+    }>(
+      `select a.id, 'item'::text as "kind", a.action,
+              u.full_name as "actorName", u.email as "actorEmail",
+              null::text as "targetName",
+              a.before_values->>'roomLabel' as "fromLocation",
+              a.after_values->>'roomLabel' as "toLocation",
+              a.occurred_at as "occurredAt", a.before_values as "beforeValues",
+              a.after_values as "afterValues"
+         from ${AUDIT} a
+         left join ${USERS} u on u.id = a.actor_id
+        where a.subject_kind = 'item' and a.subject_id = $1
+          and a.action in (
+            'item.created',
+            'item.content_updated',
+            'item.photo_captured',
+            'item.protected_fields_updated',
+            'item.archived',
+            'item.sent_to_service',
+            'item.component_added',
+            'item.component_removed'
+          )
+       union all
+       select a.id, 'responsibility'::text as "kind", a.action,
+              u.full_name as "actorName", u.email as "actorEmail",
+              target.full_name as "targetName",
+              null::text as "fromLocation", null::text as "toLocation",
+              a.occurred_at as "occurredAt", a.before_values as "beforeValues",
+              a.after_values as "afterValues"
+         from ${AUDIT} a
+         left join ${USERS} u on u.id = a.actor_id
+         left join ${USERS} target on target.id::text =
+           coalesce(a.after_values->>'responsibleUserId', a.after_values->>'responsibleId')
+        where a.subject_kind = 'responsibility' and a.subject_id = $1
+       union all
+       select a.id, 'transfer'::text as "kind", a.action,
+              u.full_name as "actorName", u.email as "actorEmail",
+              target.full_name as "targetName",
+              null::text as "fromLocation", null::text as "toLocation",
+              a.occurred_at as "occurredAt", a.before_values as "beforeValues",
+              a.after_values as "afterValues"
+         from ${AUDIT} a
+         join "yu_inventory"."transfers" t on t.id = a.subject_id
+         left join ${USERS} u on u.id = a.actor_id
+         left join ${USERS} target on target.id::text = case
+           when a.action = 'transfer.overridden'
+             and coalesce(a.after_values->>'outcome', t.override_outcome::text) = 'released'
+             then null
+           else coalesce(
+             a.after_values->>'responsibleUserId',
+             a.after_values->>'proposedResponsibleId',
+             a.after_values->>'overrideResponsibleId',
+             t.override_responsible_id::text,
+             t.proposed_responsible_id::text
+           )
+         end
+        where a.subject_kind = 'transfer' and t.item_id = $1
+        order by "occurredAt" desc, id desc
+        limit 100`,
+      [itemId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      action: row.action,
+      actorName: row.actorName,
+      actorEmail: row.actorEmail,
+      targetName: row.targetName,
+      fromLocation: row.fromLocation,
+      toLocation: row.toLocation,
+      occurredAt: new Date(row.occurredAt),
+      beforeValues: row.beforeValues,
+      afterValues: row.afterValues,
+    }));
+  }
+
+  async listComments(itemId: string): Promise<InventoryItemCommentRecord[]> {
+    const result = await this.source.query<{
+      id: string;
+      author_name: string;
+      author_email: string;
+      message: string;
+      created_at: Date;
+      attachment_id: string | null;
+      attachment_file_name: string | null;
+      attachment_media_type: string | null;
+      attachment_size_bytes: number | null;
+    }>(
+      `select a.id, u.full_name as author_name, u.email as author_email,
+              a.after_values->>'message' as message, a.occurred_at as created_at,
+              attachment.id as attachment_id,
+              attachment.file_name as attachment_file_name,
+              attachment.media_type as attachment_media_type,
+              attachment.size_bytes as attachment_size_bytes
+         from ${AUDIT} a
+         join ${USERS} u on u.id = a.actor_id
+         left join ${COMMENT_ATTACHMENTS} attachment on attachment.comment_id = a.id
+        where a.subject_kind = 'item'
+          and a.subject_id = $1
+          and a.action = 'item.comment_added'
+        order by a.occurred_at desc, a.id desc
+        limit 200`,
+      [itemId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      authorName: row.author_name,
+      authorEmail: row.author_email,
+      message: row.message,
+      createdAt: new Date(row.created_at),
+      attachment:
+        row.attachment_id &&
+        row.attachment_file_name &&
+        row.attachment_media_type &&
+        row.attachment_size_bytes
+          ? {
+              id: row.attachment_id,
+              fileName: row.attachment_file_name,
+              mediaType: row.attachment_media_type,
+              sizeBytes: row.attachment_size_bytes,
+            }
+          : null,
+    }));
+  }
+
+  async insertCommentAttachment(
+    input: InsertInventoryItemCommentAttachmentRecord,
+  ): Promise<void> {
+    await this.source.query(
+      `insert into ${COMMENT_ATTACHMENTS}
+         (id, comment_id, file_name, media_type, size_bytes, binary_data, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        input.id,
+        input.commentId,
+        input.fileName,
+        input.mediaType,
+        input.sizeBytes,
+        input.binaryData,
+        input.createdAt,
+      ],
+    );
+  }
+
+  async findCommentAttachment(
+    itemId: string,
+    commentId: string,
+    attachmentId: string,
+  ): Promise<StoredInventoryItemCommentAttachment | null> {
+    const result = await this.source.query<{
+      id: string;
+      comment_id: string;
+      item_id: string;
+      file_name: string;
+      media_type: string;
+      size_bytes: number;
+      binary_data: Uint8Array;
+      created_at: Date;
+    }>(
+      `select attachment.id, attachment.comment_id, audit.subject_id as item_id,
+              attachment.file_name, attachment.media_type, attachment.size_bytes,
+              attachment.binary_data, attachment.created_at
+         from ${COMMENT_ATTACHMENTS} attachment
+         join ${AUDIT} audit on audit.id = attachment.comment_id
+        where attachment.id = $1
+          and attachment.comment_id = $2
+          and audit.subject_kind = 'item'
+          and audit.subject_id = $3
+          and audit.action = 'item.comment_added'
+        limit 1`,
+      [attachmentId, commentId, itemId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          commentId: row.comment_id,
+          itemId: row.item_id,
+          fileName: row.file_name,
+          mediaType: row.media_type,
+          sizeBytes: row.size_bytes,
+          binaryData: new Uint8Array(row.binary_data),
+          createdAt: new Date(row.created_at),
+        }
+      : null;
   }
 
   async searchComponentCandidates(
@@ -481,6 +685,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       id: string;
       actor_id: string | null;
       actor_name: string | null;
+      actor_email: string | null;
       actor_role_snapshot: InventoryItemAuditRecord["actorRole"];
       subject_revision: number | null;
       action: string;
@@ -488,7 +693,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       after_values: Record<string, unknown> | null;
       occurred_at: Date;
     }>(
-      `select a.id, a.actor_id, u.full_name as actor_name,
+      `select a.id, a.actor_id, u.full_name as actor_name, u.email as actor_email,
               a.actor_role_snapshot, a.subject_revision, a.action,
               a.before_values, a.after_values, a.occurred_at
          from ${AUDIT} a
@@ -501,6 +706,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       id: row.id,
       actorId: row.actor_id,
       actorName: row.actor_name,
+      actorEmail: row.actor_email,
       actorRole: row.actor_role_snapshot,
       subjectRevision: row.subject_revision,
       action: row.action,

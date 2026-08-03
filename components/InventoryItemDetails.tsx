@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   Barcode,
@@ -10,19 +10,26 @@ import {
   Download,
   FileText,
   Image as ImageIcon,
+  MessageSquare,
+  Paperclip,
   Pencil,
   Printer,
   QrCode,
   Save,
+  Send,
   ShieldCheck,
   Trash2,
   Wrench,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { InventoryItemAuditDto, InventoryItemDto } from "@/lib/contracts/inventory-items";
-import type { ResponsibilityTimelineEntryDto } from "@/lib/contracts/inventory-responsibility";
+import type {
+  InventoryItemCommentDto,
+  InventoryItemDto,
+  InventoryItemOperationDto,
+} from "@/lib/contracts/inventory-items";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemQrDialogs from "@/components/InventoryItemQrDialogs";
@@ -36,8 +43,9 @@ export default function InventoryItemDetails({
   initialItem,
   canEditContent,
   canSendToService,
-  timeline,
-  audit,
+  operations,
+  initialComments,
+  canComment,
   canManageProtected,
   rooms,
   initialComponents,
@@ -46,8 +54,9 @@ export default function InventoryItemDetails({
   initialItem: InventoryItemDto;
   canEditContent: boolean;
   canSendToService: boolean;
-  timeline: ResponsibilityTimelineEntryDto[];
-  audit: InventoryItemAuditDto[];
+  operations: InventoryItemOperationDto[];
+  initialComments: InventoryItemCommentDto[];
+  canComment: boolean;
   canManageProtected: boolean;
   rooms: RoomDto[];
   initialComponents: InventoryItemDto[];
@@ -81,7 +90,15 @@ export default function InventoryItemDetails({
   const [codeKind, setCodeKind] = useState<"barcode" | "qr">("barcode");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [comments, setComments] = useState(initialComments);
+  const [comment, setComment] = useState("");
+  const [commentAttachment, setCommentAttachment] = useState<File | null>(null);
+  const [commentSaving, setCommentSaving] = useState(false);
   const actionBarRef = useRef<HTMLElement>(null);
+  const photoDialogRef = useRef<HTMLDivElement>(null);
+  const photoTriggerRef = useRef<HTMLButtonElement>(null);
+  const photoCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [actionBarHeight, setActionBarHeight] = useState(0);
 
   useEffect(() => {
@@ -94,6 +111,43 @@ export default function InventoryItemDetails({
     observer.observe(actionBar);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!photoOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousActiveElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => photoCloseButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPhotoOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        photoDialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not([disabled])",
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      (previousActiveElement ?? photoTriggerRef.current)?.focus();
+    };
+  }, [photoOpen]);
 
   async function saveContent() {
     setSaving(true);
@@ -129,6 +183,7 @@ export default function InventoryItemDetails({
       setUnitPrice(String(body.item.unitPrice));
       setEditing(false);
       setSaved(true);
+      router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
     } finally {
@@ -173,6 +228,7 @@ export default function InventoryItemDetails({
       setReplaceQr(false);
       setQrReplaceReason("");
       setSaved(true);
+      router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
     } finally {
@@ -244,6 +300,7 @@ export default function InventoryItemDetails({
       setItem(body.item);
       setServiceDialogOpen(false);
       setSaved(true);
+      router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
     } finally {
@@ -271,10 +328,44 @@ export default function InventoryItemDetails({
       }
       setItem(body.item);
       setSaved(true);
+      router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
     } finally {
       setCapturingPhoto(false);
+    }
+  }
+
+  async function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!comment.trim() || commentSaving) return;
+    setCommentSaving(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.set("message", comment);
+      if (commentAttachment) formData.set("attachment", commentAttachment);
+      const response = await fetch(`/api/inventory/items/${item.id}/comments`, {
+        method: "POST",
+        body: formData,
+      });
+      const body = (await response.json()) as {
+        comments?: InventoryItemCommentDto[];
+        error?: string;
+      };
+      if (!response.ok || !body.comments) {
+        throw new Error(body.error ?? "item_comments_unavailable");
+      }
+      setComments(body.comments);
+      setComment("");
+      setCommentAttachment(null);
+      const attachmentInput = document.getElementById("item-comment-attachment");
+      if (attachmentInput instanceof HTMLInputElement) attachmentInput.value = "";
+      router.refresh();
+    } catch (cause) {
+      setError(localizeItemError(cause, t));
+    } finally {
+      setCommentSaving(false);
     }
   }
 
@@ -476,12 +567,49 @@ export default function InventoryItemDetails({
           void saveCameraPhoto(photo);
         }}
       />
+      {photoOpen && item.photoUrl ? (
+        <div
+          ref={photoDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("itemDetails.photoFullSize")}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setPhotoOpen(false)}
+        >
+          <button
+            ref={photoCloseButtonRef}
+            type="button"
+            onClick={() => setPhotoOpen(false)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 p-3 text-zinc-900 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            aria-label={t("common.close")}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <Image
+            src={item.photoUrl}
+            alt={item.name}
+            width={1600}
+            height={1200}
+            unoptimized
+            className="max-h-[92vh] max-w-[92vw] object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.4fr)]">
-        <section className="overflow-hidden rounded-2xl border border-amber-100 bg-[#fff8ec]">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.5fr)]">
+        <section className="overflow-hidden rounded-2xl border border-amber-100 bg-[#fff8ec] shadow-sm">
           <div className="relative flex aspect-[4/3] items-center justify-center bg-zinc-100">
             {item.photoUrl ? (
-              <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
+              <button
+                ref={photoTriggerRef}
+                type="button"
+                onClick={() => setPhotoOpen(true)}
+                className="absolute inset-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+                aria-label={t("itemDetails.openPhoto")}
+              >
+                <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
+              </button>
             ) : (
               <div className="flex flex-col items-center gap-2 text-sm text-zinc-400">
                 <ImageIcon className="h-10 w-10" />
@@ -500,8 +628,8 @@ export default function InventoryItemDetails({
               </button>
             ) : null}
           </div>
-          <div className="border-t border-amber-100 p-5">
-            <div className="flex items-center justify-center gap-3 rounded-xl bg-white p-4">
+          <div className="border-t border-amber-100 bg-[#fff7e8] p-5">
+            <div className="flex items-center justify-center gap-3 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
               {codeKind === "barcode" || item.qrCode ? (
                 <Image
                   src={`/api/inventory/items/${item.id}/qr?kind=${codeKind}&format=svg`}
@@ -547,6 +675,7 @@ export default function InventoryItemDetails({
           </div>
         </section>
 
+        <div className="space-y-5">
         <section
           id="item-information"
           style={{ scrollMarginTop: actionBarHeight + 16 }}
@@ -614,6 +743,114 @@ export default function InventoryItemDetails({
             </dl>
           )}
         </section>
+        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-zinc-800">
+            {t("itemDetails.recentOperations")}
+          </h2>
+          {operations.length ? (
+            <ol className="relative mt-4 space-y-3 border-l border-sky-200 pl-4">
+              {operations.map((entry) => (
+                <li key={entry.kind + "-" + entry.id} className="relative rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                  <span className="absolute -left-[1.35rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500" aria-hidden="true" />
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="font-medium text-zinc-800">
+                      {operationTitle(entry, t)}
+                    </p>
+                    <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
+                      {new Date(entry.occurredAt).toLocaleString(locale)}
+                    </time>
+                  </div>
+                  <p className="mt-1 text-zinc-500">
+                    {entry.actorName ?? t("itemDetails.auditUnknownActor")}
+                    {entry.actorEmail ? " · " + entry.actorEmail : ""}
+                    {operationDetail(entry, t)}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-sm text-zinc-500">
+              {t("itemDetails.operationsEmpty")}
+            </p>
+          )}
+        </section>
+        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-sky-600" />
+            <h2 className="text-lg font-semibold text-zinc-800">
+              {t("itemDetails.comments")} ({comments.length})
+            </h2>
+          </div>
+          {canComment ? (
+            <form className="mt-4 space-y-2" onSubmit={submitComment}>
+              <label className="sr-only" htmlFor="item-comment">
+                {t("itemDetails.commentPlaceholder")}
+              </label>
+              <textarea
+                id="item-comment"
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                maxLength={2000}
+                rows={2}
+                placeholder={t("itemDetails.commentPlaceholder")}
+                className="min-h-12 flex-1 resize-y rounded-xl border border-black/10 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-sky-500"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-sm font-medium text-zinc-600">
+                  <Paperclip className="h-4 w-4" />
+                  {t("itemDetails.commentAttach")}
+                  <input
+                    id="item-comment-attachment"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                    className="sr-only"
+                    onChange={(event) => setCommentAttachment(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {commentAttachment ? <span className="text-xs text-zinc-500">{commentAttachment.name}</span> : null}
+                <button
+                  type="submit"
+                  disabled={commentSaving || !comment.trim()}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                  {commentSaving ? t("itemDetails.saving") : t("itemDetails.commentSend")}
+                </button>
+              </div>
+            </form>
+          ) : null}
+          {comments.length ? (
+            <ol className="mt-4 space-y-3">
+              {comments.map((entry) => (
+                <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="font-medium text-zinc-800">
+                      {entry.authorName} <span className="font-normal text-zinc-400">· {entry.authorEmail}</span>
+                    </p>
+                    <time dateTime={entry.createdAt} className="text-xs text-zinc-400">
+                      {new Date(entry.createdAt).toLocaleString(locale)}
+                    </time>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-zinc-600">{entry.message}</p>
+                  {entry.attachment ? (
+                    <a
+                      href={entry.attachment.downloadUrl}
+                      className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-sky-700 hover:underline"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                      {entry.attachment.fileName}
+                    </a>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-sm text-zinc-500">
+              {t("itemDetails.commentsEmpty")}
+            </p>
+          )}
+        </section>
+        </div>
       </div>
 
       <InventoryItemComposition
@@ -623,80 +860,83 @@ export default function InventoryItemDetails({
         canManage={canManageComponents}
       />
 
-      {timeline.length ? (
-        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.responsibilityHistory")}</h2>
-          <ol className="mt-4 space-y-3">
-            {timeline.map((entry) => (
-              <li key={`${entry.kind}-${entry.id}`} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-medium text-zinc-800">
-                    {timelineTitle(entry, t)}
-                  </p>
-                  <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
-                    {new Date(entry.occurredAt).toLocaleString(locale)}
-                  </time>
-                </div>
-                <p className="mt-1 text-zinc-500">
-                  {entry.actorName ? `${entry.actorName} → ` : ""}
-                  {entry.responsibleName ?? t("common.notAssigned")}
-                  {entry.detail ? ` · ${entry.detail}` : ""}
-                </p>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-
-      {audit.length ? (
-        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-zinc-800">{t("itemDetails.auditHistory")}</h2>
-          <ol className="mt-4 space-y-3">
-            {audit.map((entry) => (
-              <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-medium text-zinc-800">{auditActionLabel(entry.action, t)}</p>
-                  <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
-                    {new Date(entry.occurredAt).toLocaleString(locale)}
-                  </time>
-                </div>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {entry.actorName ?? t("itemDetails.auditUnknownActor")}
-                  {entry.actorId ? ` · ${entry.actorId}` : ""}
-                  {entry.subjectRevision ? ` · ${t("itemDetails.auditRevision", { revision: entry.subjectRevision })}` : ""}
-                </p>
-                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                  <AuditSnapshot label={t("itemDetails.auditBefore")} values={entry.beforeValues} />
-                  <AuditSnapshot label={t("itemDetails.auditAfter")} values={entry.afterValues} />
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
     </div>
   );
 }
 
-function timelineTitle(
-  entry: ResponsibilityTimelineEntryDto,
+function operationTitle(
+  entry: InventoryItemOperationDto,
   t: (key: TranslationKey) => string,
 ) {
-  if (entry.kind === "responsibility") {
-    return entry.status === "transfer"
-      ? t("itemDetails.responsibilityTransferred")
-      : entry.status === "admin_override"
-        ? t("itemDetails.responsibilityOverridden")
-        : t("itemDetails.responsibilityAccepted");
-  }
+  if (entry.kind === "item") return auditActionLabel(entry.action, t);
   const labels: Record<string, TranslationKey> = {
+    "responsibility.accepted": "itemDetails.responsibilityAccepted",
+    "responsibility.transferred": "itemDetails.responsibilityTransferred",
+    "responsibility.admin_override": "itemDetails.responsibilityOverridden",
+    "transfer.requested": "itemDetails.transferRequested",
+    "transfer.confirmed": "itemDetails.transferConfirmed",
+    "transfer.rejected": "itemDetails.transferRejected",
+    "transfer.cancelled": "itemDetails.transferCancelled",
+    "transfer.overridden": "itemDetails.transferOverridden",
     pending_current_owner: "itemDetails.transferRequested",
     confirmed: "itemDetails.transferConfirmed",
     rejected: "itemDetails.transferRejected",
     cancelled: "itemDetails.transferCancelled",
     overridden: "itemDetails.transferOverridden",
   };
-  return t(labels[entry.status] ?? "itemDetails.responsibilityTransfer");
+  return t(labels[entry.action] ?? "itemDetails.responsibilityTransfer");
+}
+
+function operationDetail(
+  entry: InventoryItemOperationDto,
+  t: (key: TranslationKey) => string,
+) {
+  if (!entry.detail) return ` · ${t("itemDetails.operationRecorded")}`;
+  const parts: string[] = [];
+  if (entry.detail.targetName) {
+    parts.push(entry.detail.targetName);
+  }
+  if (entry.detail.itemName) {
+    parts.push(entry.detail.itemName);
+  }
+  if (entry.detail.serviceName) {
+    parts.push(entry.detail.serviceName);
+  }
+  if (entry.detail.componentName) {
+    parts.push(entry.detail.componentName);
+  }
+  const inventoryNumber = entry.detail.componentInventoryNumber;
+  if (inventoryNumber) parts.push(inventoryNumber);
+  const fromRoom = entry.detail.fromLocation;
+  const toRoom = entry.detail.toLocation;
+  if (fromRoom && toRoom && fromRoom !== toRoom) parts.push(`${fromRoom} → ${toRoom}`);
+  if (entry.detail.source) parts.push(localizeOperationValue(entry.detail.source, t));
+  if (entry.detail.status) parts.push(localizeOperationValue(entry.detail.status, t));
+  if (entry.detail.outcome === "released") parts.push(t("itemDetails.notAssigned"));
+  if (entry.detail.comment) parts.push(entry.detail.comment);
+  if (entry.detail.reason) parts.push(entry.detail.reason);
+  if (!parts.length) parts.push(t("itemDetails.operationRecorded"));
+  return parts.length ? ` · ${parts.join(", ")}` : "";
+}
+
+function localizeOperationValue(
+  value: string,
+  t: (key: TranslationKey) => string,
+) {
+  const labels: Record<string, TranslationKey> = {
+    accepted: "itemDetails.responsibilityAccepted",
+    admin_override: "itemDetails.responsibilityOverridden",
+    transfer: "itemDetails.responsibilityTransferred",
+    pending_current_owner: "itemDetails.transferRequested",
+    confirmed: "itemDetails.transferConfirmed",
+    rejected: "itemDetails.transferRejected",
+    cancelled: "itemDetails.transferCancelled",
+    overridden: "itemDetails.transferOverridden",
+    active: "itemDetails.statusActive",
+    maintenance: "itemDetails.statusMaintenance",
+    decommissioned: "itemDetails.statusDecommissioned",
+  };
+  return labels[value] ? t(labels[value]) : value;
 }
 
 function auditActionLabel(
@@ -716,22 +956,6 @@ function auditActionLabel(
   return t(labels[action] ?? "itemDetails.auditUnknownAction");
 }
 
-function AuditSnapshot({
-  label,
-  values,
-}: {
-  label: string;
-  values: Record<string, unknown> | null;
-}) {
-  return (
-    <div className="rounded-lg bg-white p-2">
-      <p className="font-semibold text-zinc-400">{label}</p>
-      <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words text-zinc-600">
-        {values ? JSON.stringify(values, null, 2) : "—"}
-      </pre>
-    </div>
-  );
-}
 
 function localizeItemError(
   cause: unknown,

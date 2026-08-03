@@ -137,12 +137,56 @@ export interface InventoryItemAuditRecord {
   id: string;
   actorId: string | null;
   actorName: string | null;
+  actorEmail: string | null;
   actorRole: UserRole | null;
   subjectRevision: number | null;
   action: string;
   beforeValues: Record<string, unknown> | null;
   afterValues: Record<string, unknown> | null;
   occurredAt: Date;
+}
+
+export interface InventoryItemOperationRecord {
+  id: string;
+  kind: "item" | "responsibility" | "transfer";
+  action: string;
+  actorName: string | null;
+  actorEmail: string | null;
+  targetName: string | null;
+  fromLocation?: string | null;
+  toLocation?: string | null;
+  occurredAt: Date;
+  beforeValues: Record<string, unknown> | null;
+  afterValues: Record<string, unknown> | null;
+}
+
+export interface InventoryItemCommentRecord {
+  id: string;
+  authorName: string;
+  authorEmail: string;
+  message: string;
+  createdAt: Date;
+  attachment: {
+    id: string;
+    fileName: string;
+    mediaType: string;
+    sizeBytes: number;
+  } | null;
+}
+
+export interface InsertInventoryItemCommentAttachmentRecord {
+  id: string;
+  commentId: string;
+  fileName: string;
+  mediaType: string;
+  sizeBytes: number;
+  binaryData: Uint8Array;
+  createdAt: Date;
+}
+
+export interface StoredInventoryItemCommentAttachment
+  extends InsertInventoryItemCommentAttachmentRecord {
+  itemId: string;
 }
 
 export interface InventoryItemRepository {
@@ -155,6 +199,14 @@ export interface InventoryItemRepository {
   ): Promise<InventoryItemRecord[]>;
   findItemById(id: string): Promise<InventoryItemRecord | null>;
   listComponents(itemId: string): Promise<InventoryItemRecord[]>;
+  listOperations(itemId: string): Promise<InventoryItemOperationRecord[]>;
+  listComments(itemId: string): Promise<InventoryItemCommentRecord[]>;
+  insertCommentAttachment(input: InsertInventoryItemCommentAttachmentRecord): Promise<void>;
+  findCommentAttachment(
+    itemId: string,
+    commentId: string,
+    attachmentId: string,
+  ): Promise<StoredInventoryItemCommentAttachment | null>;
   searchComponentCandidates(
     itemId: string,
     query: string,

@@ -38,12 +38,53 @@ export interface InventoryItemAuditDto {
   id: string;
   actorId: string | null;
   actorName: string | null;
+  actorEmail: string | null;
   actorRole: "admin" | "warehouse" | "employee" | null;
   subjectRevision: number | null;
   action: string;
   beforeValues: Record<string, unknown> | null;
   afterValues: Record<string, unknown> | null;
   occurredAt: string;
+}
+
+export interface InventoryItemOperationDto {
+  id: string;
+  kind: "item" | "responsibility" | "transfer";
+  action: string;
+  actorName: string | null;
+  actorEmail: string | null;
+  occurredAt: string;
+  detail: {
+    componentName?: string;
+    componentInventoryNumber?: string;
+    targetName?: string;
+    itemName?: string;
+    serviceName?: string;
+    reason?: string;
+    source?: string;
+    status?: string;
+    outcome?: string;
+    fromRoomId?: string;
+    toRoomId?: string;
+    fromLocation?: string;
+    toLocation?: string;
+    comment?: string;
+  } | null;
+}
+
+export interface InventoryItemCommentDto {
+  id: string;
+  authorName: string;
+  authorEmail: string;
+  message: string;
+  createdAt: string;
+  attachment: {
+    id: string;
+    fileName: string;
+    mediaType: string;
+    sizeBytes: number;
+    downloadUrl: string;
+  } | null;
 }
 
 export interface CreateInventoryItemInput {

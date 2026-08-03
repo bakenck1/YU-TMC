@@ -22,7 +22,6 @@ export default async function ItemPage({
     };
     const services = getApplicationServices();
     const item = await services.items.findItem(id, actor);
-    const canReadHistory = hasPermission(user.role, "inventory.item.read_all");
     const canManageProtected = hasPermission(
       user.role,
       "inventory.item.manage_protected_fields",
@@ -31,29 +30,33 @@ export default async function ItemPage({
       user.role,
       "inventory.item.manage_components",
     );
-    const components = await services.items.listComponents(id, actor);
-    const timeline = canReadHistory
-      ? await services.responsibility.listTimeline(id, actor)
+    const canComment = hasPermission(user.role, "inventory.item.comment");
+    const [components, operations, comments] = await Promise.all([
+      services.items.listComponents(id, actor),
+      services.items.listOperations(id, actor),
+      services.items.listComments(id, actor),
+    ]);
+    const buildings = canManageProtected
+      ? await services.locations.listBuildings(actor)
       : [];
-    const audit = canManageProtected
-      ? await services.items.listAudit(id, actor)
-      : [];
-    const rooms = canManageProtected
-      ? (
-          await Promise.all(
-            (await services.locations.listBuildings(actor)).map((building) =>
-              services.locations.listRooms(building.id, actor),
-            ),
-          )
-        ).flat()
-      : [];
+    const rooms = (
+      await Promise.all(
+        buildings.map(async (building) =>
+          (await services.locations.listRooms(building.id, actor)).map((room) => ({
+            ...room,
+            buildingName: building.name,
+          })),
+        ),
+      )
+    ).flat();
     return (
       <InventoryItemDetails
         initialItem={item}
         canEditContent={hasPermission(user.role, "inventory.item.edit_content")}
         canSendToService={hasPermission(user.role, "inventory.item.send_to_service")}
-        timeline={timeline}
-        audit={audit}
+        operations={operations}
+        initialComments={comments}
+        canComment={canComment}
         canManageProtected={canManageProtected}
         rooms={rooms}
         initialComponents={components}

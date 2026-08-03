@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type {
@@ -85,11 +86,11 @@ test("lists all decommissioned items for an administrator and exposes archive ti
   );
 });
 
-test("uses the assigned archive query for an employee", async () => {
-  let requestedUserId = "";
+test("employee sees the complete decommissioned registry", async () => {
+  let requestedAll = false;
   const service = createService({
-    listDecommissionedItemsAssignedTo: async (userId) => {
-      requestedUserId = userId;
+    listDecommissionedItems: async () => {
+      requestedAll = true;
       return [DECOMMISSIONED_ITEM];
     },
   });
@@ -99,7 +100,7 @@ test("uses the assigned archive query for an employee", async () => {
     role: "employee",
   });
 
-  assert.equal(requestedUserId, "employee-1");
+  assert.equal(requestedAll, true);
   assert.equal(result.length, 1);
 });
 
@@ -108,6 +109,7 @@ test("lists protected-field audit snapshots only for administrators", async () =
     id: "audit-1",
     actorId: "admin-1",
     actorName: "Admin User",
+    actorEmail: "admin@example.com",
     actorRole: "admin" as const,
     subjectRevision: 3,
     action: "item.protected_fields_updated",
@@ -128,6 +130,7 @@ test("lists protected-field audit snapshots only for administrators", async () =
     id: audit.id,
     actorId: audit.actorId,
     actorName: audit.actorName,
+    actorEmail: audit.actorEmail,
     actorRole: audit.actorRole,
     subjectRevision: audit.subjectRevision,
     action: audit.action,
@@ -175,17 +178,62 @@ test("records protected-field before and after snapshots with the acting adminis
   assert.equal(captured?.subjectRevision, updated.version);
   assert.deepEqual(captured?.beforeValues, {
     roomId: DECOMMISSIONED_ITEM.roomId,
+    roomLabel: `${DECOMMISSIONED_ITEM.buildingName}, ${DECOMMISSIONED_ITEM.roomDesignation}`,
     inventoryNumber: DECOMMISSIONED_ITEM.inventoryNumber,
     status: DECOMMISSIONED_ITEM.status,
     qrCode: DECOMMISSIONED_ITEM.qrCode,
   });
   assert.deepEqual(captured?.afterValues, {
     roomId: updated.roomId,
+    roomLabel: `${updated.buildingName}, ${updated.roomDesignation}`,
     inventoryNumber: updated.inventoryNumber,
     status: updated.status,
     qrCode: updated.qrCode,
     qrReplaceReason: null,
   });
+});
+
+test("operation feed uses historical room label snapshots without live-name fallback", () => {
+  const repositorySource = readFileSync(
+    "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
+    "utf8",
+  );
+  const operationQuery = repositorySource.slice(
+    repositorySource.indexOf("async listOperations"),
+    repositorySource.indexOf("async listComments"),
+  );
+
+  assert.match(operationQuery, /a\.before_values->>'roomLabel' as "fromLocation"/);
+  assert.match(operationQuery, /a\.after_values->>'roomLabel' as "toLocation"/);
+  assert.match(operationQuery, /and a\.action in \(/);
+  assert.doesNotMatch(operationQuery, /'item\.comment_added'/);
+  assert.doesNotMatch(operationQuery, /'item\.imported'/);
+});
+
+test("item detail UI wires photo modal and recent operation rendering", () => {
+  const componentSource = readFileSync(
+    "components/InventoryItemDetails.tsx",
+    "utf8",
+  );
+
+  assert.match(componentSource, /const \[photoOpen, setPhotoOpen\] = useState\(false\)/);
+  assert.match(componentSource, /lg:grid-cols-\[minmax\(340px,0\.95fr\)_minmax\(0,1\.5fr\)\]/);
+  assert.match(componentSource, /const photoDialogRef = useRef<HTMLDivElement>\(null\)/);
+  assert.match(componentSource, /const photoTriggerRef = useRef<HTMLButtonElement>\(null\)/);
+  assert.match(componentSource, /const photoCloseButtonRef = useRef<HTMLButtonElement>\(null\)/);
+  assert.match(componentSource, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(componentSource, /previousActiveElement \?\? photoTriggerRef\.current/);
+  assert.match(componentSource, /event\.key === "Escape"/);
+  assert.match(componentSource, /event\.key !== "Tab"/);
+  assert.match(componentSource, /role="dialog"/);
+  assert.match(componentSource, /ref=\{photoDialogRef\}/);
+  assert.match(componentSource, /ref=\{photoCloseButtonRef\}/);
+  assert.match(componentSource, /ref=\{photoTriggerRef\}/);
+  assert.match(componentSource, /aria-label=\{t\("itemDetails\.photoFullSize"\)\}/);
+  assert.match(componentSource, /onClick=\{\(\) => setPhotoOpen\(true\)\}/);
+  assert.match(componentSource, /operations\.map\(\(entry\) =>/);
+  assert.match(componentSource, /operationTitle\(entry, t\)/);
+  assert.match(componentSource, /operationDetail\(entry, t\)/);
 });
 
 test("archive route is only visible to roles that can read inventory items", () => {

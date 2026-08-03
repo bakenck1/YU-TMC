@@ -1,7 +1,9 @@
 import type {
   CreateInventoryItemInput,
   InventoryItemAuditDto,
+  InventoryItemCommentDto,
   InventoryItemDto,
+  InventoryItemOperationDto,
   UpdateInventoryItemContentInput,
   UpdateInventoryItemPhotoInput,
   UpdateInventoryItemProtectedInput,
@@ -9,8 +11,11 @@ import type {
 import type {
   AppendItemAuditRecord,
   InventoryItemAuditRecord,
+  InventoryItemCommentRecord,
+  InventoryItemOperationRecord,
   InventoryItemRecord,
   InventoryItemRepositories,
+  StoredInventoryItemCommentAttachment,
   StoredItemPhoto,
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
@@ -37,6 +42,12 @@ export interface InventoryItemQrEntropy {
 
 export interface TemporaryNumberSource {
   next(year: number): string;
+}
+
+export interface InventoryItemCommentAttachmentInput {
+  fileName: unknown;
+  mediaType: unknown;
+  binaryData: Uint8Array;
 }
 
 export interface SendItemToServiceInput {
@@ -240,6 +251,108 @@ export class InventoryItemService {
     return records.map(toAuditDto);
   }
 
+  async listOperations(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemOperationDto[]> {
+    const normalizedId = normalizeItemId(id);
+    const records = await this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(normalizedId);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+      assertItemReadable(item, actor);
+      return items.listOperations(normalizedId);
+    });
+    return records.map((record) =>
+      toOperationDto(
+        record,
+        hasPermission(actor.role, "inventory.item.read_all"),
+        actor.role === "admin",
+        hasPermission(actor.role, "inventory.item.comment"),
+      ),
+    );
+  }
+
+  async listComments(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemCommentDto[]> {
+    if (!hasPermission(actor.role, "inventory.item.comment.read")) throw forbidden();
+    const normalizedId = normalizeItemId(id);
+    const records = await this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(normalizedId);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+      assertItemReadable(item, actor);
+      return items.listComments(normalizedId);
+    });
+    return records.map((record) => toCommentDto(normalizedId, record));
+  }
+
+  async addComment(
+    id: string,
+    message: unknown,
+    actor: AuthorizationActor,
+    attachment?: InventoryItemCommentAttachmentInput,
+  ): Promise<InventoryItemCommentDto[]> {
+    if (!hasPermission(actor.role, "inventory.item.comment")) throw forbidden();
+    const normalizedId = normalizeItemId(id);
+    const normalizedMessage = normalizeText(message, 2_000, "invalid_comment");
+    const normalizedAttachment = attachment
+      ? normalizeCommentAttachment(attachment)
+      : null;
+    const occurredAt = this.clock.now();
+    const commentId = this.ids.create();
+    const records = await this.unitOfWork.transaction(async ({ items }) => {
+      const item = await items.findItemById(normalizedId);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+      assertItemReadable(item, actor);
+      await items.appendAudit(
+        createAudit({
+          id: commentId,
+          actor,
+          subjectId: normalizedId,
+          subjectRevision: item.version,
+          action: "item.comment_added",
+          afterValues: { message: normalizedMessage },
+          occurredAt,
+        }),
+      );
+      if (normalizedAttachment) {
+        await items.insertCommentAttachment({
+          id: this.ids.create(),
+          commentId,
+          ...normalizedAttachment,
+          createdAt: occurredAt,
+        });
+      }
+      return items.listComments(normalizedId);
+    });
+    return records.map((record) => toCommentDto(normalizedId, record));
+  }
+
+  async findCommentAttachment(
+    itemId: string,
+    commentId: string,
+    attachmentId: string,
+    actor: AuthorizationActor,
+  ): Promise<StoredInventoryItemCommentAttachment> {
+    if (!hasPermission(actor.role, "inventory.item.comment.read")) throw forbidden();
+    const normalizedItemId = normalizeItemId(itemId);
+    const normalizedCommentId = normalizeId(commentId, "invalid_comment_id");
+    const normalizedAttachmentId = normalizeId(attachmentId, "invalid_attachment_id");
+    return this.unitOfWork.read(async ({ items }) => {
+      const item = await items.findItemById(normalizedItemId);
+      if (!item) throw new ApplicationError("not_found", "item_not_found");
+      assertItemReadable(item, actor);
+      const attachment = await items.findCommentAttachment(
+        normalizedItemId,
+        normalizedCommentId,
+        normalizedAttachmentId,
+      );
+      if (!attachment) throw new ApplicationError("not_found", "attachment_not_found");
+      return attachment;
+    });
+  }
+
   async createItem(
     input: CreateInventoryItemInput,
     actor: AuthorizationActor,
@@ -306,6 +419,81 @@ export class InventoryItemService {
         }),
       );
       return toItemDto({ ...created, qrCode });
+    });
+  }
+
+  async importItems(
+    input: CreateInventoryItemInput[],
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
+    requirePermission(actor, "inventory.item.bulk_manage");
+    if (!Array.isArray(input) || input.length < 1 || input.length > 2_000) {
+      throw new ApplicationError("validation", "invalid_import_size");
+    }
+    const rows = input.map(normalizeCreateInput);
+    const occurredAt = this.clock.now();
+    const temporaryBase = this.temporaryNumbers.next(occurredAt.getUTCFullYear());
+
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const createdItems: InventoryItemDto[] = [];
+      for (const [index, values] of rows.entries()) {
+        if (!(await items.roomExists(values.roomId))) {
+          throw new ApplicationError("not_found", "room_not_found");
+        }
+        const itemId = this.ids.create();
+        const qrId = this.ids.create();
+        const inventoryNumber = values.inventoryNumber ??
+          `${temporaryBase}-${String(index + 1).padStart(4, "0")}`;
+        const inventoryNumberKind = values.inventoryNumber ? "official" : "temporary";
+        const qrCode = qrIdentifierFromEntropy(this.qrEntropy.create());
+        const created = await items.insertItem({
+          id: itemId,
+          name: values.name,
+          description: values.description,
+          itemType: values.itemType,
+          brand: values.brand,
+          model: values.model,
+          quantity: values.quantity,
+          unitPrice: values.unitPrice,
+          roomId: values.roomId,
+          inventoryNumberKind,
+          inventoryNumber,
+          inventoryNumberKey: inventoryNumberComparisonKey(inventoryNumber),
+          actorId: actor.userId,
+          occurredAt,
+        });
+        await items.insertItemQr({
+          id: qrId,
+          itemId,
+          value: qrCode,
+          actorId: actor.userId,
+        });
+        await items.appendAudit(
+          createAudit({
+            id: this.ids.create(),
+            actor,
+            subjectId: itemId,
+            subjectRevision: created.version,
+            action: "item.imported",
+            afterValues: {
+              name: created.name,
+              description: created.description,
+              itemType: created.itemType,
+              brand: created.brand,
+              model: created.model,
+              quantity: created.quantity,
+              unitPrice: created.unitPrice,
+              roomId: created.roomId,
+              inventoryNumber: created.inventoryNumber,
+              inventoryNumberKind: created.inventoryNumberKind,
+              qrIdentifierId: qrId,
+            },
+            occurredAt,
+          }),
+        );
+        createdItems.push(toItemDto({ ...created, qrCode }));
+      }
+      return createdItems;
     });
   }
 
@@ -456,12 +644,14 @@ export class InventoryItemService {
           action: "item.protected_fields_updated",
           beforeValues: {
             roomId: current.roomId,
+            roomLabel: itemLocationLabel(current),
             inventoryNumber: current.inventoryNumber,
             status: current.status,
             qrCode: current.qrCode,
           },
           afterValues: {
             roomId: updated.roomId,
+            roomLabel: itemLocationLabel(updated),
             inventoryNumber: updated.inventoryNumber,
             status: updated.status,
             qrCode,
@@ -690,6 +880,44 @@ function normalizeText(value: unknown, max: number, code: string) {
   return normalized;
 }
 
+const COMMENT_ATTACHMENT_MEDIA_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/plain",
+]);
+
+function normalizeCommentAttachment(input: InventoryItemCommentAttachmentInput) {
+  const rawName = normalizeText(input.fileName, 255, "invalid_comment_attachment");
+  const fileName = rawName
+    .replace(/.*[\\/]/, "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim();
+  const mediaType = normalizeText(input.mediaType, 127, "invalid_comment_attachment")
+    .toLocaleLowerCase("en-US");
+  if (
+    !fileName ||
+    [...fileName].length > 180 ||
+    !COMMENT_ATTACHMENT_MEDIA_TYPES.has(mediaType) ||
+    !(input.binaryData instanceof Uint8Array) ||
+    input.binaryData.byteLength < 1 ||
+    input.binaryData.byteLength > 2 * 1024 * 1024
+  ) {
+    throw new ApplicationError("validation", "invalid_comment_attachment");
+  }
+  return {
+    fileName,
+    mediaType,
+    sizeBytes: input.binaryData.byteLength,
+    binaryData: input.binaryData,
+  };
+}
+
 function normalizeId(value: unknown, code: string) {
   const normalized = normalizeText(value, 64, code);
   if (!/^[0-9a-f-]{36}$/i.test(normalized)) {
@@ -712,7 +940,8 @@ function requirePermission(
     | "inventory.item.edit_content"
     | "inventory.item.send_to_service"
     | "inventory.item.manage_protected_fields"
-    | "inventory.item.manage_components",
+    | "inventory.item.manage_components"
+    | "inventory.item.bulk_manage",
 ) {
   if (!hasPermission(actor.role, permission)) throw forbidden();
 }
@@ -871,16 +1100,140 @@ function itemContentAuditValues(record: InventoryItemRecord) {
   };
 }
 
+function itemLocationLabel(
+  record: Pick<InventoryItemRecord, "buildingName" | "roomDesignation">,
+) {
+  return `${record.buildingName}, ${record.roomDesignation}`;
+}
+
 function toAuditDto(record: InventoryItemAuditRecord): InventoryItemAuditDto {
   return {
     id: record.id,
     actorId: record.actorId,
     actorName: record.actorName,
+    actorEmail: record.actorEmail,
     actorRole: record.actorRole,
     subjectRevision: record.subjectRevision,
     action: record.action,
     beforeValues: record.beforeValues,
     afterValues: record.afterValues,
     occurredAt: record.occurredAt.toISOString(),
+  };
+}
+
+function toCommentDto(
+  itemId: string,
+  record: InventoryItemCommentRecord,
+): InventoryItemCommentDto {
+  return {
+    id: record.id,
+    authorName: record.authorName,
+    authorEmail: record.authorEmail,
+    message: record.message,
+    createdAt: record.createdAt.toISOString(),
+    attachment: record.attachment
+      ? {
+          ...record.attachment,
+          downloadUrl: `/api/inventory/items/${itemId}/comments/${record.id}/attachments/${record.attachment.id}`,
+        }
+      : null,
+  };
+}
+
+function toOperationDto(
+  record: InventoryItemOperationRecord,
+  canReadAll: boolean,
+  canReadAdministrative: boolean,
+  canReadComments: boolean,
+): InventoryItemOperationDto {
+  const componentValues = record.action === "item.component_added"
+    ? record.afterValues
+    : record.action === "item.component_removed"
+      ? record.beforeValues
+      : null;
+  const componentName = componentValues?.componentName;
+  const componentInventoryNumber = canReadAdministrative
+    ? componentValues?.componentInventoryNumber
+    : undefined;
+  const rawValues = record.afterValues ?? record.beforeValues;
+  const safeValues = record.kind === "item" && !canReadAdministrative
+    ? {
+        ...(typeof rawValues?.name === "string" ? { name: rawValues.name } : {}),
+        ...(typeof rawValues?.status === "string" ? { status: rawValues.status } : {}),
+      }
+    : rawValues;
+  const source = safeValues?.source;
+  const status = safeValues?.status;
+  const outcome = safeValues?.outcome;
+  const beforeRoomId = record.kind === "item" && canReadAll
+    ? record.beforeValues?.roomId
+    : undefined;
+  const afterRoomId = record.kind === "item" && canReadAll
+    ? record.afterValues?.roomId
+    : undefined;
+  const roomChanged =
+    typeof beforeRoomId === "string" &&
+    typeof afterRoomId === "string" &&
+    beforeRoomId !== afterRoomId;
+  const itemName = record.kind === "item"
+    ? safeValues?.name
+    : undefined;
+  const serviceName = record.kind === "item" && canReadAdministrative
+    ? safeValues?.serviceName
+    : undefined;
+  const reason = record.kind === "item" && canReadAdministrative
+    ? safeValues?.reason
+    : undefined;
+  const comment = canReadComments
+    ? safeValues?.decisionComment ??
+      (canReadAdministrative ? safeValues?.administrativeReason : undefined) ??
+      safeValues?.detail
+    : undefined;
+  const targetName = record.kind === "item" ? undefined : record.targetName;
+  return {
+    id: record.id,
+    kind: record.kind,
+    action: record.action,
+    actorName: record.actorName,
+    actorEmail: canReadComments ? record.actorEmail : null,
+    occurredAt: record.occurredAt.toISOString(),
+    detail:
+      typeof componentName === "string" ||
+      typeof componentInventoryNumber === "string" ||
+      typeof targetName === "string" ||
+      typeof itemName === "string" ||
+      typeof serviceName === "string" ||
+      typeof reason === "string" ||
+      typeof source === "string" ||
+      typeof status === "string" ||
+      typeof outcome === "string" ||
+      roomChanged ||
+      typeof record.fromLocation === "string" ||
+      typeof record.toLocation === "string" ||
+      typeof comment === "string"
+        ? {
+            ...(typeof componentName === "string" ? { componentName } : {}),
+            ...(typeof componentInventoryNumber === "string"
+              ? { componentInventoryNumber }
+              : {}),
+            ...(typeof targetName === "string" ? { targetName } : {}),
+            ...(typeof itemName === "string" ? { itemName } : {}),
+            ...(typeof serviceName === "string" ? { serviceName } : {}),
+            ...(typeof reason === "string" ? { reason } : {}),
+            ...(typeof source === "string" ? { source } : {}),
+            ...(typeof status === "string" ? { status } : {}),
+            ...(typeof outcome === "string" ? { outcome } : {}),
+            ...(roomChanged
+              ? { fromRoomId: beforeRoomId, toRoomId: afterRoomId }
+              : {}),
+            ...(typeof record.fromLocation === "string"
+              ? { fromLocation: record.fromLocation }
+              : {}),
+            ...(typeof record.toLocation === "string"
+              ? { toLocation: record.toLocation }
+              : {}),
+            ...(typeof comment === "string" ? { comment } : {}),
+          }
+        : null,
   };
 }
