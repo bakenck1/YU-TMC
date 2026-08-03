@@ -68,7 +68,7 @@ export const PERMISSION_ROLES = {
   "legacy.dashboard.read": ALL_ROLES,
   "legacy.items.read": ALL_ROLES,
   "legacy.locations.read": ALL_ROLES,
-  "legacy.analytics.read": ADMIN_ONLY,
+  "legacy.analytics.read": ADMIN_WAREHOUSE,
   "legacy.users.read": ADMIN_ONLY,
   "legacy.users.manage": ADMIN_ONLY,
   "legacy.users.manage_privileged": ADMIN_ONLY,
@@ -116,7 +116,7 @@ export const PERMISSION_ROLES = {
   "inventory.photo.inspection_original": ADMIN_WAREHOUSE,
   "inventory.photo.dispute_preview": ALL_ROLES,
   "inventory.photo.dispute_original": ["admin", "employee"],
-  "inventory.report.export": ADMIN_ONLY,
+  "inventory.report.export": ADMIN_WAREHOUSE,
 } as const satisfies Record<AppPermission, readonly UserRole[]>;
 
 export interface AuthorizationActor {

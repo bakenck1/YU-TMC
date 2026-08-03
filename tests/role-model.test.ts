@@ -21,9 +21,10 @@ test("exposes exactly the three product roles", () => {
   assert.equal(translate("en", "auth.roleWarehouse"), "Warehouse keeper");
 });
 
-test("warehouse can scan and record presence without inventory mutation rights", () => {
+test("warehouse can read analytics, decommissioned items, and export without inventory mutation rights", () => {
   const allowed = [
     "legacy.locations.read",
+    "legacy.analytics.read",
     "inventory.workspace.read",
     "inventory.item.read_all",
     "inventory.qr.resolve_full",
@@ -31,9 +32,9 @@ test("warehouse can scan and record presence without inventory mutation rights",
     "inventory.inspection.read_own",
     "inventory.inspection.mutate_own_draft",
     "inventory.result.record_own_inspection",
+    "inventory.report.export",
   ] as const;
   const denied = [
-    "legacy.analytics.read",
     "inventory.building.create",
     "inventory.room.create",
     "inventory.item.create",
@@ -50,6 +51,8 @@ test("warehouse can scan and record presence without inventory mutation rights",
   });
   assert.equal(hasPermission("warehouse", "inventory.item.comment.read"), true);
   assert.equal(hasPermission("warehouse", "inventory.item.comment"), false);
+  assert.equal(canAccessPath("warehouse", "/analytics"), true);
+  assert.equal(canAccessPath("warehouse", "/items/decommissioned"), true);
   denied.forEach((permission) => {
     assert.equal(hasPermission("warehouse", permission), false, permission);
   });
@@ -67,7 +70,7 @@ test("employee can open and complete an assigned inventory session", () => {
   const allowed = [
     "legacy.locations.read",
     "inventory.workspace.read",
-    "inventory.item.read_all",
+    "inventory.item.read_assigned",
     "inventory.item.comment",
     "inventory.inspection.read_own",
     "inventory.result.read_own_inspection",

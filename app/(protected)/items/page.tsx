@@ -46,6 +46,11 @@ export default async function ItemsPage() {
           items={items}
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
+          excelDataset={
+            hasPermission(user.role, "inventory.report.export")
+              ? "items"
+              : undefined
+          }
         />
       )}
     </div>

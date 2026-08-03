@@ -71,9 +71,9 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     const actor = authorizationActor(user);
-    if (!hasPermission(user.role, "inventory.item.bulk_manage")) throw forbidden();
     const action = new URL(request.url).searchParams.get("action");
     if (action === "export") {
+      if (!hasPermission(user.role, "inventory.report.export")) throw forbidden();
       const body = (await request.json()) as {
         dataset?: string;
         itemIds?: unknown;
@@ -101,6 +101,7 @@ export async function POST(request: Request) {
       );
     }
     if (action !== "preview" && action !== "import") throw invalidRequest();
+    if (!hasPermission(user.role, "inventory.item.bulk_manage")) throw forbidden();
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size < 1 || file.size > MAX_FILE_BYTES || !file.name.toLowerCase().endsWith(".xlsx")) {
