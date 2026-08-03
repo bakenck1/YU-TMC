@@ -69,5 +69,10 @@ export default async function ItemPage({
 
   if (!item) notFound();
 
-  return <ItemDetails item={item} />;
+  return (
+    <ItemDetails
+      item={item}
+      canManage={hasPermission(user.role, "inventory.item.edit_content")}
+    />
+  );
 }

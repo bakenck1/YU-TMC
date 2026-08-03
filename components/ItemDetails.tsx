@@ -35,7 +35,7 @@ function splitLocation(value: string) {
   return { object, room: rest.join(" / ") || "—" };
 }
 
-function AssetCard({ item }: { item: InventoryItem }) {
+function AssetCard({ item, canManage }: { item: InventoryItem; canManage: boolean }) {
   const location = splitLocation(item.location);
   const { t } = useAppSettings();
   return (
@@ -52,7 +52,7 @@ function AssetCard({ item }: { item: InventoryItem }) {
         </div>
         <div className="hidden text-center sm:block">
           <QrCode className="mx-auto h-24 w-24 text-zinc-700" strokeWidth={1.5} />
-          <button type="button" className="mt-3 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">{t("items.createQr")}</button>
+          {canManage ? <button type="button" className="mt-3 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">{t("items.createQr")}</button> : null}
         </div>
       </div>
     </div>
@@ -129,7 +129,13 @@ function ActionPanel({ type }: { type: Exclude<DetailTab, "info" | "edit"> }) {
   );
 }
 
-export default function ItemDetails({ item }: { item: InventoryItem }) {
+export default function ItemDetails({
+  item,
+  canManage = false,
+}: {
+  item: InventoryItem;
+  canManage?: boolean;
+}) {
   const [activeTab, setActiveTab] = useState<DetailTab>("info");
   const { dataLabel, t } = useAppSettings();
   const statusStyles =
@@ -142,12 +148,12 @@ export default function ItemDetails({ item }: { item: InventoryItem }) {
   return (
     <div className="space-y-5">
       <div className="flex gap-2 overflow-x-auto rounded-2xl border border-black/5 bg-white p-2">
-        {tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${activeTab === tab.id ? "bg-emerald-50 text-emerald-700" : "text-zinc-500 hover:bg-zinc-50"}`}><Icon className="h-4 w-4" />{t(tab.labelKey)}</button>; })}
+        {tabs.filter((tab) => canManage || tab.id === "info").map((tab) => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${activeTab === tab.id ? "bg-emerald-50 text-emerald-700" : "text-zinc-500 hover:bg-zinc-50"}`}><Icon className="h-4 w-4" />{t(tab.labelKey)}</button>; })}
       </div>
       <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span className="flex items-center gap-2"><TriangleAlert className="h-5 w-5 text-amber-500" /><strong>{t("items.notMarked")}</strong> {t("items.createAndScanQr")}</span></div>
       <div className="flex items-center gap-3"><Link href="/items" className="rounded-lg p-2 text-zinc-500 hover:bg-white"><ArrowLeft className="h-5 w-5" /></Link><div><h1 className="text-2xl font-semibold text-zinc-800">{dataLabel(item.itemType ?? item.name)} {item.brandModel ?? ""}</h1><span className={`mt-1 inline-block rounded px-2 py-1 text-xs font-medium ${statusStyles}`}>{dataLabel(item.displayStatus ?? "Активен")}</span></div></div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(320px,0.85fr)_minmax(520px,1.6fr)]">
-        <AssetCard item={item} />
+        <AssetCard item={item} canManage={canManage} />
         {activeTab === "info" ? <InformationPanel /> : activeTab === "edit" ? <EditPanel item={item} /> : <ActionPanel type={activeTab} />}
       </div>
       <div className="rounded-2xl border border-black/5 bg-white p-6"><div className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-emerald-500" /><h2 className="font-semibold">{t("items.equipment")}</h2></div><p className="mt-4 text-sm text-zinc-400">{t("items.equipmentEmpty")}</p></div>
