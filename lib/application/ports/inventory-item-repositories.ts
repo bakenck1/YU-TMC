@@ -25,6 +25,7 @@ export interface InventoryItemRecord {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  maintenanceStartedAt?: Date | null;
   archivedAt: Date | null;
 }
 
@@ -90,6 +91,14 @@ export interface UpdateInventoryItemProtectedRecord {
 export interface UpdateInventoryItemStatusRecord {
   id: string;
   status: ItemStatus;
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
+}
+
+export interface ResolveMaintenanceItemRecord {
+  id: string;
+  status: "active" | "decommissioned";
   actorId: string;
   expectedVersion: number;
   occurredAt: Date;
@@ -227,6 +236,9 @@ export interface InventoryItemRepository {
   ): Promise<InventoryItemRecord | null>;
   updateItemStatus(
     input: UpdateInventoryItemStatusRecord,
+  ): Promise<InventoryItemRecord | null>;
+  resolveMaintenanceItem(
+    input: ResolveMaintenanceItemRecord,
   ): Promise<InventoryItemRecord | null>;
   archiveItem(input: ArchiveInventoryItemRecord): Promise<InventoryItemRecord | null>;
   insertItemQr(input: InsertItemQrRecord): Promise<void>;

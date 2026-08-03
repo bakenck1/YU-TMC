@@ -41,6 +41,7 @@ test("warehouse is read-only and cannot access inspection workflows", () => {
     false,
   );
   assert.equal(hasPermission(warehouse, "inventory.item.send_to_service"), false);
+  assert.equal(hasPermission(warehouse, "inventory.item.resolve_maintenance"), false);
   assert.equal(hasPermission(warehouse, "inventory.item.bulk_manage"), false);
 
   assert.equal(hasPermission(warehouse, "inventory.inspection.create_self"), false);
@@ -64,6 +65,7 @@ test("warehouse item mutations are rejected by the service before repository acc
     service.updateProtected("item-1", {} as never, actor),
     service.archiveItem("item-1", 1, actor),
     service.sendToService("item-1", 1, {} as never, actor),
+    service.resolveMaintenanceItem("item-1", {} as never, actor),
     service.addComponent("item-1", "item-2", actor),
     service.removeComponent("item-1", "item-2", actor),
     service.addComment("item-1", {} as never, actor),

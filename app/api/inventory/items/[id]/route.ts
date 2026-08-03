@@ -53,6 +53,12 @@ export async function PATCH(
             },
             actor,
           )
+        : isMaintenanceResolutionPatch(body)
+        ? await getApplicationServices().items.resolveMaintenanceItem(
+            id,
+            { version: body.version, status: body.status },
+            actor,
+          )
         : isProtectedPatch(body)
         ? await getApplicationServices().items.updateProtected(
             id,
@@ -68,6 +74,21 @@ export async function PATCH(
   } catch (error) {
     return itemErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);
   }
+}
+
+function isMaintenanceResolutionPatch(value: unknown): value is {
+  operation: "resolve_maintenance";
+  version: number;
+  status: "active" | "decommissioned";
+} {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>).operation === "resolve_maintenance" &&
+      Number.isInteger((value as Record<string, unknown>).version) &&
+      ((value as Record<string, unknown>).status === "active" ||
+        (value as Record<string, unknown>).status === "decommissioned"),
+  );
 }
 
 function isServicePatch(value: unknown): value is {

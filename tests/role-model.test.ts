@@ -36,6 +36,7 @@ test("warehouse can read analytics, decommissioned items, and export without inv
     "inventory.item.create",
     "inventory.item.edit_content",
     "inventory.item.send_to_service",
+    "inventory.item.resolve_maintenance",
     "inventory.item.manage_protected_fields",
     "inventory.item.manage_components",
     "inventory.item.bulk_manage",

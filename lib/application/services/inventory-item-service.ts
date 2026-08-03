@@ -58,6 +58,11 @@ export interface SendItemToServiceInput {
   reason: string;
 }
 
+export interface ResolveMaintenanceItemInput {
+  version: number;
+  status: "active" | "decommissioned";
+}
+
 export class InventoryItemService {
   constructor(
     private readonly unitOfWork: UnitOfWork<InventoryItemRepositories>,
@@ -777,6 +782,47 @@ export class InventoryItemService {
       return toItemDto({ ...updated, qrCode: current.qrCode });
     });
   }
+
+  async resolveMaintenanceItem(
+    id: string,
+    input: ResolveMaintenanceItemInput,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.resolve_maintenance");
+    if (!Number.isInteger(input.version) || input.version < 1) {
+      throw new ApplicationError("validation", "invalid_version");
+    }
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.version !== input.version) throw versionConflict();
+      if (current.status !== "maintenance") {
+        throw new ApplicationError("conflict", "item_not_in_maintenance");
+      }
+      const updated = await items.resolveMaintenanceItem({
+        id,
+        status: input.status,
+        actorId: actor.userId,
+        expectedVersion: input.version,
+        occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      await items.appendAudit(
+        createAudit({
+          id: this.ids.create(),
+          actor,
+          subjectId: id,
+          subjectRevision: updated.version,
+          action: "item.maintenance_resolved",
+          beforeValues: { status: current.status },
+          afterValues: { status: updated.status },
+          occurredAt,
+        }),
+      );
+      return toItemDto({ ...updated, qrCode: current.qrCode });
+    });
+  }
 }
 
 function normalizeCreateInput(input: CreateInventoryItemInput) {
@@ -1009,6 +1055,7 @@ function requirePermission(
     | "inventory.item.create"
     | "inventory.item.edit_content"
     | "inventory.item.send_to_service"
+    | "inventory.item.resolve_maintenance"
     | "inventory.item.manage_protected_fields"
     | "inventory.item.manage_components"
     | "inventory.item.bulk_manage",
@@ -1154,6 +1201,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     version: record.version,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    maintenanceStartedAt: record.maintenanceStartedAt?.toISOString() ?? null,
     archivedAt: record.archivedAt?.toISOString() ?? null,
   };
 }

@@ -24,9 +24,8 @@ export default function MaintenanceItemsPanel({
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          operation: "resolve_maintenance",
           version: item.version,
-          roomId: item.room.id,
-          inventoryNumber: item.inventoryNumber,
           status,
         }),
       });
@@ -77,7 +76,7 @@ export default function MaintenanceItemsPanel({
                 <th className="px-3 py-3">ТМЦ</th>
                 <th className="px-3 py-3">Корпус / помещение</th>
                 <th className="px-3 py-3">Ответственный</th>
-                <th className="px-3 py-3">Переведено</th>
+                <th className="px-3 py-3">Переведено в сервис</th>
                 {canManage ? <th className="px-3 py-3">Действия</th> : null}
               </tr>
             </thead>
@@ -101,7 +100,7 @@ export default function MaintenanceItemsPanel({
                     {item.responsible?.name || "Не назначен"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-zinc-600">
-                    {new Date(item.updatedAt).toLocaleString()}
+                    {new Date(item.maintenanceStartedAt ?? item.updatedAt).toLocaleString("ru-RU")}
                   </td>
                   {canManage ? (
                     <td className="px-3 py-3">

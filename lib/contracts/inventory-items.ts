@@ -31,6 +31,7 @@ export interface InventoryItemDto {
   version: number;
   createdAt: string;
   updatedAt: string;
+  maintenanceStartedAt?: string | null;
   archivedAt: string | null;
 }
 

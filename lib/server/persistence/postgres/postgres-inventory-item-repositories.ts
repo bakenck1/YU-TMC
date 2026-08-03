@@ -17,6 +17,7 @@ import type {
   InventoryItemRepositories,
   InventoryItemRepository,
   ReplaceItemQrRecord,
+  ResolveMaintenanceItemRecord,
   StoredInventoryItemCommentAttachment,
   UpdateInventoryItemContentRecord,
   UpdateInventoryItemPhotoRecord,
@@ -62,6 +63,7 @@ interface ItemRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  maintenance_started_at: Date | null;
   archived_at: Date | null;
 }
 
@@ -609,6 +611,22 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.findItemById(input.id);
   }
 
+  async resolveMaintenanceItem(
+    input: ResolveMaintenanceItemRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set status = $2::"yu_inventory"."item_status",
+           archived_by = case when $2 = 'decommissioned' then $3 else null end,
+           archived_at = case when $2 = 'decommissioned' then $4 else null end,
+           updated_by = $3, updated_at = $4, version = version + 1
+       where id = $1 and version = $5 and status = 'maintenance' and archived_at is null`,
+      [input.id, input.status, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (result.rowCount !== 1) return null;
+    return this.findItemById(input.id);
+  }
+
   async archiveItem(
     input: ArchiveInventoryItemRecord,
   ): Promise<InventoryItemRecord | null> {
@@ -728,10 +746,19 @@ function itemSelect(where: string, limit = "") {
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
            p.preview_object_key as photo_url, p.id as photo_id,
-           i.version, i.created_at, i.updated_at, i.archived_at
+           i.version, i.created_at, i.updated_at,
+           service_move.occurred_at as maintenance_started_at, i.archived_at
       from ${ITEMS} i
       join ${ROOMS} r on r.id = i.room_id
       join ${BUILDINGS} b on b.id = r.building_id
+      left join lateral (
+        select occurred_at
+          from ${AUDIT}
+         where subject_kind = 'item' and subject_id = i.id
+           and action = 'item.sent_to_service'
+         order by occurred_at desc, id desc
+         limit 1
+      ) service_move on true
       left join lateral (
         select original_value
           from ${QR}
@@ -786,6 +813,9 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     version: Number(row.version),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    maintenanceStartedAt: row.maintenance_started_at
+      ? new Date(row.maintenance_started_at)
+      : null,
     archivedAt: row.archived_at ? new Date(row.archived_at) : null,
   };
 }
