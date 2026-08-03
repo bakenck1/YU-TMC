@@ -23,6 +23,7 @@ import {
 import { useAppSettings } from "./AppSettingsProvider";
 import { useAuth } from "./AuthProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import type { UserRole } from "@/lib/contracts/users";
 import { canAccessPath } from "@/lib/security/authorization";
 
 interface NavItem {
@@ -49,6 +50,20 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
+
+const EMPLOYEE_HIDDEN_NAV_PATHS = new Set([
+  "/inventory",
+  "/inventory/inspections",
+]);
+
+export function sidebarItemsForRole(role: UserRole) {
+  return NAV_ITEMS.filter(
+    (item) =>
+      !(
+        role === "employee" && EMPLOYEE_HIDDEN_NAV_PATHS.has(item.href)
+      ) && canAccessPath(role, item.href),
+  );
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -124,9 +139,7 @@ function SidebarContent({
   const { user, loading: authLoading, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
-  const visibleItems = user
-    ? NAV_ITEMS.filter((item) => canAccessPath(user.role, item.href))
-    : [];
+  const visibleItems = user ? sidebarItemsForRole(user.role) : [];
   const activeHref = visibleItems
     .filter((item) =>
       item.href === "/"
