@@ -278,6 +278,23 @@ const BUILDINGS: BuildingCfg[] = [
   },
 ];
 
+type DecorativeField = {
+  id: string;
+  kind: "basketball" | "football";
+  left: string;
+  top: number;
+  width: number;
+  height: number;
+  label: TranslationKey;
+};
+
+const DECORATIVE_FIELDS: DecorativeField[] = [
+  { id: "basketball-1", kind: "basketball", left: "17.5%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball1" },
+  { id: "basketball-2", kind: "basketball", left: "30.5%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball2" },
+  { id: "football-1", kind: "football", left: "17.5%", top: 178, width: 190, height: 105, label: "map.decorativeFootball1" },
+  { id: "football-2", kind: "football", left: "33.5%", top: 178, width: 190, height: 105, label: "map.decorativeFootball2" },
+];
+
 type View = "loading" | "building" | "floor" | "item";
 
 export default function CampusMap({ data }: { data: CampusMapData }) {
@@ -448,6 +465,51 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
             <span>{t("map.t1Construction")}</span>
           </div>
         </div>
+
+        {/* Decorative sports fields are visual context only, never inventory locations. */}
+        {DECORATIVE_FIELDS.map((field) => (
+          <div
+            key={field.id}
+            data-testid={`decorative-${field.id}`}
+            aria-label={t(field.label)}
+            style={{
+              position: "absolute",
+              left: field.left,
+              top: field.top,
+              width: field.width,
+              height: field.height,
+              pointerEvents: "none",
+              zIndex: 2,
+              borderRadius: field.kind === "football" ? "9px" : "5px",
+              background: field.kind === "football" ? "#5d9b62" : "#6d9bba",
+              border: "2px solid rgba(255,255,255,.82)",
+              boxShadow: "0 3px 8px rgba(35,55,40,.18)",
+              overflow: "hidden",
+            }}
+          >
+            {field.kind === "basketball" ? (
+              <>
+                <div aria-hidden="true" style={css("position:absolute;inset:8px;border:2px solid rgba(255,255,255,.8);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:8px;bottom:8px;border-left:2px solid rgba(255,255,255,.8);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:8px;top:50%;width:38px;height:38px;transform:translate(-2px,-50%);border:2px solid rgba(255,255,255,.8);border-radius:50%;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:8px;top:50%;width:38px;height:38px;transform:translate(2px,-50%);border:2px solid rgba(255,255,255,.8);border-radius:50%;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:5px;top:50%;width:5px;height:20px;transform:translateY(-50%);background:#f1d27a;border-radius:2px;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:5px;top:50%;width:5px;height:20px;transform:translateY(-50%);background:#f1d27a;border-radius:2px;")} />
+              </>
+            ) : (
+              <>
+                <div aria-hidden="true" style={css("position:absolute;inset:8px;border:2px solid rgba(255,255,255,.82);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:8px;bottom:8px;border-left:2px solid rgba(255,255,255,.82);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:50%;width:30px;height:30px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.82);border-radius:50%;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:8px;top:25%;width:28px;height:50%;border:2px solid rgba(255,255,255,.82);border-left:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:8px;top:25%;width:28px;height:50%;border:2px solid rgba(255,255,255,.82);border-right:0;")} />
+              </>
+            )}
+            <span style={css("position:absolute;left:6px;bottom:4px;color:#fff;font-size:10px;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.4);")}>
+              {t(field.label)}
+            </span>
+          </div>
+        ))}
 
         {BUILDINGS.map((b) => {
           const buildingData = data.buildings[b.id];

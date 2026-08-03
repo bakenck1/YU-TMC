@@ -63,3 +63,21 @@ test("renders T1 as a localized, non-interactive construction block", () => {
   assert.match(source, /pointer-events:none/);
   assert.doesNotMatch(source, /id: "t1-building",[\s\S]*?onClick/);
 });
+
+test("renders two basketball and two football decorative fields without interactions", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /const DECORATIVE_FIELDS: DecorativeField\[\] = \[/);
+  assert.equal((source.match(/id: "basketball-[12]"/g) ?? []).length, 2);
+  assert.equal((source.match(/id: "football-[12]"/g) ?? []).length, 2);
+  assert.match(source, /data-testid=\{`decorative-\$\{field\.id\}`\}/);
+  for (const id of ["basketball-1", "basketball-2", "football-1", "football-2"]) {
+    assert.match(source, new RegExp(`id: "${id}"`));
+  }
+  assert.match(source, /pointerEvents: "none"/);
+  const fieldsBlock = source.slice(source.indexOf("const DECORATIVE_FIELDS"), source.indexOf("{BUILDINGS.map"));
+  assert.doesNotMatch(fieldsBlock, /onClick/);
+});
