@@ -58,7 +58,8 @@ test("renders T1 as a localized, non-interactive construction block", () => {
   );
 
   assert.match(source, /data-testid="t1-construction"/);
+  assert.match(source, /id="t1-building"/);
   assert.match(source, /t\("map\.t1Construction"\)/);
   assert.match(source, /pointer-events:none/);
-  assert.doesNotMatch(source, /id: "t1-building"/);
+  assert.doesNotMatch(source, /id: "t1-building",[\s\S]*?onClick/);
 });

@@ -437,6 +437,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
         {/* T1 is a construction site, not an inventory building. Keep it
             outside BUILDINGS so it cannot open a building modal. */}
         <div
+          id="t1-building"
           data-testid="t1-construction"
           aria-label={t("map.t1Construction")}
           style={css("position:absolute;left:35.5%;top:150px;width:150px;height:82px;pointer-events:none;z-index:3;")}
