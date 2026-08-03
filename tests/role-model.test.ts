@@ -28,10 +28,6 @@ test("warehouse can read analytics, decommissioned items, and export without inv
     "inventory.workspace.read",
     "inventory.item.read_all",
     "inventory.qr.resolve_full",
-    "inventory.inspection.create_self",
-    "inventory.inspection.read_own",
-    "inventory.inspection.mutate_own_draft",
-    "inventory.result.record_own_inspection",
     "inventory.report.export",
   ] as const;
   const denied = [
@@ -44,6 +40,10 @@ test("warehouse can read analytics, decommissioned items, and export without inv
     "inventory.item.manage_components",
     "inventory.item.bulk_manage",
     "inventory.transfer.override",
+    "inventory.inspection.create_self",
+    "inventory.inspection.read_own",
+    "inventory.inspection.mutate_own_draft",
+    "inventory.result.record_own_inspection",
   ] as const;
 
   allowed.forEach((permission) => {
@@ -66,7 +66,7 @@ test("warehouse can read analytics, decommissioned items, and export without inv
   );
 });
 
-test("employee can open and complete an assigned inventory session", () => {
+test("employee retains assigned-session permissions without direct inspection route access", () => {
   const allowed = [
     "legacy.locations.read",
     "inventory.workspace.read",
@@ -90,7 +90,7 @@ test("employee can open and complete an assigned inventory session", () => {
     false,
   );
   assert.equal(hasPermission("employee", "inventory.workspace.read"), true);
-  assert.equal(canAccessPath("employee", "/inventory/inspections"), true);
+  assert.equal(canAccessPath("employee", "/inventory/inspections"), false);
   assert.equal(canAccessPath("employee", "/inventory"), true);
   assert.equal(canAccessPath("employee", "/locations"), true);
 });

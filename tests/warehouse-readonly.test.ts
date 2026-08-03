@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { InventoryItemRepositories, InventoryItemRepository } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
+import { legacyItemDetailVisibility } from "../lib/item-detail-visibility";
 import { canAccessPath } from "../lib/security/authorization";
 import { hasPermission } from "../lib/security/permissions";
 
@@ -74,12 +74,13 @@ test("warehouse item mutations are rejected by the service before repository acc
   }
 });
 
-test("legacy item details hide every inventory mutation control by default", () => {
-  const detailsSource = readFileSync("components/ItemDetails.tsx", "utf8");
-  const pageSource = readFileSync("app/(protected)/items/[id]/page.tsx", "utf8");
-
-  assert.match(detailsSource, /canManage = false/);
-  assert.match(detailsSource, /canManage \|\| tab\.id === "info"/);
-  assert.match(detailsSource, /canManage \? <button[^>]*>[\s\S]*?items\.createQr/);
-  assert.match(pageSource, /canManage=\{hasPermission\(user\.role, "inventory\.item\.edit_content"\)\}/);
+test("legacy item details expose only read controls without management access", () => {
+  assert.deepEqual(legacyItemDetailVisibility(false), {
+    tabs: ["info"],
+    canGenerateQr: false,
+  });
+  assert.deepEqual(legacyItemDetailVisibility(true), {
+    tabs: ["info", "edit", "service", "writeoff", "delete"],
+    canGenerateQr: true,
+  });
 });
