@@ -1,23 +1,53 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
-test("employee inventory presents isolated status tabs", async () => {
-  const source = await readFile(
-    new URL("../components/EmployeeItemsTabs.tsx", import.meta.url),
-    "utf8",
+import {
+  EmployeeItemsTabList,
+  EmployeeItemsTabPanels,
+} from "../components/EmployeeItemsTabs";
+import { employeeItemTabAfterKey } from "../lib/employee-items-tabs";
+
+test("employee inventory renders a roving, fully associated tab list", () => {
+  const markup = renderToStaticMarkup(
+    createElement(EmployeeItemsTabList, {
+      activeStatus: "maintenance",
+      ariaLabel: "Inventory",
+      label: (status) => status,
+      onSelect: () => undefined,
+    }),
   );
 
-  assert.match(source, /role="tablist"/);
-  assert.match(source, /useState<ItemStatus>\("active"\)/);
-  assert.match(source, /status: "active"/);
-  assert.match(source, /status: "maintenance"/);
-  assert.match(source, /status: "decommissioned"/);
-  assert.match(source, /items\.filter\(\(item\) => item\.status === activeStatus\)/);
-  assert.match(source, /aria-selected=\{selected\}/);
-  assert.match(source, /aria-controls=\{`employee-items-panel-\$\{tab\.status\}`\}/);
-  assert.match(source, /aria-labelledby=\{`employee-items-tab-\$\{activeStatus\}`\}/);
-  assert.match(source, /<ItemsTable[\s\S]*items=\{visibleItems\}/);
+  assert.match(markup, /role="tablist" aria-label="Inventory"/);
+  assert.equal((markup.match(/role="tab"/g) ?? []).length, 3);
+  assert.equal((markup.match(/tabindex="0"/g) ?? []).length, 1);
+  assert.equal((markup.match(/tabindex="-1"/g) ?? []).length, 2);
+  assert.match(markup, /id="employee-items-tab-maintenance"[^>]*aria-selected="true"/);
+  for (const status of ["active", "maintenance", "decommissioned"]) {
+    assert.match(markup, new RegExp(`aria-controls="employee-items-panel-${status}"`));
+  }
+
+  const panels = renderToStaticMarkup(
+    createElement(EmployeeItemsTabPanels, {
+      activeStatus: "maintenance",
+      renderActive: () => createElement("p", null, "visible items"),
+    }),
+  );
+  assert.equal((panels.match(/role="tabpanel"/g) ?? []).length, 3);
+  assert.equal((panels.match(/ hidden=""/g) ?? []).length, 2);
+  assert.match(panels, /id="employee-items-panel-maintenance"[^>]*><p>visible items<\/p>/);
+});
+
+test("employee tab keyboard interaction wraps and supports Home and End", () => {
+  assert.equal(employeeItemTabAfterKey("active", "ArrowRight"), "maintenance");
+  assert.equal(employeeItemTabAfterKey("maintenance", "ArrowRight"), "decommissioned");
+  assert.equal(employeeItemTabAfterKey("decommissioned", "ArrowRight"), "active");
+  assert.equal(employeeItemTabAfterKey("active", "ArrowLeft"), "decommissioned");
+  assert.equal(employeeItemTabAfterKey("maintenance", "Home"), "active");
+  assert.equal(employeeItemTabAfterKey("active", "End"), "decommissioned");
+  assert.equal(employeeItemTabAfterKey("active", "Enter"), null);
 });
 
 test("only employees receive the tabbed inventory interface", async () => {
