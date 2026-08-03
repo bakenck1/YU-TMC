@@ -25,6 +25,14 @@ test("adds the three 2GIS campus objects as interactive map buildings", () => {
   assert.equal(CAMPUS_MAP_BUILDING_PRESETS.length, 10);
 });
 
+test("builds both stadium floor selectors even when no rooms are stored yet", () => {
+  const stadium = buildCampusMapData([], [], []).buildings["yessenov-stadium"];
+
+  assert.equal(stadium?.floorCount, 2);
+  assert.deepEqual(stadium?.floors.map((floor) => floor.n), [1, 2]);
+  assert.deepEqual(stadium?.floors.map((floor) => floor.roomCount), [0, 0]);
+});
+
 test("renders the stadium and centers, removes the court, and shifts KGI west", () => {
   const source = readFileSync(
     new URL("../components/CampusMap.tsx", import.meta.url),
