@@ -28,6 +28,7 @@ const ROUTE_PERMISSIONS = [
   ["/settings", "legacy.settings.manage"],
   ["/users", "legacy.users.read"],
   ["/items", "legacy.items.read"],
+  ["/transfers", "inventory.transfer.request_self"],
   ["/", "legacy.dashboard.read"],
 ] as const satisfies readonly (readonly [string, AppPermission])[];
 
@@ -51,6 +52,11 @@ export function canAccessPath(role: unknown, pathname: string) {
     // warehouse access is intentionally read-only for inventory and must not
     // expose this route (or its mutation endpoints).
     return hasPermission(role, "inventory.inspection.read_all");
+  }
+  if (matchesRoute(pathOnly, "/inventory") && role === "warehouse") {
+    // The warehouse role is read-only over inventory items and must not enter
+    // the building/room management workspace.
+    return false;
   }
   if (matchesRoute(pathOnly, "/items/decommissioned")) {
     return hasPermission(role, "inventory.item.read_all");
