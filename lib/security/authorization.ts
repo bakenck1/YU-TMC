@@ -53,10 +53,7 @@ export function canAccessPath(role: unknown, pathname: string) {
     );
   }
   if (matchesRoute(pathOnly, "/items/decommissioned")) {
-    return (
-      hasPermission(role, "inventory.item.read_all") ||
-      hasPermission(role, "inventory.item.read_assigned")
-    );
+    return hasPermission(role, "inventory.item.read_all");
   }
   const permission = permissionForPath(pathname);
   return permission !== null && hasPermission(role, permission);
