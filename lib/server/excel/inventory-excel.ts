@@ -397,38 +397,6 @@ export async function exportInspectionResults(inspections: InspectionDto[]): Pro
   return workbookBytes(workbook);
 }
 
-export async function exportAnalyticsReport(items: InventoryItemDto[]): Promise<Uint8Array> {
-  const workbook = new Workbook();
-  const exportedAt = new Date();
-  const addDataset = (title: string, headers: string[], rows: (string | number | Date)[][]) => {
-    const sheet = workbook.addWorksheet(title, { views: [{ state: "frozen", ySplit: 1 }] });
-    sheet.columns = [...headers.map((header, index) => ({ header, key: `column${index}`, width: 28 })), { header: "Exported at", key: "exportedAt", width: 22 }];
-    rows.forEach((row) => sheet.addRow([...row, exportedAt]));
-    styleDataSheet(sheet);
-  };
-  const grouped = (selector: (item: InventoryItemDto) => string) => {
-    const totals = new Map<string, number>();
-    items.forEach((item) => totals.set(selector(item), (totals.get(selector(item)) ?? 0) + item.quantity));
-    return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]).map(([name, value]) => [name, value] as [string, number]);
-  };
-  addDataset("Summary", ["Metric", "Value"], [
-    ["Total records", items.length],
-    ["Total quantity", items.reduce((sum, item) => sum + item.quantity, 0)],
-    ["Total value KZT", items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)],
-    ["Assigned records", items.filter((item) => item.responsible).length],
-    ["Records with photo", items.filter((item) => item.photoUrl).length],
-  ]);
-  addDataset("By type", ["Type", "Quantity"], grouped((item) => item.itemType));
-  addDataset("By brand", ["Brand", "Quantity"], grouped((item) => item.brand ?? "No brand"));
-  addDataset("By building", ["Building", "Quantity"], grouped((item) => item.room.buildingName));
-  addDataset("By responsible", ["Responsible", "Quantity"], grouped((item) => item.responsible?.name ?? "Not assigned"));
-  addDataset("By status", ["Status", "Quantity"], grouped(() => "Active"));
-  addDataset("Top expensive", ["Item", "Inventory number", "Total KZT"], items
-    .slice().sort((a, b) => b.unitPrice * b.quantity - a.unitPrice * a.quantity).slice(0, 10)
-    .map((item) => [item.name, item.inventoryNumber, item.unitPrice * item.quantity]));
-  return workbookBytes(workbook);
-}
-
 function configureImportColumns(sheet: Worksheet) {
   sheet.columns = [
     { header: HEADERS.name, key: "name", width: 34 },

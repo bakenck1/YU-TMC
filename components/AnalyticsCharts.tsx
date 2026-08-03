@@ -8,7 +8,6 @@ import {
   Boxes,
   Camera,
   ExternalLink,
-  FileSpreadsheet,
   PackageSearch,
   UserCheck,
   Users,
@@ -753,19 +752,15 @@ function DetailsModal({
 export default function AnalyticsCharts({
   data: initialData,
   canBulkManage = false,
-  canExport = false,
 }: {
   data: AnalyticsDashboardData;
   canBulkManage?: boolean;
-  canExport?: boolean;
 }) {
   const { locale, t } = useAppSettings();
   const [building, setBuilding] = useState("all");
   const [itemType, setItemType] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState("");
   const data = useMemo(() => filteredDashboard(initialData, { building, itemType, dateFrom, dateTo }), [building, dateFrom, dateTo, initialData, itemType]);
   const buildings = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.building))).sort(), [initialData.records]);
   const itemTypes = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.itemType))).sort(), [initialData.records]);
@@ -777,20 +772,6 @@ export default function AnalyticsCharts({
   const photoPercent = data.summary.totalItems
     ? (data.summary.withPhoto / data.summary.totalItems) * 100
     : 0;
-
-  async function exportReport() {
-    if (exporting) return;
-    setExporting(true);
-    setExportError("");
-    try {
-      const response = await fetch("/api/inventory/excel?action=export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataset: "analytics", itemIds: data.records.map((record) => record.id) }) });
-      if (!response.ok) throw new Error("export_failed");
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a"); anchor.href = url; anchor.download = "analytics-report.xlsx"; anchor.click(); URL.revokeObjectURL(url);
-    } catch {
-      setExportError(t("excel.requestFailed"));
-    } finally { setExporting(false); }
-  }
 
   return (
     <div className="space-y-5">
@@ -828,12 +809,6 @@ export default function AnalyticsCharts({
             </div>
           </div>
         </div>
-        {canExport ? (
-          <div className="relative mt-5 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => void exportReport()} disabled={exporting} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-300/50 px-4 text-sm font-semibold text-emerald-200 hover:bg-white/10 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" />{t("analytics.exportReport")}</button>
-            {exportError ? <p role="alert" className="text-sm text-rose-200">{exportError}</p> : null}
-          </div>
-        ) : null}
       </section>
 
       <section aria-label={t("analytics.filters")} className="grid gap-3 rounded-2xl border border-black/5 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -845,8 +820,6 @@ export default function AnalyticsCharts({
 
       <AnalyticsExcelTools
         canBulkManage={canBulkManage}
-        canExport={canExport}
-        itemIds={data.records.map((record) => record.id)}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

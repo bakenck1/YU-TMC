@@ -6,7 +6,6 @@ import { getApplicationServices } from "@/lib/server/application";
 import {
   createInventoryTemplate,
   exportInspectionResults,
-  exportAnalyticsReport,
   exportInventoryItems,
   activeInventoryItems,
   parseInventoryWorkbook,
@@ -55,12 +54,6 @@ export async function GET(request: Request) {
         "inspection-results.xlsx",
       );
     }
-    if (dataset === "analytics") {
-      return workbookResponse(
-        await exportAnalyticsReport(activeInventoryItems(await services.items.listItems(actor))),
-        "analytics-report.xlsx",
-      );
-    }
     throw invalidRequest();
   } catch (error) {
     return excelErrorResponse(error);
@@ -79,7 +72,7 @@ export async function POST(request: Request) {
         itemIds?: unknown;
         columns?: unknown;
       };
-      if (body.dataset !== "items" && body.dataset !== "decommissioned" && body.dataset !== "analytics") throw invalidRequest();
+      if (body.dataset !== "items" && body.dataset !== "decommissioned") throw invalidRequest();
       const itemIdsProvided = Array.isArray(body.itemIds);
       const rawItemIds: unknown[] = itemIdsProvided ? (body.itemIds as unknown[]) : [];
       const itemIds = rawItemIds.filter(isUuid).slice(0, 2_000);
@@ -92,9 +85,6 @@ export async function POST(request: Request) {
         ? await services.items.listDecommissionedItems(actor)
         : activeInventoryItems(await services.items.listItems(actor));
       const selected = itemIdsProvided ? source.filter((item) => itemIds.includes(item.id)) : source;
-      if (body.dataset === "analytics") {
-        return workbookResponse(await exportAnalyticsReport(selected), "analytics-report.xlsx");
-      }
       return workbookResponse(
         await exportInventoryItems(selected, body.dataset === "items" ? "Inventory items" : "Decommissioned", columns),
         body.dataset === "items" ? "inventory-items.xlsx" : "decommissioned-items.xlsx",

@@ -8,7 +8,6 @@ import type {
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import { getApplicationServices } from "@/lib/server/application";
 import { activeInventoryItems } from "@/lib/server/excel/inventory-excel";
-import { hasPermission } from "@/lib/security/permissions";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { authorizationActor } from "@/lib/server/security/request-user";
 
@@ -132,8 +131,7 @@ export default async function AnalyticsPage() {
   return (
     <AnalyticsCharts
       data={data}
-      canBulkManage={hasPermission(user.role, "inventory.item.bulk_manage")}
-      canExport={hasPermission(user.role, "inventory.report.export")}
+      canBulkManage={user.role === "admin"}
     />
   );
 }

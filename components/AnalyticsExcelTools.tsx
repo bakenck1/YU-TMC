@@ -4,21 +4,15 @@ import { FileSpreadsheet } from "lucide-react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryExcelTools from "@/components/InventoryExcelTools";
-import InventoryExportButton from "@/components/InventoryExportButton";
-import { DEFAULT_INVENTORY_COLUMNS } from "@/lib/inventory-columns";
 
 export default function AnalyticsExcelTools({
   canBulkManage,
-  canExport,
-  itemIds,
 }: {
   canBulkManage: boolean;
-  canExport: boolean;
-  itemIds: string[];
 }) {
   const { t } = useAppSettings();
 
-  if (!canBulkManage && !canExport) return null;
+  if (!canBulkManage) return null;
 
   return (
     <section aria-labelledby="analytics-excel-tools-title" className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
@@ -31,13 +25,6 @@ export default function AnalyticsExcelTools({
             {t("excel.title")}
           </h2>
         </div>
-        {canExport ? (
-          <InventoryExportButton
-            dataset="items"
-            itemIds={itemIds}
-            columns={DEFAULT_INVENTORY_COLUMNS}
-          />
-        ) : null}
       </div>
 
       {canBulkManage ? (
