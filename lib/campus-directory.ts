@@ -42,13 +42,15 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
   },
   {
     id: "center-1",
-    name: "Центр 1",
+    name: "Центр обслуживания",
+    legacyNames: ["Центр 1"],
     address: CAMPUS_ADDRESS,
     floorCount: 1,
   },
   {
     id: "center-2",
-    name: "Центр 2",
+    name: "Шерқала",
+    legacyNames: ["Центр 2"],
     address: CAMPUS_ADDRESS,
     floorCount: 1,
   },
@@ -56,7 +58,7 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     id: "yessenov-stadium",
     name: "Yessenov Stadium",
     address: CAMPUS_ADDRESS,
-    floorCount: 1,
+    floorCount: 2,
   },
   {
     id: "dormitory-1",

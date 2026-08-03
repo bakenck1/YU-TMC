@@ -8,8 +8,8 @@ import {
 import { buildCampusMapData } from "../lib/campus-map-data";
 
 const REQUIRED_MAP_OBJECTS = [
-  ["center-1", "Центр 1"],
-  ["center-2", "Центр 2"],
+  ["center-1", "Центр обслуживания"],
+  ["center-2", "Шерқала"],
   ["yessenov-stadium", "Yessenov Stadium"],
 ] as const;
 
@@ -19,7 +19,7 @@ test("adds the three 2GIS campus objects as interactive map buildings", () => {
   for (const [id, name] of REQUIRED_MAP_OBJECTS) {
     assert.equal(findCampusBuildingPreset(name)?.id, id);
     assert.equal(map.buildings[id]?.name, name);
-    assert.equal(map.buildings[id]?.floorCount, 1);
+    assert.equal(map.buildings[id]?.floorCount, id === "yessenov-stadium" ? 2 : 1);
   }
   assert.equal(map.totals.locations, 10);
   assert.equal(CAMPUS_MAP_BUILDING_PRESETS.length, 10);

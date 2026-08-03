@@ -224,16 +224,16 @@ const BUILDINGS: BuildingCfg[] = [
   },
   {
     id: "center-1",
-    wrap: "position:absolute;left:39%;top:260px;width:120px;height:78px;",
+    wrap: "position:absolute;left:39%;top:260px;width:96px;height:62px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
-    tooltipCss: "position:absolute;left:50%;top:96px;transform:translateX(-50%);",
+    tooltipCss: "position:absolute;left:50%;top:80px;transform:translateX(-50%);",
     selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
     shape: (
       <>
         <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;")} />
         <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;")} />
-        <div style={css("position:absolute;left:0;right:0;top:-22px;height:78px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
+        <div style={css("position:absolute;left:0;right:0;top:-18px;height:62px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
           <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:6px;")} />
           <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
         </div>
@@ -242,19 +242,20 @@ const BUILDINGS: BuildingCfg[] = [
   },
   {
     id: "center-2",
-    wrap: "position:absolute;left:57%;top:260px;width:120px;height:78px;",
+    wrap: "position:absolute;left:59%;top:260px;width:120px;height:84px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
     tooltipCss: "position:absolute;left:50%;top:96px;transform:translateX(-50%);",
     selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
     shape: (
       <>
-        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;")} />
-        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;")} />
-        <div style={css("position:absolute;left:0;right:0;top:-22px;height:78px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
-          <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:6px;")} />
+        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:50%;clip-path:ellipse(50% 50% at 50% 50%);")} />
+        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:50%;clip-path:ellipse(50% 50% at 50% 50%);")} />
+        <div style={css("position:absolute;left:0;right:0;top:-22px;height:84px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:50%;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;clip-path:ellipse(50% 50% at 50% 50%);")}>
+          <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:50%;")} />
           <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
         </div>
+        <div aria-hidden="true" style={css("position:absolute;left:43%;top:-8%;width:67%;height:86%;background:#f3f0e5;border-radius:50%;")} />
       </>
     ),
   },
