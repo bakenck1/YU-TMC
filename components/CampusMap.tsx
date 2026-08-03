@@ -479,7 +479,8 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
               width: field.width,
               height: field.height,
               pointerEvents: "none",
-              zIndex: 2,
+              // Keep fields behind T1/buildings so their labels and silhouettes remain clear.
+              zIndex: 1,
               borderRadius: field.kind === "football" ? "9px" : "5px",
               background: field.kind === "football" ? "#5d9b62" : "#6d9bba",
               border: "2px solid rgba(255,255,255,.82)",
