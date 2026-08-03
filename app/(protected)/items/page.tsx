@@ -1,5 +1,6 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
+import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
@@ -34,11 +35,19 @@ export default async function ItemsPage() {
         </div>
       ) : null}
       <InventorySummaryAccordions items={items} />
-      <ItemsTable
-        items={items}
-        searchHistoryScope={user.userId}
-        columnSettingsScope={user.userId}
-      />
+      {user.role === "employee" ? (
+        <EmployeeItemsTabs
+          items={items}
+          searchHistoryScope={user.userId}
+          columnSettingsScope={user.userId}
+        />
+      ) : (
+        <ItemsTable
+          items={items}
+          searchHistoryScope={user.userId}
+          columnSettingsScope={user.userId}
+        />
+      )}
     </div>
   );
 }
