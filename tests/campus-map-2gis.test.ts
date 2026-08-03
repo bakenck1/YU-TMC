@@ -87,3 +87,20 @@ test("renders two basketball and two football decorative fields without interact
   assert.doesNotMatch(fieldsBlock, /zIndex:\s*[1-9]/);
   assert.doesNotMatch(fieldsBlock, /onClick/);
 });
+
+test("uses realistic court markings and turf details for decorative fields", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Basketball: key areas, center circle, hoops and three-point arcs.
+  assert.match(source, /field\.kind === "basketball"/);
+  assert.match(source, /border-radius:0 50% 50% 0/);
+  assert.match(source, /background:#e8c66d/);
+  // Football: striped turf, penalty boxes, six-yard boxes and goals.
+  assert.match(source, /repeating-linear-gradient\(90deg/);
+  assert.match(source, /top:24%;width:34px;height:52%/);
+  assert.match(source, /top:39%;width:8px;height:22%/);
+  assert.match(source, /repeating-linear-gradient\(0deg,#eef5e5/);
+});

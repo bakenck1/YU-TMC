@@ -481,7 +481,10 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
               pointerEvents: "none",
               // Auto stacking plus DOM order keeps fields behind later building overlays.
               borderRadius: field.kind === "football" ? "9px" : "5px",
-              background: field.kind === "football" ? "#5d9b62" : "#6d9bba",
+              background:
+                field.kind === "football"
+                  ? "repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 12px,rgba(0,0,0,.035) 12px 24px),#5d9b62"
+                  : "linear-gradient(135deg,rgba(255,255,255,.06),transparent 35%),#6d9bba",
               border: "2px solid rgba(255,255,255,.82)",
               boxShadow: "0 3px 8px rgba(35,55,40,.18)",
               overflow: "hidden",
@@ -489,20 +492,27 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
           >
             {field.kind === "basketball" ? (
               <>
-                <div aria-hidden="true" style={css("position:absolute;inset:8px;border:2px solid rgba(255,255,255,.8);")} />
-                <div aria-hidden="true" style={css("position:absolute;left:50%;top:8px;bottom:8px;border-left:2px solid rgba(255,255,255,.8);")} />
-                <div aria-hidden="true" style={css("position:absolute;left:8px;top:50%;width:38px;height:38px;transform:translate(-2px,-50%);border:2px solid rgba(255,255,255,.8);border-radius:50%;")} />
-                <div aria-hidden="true" style={css("position:absolute;right:8px;top:50%;width:38px;height:38px;transform:translate(2px,-50%);border:2px solid rgba(255,255,255,.8);border-radius:50%;")} />
-                <div aria-hidden="true" style={css("position:absolute;left:5px;top:50%;width:5px;height:20px;transform:translateY(-50%);background:#f1d27a;border-radius:2px;")} />
-                <div aria-hidden="true" style={css("position:absolute;right:5px;top:50%;width:5px;height:20px;transform:translateY(-50%);background:#f1d27a;border-radius:2px;")} />
+                <div aria-hidden="true" style={css("position:absolute;inset:7px;border:2px solid rgba(255,255,255,.88);box-shadow:inset 0 0 0 1px rgba(20,50,80,.18);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:7px;bottom:7px;border-left:2px solid rgba(255,255,255,.88);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:50%;width:25px;height:25px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.88);border-radius:50%;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:7px;top:50%;width:38px;height:52px;transform:translateY(-50%);border:2px solid rgba(255,255,255,.88);border-left:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:7px;top:50%;width:38px;height:52px;transform:translateY(-50%);border:2px solid rgba(255,255,255,.88);border-right:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:8px;top:50%;width:42px;height:62px;transform:translateY(-50%);border:2px solid rgba(255,255,255,.88);border-radius:0 50% 50% 0;clip-path:inset(0 0 0 50%);")} />
+                <div aria-hidden="true" style={css("position:absolute;right:8px;top:50%;width:42px;height:62px;transform:translateY(-50%) rotate(180deg);border:2px solid rgba(255,255,255,.88);border-radius:0 50% 50% 0;clip-path:inset(0 0 0 50%);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:4px;top:50%;width:5px;height:22px;transform:translateY(-50%);background:#e8c66d;border:1px solid rgba(30,50,60,.35);border-radius:2px;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:4px;top:50%;width:5px;height:22px;transform:translateY(-50%);background:#e8c66d;border:1px solid rgba(30,50,60,.35);border-radius:2px;")} />
               </>
             ) : (
               <>
-                <div aria-hidden="true" style={css("position:absolute;inset:8px;border:2px solid rgba(255,255,255,.82);")} />
-                <div aria-hidden="true" style={css("position:absolute;left:50%;top:8px;bottom:8px;border-left:2px solid rgba(255,255,255,.82);")} />
-                <div aria-hidden="true" style={css("position:absolute;left:50%;top:50%;width:30px;height:30px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.82);border-radius:50%;")} />
-                <div aria-hidden="true" style={css("position:absolute;left:8px;top:25%;width:28px;height:50%;border:2px solid rgba(255,255,255,.82);border-left:0;")} />
-                <div aria-hidden="true" style={css("position:absolute;right:8px;top:25%;width:28px;height:50%;border:2px solid rgba(255,255,255,.82);border-right:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;inset:8px;border:2px solid rgba(255,255,255,.86);box-shadow:inset 0 0 0 1px rgba(20,70,30,.22);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:8px;bottom:8px;border-left:2px solid rgba(255,255,255,.86);")} />
+                <div aria-hidden="true" style={css("position:absolute;left:50%;top:50%;width:28px;height:28px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.86);border-radius:50%;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:8px;top:24%;width:34px;height:52%;border:2px solid rgba(255,255,255,.86);border-left:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:8px;top:24%;width:34px;height:52%;border:2px solid rgba(255,255,255,.86);border-right:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:4px;top:39%;width:8px;height:22%;border:2px solid rgba(255,255,255,.86);border-left:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;right:4px;top:39%;width:8px;height:22%;border:2px solid rgba(255,255,255,.86);border-right:0;")} />
+                <div aria-hidden="true" style={css("position:absolute;left:0;top:50%;width:5px;height:26px;transform:translateY(-50%);background:repeating-linear-gradient(0deg,#eef5e5 0 2px,transparent 2px 4px);border:1px solid rgba(255,255,255,.7);")} />
+                <div aria-hidden="true" style={css("position:absolute;right:0;top:50%;width:5px;height:26px;transform:translateY(-50%);background:repeating-linear-gradient(0deg,#eef5e5 0 2px,transparent 2px 4px);border:1px solid rgba(255,255,255,.7);")} />
               </>
             )}
             <span style={css("position:absolute;left:6px;bottom:4px;color:#fff;font-size:10px;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.4);")}>
