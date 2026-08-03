@@ -47,10 +47,10 @@ export function permissionForPath(pathname: string): AppPermission | null {
 export function canAccessPath(role: unknown, pathname: string) {
   const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
   if (matchesRoute(pathOnly, "/inventory/inspections")) {
-    return (
-      hasPermission(role, "inventory.inspection.read_all") ||
-      hasPermission(role, "inventory.inspection.read_own")
-    );
+    // Inspections are an administrator-only workflow. In particular,
+    // warehouse access is intentionally read-only for inventory and must not
+    // expose this route (or its mutation endpoints).
+    return hasPermission(role, "inventory.inspection.read_all");
   }
   if (matchesRoute(pathOnly, "/items/decommissioned")) {
     return hasPermission(role, "inventory.item.read_all");

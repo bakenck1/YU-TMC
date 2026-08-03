@@ -60,8 +60,11 @@ export type AppPermission = (typeof APP_PERMISSIONS)[number];
 const ALL_ROLES: readonly UserRole[] = USER_ROLES;
 const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
 const ADMIN_ONLY: readonly UserRole[] = ["admin"];
-const TECHNICIAN_ONLY: readonly UserRole[] = ["warehouse"];
-const ASSIGNABLE_TECHNICIANS: readonly UserRole[] = ["warehouse", "employee"];
+// Warehouse users have a read-only inventory role and must not participate in
+// inspections. Employee inspection permissions remain available for the
+// existing assigned-session workflow.
+const TECHNICIAN_ONLY: readonly UserRole[] = [];
+const ASSIGNABLE_TECHNICIANS: readonly UserRole[] = ["employee"];
 const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
 
 export const PERMISSION_ROLES = {
