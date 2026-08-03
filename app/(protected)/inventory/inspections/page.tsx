@@ -1,4 +1,5 @@
 import InventoryInspectionsManager from "@/components/InventoryInspectionsManager";
+import MaintenanceItemsPanel from "@/components/MaintenanceItemsPanel";
 import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -20,12 +21,13 @@ export default async function InventoryInspectionsPage({
     actor.role,
     "inventory.workspace.read",
   );
-  const [inspections, buildings, users] = await Promise.all([
+  const [inspections, buildings, users, inventoryItems] = await Promise.all([
     services.inspections.list(actor),
     canReadWorkspace
       ? services.locations.listBuildings(actor)
       : Promise.resolve([]),
     user.role === "admin" ? services.users.listUsers() : Promise.resolve([]),
+    services.items.listItems(actor),
   ]);
   const roomLists = await Promise.all(
     buildings.map((building) => services.locations.listRooms(building.id, actor)),
@@ -48,7 +50,9 @@ export default async function InventoryInspectionsPage({
         ? [{ id: user.userId, fullName: user.name, role: user.role }]
         : [];
   return (
-    <InventoryInspectionsManager
+    <div className="space-y-5">
+      <MaintenanceItemsPanel initialItems={inventoryItems.filter((item) => item.status === "maintenance")} canManage={user.role === "admin"} />
+      <InventoryInspectionsManager
       actorRole={user.role}
       currentUserId={user.userId}
       initialInspections={inspections}
@@ -61,6 +65,7 @@ export default async function InventoryInspectionsPage({
       rooms={roomLists.flat()}
       technicians={assignableUsers}
       canExport={user.role === "admin"}
-    />
+      />
+    </div>
   );
 }
