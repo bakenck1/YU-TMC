@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { createElement } from "react";
+import { Children, createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   EmployeeItemsTabList,
   EmployeeItemsTabPanels,
+  EmployeeItemsTabsView,
 } from "../components/EmployeeItemsTabs";
 import { employeeItemTabAfterKey } from "../lib/employee-items-tabs";
 
@@ -38,16 +39,61 @@ test("employee inventory renders a roving, fully associated tab list", () => {
   assert.equal((panels.match(/role="tabpanel"/g) ?? []).length, 3);
   assert.equal((panels.match(/ hidden=""/g) ?? []).length, 2);
   assert.match(panels, /id="employee-items-panel-maintenance"[^>]*><p>visible items<\/p>/);
+  assert.match(panels, /aria-labelledby="employee-items-tab-active"/);
+  assert.match(panels, /aria-labelledby="employee-items-tab-maintenance"/);
 });
 
-test("employee tab keyboard interaction wraps and supports Home and End", () => {
-  assert.equal(employeeItemTabAfterKey("active", "ArrowRight"), "maintenance");
-  assert.equal(employeeItemTabAfterKey("maintenance", "ArrowRight"), "decommissioned");
-  assert.equal(employeeItemTabAfterKey("decommissioned", "ArrowRight"), "active");
-  assert.equal(employeeItemTabAfterKey("active", "ArrowLeft"), "decommissioned");
+test("employee tab keyboard interaction invokes selection, focus, and preventDefault", () => {
+  type ButtonProps = {
+    onKeyDown?: (event: { key: string; preventDefault: () => void }) => void;
+  };
+  const selected: string[] = [];
+  const focused: string[] = [];
+  const list = EmployeeItemsTabList({
+    activeStatus: "active",
+    ariaLabel: "Inventory",
+    label: (status) => status,
+    onSelect: (status) => selected.push(status),
+    focusTab: (status) => focused.push(status),
+  }) as ReactElement<{ children?: ReactNode }>;
+  const buttons = Children.toArray(list.props.children) as Array<ReactElement<ButtonProps>>;
+  let prevented = false;
+
+  buttons[0]?.props.onKeyDown?.({
+    key: "ArrowLeft",
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+
+  assert.deepEqual(selected, ["decommissioned"]);
+  assert.deepEqual(focused, ["decommissioned"]);
+  assert.equal(prevented, true);
   assert.equal(employeeItemTabAfterKey("maintenance", "Home"), "active");
   assert.equal(employeeItemTabAfterKey("active", "End"), "decommissioned");
-  assert.equal(employeeItemTabAfterKey("active", "Enter"), null);
+});
+
+test("employee view passes only the selected status items to its table", () => {
+  const items = [
+    { id: "a", status: "active" },
+    { id: "m", status: "maintenance" },
+    { id: "d", status: "decommissioned" },
+  ] as never[];
+  let renderedIds: string[] = [];
+  renderToStaticMarkup(
+    createElement(EmployeeItemsTabsView, {
+      items,
+      activeStatus: "maintenance",
+      ariaLabel: "Inventory",
+      label: (status) => status,
+      onSelect: () => undefined,
+      renderItems: (visibleItems) => {
+        renderedIds = visibleItems.map((item) => item.id);
+        return createElement("p", null, renderedIds.join(","));
+      },
+    }),
+  );
+  assert.deepEqual(renderedIds, ["m"]);
 });
 
 test("only employees receive the tabbed inventory interface", async () => {

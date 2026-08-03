@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -27,21 +26,22 @@ export function EmployeeItemsTabList({
   ariaLabel,
   label,
   onSelect,
+  focusTab = (status) =>
+    document.getElementById(`employee-items-tab-${status}`)?.focus(),
 }: {
   activeStatus: ItemStatus;
   ariaLabel: string;
   label: (status: ItemStatus) => string;
   onSelect: (status: ItemStatus) => void;
+  focusTab?: (status: ItemStatus) => void;
 }) {
-  const tabRefs = useRef(new Map<ItemStatus, HTMLButtonElement>());
-
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const nextStatus = employeeItemTabAfterKey(activeStatus, event.key);
     if (!nextStatus) return;
 
     event.preventDefault();
     onSelect(nextStatus);
-    tabRefs.current.get(nextStatus)?.focus();
+    focusTab(nextStatus);
   }
 
   return (
@@ -51,10 +51,6 @@ export function EmployeeItemsTabList({
         return (
           <button
             key={status}
-            ref={(element) => {
-              if (element) tabRefs.current.set(status, element);
-              else tabRefs.current.delete(status);
-            }}
             id={`employee-items-tab-${status}`}
             type="button"
             role="tab"
@@ -82,7 +78,7 @@ export function EmployeeItemsTabPanels({
   renderActive,
 }: {
   activeStatus: ItemStatus;
-  renderActive: () => ReactNode;
+  renderActive: (status: ItemStatus) => ReactNode;
 }) {
   return EMPLOYEE_ITEM_STATUSES.map((status) => {
     const selected = status === activeStatus;
@@ -95,10 +91,46 @@ export function EmployeeItemsTabPanels({
         hidden={!selected}
         tabIndex={0}
       >
-        {selected ? renderActive() : null}
+        {selected ? renderActive(status) : null}
       </div>
     );
   });
+}
+
+export function EmployeeItemsTabsView({
+  items,
+  activeStatus,
+  ariaLabel,
+  label,
+  onSelect,
+  focusTab,
+  renderItems,
+}: {
+  items: InventoryItem[];
+  activeStatus: ItemStatus;
+  ariaLabel: string;
+  label: (status: ItemStatus) => string;
+  onSelect: (status: ItemStatus) => void;
+  focusTab?: (status: ItemStatus) => void;
+  renderItems: (items: InventoryItem[]) => ReactNode;
+}) {
+  return (
+    <>
+      <EmployeeItemsTabList
+        activeStatus={activeStatus}
+        ariaLabel={ariaLabel}
+        label={label}
+        onSelect={onSelect}
+        focusTab={focusTab}
+      />
+      <EmployeeItemsTabPanels
+        activeStatus={activeStatus}
+        renderActive={(status) =>
+          renderItems(items.filter((item) => item.status === status))
+        }
+      />
+    </>
+  );
 }
 
 export default function EmployeeItemsTabs({
@@ -112,19 +144,16 @@ export default function EmployeeItemsTabs({
 }) {
   const { t } = useAppSettings();
   const [activeStatus, setActiveStatus] = useState<ItemStatus>("active");
-  const visibleItems = items.filter((item) => item.status === activeStatus);
 
   return (
     <section aria-label={t("nav.items")} className="space-y-4">
-      <EmployeeItemsTabList
+      <EmployeeItemsTabsView
+        items={items}
         activeStatus={activeStatus}
         ariaLabel={t("nav.items")}
         label={(status) => t(EMPLOYEE_TAB_LABELS[status])}
         onSelect={setActiveStatus}
-      />
-      <EmployeeItemsTabPanels
-        activeStatus={activeStatus}
-        renderActive={() => (
+        renderItems={(visibleItems) => (
           <ItemsTable
             key={activeStatus}
             items={visibleItems}
