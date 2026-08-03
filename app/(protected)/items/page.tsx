@@ -1,7 +1,6 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
-import InventoryExportButton from "@/components/InventoryExportButton";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
@@ -32,14 +31,6 @@ export default async function ItemsPage() {
 
   return (
     <div className="space-y-4">
-      {canCreate || canExport ? (
-        <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
-          {canExport ? <InventoryExportButton dataset="items" /> : null}
-          {canCreate ? (
-            <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
-          ) : null}
-        </div>
-      ) : null}
       <InventorySummaryAccordions items={items} />
       {user.role === "employee" ? (
         <EmployeeItemsTabs
@@ -52,6 +43,12 @@ export default async function ItemsPage() {
           items={items}
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
+          excelDataset={canExport ? "items" : undefined}
+          headerActions={
+            canCreate ? (
+              <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
+            ) : null
+          }
         />
       )}
     </div>

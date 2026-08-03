@@ -5,13 +5,13 @@ import { useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { InventoryColumnVisibility } from "@/lib/inventory-columns";
+import { createInventoryExportPayload } from "@/lib/inventory-export";
 
 type InventoryExportButtonProps = {
   dataset: "items" | "decommissioned";
-} & (
-  | { itemIds: string[]; columns: InventoryColumnVisibility }
-  | { itemIds?: never; columns?: never }
-);
+  itemIds: string[];
+  columns: InventoryColumnVisibility;
+};
 
 export default function InventoryExportButton({
   dataset,
@@ -26,19 +26,13 @@ export default function InventoryExportButton({
     setBusy(true);
     setError("");
     try {
-      const response = itemIds && columns
-        ? await fetch("/api/inventory/excel?action=export", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              dataset,
-              itemIds,
-              columns: exportColumnKeys(columns),
-            }),
-          })
-        : await fetch(
-            `/api/inventory/excel?action=export&dataset=${encodeURIComponent(dataset)}`,
-          );
+      const response = await fetch("/api/inventory/excel?action=export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          createInventoryExportPayload(dataset, itemIds, columns),
+        ),
+      });
       if (!response.ok) throw new Error("export_failed");
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
@@ -63,21 +57,4 @@ export default function InventoryExportButton({
       {error ? <p role="alert" className="text-sm text-rose-600">{error}</p> : null}
     </div>
   );
-}
-
-function exportColumnKeys(columns: InventoryColumnVisibility) {
-  const keys = ["name", "inventoryNumber"];
-  if (columns.qrCode) keys.push("qrCode");
-  if (columns.itemType) keys.push("itemType");
-  if (columns.brandModel) keys.push("brand", "model");
-  if (columns.location) keys.push("building", "room");
-  if (columns.status) keys.push("status");
-  if (columns.responsible) keys.push("responsible");
-  if (columns.additionalInfo) keys.push("description");
-  if (columns.quantity) keys.push("quantity");
-  if (columns.price) keys.push("unitPrice", "total");
-  if (columns.createdAt) keys.push("createdAt");
-  if (columns.updatedAt) keys.push("updatedAt");
-  keys.push("exportedAt");
-  return keys;
 }

@@ -168,6 +168,7 @@ export default function ItemsTable({
   searchHistoryScope,
   columnSettingsScope,
   excelDataset,
+  headerActions,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
@@ -175,6 +176,7 @@ export default function ItemsTable({
   searchHistoryScope?: string;
   columnSettingsScope?: string;
   excelDataset?: "items" | "decommissioned";
+  headerActions?: React.ReactNode;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -335,7 +337,18 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
-      {excelDataset ? <div className="flex justify-end"><InventoryExportButton dataset={excelDataset} itemIds={filtered.map((item) => item.id)} columns={visibleColumns} /></div> : null}
+      {excelDataset || headerActions ? (
+        <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
+          {excelDataset ? (
+            <InventoryExportButton
+              dataset={excelDataset}
+              itemIds={filtered.map((item) => item.id)}
+              columns={visibleColumns}
+            />
+          ) : null}
+          {headerActions}
+        </div>
+      ) : null}
       {showFilters ? (
       <div className="rounded-2xl border border-black/5 bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">

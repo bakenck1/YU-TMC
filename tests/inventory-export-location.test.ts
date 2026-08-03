@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { createInventoryExportPayload } from "../lib/inventory-export";
+import { DEFAULT_INVENTORY_COLUMNS } from "../lib/inventory-columns";
+import { filterInventoryItems } from "../lib/inventory-list";
 import { hasPermission } from "../lib/security/permissions";
+import type { InventoryItem } from "../lib/types";
 
 const itemsPage = readFileSync("app/(protected)/items/page.tsx", "utf8");
+const itemsTable = readFileSync("components/ItemsTable.tsx", "utf8");
 const exportButton = readFileSync("components/InventoryExportButton.tsx", "utf8");
 const analyticsCharts = readFileSync("components/AnalyticsCharts.tsx", "utf8");
 const analyticsTools = readFileSync("components/AnalyticsExcelTools.tsx", "utf8");
@@ -21,9 +26,58 @@ test("inventory export is adjacent to the add action and hidden from employees",
   assert.match(itemsPage, /const canExport = hasPermission\(user\.role, "inventory\.report\.export"\)/);
   assert.match(
     itemsPage,
-    /\{canExport \? <InventoryExportButton dataset="items" \/> : null\}[\s\S]*\{canCreate \? \([\s\S]*<InventoryItemCreateForm/,
+    /excelDataset=\{canExport \? "items" : undefined\}[\s\S]*headerActions=\{[\s\S]*canCreate \? \([\s\S]*<InventoryItemCreateForm/,
   );
-  assert.doesNotMatch(itemsPage, /excelDataset=/);
+  assert.match(
+    itemsTable,
+    /<InventoryExportButton[\s\S]*itemIds=\{filtered\.map\(\(item\) => item\.id\)\}[\s\S]*columns=\{visibleColumns\}[\s\S]*\{headerActions\}/,
+  );
+});
+
+test("POST payload contains only filtered item ids and visible columns", () => {
+  const items = [
+    inventoryItem("item-1", "Projector", "Building A / 101"),
+    inventoryItem("item-2", "Printer", "Building B / 202"),
+  ];
+  const filtered = filterInventoryItems(items, {
+    query: "projector",
+    category: "all",
+    location: "all",
+    statusKey: "all",
+  });
+  const columns = {
+    ...DEFAULT_INVENTORY_COLUMNS,
+    location: false,
+    additionalInfo: true,
+  };
+
+  assert.deepEqual(
+    createInventoryExportPayload(
+      "items",
+      filtered.map((item) => item.id),
+      columns,
+    ),
+    {
+      dataset: "items",
+      itemIds: ["item-1"],
+      columns: [
+        "name",
+        "inventoryNumber",
+        "qrCode",
+        "itemType",
+        "brand",
+        "model",
+        "status",
+        "responsible",
+        "description",
+        "quantity",
+        "unitPrice",
+        "total",
+        "updatedAt",
+        "exportedAt",
+      ],
+    },
+  );
 });
 
 test("inventory export reports progress and errors and downloads the workbook", () => {
@@ -41,3 +95,16 @@ test("analytics has no export controls or analytics export dataset", () => {
   assert.doesNotMatch(analyticsTools, /InventoryExportButton|canExport/);
   assert.doesNotMatch(excelRoute, /dataset === ["']analytics["']|exportAnalyticsReport/);
 });
+
+function inventoryItem(id: string, name: string, location: string): InventoryItem {
+  return {
+    id,
+    name,
+    inventoryNumber: `INV-${id}`,
+    category: "Компьютеры" as InventoryItem["category"],
+    location,
+    responsible: "Employee",
+    status: "active",
+    photoColor: "bg-zinc-100",
+  };
+}
