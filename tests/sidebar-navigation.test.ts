@@ -3,12 +3,13 @@ import test from "node:test";
 
 import { sidebarItemsForRole } from "../components/Sidebar";
 
-test("employee sidebar excludes facilities and inspections", () => {
+test("employee sidebar excludes objects and inspection requests", () => {
   const hrefs = sidebarItemsForRole("employee").map((item) => item.href);
 
   assert.ok(hrefs.includes("/items"));
-  assert.ok(!hrefs.includes("/inventory"));
-  assert.ok(!hrefs.includes("/inventory/inspections"));
+  for (const hiddenPath of ["/inventory", "/inventory/inspections"]) {
+    assert.ok(!hrefs.includes(hiddenPath), `unexpected employee nav item: ${hiddenPath}`);
+  }
 });
 
 test("administrator sidebar keeps facilities and inspections", () => {
