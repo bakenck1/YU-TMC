@@ -289,10 +289,10 @@ type DecorativeField = {
 };
 
 const DECORATIVE_FIELDS: DecorativeField[] = [
-  { id: "basketball-1", kind: "basketball", left: "17.5%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball1" },
-  { id: "basketball-2", kind: "basketball", left: "30.5%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball2" },
-  { id: "football-1", kind: "football", left: "17.5%", top: 178, width: 190, height: 105, label: "map.decorativeFootball1" },
-  { id: "football-2", kind: "football", left: "33.5%", top: 178, width: 190, height: 105, label: "map.decorativeFootball2" },
+  { id: "basketball-1", kind: "basketball", left: "72%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball1" },
+  { id: "basketball-2", kind: "basketball", left: "84%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball2" },
+  { id: "football-1", kind: "football", left: "72%", top: 178, width: 190, height: 105, label: "map.decorativeFootball1" },
+  { id: "football-2", kind: "football", left: "84%", top: 178, width: 190, height: 105, label: "map.decorativeFootball2" },
 ];
 
 type View = "loading" | "building" | "floor" | "item";
@@ -479,8 +479,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
               width: field.width,
               height: field.height,
               pointerEvents: "none",
-              // Keep fields behind T1/buildings so their labels and silhouettes remain clear.
-              zIndex: 1,
+              // Auto stacking plus DOM order keeps fields behind later building overlays.
               borderRadius: field.kind === "football" ? "9px" : "5px",
               background: field.kind === "football" ? "#5d9b62" : "#6d9bba",
               border: "2px solid rgba(255,255,255,.82)",

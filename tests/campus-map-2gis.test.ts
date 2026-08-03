@@ -78,8 +78,12 @@ test("renders two basketball and two football decorative fields without interact
     assert.match(source, new RegExp(`id: "${id}"`));
   }
   assert.match(source, /pointerEvents: "none"/);
-  assert.match(source, /pointerEvents: "none",[\s\S]*?zIndex: 1/);
+  assert.match(source, /left: "72%"[\s\S]*?top: 74/);
+  assert.match(source, /left: "84%"[\s\S]*?top: 74/);
+  assert.match(source, /left: "72%"[\s\S]*?top: 178/);
+  assert.match(source, /left: "84%"[\s\S]*?top: 178/);
   assert.ok(source.indexOf("DECORATIVE_FIELDS.map") < source.indexOf("BUILDINGS.map"));
   const fieldsBlock = source.slice(source.indexOf("const DECORATIVE_FIELDS"), source.indexOf("{BUILDINGS.map"));
+  assert.doesNotMatch(fieldsBlock, /zIndex:\s*[1-9]/);
   assert.doesNotMatch(fieldsBlock, /onClick/);
 });
