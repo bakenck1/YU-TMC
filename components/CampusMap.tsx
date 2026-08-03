@@ -434,6 +434,20 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
         <div style={css("position:absolute;left:42.19%;top:300px;width:220px;height:0;border-top:2px solid #e6e1d1;transform:rotate(14deg);")} />
         <div style={css("position:absolute;left:40.63%;top:420px;width:260px;height:0;border-top:2px solid #e6e1d1;transform:rotate(-10deg);")} />
 
+        {/* T1 is a construction site, not an inventory building. Keep it
+            outside BUILDINGS so it cannot open a building modal. */}
+        <div
+          data-testid="t1-construction"
+          aria-label={t("map.t1Construction")}
+          style={css("position:absolute;left:35.5%;top:150px;width:150px;height:82px;pointer-events:none;z-index:3;")}
+        >
+          <div style={css("position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(130,135,132,.28) 0,rgba(130,135,132,.28) 8px,rgba(160,164,160,.28) 8px,rgba(160,164,160,.28) 16px);background-color:rgba(112,118,115,.5);border:2px dashed #737a76;border-radius:8px;box-shadow:0 5px 12px rgba(35,45,40,.14);")} />
+          <div style={css("position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;color:#4f5753;font-size:12px;font-weight:800;text-align:center;text-shadow:0 1px rgba(255,255,255,.45);")}>
+            <span aria-hidden="true" style={{ fontSize: "23px", lineHeight: 1 }}>🏗️</span>
+            <span>{t("map.t1Construction")}</span>
+          </div>
+        </div>
+
         {BUILDINGS.map((b) => {
           const buildingData = data.buildings[b.id];
           const isHovered = hovered === b.id;

@@ -50,3 +50,15 @@ test("renders the stadium and centers, removes the court, and shifts KGI west", 
     /id: "kgise",[\s\S]*?left:3\.5%;top:555px/,
   );
 });
+
+test("renders T1 as a localized, non-interactive construction block", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /data-testid="t1-construction"/);
+  assert.match(source, /t\("map\.t1Construction"\)/);
+  assert.match(source, /pointer-events:none/);
+  assert.doesNotMatch(source, /id: "t1-building"/);
+});
