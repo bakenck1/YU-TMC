@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { findCampusBuildingPreset } from "../lib/campus-directory";
 import { translateCampusBuilding } from "../lib/i18n";
@@ -17,4 +18,20 @@ test("center labels are localized", () => {
   assert.equal(translateCampusBuilding("ru", "Шерқала"), "Шерқала");
   assert.equal(translateCampusBuilding("kk", "Шерқала"), "Шерқала");
   assert.equal(translateCampusBuilding("en", "Шерқала"), "Sherqala");
+});
+
+test("service center keeps its position with a reduced map footprint", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /id: "center-1",[\s\S]*?wrap: "position:absolute;left:39%;top:260px;width:96px;height:62px;"/,
+  );
+  assert.doesNotMatch(
+    source,
+    /id: "center-1",[\s\S]*?width:120px;height:78px/,
+  );
 });
