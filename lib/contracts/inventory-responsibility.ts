@@ -32,6 +32,7 @@ export interface TransferDto {
   closedAt: string | null;
   decisionComment: string | null;
   version: number;
+  direction: "incoming" | "outgoing";
 }
 
 export interface CreateTransferInput {

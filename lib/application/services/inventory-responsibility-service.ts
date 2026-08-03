@@ -107,7 +107,7 @@ export class InventoryResponsibilityService {
             occurredAt: this.clock.now(),
           }),
         );
-        return toTransferDto(transfer);
+        return toTransferDto(transfer, actor.userId);
       } catch (error) {
         if (postgresConflict(error)) throw conflict("transfer_already_pending");
         throw error;
@@ -132,6 +132,18 @@ export class InventoryResponsibilityService {
       }
       if (current.status !== "pending_current_owner") {
         throw conflict("transfer_not_pending");
+      }
+      const item = await responsibility.findItemState(current.itemId);
+      if (!item || item.responsibleUserId !== actor.userId) {
+        throw conflict("responsibility_changed");
+      }
+      if (
+        input.decision === "confirm" &&
+        !(await responsibility.isUserActiveForUpdate(
+          current.proposedResponsibleId,
+        ))
+      ) {
+        throw conflict("proposed_responsible_unavailable");
       }
       const comment =
         input.decision === "reject"
@@ -175,7 +187,7 @@ export class InventoryResponsibilityService {
           occurredAt: closedAt,
         }),
       );
-      return toTransferDto(updated);
+      return toTransferDto(updated, actor.userId);
     });
   }
 
@@ -189,7 +201,9 @@ export class InventoryResponsibilityService {
       throw new ApplicationError("forbidden", "forbidden");
     }
     return this.unitOfWork.read(async ({ responsibility }) =>
-      (await responsibility.listTransfersForUser(actor.userId)).map(toTransferDto),
+      (await responsibility.listTransfersForUser(actor.userId)).map((transfer) =>
+        toTransferDto(transfer, actor.userId),
+      ),
     );
   }
 
@@ -245,7 +259,7 @@ export class InventoryResponsibilityService {
           occurredAt,
         }),
       );
-      return toTransferDto(updated);
+      return toTransferDto(updated, actor.userId);
     });
   }
 
@@ -330,7 +344,7 @@ export class InventoryResponsibilityService {
           occurredAt,
         }),
       );
-      return toTransferDto(updated);
+      return toTransferDto(updated, actor.userId);
     });
   }
 }
@@ -406,7 +420,7 @@ function audit(input: {
   };
 }
 
-function toTransferDto(record: TransferRecord): TransferDto {
+function toTransferDto(record: TransferRecord, actorUserId: string): TransferDto {
   return {
     id: record.id,
     itemId: record.itemId,
@@ -416,6 +430,10 @@ function toTransferDto(record: TransferRecord): TransferDto {
     closedAt: record.closedAt?.toISOString() ?? null,
     decisionComment: record.decisionComment,
     version: record.version,
+    direction:
+      record.currentResponsibleIdAtRequest === actorUserId
+        ? "incoming"
+        : "outgoing",
   };
 }
 
