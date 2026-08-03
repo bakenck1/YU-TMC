@@ -77,9 +77,11 @@ export class InventoryItemService {
       }
       throw forbidden();
     });
-    return repositories
-      .filter((item) => actor.role !== "employee" || item.status !== "decommissioned")
-      .map(toItemDto);
+    // The repository query is already scoped to the employee's current
+    // responsibility. Keep every lifecycle state in that scoped result so
+    // the employee tabs and summary cards can show their own decommissioned
+    // items as well.
+    return repositories.map(toItemDto);
   }
 
   async listDecommissionedItems(
@@ -104,9 +106,6 @@ export class InventoryItemService {
     const item = await this.unitOfWork.read(async ({ items }) => {
       const value = await items.findItemById(id);
       if (!value) throw new ApplicationError("not_found", "item_not_found");
-      if (value.status === "decommissioned" && actor.role === "employee") {
-        throw forbidden();
-      }
       if (
         !hasPermission(actor.role, "inventory.item.read_all") &&
         !(

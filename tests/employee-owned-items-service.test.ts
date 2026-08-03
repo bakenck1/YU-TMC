@@ -66,6 +66,7 @@ test("an employee receives only their assigned items and derived summary", async
   const assigned = [
     item("mine-active", "employee-1"),
     item("mine-maintenance", "employee-1", "maintenance"),
+    item("mine-decommissioned", "employee-1", "decommissioned"),
   ];
   let requestedFor: string | undefined;
   const service = createService({
@@ -81,12 +82,16 @@ test("an employee receives only their assigned items and derived summary", async
   const items = await service.listItems({ userId: "employee-1", role: "employee" });
 
   assert.equal(requestedFor, "employee-1");
-  assert.deepEqual(items.map((value) => value.id), ["mine-active", "mine-maintenance"]);
+  assert.deepEqual(items.map((value) => value.id), [
+    "mine-active",
+    "mine-maintenance",
+    "mine-decommissioned",
+  ]);
   assert.deepEqual(summarizeInventory(items.map(toInventoryItemView)), {
-    totalValue: 2_000,
-    totalItems: 2,
+    totalValue: 3_000,
+    totalItems: 3,
     maintenance: 1,
-    decommissioned: 0,
+    decommissioned: 1,
   });
 });
 
