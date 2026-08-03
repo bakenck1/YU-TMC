@@ -36,7 +36,9 @@ export function buildCampusMapData(
       .filter((building) => building.status === "active")
       .flatMap((building) => {
         const preset = findCampusBuildingPreset(building.name);
-        return preset ? [[preset.id, building] as const] : [];
+        return preset && preset.mapVisible !== false
+          ? [[preset.id, building] as const]
+          : [];
       }),
   );
   const roomsByBuildingId = groupBy(
