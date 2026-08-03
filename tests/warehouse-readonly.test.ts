@@ -9,6 +9,10 @@ test("warehouse is read-only and cannot access inspection workflows", () => {
 
   assert.equal(hasPermission(warehouse, "inventory.item.read_all"), true);
   assert.equal(hasPermission(warehouse, "inventory.report.export"), true);
+  assert.equal(canAccessPath(warehouse, "/"), true);
+  assert.equal(canAccessPath(warehouse, "/items"), true);
+  assert.equal(canAccessPath(warehouse, "/items/decommissioned"), true);
+  assert.equal(canAccessPath(warehouse, "/analytics"), true);
   assert.equal(hasPermission(warehouse, "inventory.item.create"), false);
   assert.equal(hasPermission(warehouse, "inventory.item.edit_content"), false);
   assert.equal(
@@ -23,5 +27,7 @@ test("warehouse is read-only and cannot access inspection workflows", () => {
   assert.equal(hasPermission(warehouse, "inventory.inspection.mutate_own_draft"), false);
   assert.equal(hasPermission(warehouse, "inventory.result.record_own_inspection"), false);
   assert.equal(canAccessPath(warehouse, "/inventory/inspections"), false);
+  assert.equal(canAccessPath(warehouse, "/inventory"), false);
+  assert.equal(canAccessPath(warehouse, "/users"), false);
+  assert.equal(canAccessPath(warehouse, "/settings"), false);
 });
-
