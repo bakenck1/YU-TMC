@@ -224,16 +224,16 @@ const BUILDINGS: BuildingCfg[] = [
   },
   {
     id: "center-1",
-    wrap: "position:absolute;left:39%;top:260px;width:96px;height:62px;",
+    wrap: "position:absolute;left:39%;top:260px;width:110px;height:96px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
-    tooltipCss: "position:absolute;left:50%;top:80px;transform:translateX(-50%);",
+    tooltipCss: "position:absolute;left:50%;top:112px;transform:translateX(-50%);",
     selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
     shape: (
       <>
-        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;")} />
-        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;")} />
-        <div style={css("position:absolute;left:0;right:0;top:-18px;height:62px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;")}>
+        <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:12px;clip-path:polygon(0 0,100% 0,100% 48%,65% 48%,40% 64%,30% 100%,0 100%);")} />
+        <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:10px;clip-path:polygon(0 0,100% 0,100% 48%,65% 48%,40% 64%,30% 100%,0 100%);")} />
+        <div style={css("position:absolute;left:0;right:0;top:-18px;height:80px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:10px;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;clip-path:polygon(0 0,100% 0,100% 60%,65% 60%,40% 76%,30% 100%,0 100%);")}>
           <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:6px;")} />
           <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
         </div>
@@ -242,20 +242,20 @@ const BUILDINGS: BuildingCfg[] = [
   },
   {
     id: "center-2",
-    wrap: "position:absolute;left:59%;top:260px;width:120px;height:84px;",
+    wrap: "position:absolute;left:59%;top:266px;width:100px;height:70px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-48px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
-    tooltipCss: "position:absolute;left:50%;top:96px;transform:translateX(-50%);",
+    tooltipCss: "position:absolute;left:50%;top:82px;transform:translateX(-50%);",
     selRing: "position:absolute;left:-8px;right:-8px;top:-30px;bottom:-8px;border:3px solid #002060;border-radius:14px;box-shadow:0 0 0 5px rgba(0,32,96,.15);",
     shape: (
       <>
         <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(35,55,85,.16);filter:blur(9px);border-radius:50%;clip-path:ellipse(50% 50% at 50% 50%);")} />
         <div style={css("position:absolute;inset:0;background:linear-gradient(#91a9bd,#718ba1);border-radius:50%;clip-path:ellipse(50% 50% at 50% 50%);")} />
-        <div style={css("position:absolute;left:0;right:0;top:-22px;height:84px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:50%;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;clip-path:ellipse(50% 50% at 50% 50%);")}>
+        <div style={css("position:absolute;left:0;right:0;top:-18px;height:70px;background:linear-gradient(135deg,#dce8f0,#bdd0de);border-radius:50%;box-shadow:0 10px 18px rgba(45,70,90,.18);overflow:hidden;clip-path:ellipse(50% 50% at 50% 50%);")}>
           <div style={css("position:absolute;inset:9px;border:2px solid rgba(60,90,115,.16);border-radius:50%;")} />
           <div style={css("position:absolute;left:16px;right:16px;top:50%;height:2px;background:rgba(60,90,115,.12);")} />
         </div>
-        <div aria-hidden="true" style={css("position:absolute;left:43%;top:-8%;width:67%;height:86%;background:#f3f0e5;border-radius:50%;")} />
+        <div aria-hidden="true" style={css("position:absolute;left:-10%;top:-8%;width:67%;height:86%;background:#f3f0e5;border-radius:50%;")} />
       </>
     ),
   },
@@ -285,14 +285,11 @@ type DecorativeField = {
   top: number;
   width: number;
   height: number;
-  label: TranslationKey;
 };
 
 const DECORATIVE_FIELDS: DecorativeField[] = [
-  { id: "basketball-1", kind: "basketball", left: "72%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball1" },
-  { id: "basketball-2", kind: "basketball", left: "84%", top: 74, width: 150, height: 88, label: "map.decorativeBasketball2" },
-  { id: "football-1", kind: "football", left: "72%", top: 178, width: 190, height: 105, label: "map.decorativeFootball1" },
-  { id: "football-2", kind: "football", left: "84%", top: 178, width: 190, height: 105, label: "map.decorativeFootball2" },
+  { id: "basketball-1", kind: "basketball", left: "67%", top: 235, width: 150, height: 88 },
+  { id: "football-1", kind: "football", left: "67%", top: 365, width: 150, height: 88 },
 ];
 
 type View = "loading" | "building" | "floor" | "item";
@@ -451,19 +448,19 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
         <div style={css("position:absolute;left:42.19%;top:300px;width:220px;height:0;border-top:2px solid #e6e1d1;transform:rotate(14deg);")} />
         <div style={css("position:absolute;left:40.63%;top:420px;width:260px;height:0;border-top:2px solid #e6e1d1;transform:rotate(-10deg);")} />
 
-        {/* T1 is a construction site, not an inventory building. Keep it
-            outside BUILDINGS so it cannot open a building modal. */}
+        {/* T1 is visual-only and stays outside BUILDINGS so it cannot open a modal. */}
         <div
           id="t1-building"
           data-testid="t1-construction"
           aria-label={t("map.t1Construction")}
-          style={css("position:absolute;left:35.5%;top:150px;width:150px;height:82px;pointer-events:none;z-index:3;")}
+          style={css("position:absolute;left:35.5%;top:58px;width:118px;height:82px;pointer-events:none;z-index:3;")}
         >
-          <div style={css("position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(130,135,132,.28) 0,rgba(130,135,132,.28) 8px,rgba(160,164,160,.28) 8px,rgba(160,164,160,.28) 16px);background-color:rgba(112,118,115,.5);border:2px dashed #737a76;border-radius:8px;box-shadow:0 5px 12px rgba(35,45,40,.14);")} />
-          <div style={css("position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;color:#4f5753;font-size:12px;font-weight:800;text-align:center;text-shadow:0 1px rgba(255,255,255,.45);")}>
-            <span aria-hidden="true" style={{ fontSize: "23px", lineHeight: 1 }}>🏗️</span>
-            <span>{t("map.t1Construction")}</span>
+          <div style={css("position:absolute;left:7px;right:-8px;top:10px;bottom:-10px;background:rgba(70,80,90,.15);filter:blur(9px);border-radius:16px;")} />
+          <div style={css("position:absolute;inset:0;background:linear-gradient(#c7d4df,#9cadbb);border-radius:14px;")} />
+          <div style={css("position:absolute;left:0;right:0;top:-26px;height:82px;background:linear-gradient(135deg,#eef4f7,#d7e4eb);border-radius:14px;box-shadow:0 10px 18px rgba(60,80,90,.15);overflow:hidden;")}>
+            <div style={css("position:absolute;inset:10px;border:2px solid rgba(70,90,105,.15);border-radius:8px;")} />
           </div>
+          <span style={css("position:absolute;left:0;right:0;top:30px;text-align:center;color:#52616b;font-size:12px;font-weight:800;text-shadow:0 1px rgba(255,255,255,.7);")}>Т1</span>
         </div>
 
         {/* Decorative sports fields are visual context only, never inventory locations. */}
@@ -471,7 +468,6 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
           <div
             key={field.id}
             data-testid={`decorative-${field.id}`}
-            aria-label={t(field.label)}
             style={{
               position: "absolute",
               left: field.left,
@@ -515,9 +511,6 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                 <div aria-hidden="true" style={css("position:absolute;right:0;top:50%;width:5px;height:26px;transform:translateY(-50%);background:repeating-linear-gradient(0deg,#eef5e5 0 2px,transparent 2px 4px);border:1px solid rgba(255,255,255,.7);")} />
               </>
             )}
-            <span style={css("position:absolute;left:6px;bottom:4px;color:#fff;font-size:10px;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.4);")}>
-              {t(field.label)}
-            </span>
           </div>
         ))}
 

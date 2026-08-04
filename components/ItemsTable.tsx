@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import NextImage, { type ImageProps } from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -118,20 +118,101 @@ function FilterInput({
   label,
   value,
   onChange,
+  historyStorageKey,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  historyStorageKey?: string;
 }) {
+  const { t } = useAppSettings();
+  const [history, setHistory] = useState<string[]>([]);
+  const [focused, setFocused] = useState(false);
+  const inputId = useId();
+  const blurTimeoutRef = useRef<number | null>(null);
+  const visibleHistory = useMemo(() => {
+    const query = value.trim().toLocaleLowerCase();
+    return query
+      ? history.filter((entry) => entry.toLocaleLowerCase().includes(query))
+      : history;
+  }, [history, value]);
+
+  useEffect(() => {
+    if (!historyStorageKey) return;
+    const timeout = window.setTimeout(
+      () => setHistory(loadSearchHistory(historyStorageKey)),
+      0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [historyStorageKey]);
+
+  useEffect(() => () => {
+    if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current);
+  }, []);
+
+  function rememberValue() {
+    const nextValue = value.trim();
+    if (!nextValue || !historyStorageKey) return;
+    setHistory((current) => {
+      const next = addSearchHistoryEntry(current, nextValue);
+      saveSearchHistory(historyStorageKey, next);
+      return next;
+    });
+  }
+
+  function selectValue(entry: string) {
+    onChange(entry);
+    setFocused(false);
+    setHistory((current) => {
+      const next = addSearchHistoryEntry(current, entry);
+      if (historyStorageKey) saveSearchHistory(historyStorageKey, next);
+      return next;
+    });
+  }
+
   return (
-    <label className="text-sm text-zinc-600">
-      <span className="mb-1 block text-xs font-medium text-zinc-500">{label}</span>
+    <div
+      className="relative text-sm text-zinc-600"
+      onFocus={() => {
+        if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current);
+        setFocused(true);
+      }}
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        rememberValue();
+        blurTimeoutRef.current = window.setTimeout(() => setFocused(false), 0);
+      }}
+    >
+      <label htmlFor={inputId} className="mb-1 block text-xs font-medium text-zinc-500">{label}</label>
       <input
+        id={inputId}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") rememberValue();
+          if (event.key === "Escape") setFocused(false);
+        }}
         className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent"
       />
-    </label>
+      {focused && visibleHistory.length ? (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg">
+          <div className="px-3 py-2 text-xs text-zinc-500">{t("items.recentSearches")}</div>
+          <ul className="border-t border-black/5 py-1">
+            {visibleHistory.map((entry) => (
+              <li key={entry}>
+                <button
+                  type="button"
+                  onClick={() => selectValue(entry)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Search className="h-3.5 w-3.5 text-zinc-400" /> {entry}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -201,6 +282,9 @@ export default function ItemsTable({
   const columnSettingsStorageKey = columnSettingsScope
     ? `yu-inventory:item-columns:v1:${columnSettingsScope}`
     : null;
+  const filterHistoryStorageKey = searchHistoryScope
+    ? `yu-inventory:item-filter-history:v1:${searchHistoryScope}`
+    : null;
 
   useEffect(() => {
     if (!searchHistoryStorageKey) return;
@@ -238,6 +322,13 @@ export default function ItemsTable({
   }, [query, searchHistoryStorageKey]);
 
   const statusOptions = useMemo(() => inventoryStatusOptions(items), [items]);
+  const visibleSearchHistory = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return searchHistory;
+    return searchHistory.filter((entry) =>
+      entry.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [query, searchHistory]);
 
   const filtered = useMemo(() => {
     return filterInventoryItems(items, {
@@ -283,6 +374,21 @@ export default function ItemsTable({
     setQuery(value);
     setPage(1);
     setSearchFocused(false);
+    setSearchHistory((current) => {
+      const next = addSearchHistoryEntry(current, value);
+      if (searchHistoryStorageKey) saveSearchHistory(searchHistoryStorageKey, next);
+      return next;
+    });
+  }
+
+  function rememberCurrentSearch() {
+    const value = query.trim();
+    if (!value || !searchHistoryStorageKey) return;
+    setSearchHistory((current) => {
+      const next = addSearchHistoryEntry(current, value);
+      saveSearchHistory(searchHistoryStorageKey, next);
+      return next;
+    });
   }
 
   function clearSearchHistory() {
@@ -369,20 +475,24 @@ export default function ItemsTable({
             onChange={(event) => { setQuery(event.target.value); setPage(1); }}
             onKeyDown={(event) => {
               if (event.key === "Escape") setSearchFocused(false);
+              if (event.key === "Enter") {
+                rememberCurrentSearch();
+                setSearchFocused(false);
+              }
             }}
             onClick={() => setSearchFocused(true)}
             placeholder={t("common.search")}
             aria-label={t("common.search")}
             className="w-full rounded-xl border border-black/10 bg-zinc-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
-          {searchFocused && !query.trim() && searchHistory.length ? (
+          {searchFocused && visibleSearchHistory.length ? (
             <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg">
               <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-zinc-500">
                 <span>{t("items.recentSearches")}</span>
                 <button type="button" onClick={clearSearchHistory} className="rounded text-emerald-700 hover:underline">{t("items.clearRecentSearches")}</button>
               </div>
               <ul className="border-t border-black/5 py-1">
-                {searchHistory.map((entry) => (
+                {visibleSearchHistory.map((entry) => (
                   <li key={entry}>
                     <button type="button" onClick={() => selectSearchQuery(entry)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50">
                       <Search className="h-3.5 w-3.5 text-zinc-400" /> {entry}
@@ -456,11 +566,11 @@ export default function ItemsTable({
         {filterPanelOpen ? (
           <div id="inventory-advanced-filters" className="mt-4 border-t border-black/5 pt-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} />
-              <FilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} />
-              <FilterInput label={t("items.type")} value={draftFilters.itemType} onChange={(value) => updateDraftFilter("itemType", value)} />
-              <FilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={(value) => updateDraftFilter("building", value)} />
-              <FilterInput label={t("items.filterRoom")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={(value) => updateDraftFilter("location", value || "all")} />
+              <FilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:brand` : undefined} />
+              <FilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:model` : undefined} />
+              <FilterInput label={t("items.type")} value={draftFilters.itemType} onChange={(value) => updateDraftFilter("itemType", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:item-type` : undefined} />
+              <FilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={(value) => updateDraftFilter("building", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:building` : undefined} />
+              <FilterInput label={t("items.filterRoom")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={(value) => updateDraftFilter("location", value || "all")} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:location` : undefined} />
               <label className="text-sm text-zinc-600">
                 <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.status")}</span>
                 <select value={draftFilters.statusKey} onChange={(event) => updateDraftFilter("statusKey", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">
@@ -468,7 +578,7 @@ export default function ItemsTable({
                   {statusOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "display" ? dataLabel(option.value) : t(`status.${option.value}`)}</option>)}
                 </select>
               </label>
-              <FilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} />
+              <FilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:responsible` : undefined} />
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={clearFilters} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50">{t("items.clearFilters")}</button>

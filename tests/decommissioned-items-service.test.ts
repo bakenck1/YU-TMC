@@ -86,22 +86,50 @@ test("lists all decommissioned items for an administrator and exposes archive ti
   );
 });
 
-test("employee sees the complete decommissioned registry", async () => {
+test("warehouse can read the full decommissioned registry while employees receive only assigned records", async () => {
   let requestedAll = false;
   const service = createService({
     listDecommissionedItems: async () => {
       requestedAll = true;
       return [DECOMMISSIONED_ITEM];
     },
+    listDecommissionedItemsAssignedTo: async () => [],
   });
 
-  const result = await service.listDecommissionedItems({
+  const employeeItems = await service.listDecommissionedItems({
     userId: "employee-1",
     role: "employee",
   });
-
+  assert.deepEqual(employeeItems, []);
+  const warehouseItems = await service.listDecommissionedItems({
+    userId: "warehouse-1",
+    role: "warehouse",
+  });
+  assert.deepEqual(warehouseItems.map((item) => item.id), ["item-1"]);
   assert.equal(requestedAll, true);
-  assert.equal(result.length, 1);
+});
+
+test("warehouse receives decommissioned items in the full main list", async () => {
+  const activeItem = { ...DECOMMISSIONED_ITEM, id: "active-item", status: "active" as const };
+  const service = createService({
+    listItems: async () => [activeItem, DECOMMISSIONED_ITEM],
+  });
+
+  const result = await service.listItems({ userId: "warehouse-1", role: "warehouse" });
+
+  assert.deepEqual(result.map((item) => item.id), ["active-item", "item-1"]);
+});
+
+test("warehouse can open a decommissioned item by direct link", async () => {
+  const service = createService({
+    findItemById: async () => DECOMMISSIONED_ITEM,
+  });
+
+  const item = await service.findItem("item-1", {
+    userId: "warehouse-1",
+    role: "warehouse",
+  });
+  assert.equal(item.id, "item-1");
 });
 
 test("lists protected-field audit snapshots only for administrators", async () => {
@@ -226,6 +254,22 @@ test("keeps a temporary number temporary when only protected status is changed",
   assert.equal(protectedUpdate?.status, "active");
 });
 
+test("casts protected status updates to the PostgreSQL enum consistently", () => {
+  const repositorySource = readFileSync(
+    "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
+    "utf8",
+  );
+
+  assert.match(
+    repositorySource,
+    /status = \$6::"yu_inventory"\."item_status"/,
+  );
+  assert.match(
+    repositorySource,
+    /when \$6::"yu_inventory"\."item_status" = 'decommissioned'/,
+  );
+});
+
 test("operation feed uses historical room label snapshots without live-name fallback", () => {
   const repositorySource = readFileSync(
     "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
@@ -293,9 +337,9 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   );
 });
 
-test("archive route is only visible to roles that can read inventory items", () => {
+test("archive route is visible to administrators and warehouse staff", () => {
   assert.equal(canAccessPath("admin", "/items/decommissioned"), true);
   assert.equal(canAccessPath("warehouse", "/items/decommissioned"), true);
-  assert.equal(canAccessPath("employee", "/items/decommissioned"), true);
+  assert.equal(canAccessPath("employee", "/items/decommissioned"), false);
   assert.equal(canAccessPath("owner", "/items/decommissioned"), false);
 });

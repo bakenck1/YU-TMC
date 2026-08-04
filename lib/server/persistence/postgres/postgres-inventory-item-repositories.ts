@@ -555,13 +555,15 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         `update ${ITEMS}
          set room_id = $2, inventory_number_kind = $3,
              inventory_number = $4, inventory_number_key = $5,
-             status = $6,
+             status = $6::"yu_inventory"."item_status",
              archived_by = case
-               when $6 = 'decommissioned' then coalesce(archived_by, $7)
+               when $6::"yu_inventory"."item_status" = 'decommissioned'
+                 then coalesce(archived_by, $7)
                else null
              end,
              archived_at = case
-               when $6 = 'decommissioned' then coalesce(archived_at, $8)
+               when $6::"yu_inventory"."item_status" = 'decommissioned'
+                 then coalesce(archived_at, $8)
                else null
              end,
              updated_by = $7, updated_at = $8,

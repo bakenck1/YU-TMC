@@ -39,6 +39,12 @@ test("search history menu retains keyboard focus and supports Escape", async () 
   const source = await readFile(new URL("../components/ItemsTable.tsx", import.meta.url), "utf8");
   assert.match(source, /currentTarget\.contains\(event\.relatedTarget\)/);
   assert.match(source, /event\.key === "Escape"/);
+  assert.match(source, /event\.key === "Enter"/);
+  assert.match(source, /visibleSearchHistory/);
+  assert.match(source, /entry\.toLocaleLowerCase\(\)\.includes\(normalizedQuery\)/);
+  assert.match(source, /function FilterInput/);
+  assert.match(source, /item-filter-history:v1/);
+  assert.match(source, /historyStorageKey=\{filterHistoryStorageKey/);
   assert.match(source, /onClick=\{\(\) => setSearchFocused\(true\)\}/);
   assert.doesNotMatch(source, /role="combobox"/);
 });
