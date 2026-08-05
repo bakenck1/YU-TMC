@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { Languages, Menu } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
 import { useAuth } from "./AuthProvider";
@@ -11,12 +12,14 @@ import type { AppLanguage } from "@/lib/app-settings";
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
   "/items": "nav.items",
+  "/transfers": "nav.transfers",
   "/inventory": "nav.objects",
   "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
   "/analytics": "nav.analytics",
   "/users": "nav.users",
   "/settings": "nav.settings",
+  "/profile": "nav.profile",
 };
 
 const ROLE_LABELS: Record<AuthRole, TranslationKey> = {
@@ -88,9 +91,9 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
             {user ? t(ROLE_LABELS[user.role]) : "—"}
           </p>
         </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+        <Link href="/profile" aria-label="Открыть профиль" className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
           {user ? initials(user.name, user.email) : "YU"}
-        </div>
+        </Link>
       </div>
     </header>
   );

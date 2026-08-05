@@ -18,6 +18,7 @@ export interface QrResolutionRecord {
   roomDesignation: string | null;
   inventoryNumber: string | null;
   responsibleName: string | null;
+  responsibleUserId?: string | null;
 }
 
 export interface QrResolutionRepository {

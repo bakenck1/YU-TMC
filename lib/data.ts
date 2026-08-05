@@ -3,8 +3,6 @@ import type {
   Building,
   InventoryItem,
 } from "./types";
-import { items21to110 } from "./items-21-110";
-import { campusBuildings } from "./campus";
 
 export const items: InventoryItem[] = [
   ...Array.from({ length: 10 }, (_, index) => ({
@@ -35,26 +33,89 @@ export const items: InventoryItem[] = [
   { id: "18", name: "Моноблок HP 3DQ45AV", inventoryNumber: "2411/0104", category: "Компьютеры", location: "32 мкр / Каб IT", responsible: "", status: "active", photoColor: "#0ea5e9", qrCode: "2411/0104", itemType: "Моноблок", brandModel: "HP 3DQ45AV", displayStatus: "Работник", updatedAt: "02 сен 2025", quantity: 1, price: 0 },
   { id: "19", name: "Моноблок Lenovo neo", inventoryNumber: "2416/1039", category: "Компьютеры", location: "32 мкр / A801", responsible: "", status: "active", photoColor: "#0ea5e9", qrCode: "2416/1039", itemType: "Моноблок", brandModel: "Lenovo neo", displayStatus: "Работник", updatedAt: "31 июл 2025", quantity: 1, price: 432864 },
   { id: "20", name: "Системный блок", inventoryNumber: "-", category: "Компьютеры", location: "32 мкр / A801", responsible: "", status: "active", photoColor: "#0ea5e9", qrCode: "-", itemType: "Системный блок", brandModel: "", displayStatus: "Работник", updatedAt: "31 июл 2025", quantity: 1, price: 0 },
-  ...items21to110,
 ];
 
-// Реальные корпуса кампуса — берём из данных интерактивной карты (lib/campus.ts),
-// чтобы «Локации», счётчики и карта на Главной были согласованы.
-export const buildings: Building[] = Object.values(campusBuildings).map((b) => ({
-  id: b.id,
-  name: b.name,
-  address: b.sub,
-  itemCount: b.total,
-  floors: b.floors.map((f) => ({
-    id: `${b.id}-${f.n}`,
-    name: `Этаж ${f.n}`,
-    rooms: f.rooms.map((r) => ({
-      id: `${b.id}-${f.n}-${r.code}`,
-      name: r.name,
-      itemCount: r.items.length,
-    })),
-  })),
-}));
+export const buildings: Building[] = [
+  {
+    id: "main",
+    name: "Главный корпус",
+    address: "ул. Университетская, 1",
+    itemCount: 214,
+    floors: [
+      {
+        id: "main-1",
+        name: "1 этаж",
+        rooms: [
+          { id: "main-1-101", name: "Приёмная", itemCount: 6 },
+          { id: "main-1-102", name: "Библиотека", itemCount: 42 },
+        ],
+      },
+      {
+        id: "main-2",
+        name: "2 этаж",
+        rooms: [
+          { id: "main-2-201", name: "Деканат", itemCount: 18 },
+          { id: "main-2-202", name: "Ауд. 205", itemCount: 24 },
+        ],
+      },
+      {
+        id: "main-3",
+        name: "3 этаж",
+        rooms: [
+          { id: "main-3-305", name: "Ауд. 305", itemCount: 20 },
+          { id: "main-3-306", name: "Ауд. 306", itemCount: 16 },
+        ],
+      },
+      {
+        id: "main-b",
+        name: "Подвал",
+        rooms: [
+          { id: "main-b-server", name: "Серверная", itemCount: 12 },
+          { id: "main-b-archive", name: "Архив", itemCount: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "b",
+    name: "Корпус Б",
+    address: "ул. Студенческая, 5",
+    itemCount: 98,
+    floors: [
+      {
+        id: "b-2",
+        name: "2 этаж",
+        rooms: [{ id: "b-2-210", name: "Ауд. 210", itemCount: 15 }],
+      },
+      {
+        id: "b-3",
+        name: "3 этаж",
+        rooms: [{ id: "b-3-312", name: "Ауд. 312", itemCount: 11 }],
+      },
+    ],
+  },
+  {
+    id: "v",
+    name: "Корпус В",
+    address: "пр-т Науки, 12",
+    itemCount: 156,
+    floors: [
+      {
+        id: "v-1",
+        name: "1 этаж",
+        rooms: [
+          { id: "v-1-104", name: "Лаборатория 104", itemCount: 27 },
+          { id: "v-1-106", name: "Лаборатория 106", itemCount: 19 },
+        ],
+      },
+      {
+        id: "v-2",
+        name: "2 этаж",
+        rooms: [{ id: "v-2-220", name: "Ауд. 220", itemCount: 14 }],
+      },
+    ],
+  },
+];
 
 export const users: AppUser[] = [
   { id: "1", code: "USR-001", fullName: "Demo Administrator", role: "admin", email: "admin@example.test", phone: "—", addedAt: "2023-09-01", emailVerified: true, active: true, version: 1 },
@@ -87,9 +148,15 @@ export const monthlyDynamics = [
   { month: "Июн", added: 27, decommissioned: 6 },
   { month: "Июл", added: 19, decommissioned: 3 },
 ];
-
 export const statusDistribution = [
   { name: "Активен", value: 468 },
   { name: "На обслуживании", value: 54 },
   { name: "Списано", value: 69 },
 ];
+
+export const dashboardStats = {
+  totalItems: 591,
+  totalLocations: buildings.length,
+  needsAttention: items.filter((i) => i.status === "maintenance").length,
+  totalUsers: users.length,
+};

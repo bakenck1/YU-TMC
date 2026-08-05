@@ -4,6 +4,7 @@ import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { hasPermission } from "@/lib/security/permissions";
+import { isInventoryBuildingName } from "@/lib/campus-directory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,9 @@ export default async function InventoryInspectionsPage({
   const [inspections, buildings, users, inventoryItems] = await Promise.all([
     services.inspections.list(actor),
     canReadWorkspace
-      ? services.locations.listBuildings(actor)
+      ? services.locations.listBuildings(actor).then((buildings) =>
+          buildings.filter((building) => isInventoryBuildingName(building.name)),
+        )
       : Promise.resolve([]),
     user.role === "admin" ? services.users.listUsers() : Promise.resolve([]),
     services.items.listItems(actor),

@@ -314,6 +314,14 @@ export class UserService {
     );
   }
 
+  async getProfile(userId: string): Promise<UserDto> {
+    const user = await this.unitOfWork.read(({ users }) => users.findById(userId));
+    if (!user || user.deletedAt || !user.active) {
+      throw new ApplicationError("not_found", "user_not_found");
+    }
+    return toUserDto(user);
+  }
+
   async createUser(
     input: CreateUserInput,
     actorUserId: string,

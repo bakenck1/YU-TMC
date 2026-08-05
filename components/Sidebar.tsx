@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
   Archive,
+  ArrowLeftRight,
   Boxes,
   Building2,
   ChevronLeft,
@@ -17,6 +18,7 @@ import {
   LoaderCircle,
   Settings,
   Users,
+  UserCircle,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +37,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
+  { href: "/transfers", labelKey: "nav.transfers", icon: ArrowLeftRight },
   {
     href: "/items/decommissioned",
     labelKey: "nav.decommissioned",
@@ -49,19 +52,16 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
+  { href: "/profile", labelKey: "nav.profile", icon: UserCircle },
 ];
 
-const EMPLOYEE_HIDDEN_NAV_PATHS = new Set([
-  "/inventory",
-  "/inventory/inspections",
-]);
+const EMPLOYEE_NAV_PATHS = new Set(["/", "/items", "/transfers", "/profile"]);
 
 export function sidebarItemsForRole(role: UserRole) {
   return NAV_ITEMS.filter(
     (item) =>
-      !(
-        role === "employee" && EMPLOYEE_HIDDEN_NAV_PATHS.has(item.href)
-      ) && canAccessPath(role, item.href),
+      (role !== "employee" || EMPLOYEE_NAV_PATHS.has(item.href)) &&
+      canAccessPath(role, item.href),
   );
 }
 
@@ -187,10 +187,7 @@ function SidebarContent({
         {authLoading ? (
           <div className="space-y-2 px-1" aria-hidden="true">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-10 animate-pulse rounded-xl bg-zinc-100"
-              />
+              <div key={index} className="h-10 animate-pulse rounded-xl bg-zinc-100" />
             ))}
           </div>
         ) : (

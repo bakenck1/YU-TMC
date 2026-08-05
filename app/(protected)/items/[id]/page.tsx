@@ -5,6 +5,7 @@ import InventoryItemDetails from "@/components/InventoryItemDetails";
 import { items } from "@/lib/data";
 import { getApplicationServices } from "@/lib/server/application";
 import { hasPermission } from "@/lib/security/permissions";
+import { isInventoryBuildingName } from "@/lib/campus-directory";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 
 export default async function ItemPage({
@@ -22,6 +23,7 @@ export default async function ItemPage({
     };
     const services = getApplicationServices();
     const item = await services.items.findItem(id, actor);
+    if (!isInventoryBuildingName(item.room.buildingName)) notFound();
     const canManageProtected = hasPermission(
       user.role,
       "inventory.item.manage_protected_fields",
@@ -37,7 +39,9 @@ export default async function ItemPage({
       services.items.listComments(id, actor),
     ]);
     const buildings = canManageProtected
-      ? await services.locations.listBuildings(actor)
+      ? (await services.locations.listBuildings(actor)).filter((building) =>
+          isInventoryBuildingName(building.name),
+        )
       : [];
     const rooms = (
       await Promise.all(

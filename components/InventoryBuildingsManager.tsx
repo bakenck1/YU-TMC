@@ -19,7 +19,7 @@ import type {
 } from "@/lib/contracts/inventory-locations";
 import type { UserRole } from "@/lib/contracts/users";
 import {
-  CAMPUS_BUILDING_PRESETS,
+  CAMPUS_INVENTORY_BUILDING_PRESETS,
   findCampusBuildingPreset,
 } from "@/lib/campus-directory";
 import { hasPermission } from "@/lib/security/permissions";
@@ -589,7 +589,7 @@ function BuildingFormModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const selectedPreset = CAMPUS_BUILDING_PRESETS.find(
+  const selectedPreset = CAMPUS_INVENTORY_BUILDING_PRESETS.find(
     (preset) => preset.id === presetId,
   );
   const existingNames = new Set(existingBuildingNames);
@@ -683,7 +683,7 @@ function BuildingFormModal({
               disabled={Boolean(building)}
             >
               <option value="">{t("building.selectFromList")}</option>
-              {CAMPUS_BUILDING_PRESETS.map((preset) => (
+              {CAMPUS_INVENTORY_BUILDING_PRESETS.map((preset) => (
                 <option
                   key={preset.id}
                   value={preset.id}

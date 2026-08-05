@@ -424,6 +424,8 @@ function toTransferDto(record: TransferRecord, actorUserId: string): TransferDto
   return {
     id: record.id,
     itemId: record.itemId,
+    itemName: record.itemName ?? null,
+    itemInventoryNumber: record.itemInventoryNumber ?? null,
     requestedByName: record.requestedByName,
     status: record.status,
     requestedAt: record.requestedAt.toISOString(),

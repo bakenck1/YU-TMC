@@ -26,6 +26,8 @@ export interface ResponsibilityTimelineEntryDto {
 export interface TransferDto {
   id: string;
   itemId: string;
+  itemName?: string | null;
+  itemInventoryNumber?: string | null;
   requestedByName: string;
   status: TransferStatus;
   requestedAt: string;

@@ -13,7 +13,8 @@ export default async function Home() {
   const currentUser = await requireAuthorizedPage("/");
   const services = getApplicationServices();
   const actor = authorizationActor(currentUser);
-  const users = await services.users.listUsers();
+  const canReadUsers = hasPermission(currentUser.role, "legacy.users.read");
+  const users = canReadUsers ? await services.users.listUsers() : [];
   const canReadInventory = hasPermission(
     currentUser.role,
     "inventory.workspace.read",
@@ -37,6 +38,7 @@ export default async function Home() {
     <Dashboard
       totalUsers={users.length}
       campus={buildCampusMapData(buildings, rooms, items)}
+      isEmployee={currentUser.role === "employee"}
     />
   );
 }

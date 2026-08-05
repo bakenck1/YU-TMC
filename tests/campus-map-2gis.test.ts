@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   CAMPUS_MAP_BUILDING_PRESETS,
+  CAMPUS_INVENTORY_BUILDING_PRESETS,
   findCampusBuildingPreset,
 } from "../lib/campus-directory";
 import { buildCampusMapData } from "../lib/campus-map-data";
@@ -64,24 +65,68 @@ test("renders T1 as a localized, non-interactive construction block", () => {
   assert.doesNotMatch(source, /id: "t1-building",[\s\S]*?onClick/);
 });
 
-test("renders two basketball and two football decorative fields without interactions", () => {
+test("keeps KGISE on the map as a named non-interactive landmark and removes it from operational buildings", () => {
+  const source = readFileSync(
+    new URL("../components/CampusMap.tsx", import.meta.url),
+    "utf8",
+  );
+  const kgise = findCampusBuildingPreset(
+    "Kazakh-German Institute of Sustainable Engineering",
+  );
+  const kgiseBlock = source.match(
+    /id: "kgise",([\s\S]*?)(?=\n  \{\n    id:|\n\];)/,
+  )?.[1] ?? "";
+
+  assert.equal(kgise?.inventoryVisible, false);
+  assert.ok(CAMPUS_MAP_BUILDING_PRESETS.some((preset) => preset.id === "kgise"));
+  assert.ok(!CAMPUS_INVENTORY_BUILDING_PRESETS.some((preset) => preset.id === "kgise"));
+  assert.match(kgiseBlock, /interactive: false/);
+  assert.doesNotMatch(kgiseBlock, /statusKey:/);
+  assert.match(source, /pointerEvents: isInteractive \? "auto" : "none"/);
+  assert.match(source, /onClick=\{isInteractive \? \(\) => openBuilding\(b\.id\) : undefined\}/);
+
+  const manager = readFileSync(
+    new URL("../components/InventoryBuildingsManager.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(manager, /CAMPUS_INVENTORY_BUILDING_PRESETS\.map/);
+  for (const path of [
+    "../app/(protected)/inventory/page.tsx",
+    "../app/(protected)/items/page.tsx",
+    "../app/(protected)/items/[id]/page.tsx",
+    "../app/(protected)/inventory/inspections/page.tsx",
+    "../app/api/inventory/excel/route.ts",
+  ]) {
+    assert.match(readFileSync(new URL(path, import.meta.url), "utf8"), /isInventoryBuildingName/);
+  }
+  const itemDetailPage = readFileSync(
+    new URL("../app/(protected)/items/[id]/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    itemDetailPage,
+    /if \(!isInventoryBuildingName\(item\.room\.buildingName\)\) notFound\(\);/,
+  );
+});
+
+test("renders one basketball and one football decorative field in the marked column", () => {
   const source = readFileSync(
     new URL("../components/CampusMap.tsx", import.meta.url),
     "utf8",
   );
 
   assert.match(source, /const DECORATIVE_FIELDS: DecorativeField\[\] = \[/);
-  assert.equal((source.match(/id: "basketball-[12]"/g) ?? []).length, 2);
-  assert.equal((source.match(/id: "football-[12]"/g) ?? []).length, 2);
+  assert.equal((source.match(/id: "basketball-[12]"/g) ?? []).length, 1);
+  assert.equal((source.match(/id: "football-[12]"/g) ?? []).length, 1);
   assert.match(source, /data-testid=\{`decorative-\$\{field\.id\}`\}/);
-  for (const id of ["basketball-1", "basketball-2", "football-1", "football-2"]) {
+  for (const id of ["basketball-1", "football-1"]) {
     assert.match(source, new RegExp(`id: "${id}"`));
   }
+  assert.doesNotMatch(source, /id: "(?:basketball|football)-2"/);
+  assert.equal((source.match(/width: 150, height: 88/g) ?? []).length, 2);
   assert.match(source, /pointerEvents: "none"/);
-  assert.match(source, /left: "72%"[\s\S]*?top: 74/);
-  assert.match(source, /left: "84%"[\s\S]*?top: 74/);
-  assert.match(source, /left: "72%"[\s\S]*?top: 178/);
-  assert.match(source, /left: "84%"[\s\S]*?top: 178/);
+  assert.match(source, /left: "67%"[\s\S]*?top: 255/);
+  assert.match(source, /left: "67%"[\s\S]*?top: 395/);
   assert.ok(source.indexOf("DECORATIVE_FIELDS.map") < source.indexOf("BUILDINGS.map"));
   const fieldsBlock = source.slice(source.indexOf("const DECORATIVE_FIELDS"), source.indexOf("{BUILDINGS.map"));
   assert.doesNotMatch(fieldsBlock, /zIndex:\s*[1-9]/);

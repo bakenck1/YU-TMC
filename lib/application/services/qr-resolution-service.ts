@@ -53,7 +53,7 @@ export class QrResolutionService {
         };
       }
       assertRecordAccessible(record, fullAccess);
-      return toDto(record, fullAccess);
+      return toDto(record, fullAccess || itemAccess, actor.userId);
     }
 
     const parsed = parseQrIdentifierInput(input);
@@ -94,7 +94,7 @@ export class QrResolutionService {
     // response for foreign target kinds, revoked codes, and inactive items.
     assertRecordAccessible(record, fullAccess);
 
-    return toDto(record, fullAccess);
+    return toDto(record, fullAccess || itemAccess, actor.userId);
   }
 }
 
@@ -115,6 +115,7 @@ function assertRecordAccessible(
 function toDto(
   record: QrResolutionRecord,
   includeResponsibleName: boolean,
+  actorUserId: string,
 ): QrResolutionDto {
   return {
     status: record.qrStatus === "revoked" ? "revoked" : "resolved",
@@ -132,6 +133,7 @@ function toDto(
       responsibleName: includeResponsibleName
         ? record.responsibleName
         : undefined,
+      isCurrentUserResponsible: record.responsibleUserId === actorUserId,
     },
   };
 }

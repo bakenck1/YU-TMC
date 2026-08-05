@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isInventoryBuildingName } from "@/lib/campus-directory";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import {
@@ -114,7 +115,9 @@ export async function POST(request: Request) {
 
 async function listImportRooms(actor: ReturnType<typeof authorizationActor>): Promise<ImportRoom[]> {
   const services = getApplicationServices();
-  const buildings = await services.locations.listBuildings(actor);
+  const buildings = (await services.locations.listBuildings(actor)).filter(
+    (building) => isInventoryBuildingName(building.name),
+  );
   return (
     await Promise.all(buildings.map(async (building) =>
       (await services.locations.listRooms(building.id, actor)).map((room) => ({

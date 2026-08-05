@@ -26,5 +26,6 @@ export interface QrResolutionDto {
     roomDesignation?: string;
     inventoryNumber?: string;
     responsibleName?: string | null;
+    isCurrentUserResponsible?: boolean;
   } | null;
 }

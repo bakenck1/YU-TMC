@@ -9,6 +9,7 @@ import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { hasPermission } from "@/lib/security/permissions";
+import { isInventoryBuildingName } from "@/lib/campus-directory";
 
 export default async function ItemsPage() {
   const user = await requireAuthorizedPage("/items");
@@ -20,7 +21,9 @@ export default async function ItemsPage() {
   let buildings: BuildingDto[] = [];
   let rooms: RoomDto[] = [];
   if (canCreate) {
-    buildings = await getApplicationServices().locations.listBuildings(actor);
+    buildings = (await getApplicationServices().locations.listBuildings(actor)).filter(
+      (building) => isInventoryBuildingName(building.name),
+    );
     const roomLists = await Promise.all(
       buildings.map((building) =>
         getApplicationServices().locations.listRooms(building.id, actor),

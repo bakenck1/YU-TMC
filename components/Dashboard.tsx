@@ -10,9 +10,11 @@ import type { CampusMapData } from "@/lib/campus-map-data";
 export default function Dashboard({
   totalUsers,
   campus,
+  isEmployee,
 }: {
   totalUsers: number;
   campus: CampusMapData;
+  isEmployee?: boolean;
 }) {
   const { t } = useAppSettings();
   return (
@@ -26,7 +28,7 @@ export default function Dashboard({
           icon={TriangleAlert}
           hint={t("dashboard.maintenance")}
         />
-        <StatCard label={t("dashboard.users")} value={totalUsers} icon={Users} hint={t("dashboard.inSystem")} />
+        {!isEmployee ? <StatCard label={t("dashboard.users")} value={totalUsers} icon={Users} hint={t("dashboard.inSystem")} /> : null}
       </div>
 
       <CampusMap data={campus} />

@@ -5,6 +5,7 @@ export interface CampusBuildingPreset {
   name: string;
   legacyNames?: readonly string[];
   mapVisible?: boolean;
+  inventoryVisible?: boolean;
   address: string;
   floorCount: number;
 }
@@ -19,6 +20,7 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
   {
     id: "kgise",
     name: "Kazakh-German Institute of Sustainable Engineering",
+    inventoryVisible: false,
     address: CAMPUS_ADDRESS,
     floorCount: 4,
   },
@@ -94,6 +96,10 @@ export const CAMPUS_MAP_BUILDING_PRESETS = CAMPUS_BUILDING_PRESETS.filter(
   (preset) => preset.mapVisible !== false,
 );
 
+export const CAMPUS_INVENTORY_BUILDING_PRESETS = CAMPUS_BUILDING_PRESETS.filter(
+  (preset) => preset.inventoryVisible !== false,
+);
+
 export function findCampusBuildingPreset(
   name: string,
 ): CampusBuildingPreset | undefined {
@@ -101,4 +107,8 @@ export function findCampusBuildingPreset(
     (preset) =>
       preset.name === name || preset.legacyNames?.includes(name) === true,
   );
+}
+
+export function isInventoryBuildingName(name: string): boolean {
+  return findCampusBuildingPreset(name)?.inventoryVisible !== false;
 }

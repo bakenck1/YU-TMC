@@ -911,13 +911,13 @@ export default function InventoryItemDetails({
                 <Image
                   src={`/api/inventory/items/${item.id}/qr?kind=qr&format=svg`}
                   alt={`${t("items.qrCode")}: ${item.name}`}
-                  width={72}
-                  height={72}
+                  width={86.4}
+                  height={86.4}
                   unoptimized
-                  className="h-[72px] w-[72px]"
+                  className="h-[86.4px] w-[86.4px]"
                 />
               ) : (
-                <QrCode className="h-[72px] w-[72px] text-zinc-600" strokeWidth={1.5} />
+                <QrCode className="h-[86.4px] w-[86.4px] text-zinc-600" strokeWidth={1.5} />
               )}
               <button
                 type="button"

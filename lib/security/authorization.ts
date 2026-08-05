@@ -26,6 +26,7 @@ const ROUTE_PERMISSIONS = [
   ["/analytics", "legacy.analytics.read"],
   ["/locations", "legacy.locations.read"],
   ["/settings", "legacy.settings.manage"],
+  ["/profile", "legacy.dashboard.read"],
   ["/users", "legacy.users.read"],
   ["/items", "legacy.items.read"],
   ["/transfers", "inventory.transfer.request_self"],

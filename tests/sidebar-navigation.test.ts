@@ -3,13 +3,10 @@ import test from "node:test";
 
 import { sidebarItemsForRole } from "../components/Sidebar";
 
-test("employee sidebar excludes objects and inspection requests", () => {
+test("employee sidebar exposes their home, inventory, transfer workflow, and profile", () => {
   const hrefs = sidebarItemsForRole("employee").map((item) => item.href);
 
-  assert.ok(hrefs.includes("/items"));
-  for (const hiddenPath of ["/inventory", "/inventory/inspections"]) {
-    assert.ok(!hrefs.includes(hiddenPath), `unexpected employee nav item: ${hiddenPath}`);
-  }
+  assert.deepEqual(hrefs, ["/", "/items", "/transfers", "/profile"]);
 });
 
 test("administrator sidebar keeps facilities and inspections", () => {
@@ -17,4 +14,19 @@ test("administrator sidebar keeps facilities and inspections", () => {
 
   assert.ok(hrefs.includes("/inventory"));
   assert.ok(hrefs.includes("/inventory/inspections"));
+});
+
+test("warehouse sidebar exposes analytics and decommissioned items", () => {
+  const hrefs = sidebarItemsForRole("warehouse").map((item) => item.href);
+
+  assert.deepEqual(hrefs, ["/", "/items", "/items/decommissioned", "/analytics", "/profile"]);
+});
+//
+test("logout control calls the authenticated logout flow", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../components/Sidebar.tsx", import.meta.url), "utf8"),
+  );
+
+  assert.match(source, /await logout\(\)/);
+  assert.doesNotMatch(source, /href="\/login"[\s\S]*nav\.logout/);
 });

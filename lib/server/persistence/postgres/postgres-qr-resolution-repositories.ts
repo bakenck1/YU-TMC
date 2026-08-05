@@ -27,6 +27,7 @@ interface QrRow extends QueryResultRow {
   room_designation: string | null;
   inventory_number: string | null;
   responsible_name: string | null;
+  responsible_user_id: string | null;
 }
 
 export function createPostgresQrResolutionRepositories(
@@ -50,7 +51,8 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               b.name as building_name,
               r.designation as room_designation,
               i.inventory_number,
-              u.full_name as responsible_name
+              u.full_name as responsible_name,
+              rp.responsible_user_id
          from ${QR} q
          left join ${BUILDINGS} b on b.id = q.building_id
          left join ${ROOMS} r on r.id = q.room_id
@@ -81,6 +83,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       roomDesignation: row.room_designation,
       inventoryNumber: row.inventory_number,
       responsibleName: row.responsible_name,
+      responsibleUserId: row.responsible_user_id,
     };
   }
 
@@ -95,7 +98,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               i.id as target_id, i.status::text as target_status,
               i.name as title, b.name as building_name,
               r.designation as room_designation, i.inventory_number,
-              u.full_name as responsible_name
+              u.full_name as responsible_name, rp.responsible_user_id
          from ${ITEMS} i
          join ${ROOMS} r on r.id = i.room_id
          join ${BUILDINGS} b on b.id = r.building_id
@@ -127,6 +130,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       roomDesignation: row.room_designation,
       inventoryNumber: row.inventory_number,
       responsibleName: row.responsible_name,
+      responsibleUserId: row.responsible_user_id,
     };
   }
 }

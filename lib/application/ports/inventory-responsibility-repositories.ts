@@ -11,6 +11,8 @@ export interface ItemResponsibilityState {
 export interface TransferRecord {
   id: string;
   itemId: string;
+  itemName?: string | null;
+  itemInventoryNumber?: string | null;
   requestedBy: string;
   requestedByName: string;
   proposedResponsibleId: string;

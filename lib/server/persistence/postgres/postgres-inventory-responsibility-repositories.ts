@@ -33,6 +33,8 @@ interface StateRow extends QueryResultRow {
 interface TransferRow extends QueryResultRow {
   id: string;
   item_id: string;
+  item_name: string | null;
+  item_inventory_number: string | null;
   requested_by: string;
   requested_by_name: string;
   proposed_responsible_id: string;
@@ -289,7 +291,8 @@ class PostgresInventoryResponsibilityRepository
 
 function transferSelect(where: string) {
   return `
-    select t.id, t.item_id, t.requested_by,
+    select t.id, t.item_id, i.name as item_name,
+           i.inventory_number as item_inventory_number, t.requested_by,
            requester.full_name as requested_by_name,
            t.proposed_responsible_id,
            t.current_responsible_id_at_request,
@@ -297,6 +300,7 @@ function transferSelect(where: string) {
            t.status, t.requested_at, t.closed_at,
            t.decision_comment, t.version
       from ${TRANSFERS} t
+      join ${ITEMS} i on i.id = t.item_id
       join ${USERS} requester on requester.id = t.requested_by
       join ${USERS} current_owner
         on current_owner.id = t.current_responsible_id_at_request
@@ -308,6 +312,8 @@ function mapTransfer(row: TransferRow): TransferRecord {
   return {
     id: row.id,
     itemId: row.item_id,
+    itemName: row.item_name,
+    itemInventoryNumber: row.item_inventory_number,
     requestedBy: row.requested_by,
     requestedByName: row.requested_by_name,
     proposedResponsibleId: row.proposed_responsible_id,

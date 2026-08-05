@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
-
-type NextStatus = "active" | "decommissioned";
+import {
+  resolveMaintenanceItemWithRefresh,
+  type MaintenanceResolutionStatus,
+} from "@/lib/maintenance-resolution-client";
 
 export default function MaintenanceItemsPanel({
   initialItems,
@@ -16,26 +18,14 @@ export default function MaintenanceItemsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function changeStatus(item: InventoryItemDto, status: NextStatus) {
+  async function changeStatus(
+    item: InventoryItemDto,
+    status: MaintenanceResolutionStatus,
+  ) {
     setBusy(item.id);
     setError(null);
     try {
-      const response = await fetch(`/api/inventory/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          operation: "resolve_maintenance",
-          version: item.version,
-          status,
-        }),
-      });
-      const body = (await response.json()) as {
-        item?: InventoryItemDto;
-        error?: string;
-      };
-      if (!response.ok || !body.item) {
-        throw new Error(body.error ?? "update_failed");
-      }
+      await resolveMaintenanceItemWithRefresh(fetch, item, status);
       setItems((current) => current.filter((entry) => entry.id !== item.id));
     } catch {
       setError("Не удалось обновить статус. Обновите страницу и повторите попытку.");

@@ -20,7 +20,7 @@ test("center labels are localized", () => {
   assert.equal(translateCampusBuilding("en", "Шерқала"), "Sherqala");
 });
 
-test("service center keeps its position with a reduced map footprint", () => {
+test("service center keeps its position with the photographed polygon footprint", () => {
   const source = readFileSync(
     new URL("../components/CampusMap.tsx", import.meta.url),
     "utf8",
@@ -28,11 +28,15 @@ test("service center keeps its position with a reduced map footprint", () => {
 
   assert.match(
     source,
-    /id: "center-1",[\s\S]*?wrap: "position:absolute;left:39%;top:260px;width:96px;height:62px;"/,
+    /id: "center-1",[\s\S]*?wrap: "position:absolute;left:39%;top:260px;width:110px;height:96px;"/,
   );
   assert.doesNotMatch(
     source,
     /id: "center-1",[\s\S]*?width:120px;height:78px/,
+  );
+  assert.match(
+    source,
+    /id: "center-1",[\s\S]*?clip-path:polygon\(0 0,100% 0,100% 48%,65% 48%,40% 64%,30% 100%,0 100%\)/,
   );
 });
 
@@ -43,8 +47,8 @@ test("Sherqala uses a crescent footprint and is shifted right of the service cen
   );
 
   const center2 = source.match(/id: "center-2",([\s\S]*?)(?=\n  \{\n    id:|\n\];)/)?.[1] ?? "";
-  assert.match(center2, /wrap: "position:absolute;left:59%;top:260px;width:120px;height:84px;"/);
+  assert.match(center2, /wrap: "position:absolute;left:59%;top:260px;width:88px;height:62px;"/);
   assert.match(center2, /clip-path:ellipse\(50% 50% at 50% 50%\)/);
-  assert.match(center2, /background:#f3f0e5;border-radius:50%/);
+  assert.match(center2, /left:-10%;top:-8%;width:67%;height:86%;background:#f3f0e5;border-radius:50%/);
   assert.ok(source.indexOf('id: "center-2"') > source.indexOf('id: "center-1"'));
 });
