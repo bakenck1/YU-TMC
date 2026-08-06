@@ -1,6 +1,6 @@
 {
-  "id": "4e0c1cae-70ca-4e7c-8b16-5f72a6f48fc9",
-  "prevId": "aa75075f-06a7-4bb0-b9f1-db5e0342d153",
+  "id": "df2c8f55-f361-453e-92d4-299f72bcaa4b",
+  "prevId": "4e0c1cae-70ca-4e7c-8b16-5f72a6f48fc9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3826,7 +3826,7 @@
         },
         "photos_parent_check": {
           "name": "photos_parent_check",
-          "value": "(\n            \"yu_inventory\".\"photos\".\"status\" IN ('reserved', 'expired')\n            AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" NOT IN ('reserved', 'expired')\n            AND (\n              (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'item'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'inspection_result'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'decision_dispute'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NOT NULL\n              )\n            )\n          )"
+          "value": "(\n            \"yu_inventory\".\"photos\".\"status\" IN ('reserved', 'expired')\n            AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n            AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n          ) OR (\n            \"yu_inventory\".\"photos\".\"status\" NOT IN ('reserved', 'expired')\n            AND (\n              (\n                  \"yu_inventory\".\"photos\".\"purpose\"::text IN ('item', 'service_request')\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'inspection_result'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NOT NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NULL\n              ) OR (\n                \"yu_inventory\".\"photos\".\"purpose\" = 'decision_dispute'\n                AND \"yu_inventory\".\"photos\".\"item_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_id\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"result_revision_number\" IS NULL\n                AND \"yu_inventory\".\"photos\".\"decision_id\" IS NOT NULL\n              )\n            )\n          )"
         },
         "photos_attached_metadata_check": {
           "name": "photos_attached_metadata_check",
@@ -5614,6 +5614,7 @@
       "schema": "yu_inventory",
       "values": [
         "item",
+        "service_request",
         "inspection_result",
         "decision_dispute"
       ]
