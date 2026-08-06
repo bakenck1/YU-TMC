@@ -67,6 +67,27 @@ callbacks can finish.
 PostgreSQL setup, environment isolation, migration commands, and production
 deployment rules are documented in [docs/database.md](docs/database.md).
 
+### Запуск в Docker для телефона
+
+Docker Desktop запускает приложение и PostgreSQL одной командой:
+
+```powershell
+docker compose -f docker-compose.mobile.yml up --build -d
+```
+
+Откройте `http://<IP-адрес-компьютера>:3000` на телефоне, подключённом к той
+же Wi‑Fi сети. Узнать адрес компьютера можно командой `ipconfig` (строка
+`IPv4 Address`). Логи и остановка:
+
+```powershell
+docker compose -f docker-compose.mobile.yml logs -f app
+docker compose -f docker-compose.mobile.yml down
+```
+
+Данные PostgreSQL сохраняются в Docker volume, а `.data` монтируется из
+проекта, поэтому текущий администратор и настройки сохраняются между
+перезапусками.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
