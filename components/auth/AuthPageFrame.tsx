@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Boxes,
@@ -49,9 +50,14 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
         <section className="flex min-h-[680px] flex-col px-6 py-6 sm:px-10 sm:py-8 lg:px-14 lg:py-10">
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-sm font-bold text-white shadow-sm">
-                YU
-              </div>
+              <Image
+                src="/logo.png"
+                alt="YU Inventory"
+                width={44}
+                height={44}
+                priority
+                className="h-11 w-11 shrink-0 object-contain"
+              />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-zinc-900">
                   {settings.organizationName}
