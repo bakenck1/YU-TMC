@@ -22,7 +22,10 @@ import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
-import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
+import {
+  inventoryNumberComparisonKey,
+  parseCode39ScanInput,
+} from "@/lib/domain/code39";
 import {
   canPerformInventoryOperation,
   hasPermission,
@@ -56,6 +59,11 @@ export interface InventoryItemCommentAttachmentInput {
 export interface SendItemToServiceInput {
   serviceName: string;
   reason: string;
+  photo?: {
+    imageDataUrl: string;
+    width: number;
+    height: number;
+  };
 }
 
 export interface ResolveMaintenanceItemInput {
@@ -134,12 +142,10 @@ export class InventoryItemService {
       const item = await items.findItemById(normalizedId);
       if (!item) throw new ApplicationError("not_found", "item_not_found");
       assertItemReadable(item, actor);
-      const components = await items.listComponents(normalizedId);
-      return hasPermission(actor.role, "inventory.item.read_all")
-        ? components
-        : components.filter(
-            (component) => component.responsibleId === actor.userId,
-          );
+      // A linked component is part of the assigned item's composition. Hiding
+      // it when another employee is responsible for that component makes the
+      // composition look incomplete and prevents the card from being useful.
+      return items.listComponents(normalizedId);
     });
     return records.map(toItemDto);
   }
@@ -558,12 +564,17 @@ export class InventoryItemService {
     input: UpdateInventoryItemPhotoInput,
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
-    requirePermission(actor, "inventory.item.edit_content");
+    if (actor.role !== "employee") {
+      requirePermission(actor, "inventory.item.edit_content");
+    }
     const photo = await normalizeCameraPhoto(input);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (actor.role === "employee" && current.responsibleId !== actor.userId) {
+        throw forbidden();
+      }
       if (current.version !== input.version) throw versionConflict();
       const updated = await items.updateItemPhoto({
         id,
@@ -600,6 +611,21 @@ export class InventoryItemService {
     id: string,
     actor: AuthorizationActor,
   ): Promise<StoredItemPhoto> {
+    return this.getItemPhotoByPurpose(id, actor, "item");
+  }
+
+  async getServiceItemPhoto(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<StoredItemPhoto> {
+    return this.getItemPhotoByPurpose(id, actor, "service_request");
+  }
+
+  private async getItemPhotoByPurpose(
+    id: string,
+    actor: AuthorizationActor,
+    purpose: "item" | "service_request",
+  ): Promise<StoredItemPhoto> {
     return this.unitOfWork.read(async ({ items }) => {
       const item = await items.findItemById(id);
       const hasParentAccess = Boolean(
@@ -620,7 +646,9 @@ export class InventoryItemService {
       ) {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
-      const photo = await items.findItemPhoto(id);
+      const photo = purpose === "item"
+        ? await items.findItemPhoto(id)
+        : await items.findServiceItemPhoto(id);
       if (!photo) {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
@@ -750,11 +778,27 @@ export class InventoryItemService {
       throw new ApplicationError("validation", "invalid_version");
     }
     const service = normalizeServiceInput(input);
+    if (!input.photo) {
+      throw new ApplicationError("validation", "service_photo_required");
+    }
+    const photo = await normalizeCameraPhoto({ version: 1, ...input.photo });
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (actor.role === "employee" && current.responsibleId !== actor.userId) {
+        throw forbidden();
+      }
       if (current.version !== version) throw versionConflict();
+      await items.insertServiceItemPhoto({
+        id: this.ids.create(),
+        itemId: id,
+        bytes: photo.bytes,
+        width: photo.width,
+        height: photo.height,
+        actorId: actor.userId,
+        occurredAt,
+      });
       const updated = await items.updateItemStatus({
         id,
         status: "maintenance",
@@ -775,6 +819,7 @@ export class InventoryItemService {
             status: updated.status,
             serviceName: service.serviceName,
             reason: service.reason,
+            servicePhotoAttached: true,
           },
           occurredAt,
         }),
@@ -828,10 +873,27 @@ export class InventoryItemService {
 function normalizeCreateInput(input: CreateInventoryItemInput) {
   const content = normalizeContentInput({ version: 1, ...input });
   const roomId = normalizeId(input.roomId, "invalid_room_id");
-  const inventoryNumber =
+  const suppliedInventoryNumber =
     input.inventoryNumber === undefined || input.inventoryNumber === null
       ? null
       : normalizeText(input.inventoryNumber, 64, "invalid_inventory_number");
+  const barcode =
+    input.barcode === undefined || input.barcode === null
+      ? null
+      : normalizeText(input.barcode, 64, "invalid_barcode");
+  if (barcode && suppliedInventoryNumber) {
+    throw new ApplicationError("validation", "ambiguous_item_code");
+  }
+  const parsedBarcode = barcode ? parseCode39ScanInput(barcode) : null;
+  if (parsedBarcode && !parsedBarcode.ok) {
+    throw new ApplicationError("validation", "invalid_barcode");
+  }
+  if (parsedBarcode?.ok && !parsedBarcode.inventoryNumber) {
+    throw new ApplicationError("validation", "barcode_belongs_to_existing_item");
+  }
+  const inventoryNumber = parsedBarcode?.ok
+    ? parsedBarcode.inventoryNumber
+    : suppliedInventoryNumber;
   return {
     ...content,
     itemType: content.itemType ?? "ТМЦ",
@@ -1198,6 +1260,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       ? { id: record.responsibleId, name: record.responsibleName ?? "" }
       : null,
     photoUrl: record.photoUrl,
+    servicePhotoUrl: record.servicePhotoUrl ?? null,
     version: record.version,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

@@ -58,6 +58,8 @@ export default async function ItemPage({
         initialItem={item}
         canEditContent={hasPermission(user.role, "inventory.item.edit_content")}
         canSendToService={hasPermission(user.role, "inventory.item.send_to_service")}
+        requiresServicePhoto
+        canManageCode={hasPermission(user.role, "inventory.qr.manage")}
         operations={operations}
         initialComments={comments}
         canComment={canComment}

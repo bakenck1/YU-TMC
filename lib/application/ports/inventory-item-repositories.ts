@@ -22,6 +22,7 @@ export interface InventoryItemRecord {
   responsibleId: string | null;
   responsibleName: string | null;
   photoUrl: string | null;
+  servicePhotoUrl?: string | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -68,6 +69,16 @@ export interface UpdateInventoryItemPhotoRecord {
   height: number;
   actorId: string;
   expectedVersion: number;
+  occurredAt: Date;
+}
+
+export interface InsertServiceItemPhotoRecord {
+  id: string;
+  itemId: string;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  actorId: string;
   occurredAt: Date;
 }
 
@@ -231,6 +242,8 @@ export interface InventoryItemRepository {
     input: UpdateInventoryItemPhotoRecord,
   ): Promise<InventoryItemRecord | null>;
   findItemPhoto(id: string): Promise<StoredItemPhoto | null>;
+  insertServiceItemPhoto(input: InsertServiceItemPhotoRecord): Promise<void>;
+  findServiceItemPhoto(id: string): Promise<StoredItemPhoto | null>;
   updateItemProtected(
     input: UpdateInventoryItemProtectedRecord,
   ): Promise<InventoryItemRecord | null>;

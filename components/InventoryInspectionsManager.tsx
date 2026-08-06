@@ -377,7 +377,7 @@ export default function InventoryInspectionsManager({
             aria-pressed={codeFormat === "code_39"}
             className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${codeFormat === "code_39" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}
           >
-            <Barcode className="h-4 w-4" /> Code 39
+            <Barcode className="h-4 w-4" /> {t("itemDetails.barcode")}
           </button>
           <button
             type="button"

@@ -1535,7 +1535,7 @@ export const photosTable = inventorySchema.table(
             ${table.status} NOT IN ('reserved', 'expired')
             AND (
               (
-                ${table.purpose} = 'item'
+                  ${table.purpose} IN ('item', 'service_request')
                 AND ${table.itemId} IS NOT NULL
                 AND ${table.resultId} IS NULL
                 AND ${table.resultRevisionNumber} IS NULL

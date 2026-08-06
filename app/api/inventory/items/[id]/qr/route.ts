@@ -41,12 +41,12 @@ export async function GET(
     const download = url.searchParams.get("download") === "1";
     const headers = new Headers({
       "cache-control": "private, no-store",
-      "content-disposition": `${download ? "attachment" : "inline"}; filename="item-${id}-${kind === "qr" ? "qr" : "code39"}.${format}"`,
+      "content-disposition": `${download ? "attachment" : "inline"}; filename="item-${id}-${kind === "qr" ? "qr" : "barcode"}.${format}"`,
       "x-content-type-options": "nosniff",
     });
     if (kind === "barcode") {
       const payload = code39PayloadForItem(item.inventoryNumber, item.id);
-      const svg = renderCode39Svg(payload);
+      const svg = renderCode39Svg(payload, { heading: "YESSENOV UNIVERSITY" });
       headers.set("content-type", "image/svg+xml; charset=utf-8");
       return new Response(svg, { headers });
     }

@@ -10,6 +10,7 @@ import type {
   InsertInventoryItemRecord,
   InsertInventoryItemCommentAttachmentRecord,
   InsertItemQrRecord,
+  InsertServiceItemPhotoRecord,
   InventoryItemRecord,
   InventoryItemAuditRecord,
   InventoryItemCommentRecord,
@@ -60,6 +61,7 @@ interface ItemRow extends QueryResultRow {
   responsible_name: string | null;
   photo_url: string | null;
   photo_id: string | null;
+  service_photo_id: string | null;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -547,6 +549,50 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return { bytes: row.binary_data, mimeType: "image/jpeg" as const };
   }
 
+  async insertServiceItemPhoto(input: InsertServiceItemPhotoRecord): Promise<void> {
+    const objectKey = `database://items/${input.itemId}/service/${input.id}.jpg`;
+    const checksum = createHash("sha256").update(input.bytes).digest("hex");
+    await this.source.query(
+      `insert into ${PHOTOS}
+         (id, purpose, status, uploaded_by, original_object_key, preview_object_key,
+          trusted_mime_type, byte_size, width, height, checksum_sha256,
+          reserved_at, expires_at, attached_at, item_id, binary_data)
+       values ($1, 'service_request', 'attached', $2, $3, $3, 'image/jpeg',
+               $4, $5, $6, $7, $8, $9, $8, $10, $11)`,
+      [
+        input.id,
+        input.actorId,
+        objectKey,
+        input.bytes.byteLength,
+        input.width,
+        input.height,
+        checksum,
+        input.occurredAt,
+        new Date(input.occurredAt.getTime() + 24 * 60 * 60 * 1000),
+        input.itemId,
+        Buffer.from(input.bytes),
+      ],
+    );
+  }
+
+  async findServiceItemPhoto(id: string) {
+    const result = await this.source.query<{
+      binary_data: Buffer | null;
+      trusted_mime_type: string | null;
+    }>(
+      `select binary_data, trusted_mime_type
+         from ${PHOTOS}
+        where item_id = $1 and purpose = 'service_request' and status = 'attached'
+        order by attached_at desc
+        limit 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    return row?.binary_data && row.trusted_mime_type === "image/jpeg"
+      ? { bytes: row.binary_data, mimeType: "image/jpeg" as const }
+      : null;
+  }
+
   async updateItemProtected(
     input: UpdateInventoryItemProtectedRecord,
   ): Promise<InventoryItemRecord | null> {
@@ -748,6 +794,7 @@ function itemSelect(where: string, limit = "") {
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
            p.preview_object_key as photo_url, p.id as photo_id,
+           service_photo.id as service_photo_id,
            i.version, i.created_at, i.updated_at,
            service_move.occurred_at as maintenance_started_at, i.archived_at
       from ${ITEMS} i
@@ -783,6 +830,14 @@ function itemSelect(where: string, limit = "") {
          order by attached_at desc nulls last
          limit 1
       ) p on true
+      left join lateral (
+        select id
+          from ${PHOTOS}
+         where item_id = i.id and purpose = 'service_request'
+           and status = 'attached'
+         order by attached_at desc nulls last
+         limit 1
+      ) service_photo on true
       ${where}
      order by i.updated_at desc, i.id
      ${limit}`;
@@ -812,6 +867,9 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     photoUrl: row.photo_id
       ? `/api/inventory/items/${row.id}/photo?v=${row.version}`
       : row.photo_url,
+    servicePhotoUrl: row.service_photo_id
+      ? `/api/inventory/items/${row.id}/service-photo?v=${row.version}`
+      : null,
     version: Number(row.version),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),

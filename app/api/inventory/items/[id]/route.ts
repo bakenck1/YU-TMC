@@ -2,6 +2,7 @@ import type {
   UpdateInventoryItemContentInput,
   UpdateInventoryItemProtectedInput,
 } from "@/lib/contracts/inventory-items";
+import { after } from "next/server";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
@@ -42,34 +43,51 @@ export async function PATCH(
     assertId(id);
     const body: unknown = await request.json();
     const actor = authorizationActor(user);
+    const services = getApplicationServices();
+    const serviceRequest = isServicePatch(body);
     const item =
-      isServicePatch(body)
-        ? await getApplicationServices().items.sendToService(
+      serviceRequest
+        ? await services.items.sendToService(
             id,
             body.version,
             {
               serviceName: body.serviceName,
               reason: body.reason,
+              ...(body.photo ? { photo: body.photo } : {}),
             },
             actor,
           )
         : isMaintenanceResolutionPatch(body)
-        ? await getApplicationServices().items.resolveMaintenanceItem(
+        ? await services.items.resolveMaintenanceItem(
             id,
             { version: body.version, status: body.status },
             actor,
           )
         : isProtectedPatch(body)
-        ? await getApplicationServices().items.updateProtected(
+        ? await services.items.updateProtected(
             id,
             parseProtected(body),
             actor,
           )
-        : await getApplicationServices().items.updateContent(
+        : await services.items.updateContent(
             id,
             parseContent(body),
             actor,
           );
+    if (serviceRequest && user.role === "employee") {
+      after(async () => {
+        const admins = (await services.users.listUsers())
+          .filter((candidate) => candidate.role === "admin" && candidate.active)
+          .map((candidate) => candidate.id);
+        await services.push.notifyMaintenanceRequest({
+          itemId: item.id,
+          itemName: item.name,
+          inventoryNumber: item.inventoryNumber,
+          reason: body.reason,
+          recipientIds: admins,
+        });
+      });
+    }
     return Response.json({ item });
   } catch (error) {
     return itemErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);
@@ -96,6 +114,7 @@ function isServicePatch(value: unknown): value is {
   version: number;
   serviceName: string;
   reason: string;
+  photo?: { imageDataUrl: string; width: number; height: number };
 } {
   return Boolean(
     value &&
@@ -103,7 +122,23 @@ function isServicePatch(value: unknown): value is {
       (value as Record<string, unknown>).operation === "send_to_service" &&
       Number.isInteger((value as Record<string, unknown>).version) &&
       typeof (value as Record<string, unknown>).serviceName === "string" &&
-      typeof (value as Record<string, unknown>).reason === "string",
+      typeof (value as Record<string, unknown>).reason === "string" &&
+      (!((value as Record<string, unknown>).photo) ||
+        isCameraPhoto((value as Record<string, unknown>).photo)),
+  );
+}
+
+function isCameraPhoto(value: unknown): value is {
+  imageDataUrl: string;
+  width: number;
+  height: number;
+} {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof (value as Record<string, unknown>).imageDataUrl === "string" &&
+      Number.isInteger((value as Record<string, unknown>).width) &&
+      Number.isInteger((value as Record<string, unknown>).height),
   );
 }
 

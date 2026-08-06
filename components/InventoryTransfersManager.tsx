@@ -175,7 +175,7 @@ export default function InventoryTransfersManager() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Передача ТМЦ</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Сканировать ТМЦ</h1>
           <p className="mt-1 text-sm text-zinc-500">Сканируйте QR чужого ТМЦ или обработайте входящий запрос.</p>
         </div>
         <button type="button" onClick={() => setScannerOpen(true)} disabled={busy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">

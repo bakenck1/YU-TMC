@@ -37,7 +37,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
-  { href: "/transfers", labelKey: "nav.transfers", icon: ArrowLeftRight },
+  { href: "/transfers", labelKey: "nav.scanItem", icon: ArrowLeftRight },
   {
     href: "/items/decommissioned",
     labelKey: "nav.decommissioned",

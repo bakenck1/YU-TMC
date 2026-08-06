@@ -28,6 +28,8 @@ export interface InventoryItemDto {
     name: string;
   } | null;
   photoUrl: string | null;
+  /** Photograph attached to the latest service request; it never replaces photoUrl. */
+  servicePhotoUrl?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -97,6 +99,8 @@ export interface CreateInventoryItemInput {
   quantity?: number | null;
   unitPrice?: number | null;
   roomId: string;
+  /** Barcode value entered or scanned from the item's label. */
+  barcode?: string | null;
   inventoryNumber?: string | null;
 }
 

@@ -44,6 +44,8 @@ export default function InventoryItemDetails({
   initialItem,
   canEditContent,
   canSendToService,
+  requiresServicePhoto,
+  canManageCode,
   operations,
   initialComments,
   canComment,
@@ -55,6 +57,8 @@ export default function InventoryItemDetails({
   initialItem: InventoryItemDto;
   canEditContent: boolean;
   canSendToService: boolean;
+  requiresServicePhoto: boolean;
+  canManageCode: boolean;
   operations: InventoryItemOperationDto[];
   initialComments: InventoryItemCommentDto[];
   canComment: boolean;
@@ -88,6 +92,7 @@ export default function InventoryItemDetails({
   const [servicing, setServicing] = useState(false);
   const [archiveConfirmationOpen, setArchiveConfirmationOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [servicePhoto, setServicePhoto] = useState<{ imageDataUrl: string; width: number; height: number } | null>(null);
   const [qrDialog, setQrDialog] = useState<"generate" | "scan" | "purpose" | null>(null);
   const [codeKind, setCodeKind] = useState<"barcode" | "qr">("barcode");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -438,6 +443,7 @@ export default function InventoryItemDetails({
           version: item.version,
           serviceName: input.serviceName,
           reason: input.reason,
+          ...(servicePhoto ? { photo: servicePhoto } : {}),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
@@ -449,6 +455,7 @@ export default function InventoryItemDetails({
       }
       setItem(body.item);
       setServiceDialogOpen(false);
+      setServicePhoto(null);
       setSaved(true);
       router.refresh();
     } catch (cause) {
@@ -547,7 +554,7 @@ export default function InventoryItemDetails({
             <FileText className="h-4 w-4" /> {t("items.information")}
           </span>
           {canEditContent ? <button ref={editTriggerRef} type="button" onClick={openContentEditor} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
-          <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button>
+          {canManageCode ? <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button> : null}
         </div>
         {canSendToService || canManageProtected ? (
           <div className="ml-auto flex flex-wrap justify-end gap-2">
@@ -740,15 +747,19 @@ export default function InventoryItemDetails({
       <InventoryItemServiceDialog
         open={serviceDialogOpen}
         saving={servicing}
-        onClose={() => setServiceDialogOpen(false)}
+        onClose={() => { setServiceDialogOpen(false); setServicePhoto(null); }}
         onSubmit={(input) => void sendToService(input)}
+        onAddPhoto={() => setCameraOpen(true)}
+        photoAttached={Boolean(servicePhoto)}
+        photoRequired={requiresServicePhoto}
       />
       <InventoryItemCameraCapture
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onCapture={(photo) => {
           setCameraOpen(false);
-          void saveCameraPhoto(photo);
+          if (serviceDialogOpen) setServicePhoto(photo);
+          else void saveCameraPhoto(photo);
         }}
       />
       {editing ? (
@@ -906,7 +917,7 @@ export default function InventoryItemDetails({
               ) : null}
             </div>
 
-            <div className="flex flex-col items-center pt-4 text-center print:hidden">
+            {canManageCode ? <div className="flex flex-col items-center pt-4 text-center print:hidden">
               {item.qrCode ? (
                 <Image
                   src={`/api/inventory/items/${item.id}/qr?kind=qr&format=svg`}
@@ -932,7 +943,7 @@ export default function InventoryItemDetails({
               <button type="button" onClick={() => { setCodeKind("qr"); setQrDialog("purpose"); }} className="mt-1 text-xs font-medium text-emerald-600 underline underline-offset-2">
                 {t("itemDetails.codePurpose")}
               </button>
-            </div>
+            </div> : null}
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
@@ -949,6 +960,26 @@ export default function InventoryItemDetails({
           initialComponents={initialComponents}
           canManage={canManageComponents}
         />
+        {canManageCode && item.servicePhotoUrl ? (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <h2 className="font-semibold text-amber-950">{t("service.evidence")}</h2>
+            <a
+              href={item.servicePhotoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block overflow-hidden rounded-xl border border-amber-200 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            >
+              <Image
+                src={item.servicePhotoUrl}
+                alt={t("service.evidence")}
+                width={720}
+                height={540}
+                unoptimized
+                className="h-auto w-full object-cover"
+              />
+            </a>
+          </section>
+        ) : null}
         </div>
 
         <div className="space-y-5">
@@ -1190,6 +1221,7 @@ function localizeItemError(
     invalid_comment_attachment: "itemDetails.errorComment",
     invalid_service_name: "itemDetails.errorService",
     invalid_service_reason: "itemDetails.errorService",
+    service_photo_required: "itemDetails.errorServicePhoto",
     service_failed: "itemDetails.errorUnavailable",
     item_comments_unavailable: "itemDetails.errorUnavailable",
     items_unavailable: "itemDetails.errorUnavailable",

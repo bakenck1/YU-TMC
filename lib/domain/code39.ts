@@ -48,7 +48,7 @@ const CODE_39_PATTERNS: Readonly<Record<string, string>> = {
 const CODE_39_DATA_PATTERN = /^[0-9A-Z. $/+%-]+$/;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const BARCODE_INVENTORY_PREFIX = "YUB-";
+const LEGACY_BARCODE_INVENTORY_PREFIX = "YUB-";
 const BARCODE_FALLBACK_PREFIX = "YUI-";
 const MAX_DIRECT_INVENTORY_NUMBER_LENGTH = 16;
 
@@ -66,10 +66,10 @@ export function code39PayloadForItem(
     candidate.length <= MAX_DIRECT_INVENTORY_NUMBER_LENGTH &&
     CODE_39_DATA_PATTERN.test(candidate)
   ) {
-    return `${BARCODE_INVENTORY_PREFIX}${candidate}`;
+    return candidate;
   }
   if (!UUID_PATTERN.test(itemId)) {
-    throw new RangeError("A UUID item id is required for the Code 39 fallback.");
+    throw new RangeError("A UUID item id is required for the barcode fallback.");
   }
   return `${BARCODE_FALLBACK_PREFIX}${itemId.replaceAll("-", "").slice(0, 16).toUpperCase()}`;
 }
@@ -85,7 +85,11 @@ export type ParsedCode39Scan =
 
 export function parseCode39ScanInput(input: unknown): ParsedCode39Scan {
   if (typeof input !== "string") return { ok: false };
-  const value = input.normalize("NFKC").trim().toUpperCase();
+  const rawValue = input.normalize("NFKC").trim().toUpperCase();
+  const value =
+    rawValue.length > 2 && rawValue.startsWith("*") && rawValue.endsWith("*")
+      ? rawValue.slice(1, -1)
+      : rawValue;
   if (!value || value.length > 64 || !CODE_39_DATA_PATTERN.test(value)) {
     return { ok: false };
   }
@@ -93,8 +97,8 @@ export function parseCode39ScanInput(input: unknown): ParsedCode39Scan {
   if (fallbackKey) {
     return { ok: true, value, inventoryNumber: "", fallbackKey };
   }
-  const inventoryNumber = value.startsWith(BARCODE_INVENTORY_PREFIX)
-    ? value.slice(BARCODE_INVENTORY_PREFIX.length)
+  const inventoryNumber = value.startsWith(LEGACY_BARCODE_INVENTORY_PREFIX)
+    ? value.slice(LEGACY_BARCODE_INVENTORY_PREFIX.length)
     : value;
   if (!inventoryNumber) return { ok: false };
   return { ok: true, value, inventoryNumber, fallbackKey: null };
@@ -106,21 +110,23 @@ export function renderCode39Svg(
     moduleWidth = 2,
     barHeight = 72,
     includeText = true,
+    heading,
   }: {
     moduleWidth?: number;
     barHeight?: number;
     includeText?: boolean;
+    heading?: string;
   } = {},
 ): string {
   const normalized = value.normalize("NFKC").trim().toUpperCase();
   if (!CODE_39_DATA_PATTERN.test(normalized)) {
-    throw new RangeError("Code 39 supports only 0-9, A-Z, space and . $ / + % -.");
+    throw new RangeError("Barcode supports only 0-9, A-Z, space and . $ / + % -.");
   }
   if (!Number.isFinite(moduleWidth) || moduleWidth <= 0) {
-    throw new RangeError("Code 39 module width must be positive.");
+    throw new RangeError("Barcode module width must be positive.");
   }
   if (!Number.isFinite(barHeight) || barHeight <= 0) {
-    throw new RangeError("Code 39 bar height must be positive.");
+    throw new RangeError("Barcode bar height must be positive.");
   }
 
   const encoded = `*${normalized}*`;
@@ -131,7 +137,7 @@ export function renderCode39Svg(
 
   for (const [characterIndex, character] of Array.from(encoded).entries()) {
     const pattern = CODE_39_PATTERNS[character];
-    if (!pattern) throw new RangeError(`Unsupported Code 39 character: ${character}`);
+    if (!pattern) throw new RangeError(`Unsupported barcode character: ${character}`);
     for (const [elementIndex, widthKind] of Array.from(pattern).entries()) {
       const width = widthKind === "w" ? wideRatio : 1;
       if (elementIndex % 2 === 0) {
@@ -145,15 +151,20 @@ export function renderCode39Svg(
   }
 
   const width = (cursor + quietZone) * moduleWidth;
+  const headingHeight = heading ? 26 : 0;
   const textHeight = includeText ? 24 : 0;
-  const height = barHeight + textHeight;
+  const height = headingHeight + barHeight + textHeight;
   const label = escapeXml(normalized);
+  const headingText = heading ? escapeXml(heading) : "";
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Code 39: ${label}" shape-rendering="crispEdges">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Barcode: ${label}" shape-rendering="crispEdges">`,
     `<rect width="${width}" height="${height}" fill="#fff"/>`,
-    `<g fill="#000">${rectangles.join("")}</g>`,
+    heading
+      ? `<text x="${width / 2}" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#000" shape-rendering="geometricPrecision">${headingText}</text>`
+      : "",
+    `<g transform="translate(0 ${headingHeight})" fill="#000">${rectangles.join("")}</g>`,
     includeText
-      ? `<text x="${width / 2}" y="${barHeight + 18}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#000" shape-rendering="geometricPrecision">${label}</text>`
+      ? `<text x="${width / 2}" y="${headingHeight + barHeight + 18}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#000" shape-rendering="geometricPrecision">*${label}*</text>`
       : "",
     "</svg>",
   ].join("");

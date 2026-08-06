@@ -42,6 +42,7 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
   if (
     typeof body.name !== "string" ||
     typeof body.roomId !== "string" ||
+    typeof body.barcode !== "string" ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -50,6 +51,9 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
     (body.model !== undefined && body.model !== null && typeof body.model !== "string") ||
     (body.quantity !== undefined && body.quantity !== null && typeof body.quantity !== "number") ||
     (body.unitPrice !== undefined && body.unitPrice !== null && typeof body.unitPrice !== "number") ||
+    (body.barcode !== undefined &&
+      body.barcode !== null &&
+      typeof body.barcode !== "string") ||
     (body.inventoryNumber !== undefined &&
       body.inventoryNumber !== null &&
       typeof body.inventoryNumber !== "string")
@@ -65,6 +69,7 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
     model: body.model as string | null | undefined,
     quantity: body.quantity as number | null | undefined,
     unitPrice: body.unitPrice as number | null | undefined,
+    barcode: body.barcode,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
   };
 }

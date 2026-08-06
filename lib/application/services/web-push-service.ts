@@ -54,6 +54,14 @@ export interface InspectionAssignmentPush {
   technicianId: string;
 }
 
+export interface MaintenanceRequestPush {
+  itemId: string;
+  itemName: string;
+  inventoryNumber: string;
+  reason: string;
+  recipientIds: string[];
+}
+
 export class WebPushService {
   constructor(
     private readonly unitOfWork: UnitOfWork<WebPushRepositories>,
@@ -176,6 +184,44 @@ export class WebPushService {
     }
   }
 
+  async notifyMaintenanceRequest(input: MaintenanceRequestPush): Promise<void> {
+    if (!this.configuration || input.recipientIds.length === 0) return;
+    try {
+      const subscriptions = (
+        await Promise.all(
+          [...new Set(input.recipientIds)].map((userId) =>
+            this.unitOfWork.read(({ webPushSubscriptions }) =>
+              webPushSubscriptions.listByUser(userId),
+            ),
+          ),
+        )
+      ).flat();
+      await Promise.all(
+        subscriptions.map(async (subscription) => {
+          try {
+            await this.sender.send(
+              subscription,
+              maintenanceRequestPayload(input, subscription.language),
+              this.configuration!,
+              `maintenance-${input.itemId}`.replaceAll("-", "").slice(0, 32),
+            );
+          } catch (error) {
+            this.logger.error("maintenance_request_push_failed", {
+              itemId: input.itemId,
+              subscriptionId: subscription.id,
+              statusCode: pushStatusCode(error),
+            });
+          }
+        }),
+      );
+    } catch (error) {
+      this.logger.error("maintenance_request_subscription_lookup_failed", {
+        itemId: input.itemId,
+        statusCode: pushStatusCode(error),
+      });
+    }
+  }
+
   private async deliverWithRetry(
     subscription: WebPushSubscriptionRecord,
     payload: string,
@@ -289,6 +335,25 @@ function inspectionAssignmentPayload(
     badge: "/icons/icon-192.png",
     tag: `inspection-assignment-${input.inspectionId}`,
     url: `/inventory/inspections?inspection=${encodeURIComponent(input.inspectionId)}`,
+  });
+}
+
+function maintenanceRequestPayload(
+  input: MaintenanceRequestPush,
+  languageInput: unknown,
+) {
+  const language = isAppLanguage(languageInput) ? languageInput : "ru";
+  return JSON.stringify({
+    title: translate(language, "push.maintenanceTitle"),
+    body: translate(language, "push.maintenanceBody", {
+      name: input.itemName,
+      inventoryNumber: input.inventoryNumber,
+      reason: input.reason,
+    }),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `maintenance-${input.itemId}`,
+    url: `/items/${encodeURIComponent(input.itemId)}`,
   });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import {
   resolveMaintenanceItemWithRefresh,
@@ -74,7 +75,7 @@ export default function MaintenanceItemsPanel({
               {items.map((item) => (
                 <tr key={item.id}>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-zinc-800">{item.name}</div>
+                    <Link href={`/items/${item.id}`} className="font-medium text-emerald-700 hover:underline">{item.name}</Link>
                     <div className="text-xs text-zinc-500">
                       {item.inventoryNumber}
                       {item.brand || item.model

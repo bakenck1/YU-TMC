@@ -61,6 +61,7 @@ export type AppPermission = (typeof APP_PERMISSIONS)[number];
 const ALL_ROLES: readonly UserRole[] = USER_ROLES;
 const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
 const ADMIN_ONLY: readonly UserRole[] = ["admin"];
+const ADMIN_EMPLOYEE: readonly UserRole[] = ["admin", "employee"];
 // Warehouse users have a read-only inventory role and must not participate in
 // inspections. Employee inspection permissions remain available for the
 // existing assigned-session workflow.
@@ -86,7 +87,7 @@ export const PERMISSION_ROLES = {
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
   "inventory.item.create": ADMIN_ONLY,
   "inventory.item.edit_content": ADMIN_ONLY,
-  "inventory.item.send_to_service": ADMIN_ONLY,
+  "inventory.item.send_to_service": ADMIN_EMPLOYEE,
   "inventory.item.resolve_maintenance": ADMIN_ONLY,
   "inventory.item.manage_protected_fields": ADMIN_ONLY,
   "inventory.item.manage_components": ADMIN_ONLY,

@@ -29,6 +29,7 @@ export type QrStatus = (typeof QR_STATUSES)[number];
 
 export const PHOTO_PURPOSES = [
   "item",
+  "service_request",
   "inspection_result",
   "decision_dispute",
 ] as const;

@@ -51,7 +51,7 @@ export default function InventoryQrPrintView({
       <section className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:border-black">
         <Image
           src={codeUrl}
-          alt={`${isBarcode ? `${t("itemDetails.barcode")} Code 39` : t("items.qrCode")}: ${item.name}`}
+          alt={`${isBarcode ? t("itemDetails.barcode") : t("items.qrCode")}: ${item.name}`}
           width={isBarcode ? 420 : 280}
           height={isBarcode ? 160 : 280}
           unoptimized

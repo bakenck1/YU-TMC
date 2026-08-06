@@ -37,7 +37,7 @@ export default function InventoryItemCreateForm({
   const initialRoom = rooms.find((room) => room.id === initialRoomId) ?? rooms[0];
   const [buildingId, setBuildingId] = useState(initialRoom?.buildingId ?? "");
   const [roomId, setRoomId] = useState(initialRoom?.id ?? "");
-  const [inventoryNumber, setInventoryNumber] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -66,10 +66,10 @@ export default function InventoryItemCreateForm({
           quantity: Number(quantity),
           unitPrice: unitPrice === "" ? 0 : Number(unitPrice),
           roomId,
-          inventoryNumber: inventoryNumber || null,
+          barcode: barcode || null,
         }),
       });
-      const body = (await response.json()) as { error?: string };
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "create_failed");
       setOpen(false);
       setName("");
@@ -79,12 +79,27 @@ export default function InventoryItemCreateForm({
       setModel("");
       setQuantity("1");
       setUnitPrice("");
-      setInventoryNumber("");
+      setBarcode("");
       onCreated?.();
       router.refresh();
     } catch (cause) {
-      void cause;
-      setError(t("itemDetails.error"));
+      const code = cause instanceof Error ? cause.message : "create_failed";
+      const messageKey =
+        code === "inventory_number_already_exists"
+          ? "itemDetails.errorInventoryNumber"
+          : code === "room_not_found"
+            ? "itemDetails.errorRoomNotFound"
+            : code === "forbidden"
+              ? "itemDetails.errorForbidden"
+              : code === "invalid_barcode" ||
+                  code === "invalid_request" ||
+                  code === "ambiguous_item_code" ||
+                  code === "barcode_belongs_to_existing_item"
+                ? "itemDetails.errorInvalidFields"
+                : code === "items_unavailable" || code === "internal_error"
+                  ? "itemDetails.errorUnavailable"
+                  : "itemDetails.error";
+      setError(t(messageKey));
     } finally {
       setSaving(false);
     }
@@ -133,17 +148,17 @@ export default function InventoryItemCreateForm({
                 </label>
               ) : null}
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("createItem.officialNumber")} <span className="text-zinc-400">({t("createItem.optional")})</span></span><input value={inventoryNumber} onChange={(event) => setInventoryNumber(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId || !barcode.trim()} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
             {codeScannerOpen ? (
               <InventoryItemCodeScanner
                 onClose={() => setCodeScannerOpen(false)}
                 onCodeSelected={(value) => {
-                  setInventoryNumber(value);
+                  setBarcode(value);
                   setCodeScannerOpen(false);
                 }}
               />
