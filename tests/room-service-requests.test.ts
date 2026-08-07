@@ -48,6 +48,15 @@ test("mobile navigation contains exactly the five required destinations", () => 
   assert.match(navigation, /md:hidden/);
 });
 
+test("room QR scanning and downloads are discoverable outside the mobile menu", () => {
+  const sidebar = read("components/Sidebar.tsx");
+  const buildings = read("components/InventoryBuildingsManager.tsx");
+
+  assert.match(sidebar, /href: "\/scan", labelKey: "nav\.scanQr"/);
+  assert.match(buildings, /\/api\/inventory\/rooms\/\$\{room\.id\}\/qr\?download=1/);
+  assert.match(buildings, /room\.qrSelectHint/);
+});
+
 test("item creation API rejects records without an attached photo", () => {
   const route = read("app/api/inventory/items/route.ts");
   const form = read("components/InventoryItemCreateForm.tsx");

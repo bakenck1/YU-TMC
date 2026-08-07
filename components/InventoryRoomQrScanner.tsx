@@ -27,9 +27,11 @@ interface ScannedRoom {
 export default function InventoryRoomQrScanner({
   onClose,
   onRoomResolved,
+  hintKey = "scanner.roomHint",
 }: {
   onClose: () => void;
   onRoomResolved: (room: ScannedRoom) => void;
+  hintKey?: TranslationKey;
 }) {
   const { language, t } = useAppSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -166,7 +168,7 @@ export default function InventoryRoomQrScanner({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="room-qr-scanner-title" className="text-lg font-semibold text-zinc-900">{t("scanner.roomTitle")}</h2>
-            <p className="mt-1 text-sm text-zinc-500">{t("scanner.roomHint")}</p>
+            <p className="mt-1 text-sm text-zinc-500">{t(hintKey)}</p>
           </div>
           <button type="button" onClick={() => { stopCamera(); onClose(); }} aria-label={t("common.close")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
         </div>

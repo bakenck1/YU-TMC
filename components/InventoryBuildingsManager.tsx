@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   Building2,
   DoorOpen,
+  Download,
   LoaderCircle,
   MapPin,
   Plus,
@@ -175,9 +176,25 @@ export default function InventoryBuildingsManager({
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-        {canEdit && selectedRoomIds.size ? (
-          <button type="button" onClick={() => window.open(`/inventory/rooms/qr-print?ids=${encodeURIComponent([...selectedRoomIds].join(","))}`, "_blank", "noopener,noreferrer")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#002060] px-4 text-sm font-semibold text-[#002060]">
-            <QrCode className="h-4 w-4" />{t("room.qrPrint")} ({selectedRoomIds.size})
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedRoomIds.size) {
+                setActionError(t("room.qrSelectHint"));
+                return;
+              }
+              window.open(
+                `/inventory/rooms/qr-print?ids=${encodeURIComponent([...selectedRoomIds].join(","))}`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+            }}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#002060] px-4 text-sm font-semibold text-[#002060] hover:bg-blue-50"
+          >
+            <QrCode className="h-4 w-4" />
+            {t("room.qrPrint")}
+            {selectedRoomIds.size ? ` (${selectedRoomIds.size})` : null}
           </button>
         ) : null}
         {canCreate ? (
@@ -266,7 +283,7 @@ export default function InventoryBuildingsManager({
                   {rooms[building.id].map((room) => (
                     <div
                       key={room.id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2.5"
+                      className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
@@ -278,15 +295,19 @@ export default function InventoryBuildingsManager({
                           · {room.floorNumber} {t("inventory.floorShort")}
                         </span>
                       </div>
-                      <span className="max-w-24 truncate font-mono text-[10px] text-zinc-400 sm:max-w-32">
-                        QR: {room.qrCode}
-                      </span>
                       {canEdit ? (
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <a
+                            href={`/api/inventory/rooms/${room.id}/qr?download=1`}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {t("room.qrDownload")}
+                          </a>
                           <button
                             type="button"
                             onClick={() => setRoomEditor({ building, room })}
-                            className="text-xs font-semibold text-accent-dark hover:underline"
+                            className="min-h-9 rounded-lg px-2 text-xs font-semibold text-accent-dark hover:bg-emerald-50"
                           >
                             {t("common.open")}
                           </button>

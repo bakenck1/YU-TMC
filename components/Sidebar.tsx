@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   LogOut,
   LoaderCircle,
+  ScanLine,
   Settings,
   Users,
   UserCircle,
@@ -37,6 +38,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
+  { href: "/scan", labelKey: "nav.scanQr", icon: ScanLine },
   { href: "/transfers", labelKey: "nav.scanItem", icon: ArrowLeftRight },
   {
     href: "/items/decommissioned",
@@ -55,7 +57,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/profile", labelKey: "nav.profile", icon: UserCircle },
 ];
 
-const EMPLOYEE_NAV_PATHS = new Set(["/", "/items", "/transfers", "/profile"]);
+const EMPLOYEE_NAV_PATHS = new Set([
+  "/",
+  "/items",
+  "/scan",
+  "/transfers",
+  "/profile",
+]);
 
 export function sidebarItemsForRole(role: UserRole) {
   return NAV_ITEMS.filter(
