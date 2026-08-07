@@ -22,6 +22,8 @@ export function isAuthRole(value: unknown): value is AuthRole {
 }
 
 const ROUTE_PERMISSIONS = [
+  ["/requests", "inventory.notification.read"],
+  ["/scan", "inventory.workspace.read"],
   ["/inventory", "inventory.workspace.read"],
   ["/analytics", "legacy.analytics.read"],
   ["/locations", "legacy.locations.read"],

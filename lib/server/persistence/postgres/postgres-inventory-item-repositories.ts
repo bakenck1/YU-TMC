@@ -18,6 +18,7 @@ import type {
   InventoryItemRepositories,
   InventoryItemRepository,
   ReplaceItemQrRecord,
+  RemoveInventoryItemPhotoRecord,
   ResolveMaintenanceItemRecord,
   StoredInventoryItemCommentAttachment,
   UpdateInventoryItemContentRecord,
@@ -56,9 +57,12 @@ interface ItemRow extends QueryResultRow {
   inventory_number_kind: InventoryItemRecord["inventoryNumberKind"];
   inventory_number: string;
   status: InventoryItemRecord["status"];
+  condition: InventoryItemRecord["condition"];
+  connection_status: InventoryItemRecord["connectionStatus"];
   qr_code: string | null;
   responsible_id: string | null;
   responsible_name: string | null;
+  room_responsible_id: string | null;
   photo_url: string | null;
   photo_id: string | null;
   service_photo_id: string | null;
@@ -96,7 +100,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where rp.responsible_user_id = $1"),
+      itemSelect("where rp.responsible_user_id = $1 or r.primary_responsible_id = $1"),
       [userId],
     );
     return result.rows.map(mapItem);
@@ -115,7 +119,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   ): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
       itemSelect(
-        "where rp.responsible_user_id = $1 and i.status = 'decommissioned'",
+        "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status = 'decommissioned'",
       ),
       [userId],
     );
@@ -532,6 +536,26 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.findItemById(input.id);
   }
 
+  async removeItemPhoto(
+    input: RemoveInventoryItemPhotoRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const itemUpdate = await this.source.query(
+      `update ${ITEMS}
+          set updated_by = $2, updated_at = $3, version = version + 1
+        where id = $1 and version = $4 and status <> 'decommissioned'`,
+      [input.id, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (itemUpdate.rowCount !== 1) return null;
+    const removed = await this.source.query(
+      `update ${PHOTOS}
+          set status = 'removed', removed_at = $2, version = version + 1
+        where item_id = $1 and purpose = 'item' and status = 'attached'`,
+      [input.id, input.occurredAt],
+    );
+    if (removed.rowCount !== 1) return null;
+    return this.findItemById(input.id);
+  }
+
   async findItemPhoto(id: string) {
     const result = await this.source.query<{
       binary_data: Buffer | null;
@@ -602,19 +626,21 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
          set room_id = $2, inventory_number_kind = $3,
              inventory_number = $4, inventory_number_key = $5,
              status = $6::"yu_inventory"."item_status",
+             condition = $7::"yu_inventory"."item_condition",
+             connection_status = $8::"yu_inventory"."connection_status",
              archived_by = case
                when $6::"yu_inventory"."item_status" = 'decommissioned'
-                 then coalesce(archived_by, $7)
+                 then coalesce(archived_by, $9)
                else null
              end,
              archived_at = case
                when $6::"yu_inventory"."item_status" = 'decommissioned'
-                 then coalesce(archived_at, $8)
+                 then coalesce(archived_at, $10)
                else null
              end,
-             updated_by = $7, updated_at = $8,
+             updated_by = $9, updated_at = $10,
              version = version + 1
-         where id = $1 and version = $9`,
+         where id = $1 and version = $11`,
         [
           input.id,
           input.roomId,
@@ -622,6 +648,8 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           input.inventoryNumber,
           input.inventoryNumberKey,
           input.status,
+          input.condition,
+          input.connectionStatus,
           input.actorId,
           input.occurredAt,
           input.expectedVersion,
@@ -790,9 +818,11 @@ function itemSelect(where: string, limit = "") {
            r.designation as room_designation, r.floor_number,
            b.id as building_id, b.name as building_name,
            i.inventory_number_kind, i.inventory_number, i.status,
+           i.condition, i.connection_status,
            q.original_value as qr_code,
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
+           r.primary_responsible_id as room_responsible_id,
            p.preview_object_key as photo_url, p.id as photo_id,
            service_photo.id as service_photo_id,
            i.version, i.created_at, i.updated_at,
@@ -861,9 +891,12 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     inventoryNumberKind: row.inventory_number_kind,
     inventoryNumber: row.inventory_number,
     status: row.status,
+    condition: row.condition,
+    connectionStatus: row.connection_status,
     qrCode: row.qr_code,
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
+    roomResponsibleId: row.room_responsible_id,
     photoUrl: row.photo_id
       ? `/api/inventory/items/${row.id}/photo?v=${row.version}`
       : row.photo_url,

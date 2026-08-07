@@ -104,7 +104,7 @@ function assertRecordAccessible(
 ): void {
   if (
     !fullAccess &&
-    (record.targetKind !== "item" ||
+    ((record.targetKind !== "item" && record.targetKind !== "room") ||
       record.qrStatus !== "active" ||
       record.targetStatus !== "active")
   ) {

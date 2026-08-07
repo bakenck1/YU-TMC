@@ -67,7 +67,10 @@ function parseUpdateRoom(value: unknown): UpdateRoomInput {
     input.version < 1 ||
     (input.floorLabel !== undefined &&
       input.floorLabel !== null &&
-      typeof input.floorLabel !== "string")
+      typeof input.floorLabel !== "string") ||
+    (input.primaryResponsibleId !== undefined &&
+      input.primaryResponsibleId !== null &&
+      typeof input.primaryResponsibleId !== "string")
   ) {
     throw invalidRequest();
   }
@@ -75,6 +78,7 @@ function parseUpdateRoom(value: unknown): UpdateRoomInput {
     designation: input.designation,
     floorNumber: input.floorNumber,
     floorLabel: input.floorLabel as string | null | undefined,
+    primaryResponsibleId: input.primaryResponsibleId as string | null | undefined,
     version: input.version,
   };
 }

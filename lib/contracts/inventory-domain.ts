@@ -8,6 +8,31 @@ export const ITEM_STATUSES = [
 ] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
+export const ITEM_CONDITIONS = ["good", "needs_attention", "damaged"] as const;
+export type ItemCondition = (typeof ITEM_CONDITIONS)[number];
+
+export const CONNECTION_STATUSES = [
+  "connected",
+  "disconnected",
+  "not_applicable",
+] as const;
+export type ConnectionStatus = (typeof CONNECTION_STATUSES)[number];
+
+export const SERVICE_REQUEST_TYPES = [
+  "not_working",
+  "not_connected",
+  "damaged",
+  "missing",
+] as const;
+export type ServiceRequestType = (typeof SERVICE_REQUEST_TYPES)[number];
+
+export const SERVICE_REQUEST_STATUSES = [
+  "new",
+  "in_progress",
+  "completed",
+] as const;
+export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUSES)[number];
+
 export const INVENTORY_NUMBER_KINDS = ["official", "temporary"] as const;
 export type InventoryNumberKind = (typeof INVENTORY_NUMBER_KINDS)[number];
 
@@ -161,6 +186,7 @@ export const AUDIT_SUBJECT_KINDS = [
   "item_result",
   "deviation_decision",
   "notification",
+  "service_request",
 ] as const;
 export type AuditSubjectKind = (typeof AUDIT_SUBJECT_KINDS)[number];
 

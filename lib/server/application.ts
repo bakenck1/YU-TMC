@@ -3,6 +3,8 @@ import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { InventoryLocationService } from "@/lib/application/services/inventory-location-service";
+import { RoomWorkspaceService } from "@/lib/application/services/room-workspace-service";
+import { ServiceRequestService } from "@/lib/application/services/service-request-service";
 import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
 import { QrResolutionService } from "@/lib/application/services/qr-resolution-service";
 import { InventoryResponsibilityService } from "@/lib/application/services/inventory-responsibility-service";
@@ -14,6 +16,9 @@ import { FileSettingsRepository } from "@/lib/server/persistence/file/file-setti
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
+import { createPostgresRoomWorkspaceRepositories } from "@/lib/server/persistence/postgres/postgres-room-workspace-repositories";
+import { createPostgresServiceRequestRepositories } from "@/lib/server/persistence/postgres/postgres-service-request-repositories";
+import { normalizeUploadedPhoto } from "@/lib/server/photos/normalize-uploaded-photo";
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import { createPostgresQrResolutionRepositories } from "@/lib/server/persistence/postgres/postgres-qr-resolution-repositories";
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
@@ -29,6 +34,8 @@ import {
 export interface ApplicationServices {
   readonly items: InventoryItemService;
   readonly locations: InventoryLocationService;
+  readonly rooms: RoomWorkspaceService;
+  readonly requests: ServiceRequestService;
   readonly qr: QrResolutionService;
   readonly responsibility: InventoryResponsibilityService;
   readonly inspections: InventoryInspectionService;
@@ -91,6 +98,15 @@ function createApplicationServices(): ApplicationServices {
       { now: () => new Date() },
       { create: () => randomUUID() },
       { create: () => randomBytes(16) },
+    ),
+    rooms: new RoomWorkspaceService(
+      createPostgresUnitOfWork(createPostgresRoomWorkspaceRepositories),
+    ),
+    requests: new ServiceRequestService(
+      createPostgresUnitOfWork(createPostgresServiceRequestRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+      { normalize: normalizeUploadedPhoto },
     ),
     qr: new QrResolutionService(
       createPostgresUnitOfWork(createPostgresQrResolutionRepositories),

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, ScanLine, X } from "lucide-react";
+import { Camera, CheckCircle2, Plus, ScanLine, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
+import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 
 export default function InventoryItemCreateForm({
   rooms,
@@ -39,6 +40,8 @@ export default function InventoryItemCreateForm({
   const [roomId, setRoomId] = useState(initialRoom?.id ?? "");
   const [barcode, setBarcode] = useState("");
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [photo, setPhoto] = useState<{ imageDataUrl: string; width: number; height: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const buildingRooms = useMemo(
@@ -67,6 +70,7 @@ export default function InventoryItemCreateForm({
           unitPrice: unitPrice === "" ? 0 : Number(unitPrice),
           roomId,
           barcode: barcode || null,
+          photo,
         }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -80,6 +84,7 @@ export default function InventoryItemCreateForm({
       setQuantity("1");
       setUnitPrice("");
       setBarcode("");
+      setPhoto(null);
       onCreated?.();
       router.refresh();
     } catch (cause) {
@@ -114,7 +119,7 @@ export default function InventoryItemCreateForm({
       ) : null}
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label={t("createItem.add")}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-zinc-800">{t("createItem.new")}</h2>
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} aria-label={t("common.close")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
@@ -149,10 +154,18 @@ export default function InventoryItemCreateForm({
               ) : null}
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
+              <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4">
+                <p className="text-base font-medium text-zinc-800">{t("items.photo")} <span className="text-red-600">({t("createItem.required")})</span></p>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setCameraOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800"><Camera className="h-4 w-4" />{t("camera.open")}</button>
+                  <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 text-center text-sm font-semibold text-emerald-800">{t("service.attachPhoto")}<input type="file" accept="image/jpeg" className="sr-only" onChange={(event) => void readJpeg(event.target.files?.[0]).then(setPhoto).catch(() => setError(t("common.error")))} /></label>
+                </div>
+                {photo ? <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-5 w-5" />{t("service.photoAttached")}</p> : null}
+              </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId || !barcode.trim()} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId || !barcode.trim() || !photo} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
             {codeScannerOpen ? (
               <InventoryItemCodeScanner
@@ -163,9 +176,27 @@ export default function InventoryItemCreateForm({
                 }}
               />
             ) : null}
+            <InventoryItemCameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCapture={(value) => { setPhoto(value); setCameraOpen(false); }} />
           </div>
         </div>
       ) : null}
     </>
   );
+}
+
+async function readJpeg(file: File | undefined) {
+  if (!file || file.type !== "image/jpeg" || file.size > 5 * 1024 * 1024) throw new Error("invalid_photo");
+  const imageDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = reject;
+    image.src = imageDataUrl;
+  });
+  return { imageDataUrl, ...dimensions };
 }

@@ -52,10 +52,10 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               r.designation as room_designation,
               i.inventory_number,
               u.full_name as responsible_name,
-              rp.responsible_user_id
+              coalesce(rp.responsible_user_id, r.primary_responsible_id) as responsible_user_id
          from ${QR} q
-         left join ${BUILDINGS} b on b.id = q.building_id
          left join ${ROOMS} r on r.id = q.room_id
+         left join ${BUILDINGS} b on b.id = coalesce(q.building_id, r.building_id)
          left join ${ITEMS} i on i.id = q.item_id
          left join lateral (
            select responsible_user_id
@@ -64,7 +64,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
             order by started_at desc
             limit 1
          ) rp on true
-         left join ${USERS} u on u.id = rp.responsible_user_id
+         left join ${USERS} u on u.id = coalesce(rp.responsible_user_id, r.primary_responsible_id)
         where q.canonical_key = $1
         limit 1`,
       [canonicalKey],

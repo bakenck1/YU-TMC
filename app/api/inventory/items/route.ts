@@ -6,6 +6,10 @@ import {
   authorizationActor,
   requireCurrentUser,
 } from "@/lib/server/security/request-user";
+import {
+  assertPhotoJsonRequest,
+  readPhotoJsonRequest,
+} from "@/lib/server/http/photo-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +29,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const input = parseCreate(await request.json());
+    assertPhotoJsonRequest(request);
+    const input = parseCreate(await readPhotoJsonRequest(request));
     const item = await getApplicationServices().items.createItem(
       input,
       authorizationActor(user),
@@ -43,6 +48,8 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
     typeof body.name !== "string" ||
     typeof body.roomId !== "string" ||
     typeof body.barcode !== "string" ||
+    !body.photo ||
+    typeof body.photo !== "object" ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -60,6 +67,12 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
   ) {
     throw invalidRequest();
   }
+  const photo = body.photo as Record<string, unknown>;
+  if (
+    typeof photo.imageDataUrl !== "string" ||
+    !Number.isInteger(photo.width) ||
+    !Number.isInteger(photo.height)
+  ) throw invalidRequest();
   return {
     name: body.name,
     roomId: body.roomId,
@@ -71,6 +84,11 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
     unitPrice: body.unitPrice as number | null | undefined,
     barcode: body.barcode,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
+    photo: {
+      imageDataUrl: photo.imageDataUrl,
+      width: photo.width as number,
+      height: photo.height as number,
+    },
   };
 }
 

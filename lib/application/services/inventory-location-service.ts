@@ -14,6 +14,7 @@ import type {
 } from "@/lib/application/ports/inventory-location-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
 import {
   hasPermission,
@@ -199,6 +200,15 @@ export class InventoryLocationService {
     });
   }
 
+  async findRoom(id: string, actor: AuthorizationActor): Promise<RoomDto> {
+    requirePermission(actor, "inventory.workspace.read");
+    const room = await this.unitOfWork.read(({ locations }) =>
+      locations.findRoomById(id),
+    );
+    if (!room) throw new ApplicationError("not_found", "room_not_found");
+    return toRoomDto(room);
+  }
+
   async createRoom(
     buildingId: string,
     input: CreateRoomInput,
@@ -241,6 +251,7 @@ export class InventoryLocationService {
             buildingId,
             designation: room.designation,
             floorNumber: room.floorNumber,
+            primaryResponsibleId: room.primaryResponsibleId,
             qrIdentifierId: qrId,
           },
           occurredAt,
@@ -293,11 +304,13 @@ export class InventoryLocationService {
             designation: current.designation,
             floorNumber: current.floorNumber,
             floorLabel: current.floorLabel,
+            primaryResponsibleId: current.primaryResponsibleId,
           },
           afterValues: {
             designation: updated.designation,
             floorNumber: updated.floorNumber,
             floorLabel: updated.floorLabel,
+            primaryResponsibleId: updated.primaryResponsibleId,
           },
           occurredAt,
         }),
@@ -392,6 +405,7 @@ function normalizeRoomInput(input: {
   designation: unknown;
   floorNumber: unknown;
   floorLabel?: unknown;
+  primaryResponsibleId?: unknown;
 }) {
   const designation = normalizeRequiredText(
     input.designation,
@@ -414,11 +428,19 @@ function normalizeRoomInput(input: {
       "invalid_room_floor_label",
     );
   }
+  let primaryResponsibleId: string | null = null;
+  if (input.primaryResponsibleId !== undefined && input.primaryResponsibleId !== null) {
+    if (!isUuid(input.primaryResponsibleId)) {
+      throw new ApplicationError("validation", "invalid_responsible_user");
+    }
+    primaryResponsibleId = input.primaryResponsibleId;
+  }
   return {
     designation,
     designationKey: comparisonKey(designation),
     floorNumber: input.floorNumber,
     floorLabel,
+    primaryResponsibleId,
   };
 }
 
@@ -489,6 +511,12 @@ function toRoomDto(record: RoomRecord): RoomDto {
     designation: record.designation,
     floorNumber: record.floorNumber,
     floorLabel: record.floorLabel,
+    primaryResponsible: record.primaryResponsibleId
+      ? {
+          id: record.primaryResponsibleId,
+          name: record.primaryResponsibleName ?? "",
+        }
+      : null,
     qrCode: record.qrCode,
     status: record.status,
     version: record.version,

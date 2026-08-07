@@ -67,6 +67,8 @@ export interface RoomRecord {
   designationKey: string;
   floorNumber: number;
   floorLabel: string | null;
+  primaryResponsibleId: string | null;
+  primaryResponsibleName: string | null;
   qrCode: string;
   status: "active" | "archived";
   version: number;
@@ -81,6 +83,7 @@ export interface InsertRoomRecord {
   designationKey: string;
   floorNumber: number;
   floorLabel: string | null;
+  primaryResponsibleId: string | null;
   actorId: string;
   occurredAt: Date;
 }

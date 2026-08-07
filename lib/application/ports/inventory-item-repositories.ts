@@ -1,4 +1,9 @@
-import type { InventoryNumberKind, ItemStatus } from "@/lib/contracts/inventory-domain";
+import type {
+  ConnectionStatus,
+  InventoryNumberKind,
+  ItemCondition,
+  ItemStatus,
+} from "@/lib/contracts/inventory-domain";
 import type { UserRole } from "@/lib/contracts/users";
 
 export interface InventoryItemRecord {
@@ -18,9 +23,12 @@ export interface InventoryItemRecord {
   inventoryNumberKind: InventoryNumberKind;
   inventoryNumber: string;
   status: ItemStatus;
+  condition?: ItemCondition;
+  connectionStatus?: ConnectionStatus;
   qrCode: string | null;
   responsibleId: string | null;
   responsibleName: string | null;
+  roomResponsibleId?: string | null;
   photoUrl: string | null;
   servicePhotoUrl?: string | null;
   version: number;
@@ -72,6 +80,13 @@ export interface UpdateInventoryItemPhotoRecord {
   occurredAt: Date;
 }
 
+export interface RemoveInventoryItemPhotoRecord {
+  id: string;
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
+}
+
 export interface InsertServiceItemPhotoRecord {
   id: string;
   itemId: string;
@@ -94,6 +109,8 @@ export interface UpdateInventoryItemProtectedRecord {
   inventoryNumber: string;
   inventoryNumberKey: string;
   status: ItemStatus;
+  condition: ItemCondition;
+  connectionStatus: ConnectionStatus;
   actorId: string;
   expectedVersion: number;
   occurredAt: Date;
@@ -240,6 +257,9 @@ export interface InventoryItemRepository {
   ): Promise<InventoryItemRecord | null>;
   updateItemPhoto(
     input: UpdateInventoryItemPhotoRecord,
+  ): Promise<InventoryItemRecord | null>;
+  removeItemPhoto(
+    input: RemoveInventoryItemPhotoRecord,
   ): Promise<InventoryItemRecord | null>;
   findItemPhoto(id: string): Promise<StoredItemPhoto | null>;
   insertServiceItemPhoto(input: InsertServiceItemPhotoRecord): Promise<void>;

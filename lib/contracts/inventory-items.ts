@@ -1,4 +1,6 @@
 import type {
+  ConnectionStatus,
+  ItemCondition,
   InventoryNumberKind,
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
@@ -22,6 +24,8 @@ export interface InventoryItemDto {
     buildingName: string;
   };
   status: ItemStatus;
+  condition?: ItemCondition;
+  connectionStatus?: ConnectionStatus;
   qrCode: string | null;
   responsible: {
     id: string;
@@ -102,6 +106,11 @@ export interface CreateInventoryItemInput {
   /** Barcode value entered or scanned from the item's label. */
   barcode?: string | null;
   inventoryNumber?: string | null;
+  photo?: {
+    imageDataUrl: string;
+    width: number;
+    height: number;
+  };
 }
 
 export interface UpdateInventoryItemContentInput {
@@ -127,6 +136,8 @@ export interface UpdateInventoryItemProtectedInput {
   roomId: string;
   inventoryNumber: string;
   status: ItemStatus;
+  condition?: ItemCondition;
+  connectionStatus?: ConnectionStatus;
   replaceQr?: boolean;
   qrReplaceReason?: string | null;
 }

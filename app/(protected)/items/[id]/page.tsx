@@ -2,6 +2,7 @@
 import { notFound } from "next/navigation";
 import ItemDetails from "@/components/ItemDetails";
 import InventoryItemDetails from "@/components/InventoryItemDetails";
+import ProblemReportButton from "@/components/ProblemReportButton";
 import { items } from "@/lib/data";
 import { getApplicationServices } from "@/lib/server/application";
 import { hasPermission } from "@/lib/security/permissions";
@@ -54,6 +55,7 @@ export default async function ItemPage({
       )
     ).flat();
     return (
+      <div className="space-y-4">
       <InventoryItemDetails
         initialItem={item}
         canEditContent={hasPermission(user.role, "inventory.item.edit_content")}
@@ -68,6 +70,14 @@ export default async function ItemPage({
         initialComponents={components}
         canManageComponents={canManageComponents}
       />
+      {user.role === "admin" || user.role === "employee" ? (
+        <ProblemReportButton
+          items={[{ id: item.id, name: item.name, inventoryNumber: item.inventoryNumber }]}
+          initialItemId={item.id}
+          className="w-full md:w-auto"
+        />
+      ) : null}
+      </div>
     );
   }
 

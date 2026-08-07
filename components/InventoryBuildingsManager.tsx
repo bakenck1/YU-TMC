@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Building2,
   DoorOpen,
@@ -17,7 +17,7 @@ import type {
   BuildingDto,
   RoomDto,
 } from "@/lib/contracts/inventory-locations";
-import type { UserRole } from "@/lib/contracts/users";
+import type { UserDto, UserRole } from "@/lib/contracts/users";
 import {
   CAMPUS_INVENTORY_BUILDING_PRESETS,
   findCampusBuildingPreset,
@@ -51,6 +51,7 @@ export default function InventoryBuildingsManager({
   const [scannedRoom, setScannedRoom] = useState<RoomDto | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
   const canCreate = hasPermission(actorRole, "inventory.building.create");
   const canEdit = hasPermission(actorRole, "inventory.building.manage");
   const canCreateItem = hasPermission(actorRole, "inventory.item.create");
@@ -173,6 +174,12 @@ export default function InventoryBuildingsManager({
             {t("inventory.buildingsSubtitle")}
           </p>
         </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+        {canEdit && selectedRoomIds.size ? (
+          <button type="button" onClick={() => window.open(`/inventory/rooms/qr-print?ids=${encodeURIComponent([...selectedRoomIds].join(","))}`, "_blank", "noopener,noreferrer")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#002060] px-4 text-sm font-semibold text-[#002060]">
+            <QrCode className="h-4 w-4" />{t("room.qrPrint")} ({selectedRoomIds.size})
+          </button>
+        ) : null}
         {canCreate ? (
           <button
             type="button"
@@ -183,6 +190,7 @@ export default function InventoryBuildingsManager({
             {t("inventory.addBuilding")}
           </button>
         ) : null}
+        </div>
       </div>
       {actionError ? (
         <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -261,6 +269,7 @@ export default function InventoryBuildingsManager({
                       className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2.5"
                     >
                       <div className="flex min-w-0 items-center gap-2">
+                        {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
                         <DoorOpen className="h-4 w-4 shrink-0 text-zinc-400" />
                         <span className="truncate text-sm text-zinc-700">
                           {room.designation}
@@ -380,6 +389,7 @@ export default function InventoryBuildingsManager({
               designation: `${room.buildingName} · ${room.designation}`,
               floorNumber: 0,
               floorLabel: null,
+              primaryResponsible: null,
               qrCode: "",
               status: "active",
               version: 1,
@@ -438,8 +448,20 @@ function RoomFormModal({
   const [designation, setDesignation] = useState(room?.designation ?? "");
   const floorCount = findCampusBuildingPreset(building.name)?.floorCount ?? 1;
   const [floorNumber, setFloorNumber] = useState(String(room?.floorNumber ?? 1));
+  const [responsibleId, setResponsibleId] = useState(room?.primaryResponsible?.id ?? "");
+  const [employees, setEmployees] = useState<UserDto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/users", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { users?: UserDto[] } | null) => {
+        if (active) setEmployees((body?.users ?? []).filter((user) => user.role === "employee" && user.active));
+      });
+    return () => { active = false; };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -447,6 +469,7 @@ function RoomFormModal({
     if (
       saving ||
       !designation.trim() ||
+      !responsibleId ||
       !Number.isInteger(floor) ||
       floor < 1 ||
       floor > floorCount
@@ -468,6 +491,7 @@ function RoomFormModal({
             designation: designation.trim(),
             floorNumber: floor,
             floorLabel: null,
+            primaryResponsibleId: responsibleId,
             ...(room ? { version: room.version } : {}),
           }),
         },
@@ -526,6 +550,13 @@ function RoomFormModal({
               className={INPUT_CLASS}
             />
           </label>
+          <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
+            {t("room.responsible")}
+            <select value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)} className={INPUT_CLASS}>
+              <option value="">{t("common.notAssigned")}</option>
+              {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}
+            </select>
+          </label>
           <label className="text-sm font-medium text-zinc-700">
             {t("inventory.floor")}
             <select
@@ -560,7 +591,7 @@ function RoomFormModal({
           </button>
           <button
             type="submit"
-            disabled={saving || !designation.trim()}
+            disabled={saving || !designation.trim() || !responsibleId}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}

@@ -86,6 +86,8 @@ export default function InventoryItemDetails({
   const [protectedRoomId, setProtectedRoomId] = useState(item.room.id);
   const [inventoryNumber, setInventoryNumber] = useState(item.inventoryNumber);
   const [status, setStatus] = useState(item.status);
+  const [condition, setCondition] = useState<NonNullable<InventoryItemDto["condition"]>>(item.condition ?? "good");
+  const [connectionStatus, setConnectionStatus] = useState<NonNullable<InventoryItemDto["connectionStatus"]>>(item.connectionStatus ?? "not_applicable");
   const [replaceQr, setReplaceQr] = useState(false);
   const [qrReplaceReason, setQrReplaceReason] = useState("");
   const [archiving, setArchiving] = useState(false);
@@ -298,7 +300,7 @@ export default function InventoryItemDetails({
       const statusChanged = status !== item.status;
       const submit = async (
         version: number,
-        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"] },
+        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"]; condition: NonNullable<InventoryItemDto["condition"]>; connectionStatus: NonNullable<InventoryItemDto["connectionStatus"]> },
       ) => {
         const response = await fetch(`/api/inventory/items/${item.id}`, {
           method: "PATCH",
@@ -320,6 +322,8 @@ export default function InventoryItemDetails({
         roomId: protectedRoomId,
         inventoryNumber,
         status,
+        condition,
+        connectionStatus,
       });
       if (result.response.status === 409 && result.body.error === "version_conflict") {
         const latestResponse = await fetch(`/api/inventory/items/${item.id}`);
@@ -338,6 +342,8 @@ export default function InventoryItemDetails({
             ? inventoryNumber
             : latestItem.inventoryNumber,
           status: statusChanged ? status : latestItem.status,
+          condition: condition !== (item.condition ?? "good") ? condition : (latestItem.condition ?? "good"),
+          connectionStatus: connectionStatus !== (item.connectionStatus ?? "not_applicable") ? connectionStatus : (latestItem.connectionStatus ?? "not_applicable"),
         });
       }
       if (!result.response.ok || !result.body.item) {
@@ -349,6 +355,8 @@ export default function InventoryItemDetails({
       setProtectedRoomId(body.item.room.id);
       setInventoryNumber(body.item.inventoryNumber);
       setStatus(body.item.status);
+      setCondition(body.item.condition ?? "good");
+      setConnectionStatus(body.item.connectionStatus ?? "not_applicable");
       setProtectedEditing(false);
       setReplaceQr(false);
       setQrReplaceReason("");
@@ -366,6 +374,8 @@ export default function InventoryItemDetails({
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
+    setCondition(item.condition ?? "good");
+    setConnectionStatus(item.connectionStatus ?? "not_applicable");
     setReplaceQr(false);
     setQrReplaceReason("");
     setError("");
@@ -379,6 +389,8 @@ export default function InventoryItemDetails({
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
+    setCondition(item.condition ?? "good");
+    setConnectionStatus(item.connectionStatus ?? "not_applicable");
     setReplaceQr(false);
     setQrReplaceReason("");
     setError("");
@@ -483,6 +495,28 @@ export default function InventoryItemDetails({
       if (!response.ok || !body.item) {
         throw new Error(body.error ?? responseErrorCode(response.status));
       }
+      setItem(body.item);
+      setSaved(true);
+      router.refresh();
+    } catch (cause) {
+      setError(localizeItemError(cause, t));
+    } finally {
+      setCapturingPhoto(false);
+    }
+  }
+
+  async function deletePhoto() {
+    if (!item.photoUrl || !window.confirm(t("item.deletePhotoConfirm"))) return;
+    setCapturingPhoto(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/inventory/items/${item.id}/photo`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: item.version }),
+      });
+      const body = await response.json().catch(() => ({})) as { item?: InventoryItemDto; error?: string };
+      if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
       setItem(body.item);
       setSaved(true);
       router.refresh();
@@ -630,6 +664,22 @@ export default function InventoryItemDetails({
                     {translateCampusBuilding(language, building.name)}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-600">{t("item.condition")}</span>
+              <select value={condition} onChange={(event) => setCondition(event.target.value as NonNullable<InventoryItemDto["condition"]>)} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-base">
+                <option value="good">{t("condition.good")}</option>
+                <option value="needs_attention">{t("condition.needs_attention")}</option>
+                <option value="damaged">{t("condition.damaged")}</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-600">{t("room.connected")}</span>
+              <select value={connectionStatus} onChange={(event) => setConnectionStatus(event.target.value as NonNullable<InventoryItemDto["connectionStatus"]>)} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-base">
+                <option value="connected">{t("connection.connected")}</option>
+                <option value="disconnected">{t("connection.disconnected")}</option>
+                <option value="not_applicable">{t("connection.not_applicable")}</option>
               </select>
             </label>
             <label className="block text-sm">
@@ -915,6 +965,9 @@ export default function InventoryItemDetails({
                   {capturingPhoto ? t("itemDetails.saving") : t("items.photo")}
                 </button>
               ) : null}
+              {canEditContent && item.photoUrl ? (
+                <button type="button" onClick={() => void deletePhoto()} disabled={capturingPhoto} aria-label={t("item.deletePhoto")} className="absolute bottom-2 left-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-red-600 shadow-lg hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-5 w-5" /></button>
+              ) : null}
             </div>
 
             {canManageCode ? <div className="flex flex-col items-center pt-4 text-center print:hidden">
@@ -951,6 +1004,10 @@ export default function InventoryItemDetails({
             <OverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <OverviewRow label={t("items.location")} value={item.room.designation} />
             <OverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
+            <OverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
+            <OverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
+            <OverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
+            <OverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
           </dl>
         </section>
 

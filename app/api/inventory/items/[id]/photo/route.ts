@@ -54,6 +54,31 @@ export async function POST(
   }
 }
 
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const user = await requireCurrentUser(request);
+    const { id } = await context.params;
+    assertId(id);
+    const body: unknown = await request.json();
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !Number.isInteger((body as Record<string, unknown>).version)
+    ) throw invalidRequest();
+    const item = await getApplicationServices().items.removePhoto(
+      id,
+      (body as { version: number }).version,
+      authorizationActor(user),
+    );
+    return Response.json({ item });
+  } catch (error) {
+    return photoErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);
+  }
+}
+
 function parsePhoto(value: unknown): UpdateInventoryItemPhotoInput {
   if (!value || typeof value !== "object") throw invalidRequest();
   const body = value as Record<string, unknown>;

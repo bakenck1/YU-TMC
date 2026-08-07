@@ -26,9 +26,11 @@ import {
   DECISION_STATUSES,
   INSPECTION_STATUSES,
   IDEMPOTENCY_STATES,
+  ITEM_CONDITIONS,
   INVENTORY_NUMBER_KINDS,
   ITEM_RESULT_VALUES,
   ITEM_STATUSES,
+  CONNECTION_STATUSES,
   NOTIFICATION_AUDIENCE_KINDS,
   NOTIFICATION_EVENT_TYPES,
   NOTIFICATION_MAILBOX_KINDS,
@@ -41,6 +43,8 @@ import {
   QR_TARGET_KINDS,
   RECORD_STATUSES,
   RESPONSIBILITY_SOURCES,
+  SERVICE_REQUEST_STATUSES,
+  SERVICE_REQUEST_TYPES,
   TRANSFER_OVERRIDE_OUTCOMES,
   TRANSFER_STATUSES,
 } from "@/lib/contracts/inventory-domain";
@@ -147,6 +151,22 @@ export const notificationMailboxKindEnum = inventorySchema.enum(
 export const auditSubjectKindEnum = inventorySchema.enum(
   "audit_subject_kind",
   AUDIT_SUBJECT_KINDS,
+);
+export const itemConditionEnum = inventorySchema.enum(
+  "item_condition",
+  ITEM_CONDITIONS,
+);
+export const connectionStatusEnum = inventorySchema.enum(
+  "connection_status",
+  CONNECTION_STATUSES,
+);
+export const serviceRequestTypeEnum = inventorySchema.enum(
+  "service_request_type",
+  SERVICE_REQUEST_TYPES,
+);
+export const serviceRequestStatusEnum = inventorySchema.enum(
+  "service_request_status",
+  SERVICE_REQUEST_STATUSES,
 );
 export const idempotencyStateEnum = inventorySchema.enum(
   "idempotency_state",
@@ -349,6 +369,10 @@ export const roomsTable = inventorySchema.table(
     designationKey: text().notNull(),
     floorNumber: integer().notNull(),
     floorLabel: varchar({ length: 40 }),
+    primaryResponsibleId: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
     status: recordStatusEnum().notNull().default("active"),
     createdBy: uuid()
       .notNull()
@@ -404,6 +428,7 @@ export const roomsTable = inventorySchema.table(
     ),
     index("rooms_created_by_idx").on(table.createdBy),
     index("rooms_updated_by_idx").on(table.updatedBy),
+    index("rooms_primary_responsible_idx").on(table.primaryResponsibleId),
   ],
 );
 
@@ -514,6 +539,8 @@ export const itemsTable = inventorySchema.table(
     inventoryNumber: varchar({ length: 64 }).notNull(),
     inventoryNumberKey: text().notNull(),
     status: itemStatusEnum().notNull().default("active"),
+    condition: itemConditionEnum().notNull().default("good"),
+    connectionStatus: connectionStatusEnum().notNull().default("not_applicable"),
     createdInInspectionId: uuid().references(() => inspectionsTable.id, {
       onDelete: "restrict",
       onUpdate: "restrict",
@@ -570,6 +597,82 @@ export const itemsTable = inventorySchema.table(
     ),
     index("items_created_by_idx").on(table.createdBy),
     index("items_updated_by_idx").on(table.updatedBy),
+  ],
+);
+
+export const serviceRequestsTable = inventorySchema.table(
+  "service_requests",
+  {
+    id: uuid().primaryKey(),
+    itemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    roomId: uuid()
+      .notNull()
+      .references(() => roomsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    authorId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    type: serviceRequestTypeEnum().notNull(),
+    description: text().notNull(),
+    status: serviceRequestStatusEnum().notNull().default("new"),
+    photoMediaType: varchar({ length: 32 }).notNull().default("image/jpeg"),
+    photoByteSize: integer().notNull(),
+    photoWidth: integer().notNull(),
+    photoHeight: integer().notNull(),
+    photoBinaryData: binaryData("photo_binary_data").notNull(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp({ withTimezone: true, mode: "date" }),
+    updatedBy: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    version: integer().notNull().default(1),
+  },
+  (table) => [
+    check(
+      "service_requests_description_check",
+      sql`btrim(${table.description}) <> ''`,
+    ),
+    check(
+      "service_requests_photo_check",
+      sql`${table.photoMediaType} = 'image/jpeg'
+          AND ${table.photoByteSize} BETWEEN 1 AND 5242880
+          AND ${table.photoWidth} BETWEEN 1 AND 1920
+          AND ${table.photoHeight} BETWEEN 1 AND 1920
+          AND ${table.photoWidth}::bigint * ${table.photoHeight}::bigint <= 2500000`,
+    ),
+    check(
+      "service_requests_completion_check",
+      sql`(${table.status} = 'completed') = (${table.completedAt} IS NOT NULL)`,
+    ),
+    check("service_requests_version_check", sql`${table.version} > 0`),
+    index("service_requests_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("service_requests_room_created_idx").on(table.roomId, table.createdAt),
+    index("service_requests_item_created_idx").on(table.itemId, table.createdAt),
+    index("service_requests_author_created_idx").on(
+      table.authorId,
+      table.createdAt,
+    ),
   ],
 );
 

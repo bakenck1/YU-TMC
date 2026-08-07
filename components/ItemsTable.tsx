@@ -483,7 +483,7 @@ export default function ItemsTable({
             onClick={() => setSearchFocused(true)}
             placeholder={t("common.search")}
             aria-label={t("common.search")}
-            className="w-full rounded-xl border border-black/10 bg-zinc-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            className="w-full rounded-xl border border-black/10 bg-zinc-50 py-2.5 pl-9 pr-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 md:text-sm"
           />
           {searchFocused && visibleSearchHistory.length ? (
             <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg">
@@ -512,14 +512,14 @@ export default function ItemsTable({
               if (!filterPanelOpen) setDraftFilters(filters);
               setFilterPanelOpen((value) => !value);
             }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+            className="hidden min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 md:inline-flex"
           >
             <SlidersHorizontal className="h-4 w-4" />
             {t("items.filters")}
             {activeFilterCount ? <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs text-white">{activeFilterCount}</span> : null}
           </button>
           <div
-            className="relative"
+            className="relative hidden md:block"
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) {
                 setColumnSettingsOpen(false);

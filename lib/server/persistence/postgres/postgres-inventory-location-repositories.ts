@@ -25,6 +25,7 @@ const ROOMS = '"yu_inventory"."rooms"';
 const ITEMS = '"yu_inventory"."items"';
 const QR_IDENTIFIERS = '"yu_inventory"."qr_identifiers"';
 const AUDIT_RECORDS = '"yu_inventory"."audit_records"';
+const USERS = '"yu_inventory"."users"';
 
 interface BuildingRow extends QueryResultRow {
   id: string;
@@ -47,6 +48,8 @@ interface RoomRow extends QueryResultRow {
   designation_key: string;
   floor_number: number;
   floor_label: string | null;
+  primary_responsible_id: string | null;
+  primary_responsible_name: string | null;
   qr_code: string;
   status: RoomRecord["status"];
   version: number;
@@ -220,9 +223,11 @@ class PostgresInventoryLocationRepository
     const result = await this.source.query<RoomRow>(
       `insert into ${ROOMS}
          (id, building_id, designation, designation_key, floor_number,
-          floor_label, created_by, updated_by, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $7, $8, $8)
-       returning *, ''::text as qr_code`,
+          floor_label, primary_responsible_id, created_by, updated_by,
+          created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9)
+       returning *, ''::text as qr_code,
+         null::text as primary_responsible_name`,
       [
         input.id,
         input.buildingId,
@@ -230,6 +235,7 @@ class PostgresInventoryLocationRepository
         input.designationKey,
         input.floorNumber,
         input.floorLabel,
+        input.primaryResponsibleId,
         input.actorId,
         input.occurredAt,
       ],
@@ -244,17 +250,20 @@ class PostgresInventoryLocationRepository
            designation_key = $3,
            floor_number = $4,
            floor_label = $5,
-           updated_by = $6,
-           updated_at = $7,
+           primary_responsible_id = $6,
+           updated_by = $7,
+           updated_at = $8,
            version = version + 1
-       where id = $1 and version = $8 and status = 'active'
-       returning *, ''::text as qr_code`,
+       where id = $1 and version = $9 and status = 'active'
+       returning *, ''::text as qr_code,
+         null::text as primary_responsible_name`,
       [
         input.id,
         input.designation,
         input.designationKey,
         input.floorNumber,
         input.floorLabel,
+        input.primaryResponsibleId,
         input.actorId,
         input.occurredAt,
         input.expectedVersion,
@@ -353,10 +362,13 @@ function roomSelect(whereClause: string) {
     select r.id, r.building_id, r.designation, r.designation_key,
            r.floor_number, r.floor_label, r.status, r.version,
            r.created_at, r.updated_at,
-           coalesce(q.original_value, '') as qr_code
+           coalesce(q.original_value, '') as qr_code,
+           r.primary_responsible_id,
+           responsible.full_name as primary_responsible_name
     from ${ROOMS} r
     left join ${QR_IDENTIFIERS} q
       on q.room_id = r.id and q.status = 'active' and q.role = 'primary'
+    left join ${USERS} responsible on responsible.id = r.primary_responsible_id
     ${whereClause}
     order by r.floor_number, r.designation_key, r.id
   `;
@@ -375,6 +387,8 @@ function mapRoom(row: RoomRow): RoomRecord {
     designationKey: row.designation_key,
     floorNumber: row.floor_number,
     floorLabel: row.floor_label,
+    primaryResponsibleId: row.primary_responsible_id,
+    primaryResponsibleName: row.primary_responsible_name,
     qrCode: row.qr_code,
     status: row.status,
     version: row.version,

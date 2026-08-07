@@ -33,7 +33,7 @@ export function parseQrIdentifierInput(input: unknown): ParsedQrIdentifier {
   const normalized = normalizeQrTextInput(input);
   if (!normalized.ok) return { ok: false, error: "INVALID" };
 
-  const originalValue = normalized.value;
+  const originalValue = embeddedRoomIdentifier(normalized.value) ?? normalized.value;
   const uppercase = originalValue.toUpperCase();
   const fullToken = uppercase.startsWith(QR_V1_PREFIX)
     ? uppercase.slice(QR_V1_PREFIX.length)
@@ -70,6 +70,17 @@ export function parseQrIdentifierInput(input: unknown): ParsedQrIdentifier {
     format: looksLikeUrl(originalValue) ? "legacy_url" : "legacy_raw",
     originalValue,
   };
+}
+
+function embeddedRoomIdentifier(value: string): string | null {
+  if (!looksLikeUrl(value)) return null;
+  try {
+    const url = new URL(value);
+    const match = /^\/rooms\/qr\/([^/]+)\/?$/.exec(url.pathname);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

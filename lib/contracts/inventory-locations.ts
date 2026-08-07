@@ -31,6 +31,7 @@ export interface RoomDto {
   designation: string;
   floorNumber: number;
   floorLabel: string | null;
+  primaryResponsible?: { id: string; name: string } | null;
   qrCode: string;
   status: "active" | "archived";
   version: number;
@@ -42,6 +43,7 @@ export interface CreateRoomInput {
   designation: string;
   floorNumber: number;
   floorLabel?: string | null;
+  primaryResponsibleId?: string | null;
 }
 
 export interface UpdateRoomInput extends CreateRoomInput {

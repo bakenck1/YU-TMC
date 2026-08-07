@@ -123,7 +123,8 @@ export class InventoryItemService {
         !hasPermission(actor.role, "inventory.item.read_all") &&
         !(
           hasPermission(actor.role, "inventory.item.read_assigned") &&
-          value.responsibleId === actor.userId
+          (value.responsibleId === actor.userId ||
+            value.roomResponsibleId === actor.userId)
         )
       ) {
         throw forbidden();
@@ -377,6 +378,9 @@ export class InventoryItemService {
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.create");
     const values = normalizeCreateInput(input);
+    const photo = input.photo
+      ? await normalizeCameraPhoto({ version: 1, ...input.photo })
+      : null;
     const occurredAt = this.clock.now();
     const itemId = this.ids.create();
     const qrId = this.ids.create();
@@ -436,7 +440,36 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      return toItemDto({ ...created, qrCode });
+      if (!photo) return toItemDto({ ...created, qrCode });
+      const photographed = await items.updateItemPhoto({
+        id: itemId,
+        photoId: this.ids.create(),
+        bytes: photo.bytes,
+        width: photo.width,
+        height: photo.height,
+        actorId: actor.userId,
+        expectedVersion: created.version,
+        occurredAt,
+      });
+      if (!photographed) throw versionConflict();
+      await items.appendAudit(
+        createAudit({
+          id: this.ids.create(),
+          actor,
+          subjectId: itemId,
+          subjectRevision: photographed.version,
+          action: "item.photo_captured",
+          beforeValues: { photo: null },
+          afterValues: {
+            photo: "attached",
+            width: photo.width,
+            height: photo.height,
+            byteSize: photo.bytes.byteLength,
+          },
+          occurredAt,
+        }),
+      );
+      return toItemDto({ ...photographed, qrCode });
     });
   }
 
@@ -564,17 +597,12 @@ export class InventoryItemService {
     input: UpdateInventoryItemPhotoInput,
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
-    if (actor.role !== "employee") {
-      requirePermission(actor, "inventory.item.edit_content");
-    }
+    requirePermission(actor, "inventory.item.edit_content");
     const photo = await normalizeCameraPhoto(input);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
-      if (actor.role === "employee" && current.responsibleId !== actor.userId) {
-        throw forbidden();
-      }
       if (current.version !== input.version) throw versionConflict();
       const updated = await items.updateItemPhoto({
         id,
@@ -607,6 +635,46 @@ export class InventoryItemService {
     });
   }
 
+  async removePhoto(
+    id: string,
+    version: number,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.edit_content");
+    if (!Number.isInteger(version) || version < 1) {
+      throw new ApplicationError("validation", "invalid_version");
+    }
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.version !== version) throw versionConflict();
+      if (!current.photoUrl) {
+        throw new ApplicationError("not_found", "item_photo_not_found");
+      }
+      const updated = await items.removeItemPhoto({
+        id,
+        actorId: actor.userId,
+        expectedVersion: version,
+        occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      await items.appendAudit(
+        createAudit({
+          id: this.ids.create(),
+          actor,
+          subjectId: id,
+          subjectRevision: updated.version,
+          action: "item.photo_removed",
+          beforeValues: { photo: "attached" },
+          afterValues: { photo: null },
+          occurredAt,
+        }),
+      );
+      return toItemDto(updated);
+    });
+  }
+
   async getItemPhoto(
     id: string,
     actor: AuthorizationActor,
@@ -632,13 +700,17 @@ export class InventoryItemService {
         item &&
           (hasPermission(actor.role, "inventory.item.read_all") ||
             (hasPermission(actor.role, "inventory.item.read_assigned") &&
-              item.responsibleId === actor.userId)),
+              (item.responsibleId === actor.userId ||
+                item.roomResponsibleId === actor.userId))),
       );
       if (
         !item ||
         !canPerformInventoryOperation(actor, {
           operation: "photo.item.preview",
-          currentResponsibleId: item.responsibleId,
+          currentResponsibleId:
+            item.roomResponsibleId === actor.userId
+              ? item.roomResponsibleId
+              : item.responsibleId,
           technicianHasParentAccess: hasParentAccess,
           viaAuthorizedActiveItemScan: false,
           hasParentAccess,
@@ -684,6 +756,9 @@ export class InventoryItemService {
       const updated = await items.updateItemProtected({
         id,
         ...values,
+        condition: values.condition ?? current.condition ?? "good",
+        connectionStatus:
+          values.connectionStatus ?? current.connectionStatus ?? "not_applicable",
         inventoryNumberKind,
         actorId: actor.userId,
         expectedVersion: input.version,
@@ -714,6 +789,10 @@ export class InventoryItemService {
             roomLabel: itemLocationLabel(current),
             inventoryNumber: current.inventoryNumber,
             status: current.status,
+            ...(current.condition ? { condition: current.condition } : {}),
+            ...(current.connectionStatus
+              ? { connectionStatus: current.connectionStatus }
+              : {}),
             qrCode: current.qrCode,
           },
           afterValues: {
@@ -721,6 +800,12 @@ export class InventoryItemService {
             roomLabel: itemLocationLabel(updated),
             inventoryNumber: updated.inventoryNumber,
             status: updated.status,
+            ...(current.condition || updated.condition
+              ? { condition: updated.condition }
+              : {}),
+            ...(current.connectionStatus || updated.connectionStatus
+              ? { connectionStatus: updated.connectionStatus }
+              : {}),
             qrCode,
             qrReplaceReason,
           },
@@ -967,7 +1052,33 @@ function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
     ),
     inventoryNumberKey: inventoryNumberComparisonKey(input.inventoryNumber),
     status: normalizeStatus(input.status),
+    condition: normalizeOptionalCondition(input.condition),
+    connectionStatus: normalizeOptionalConnectionStatus(input.connectionStatus),
   };
+}
+
+function normalizeOptionalCondition(
+  value: unknown,
+): UpdateInventoryItemProtectedInput["condition"] {
+  if (value === undefined) return undefined;
+  if (value === "good" || value === "needs_attention" || value === "damaged") {
+    return value;
+  }
+  throw new ApplicationError("validation", "invalid_item_condition");
+}
+
+function normalizeOptionalConnectionStatus(
+  value: unknown,
+): UpdateInventoryItemProtectedInput["connectionStatus"] {
+  if (value === undefined) return undefined;
+  if (
+    value === "connected" ||
+    value === "disconnected" ||
+    value === "not_applicable"
+  ) {
+    return value;
+  }
+  throw new ApplicationError("validation", "invalid_connection_status");
 }
 
 function normalizeServiceInput(input: SendItemToServiceInput) {
@@ -1156,7 +1267,8 @@ function assertItemReadable(
     !hasPermission(actor.role, "inventory.item.read_all") &&
     !(
       hasPermission(actor.role, "inventory.item.read_assigned") &&
-      item.responsibleId === actor.userId
+      (item.responsibleId === actor.userId ||
+        item.roomResponsibleId === actor.userId)
     )
   ) {
     throw forbidden();
@@ -1255,6 +1367,8 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       buildingName: record.buildingName,
     },
     status: record.status,
+    condition: record.condition ?? "good",
+    connectionStatus: record.connectionStatus ?? "not_applicable",
     qrCode: record.qrCode,
     responsible: record.responsibleId
       ? { id: record.responsibleId, name: record.responsibleName ?? "" }
