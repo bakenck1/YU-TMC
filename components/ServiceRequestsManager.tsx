@@ -22,6 +22,7 @@ export default function ServiceRequestsManager({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [statusErrorId, setStatusErrorId] = useState<string | null>(null);
   const rooms = unique(requests.map((request) => ({ id: request.room.id, name: `${request.room.buildingName} · ${request.room.designation}` })));
   const employees = unique(requests.map((request) => ({ id: request.author.id, name: request.author.name })));
   const visible = useMemo(() => requests.filter((request) => {
@@ -33,7 +34,14 @@ export default function ServiceRequestsManager({
   }), [requests, status, roomId, employeeId, dateFrom, dateTo]);
 
   async function updateStatus(request: ServiceRequestDto, next: ServiceRequestStatus) {
+    if (request.status === next || savingId === request.id) return;
     setSavingId(request.id);
+    setStatusErrorId(null);
+    setRequests((current) =>
+      current.map((value) =>
+        value.id === request.id ? { ...value, status: next } : value,
+      ),
+    );
     try {
       const response = await fetch(`/api/service-requests/${request.id}`, {
         method: "PATCH",
@@ -43,6 +51,11 @@ export default function ServiceRequestsManager({
       const body = await response.json() as { request?: ServiceRequestDto };
       if (!response.ok || !body.request) throw new Error();
       setRequests((current) => current.map((value) => value.id === request.id ? body.request! : value));
+    } catch {
+      setRequests((current) =>
+        current.map((value) => (value.id === request.id ? request : value)),
+      );
+      setStatusErrorId(request.id);
     } finally {
       setSavingId(null);
     }
@@ -54,6 +67,11 @@ export default function ServiceRequestsManager({
         <h1 className="text-2xl font-bold text-zinc-900">{t("request.title")}</h1>
         <p className="mt-1 text-base text-zinc-500">{visible.length}</p>
       </div>
+      {statusErrorId ? (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {t("request.statusUpdateFailed")}
+        </p>
+      ) : null}
       <section className="grid gap-3 rounded-2xl border border-black/5 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
         <FilterSelect label={t("items.status")} value={status} onChange={setStatus} options={[{ id: "all", name: t("request.allStatuses") }, ...(["new", "in_progress", "completed"] as const).map((value) => ({ id: value, name: t(`request.status.${value}`) }))]} />
         <FilterSelect label={t("itemDetails.room")} value={roomId} onChange={setRoomId} options={[{ id: "all", name: t("common.other") }, ...rooms]} />

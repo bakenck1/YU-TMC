@@ -9,7 +9,9 @@ test("a free active QR item offers receiving it for the current employee", () =>
     { kind: "claim_free" },
   );
 });
-
+//test("an item assigned to another employee cannot be calimed and offers a transfer request". () =>{
+//assert.deepequal(
+//employeescanaxtion())})
 test("an item assigned to another employee cannot be claimed and offers a transfer request", () => {
   assert.deepEqual(
     employeeScanAction({ status: "active", responsibleName: "Айдана Нурова", isCurrentUserResponsible: false }),

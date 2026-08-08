@@ -1,0 +1,24 @@
+{
+	auto_https disable_redirects
+	default_sni 172.20.10.2
+}
+
+http://172.20.10.2 {
+	@local_ca path /yu-inventory-local-ca.crt
+	handle @local_ca {
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=yu-inventory-local-ca.crt"
+		rewrite * /caddy/pki/authorities/local/root.crt
+		root * /data
+		file_server
+	}
+
+	handle {
+		redir https://172.20.10.2{uri} 308
+	}
+}
+
+https://172.20.10.2 {
+	tls internal
+	reverse_proxy app:3000
+}

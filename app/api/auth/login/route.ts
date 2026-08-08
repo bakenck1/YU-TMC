@@ -29,6 +29,13 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function shouldUseSecureSessionCookie() {
+  const configured = process.env.SESSION_COOKIE_SECURE?.trim();
+  if (configured === "true") return true;
+  if (configured === "false") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 function validEmail(email: string) {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -162,7 +169,7 @@ export async function POST(request: Request) {
     name: SESSION_COOKIE_NAME,
     value: createSessionToken(user, ttlSeconds),
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureSessionCookie(),
     sameSite: "strict",
     path: "/",
     ...(rememberMe ? { maxAge: ttlSeconds } : {}),

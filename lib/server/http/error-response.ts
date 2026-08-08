@@ -1,7 +1,7 @@
 import "server-only";
 
 import {
-  ApplicationError,
+  isApplicationError,
   type ApplicationErrorKind,
 } from "@/lib/domain/application-error";
 
@@ -22,7 +22,7 @@ export function applicationErrorResponse(
   error: unknown,
   headers?: HeadersInit,
 ): Response {
-  if (error instanceof ApplicationError) {
+  if (isApplicationError(error)) {
     return Response.json(
       {
         error: error.publicCode,

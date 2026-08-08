@@ -3,10 +3,10 @@ import test from "node:test";
 
 import { sidebarItemsForRole } from "../components/Sidebar";
 
-test("employee sidebar exposes home, inventory, room QR scan, transfer workflow, and profile", () => {
+test("employee sidebar exposes home, inventory, QR scan, requests, transfers, and profile", () => {
   const hrefs = sidebarItemsForRole("employee").map((item) => item.href);
 
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/transfers", "/profile"]);
+  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/transfers", "/profile"]);
 });
 
 test("administrator sidebar keeps facilities and inspections", () => {
@@ -14,14 +14,16 @@ test("administrator sidebar keeps facilities and inspections", () => {
 
   assert.ok(hrefs.includes("/inventory"));
   assert.ok(hrefs.includes("/inventory/inspections"));
+  assert.ok(hrefs.includes("/requests"));
 });
 
 test("warehouse sidebar exposes analytics and decommissioned items", () => {
   const hrefs = sidebarItemsForRole("warehouse").map((item) => item.href);
 
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/items/decommissioned", "/analytics", "/profile"]);
+  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/items/decommissioned", "/analytics", "/profile"]);
 });
 //
+
 test("logout control calls the authenticated logout flow", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) =>
     readFile(new URL("../components/Sidebar.tsx", import.meta.url), "utf8"),

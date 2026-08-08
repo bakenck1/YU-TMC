@@ -44,3 +44,59 @@ test("allows same-origin mutations and safe cross-site reads", () => {
     ),
   );
 });
+
+test("uses the external Host header when Next is bound to Docker's 0.0.0.0", () => {
+  assert.doesNotThrow(() =>
+    requireSameOriginMutation(
+      new Request("http://0.0.0.0:3000/api/items", {
+        method: "POST",
+        headers: {
+          host: "172.20.10.2:3000",
+          origin: "http://172.20.10.2:3000",
+        },
+      }),
+    ),
+  );
+  assert.throws(
+    () =>
+      requireSameOriginMutation(
+        new Request("http://0.0.0.0:3000/api/items", {
+          method: "POST",
+          headers: {
+            host: "172.20.10.2:3000",
+            origin: "http://attacker.example",
+          },
+        }),
+      ),
+    /cross_site_request_blocked/,
+  );
+});
+
+test("uses the forwarded HTTPS protocol behind the trusted local reverse proxy", () => {
+  assert.doesNotThrow(() =>
+    requireSameOriginMutation(
+      new Request("http://app:3000/api/service-requests/request-id", {
+        method: "PATCH",
+        headers: {
+          host: "172.20.10.2",
+          origin: "https://172.20.10.2",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    ),
+  );
+  assert.throws(
+    () =>
+      requireSameOriginMutation(
+        new Request("http://app:3000/api/service-requests/request-id", {
+          method: "PATCH",
+          headers: {
+            host: "172.20.10.2",
+            origin: "https://attacker.example",
+            "x-forwarded-proto": "https",
+          },
+        }),
+      ),
+    /cross_site_request_blocked/,
+  );
+});

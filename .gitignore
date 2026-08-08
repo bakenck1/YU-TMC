@@ -35,6 +35,8 @@ yarn-error.log*
 /.data/auth-credentials.json
 /.data/session-secret
 /.data/postgres-development/
+/.data/backups/
+/.data/caddy-public/
 
 # production error monitor state
 /errors/.monitor-state.json

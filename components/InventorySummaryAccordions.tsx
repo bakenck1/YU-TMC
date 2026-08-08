@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
@@ -72,6 +73,7 @@ export default function InventorySummaryAccordions({
   items: InventoryItem[];
 }) {
   const { locale, t } = useAppSettings();
+  const router = useRouter();
   const [openKind, setOpenKind] = useState<InventorySummaryKind | null>(null);
   const summary = useMemo(() => summarizeInventory(items), [items]);
   const openItems = useMemo(
@@ -178,11 +180,13 @@ export default function InventorySummaryAccordions({
                   {openItems.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-black/5 first:border-t-0"
+                      onClick={() => router.push(`/items/${item.id}`)}
+                      className="cursor-pointer border-t border-black/5 transition-colors first:border-t-0 hover:bg-zinc-50/80"
                     >
                       <td className="px-4 py-3 font-medium text-zinc-800">
                         <Link
                           href={`/items/${item.id}`}
+                          onClick={(event) => event.stopPropagation()}
                           className="hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >
                           {item.name}

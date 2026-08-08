@@ -305,6 +305,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
     [language],
   );
   const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -320,14 +321,18 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
   // Fit the 1280×760 canvas to the host (scales with height, stretches width).
   useEffect(() => {
     const host = hostRef.current;
+    const stage = stageRef.current;
     const canvas = canvasRef.current;
-    if (!host || !canvas) return;
+    if (!host || !stage || !canvas) return;
     const fit = () => {
       const w = host.clientWidth - 16;
       const h = host.clientHeight - 16;
       const sc = h / 760;
+      const canvasWidth = Math.max(1280, Math.floor(w / sc));
       canvas.style.transform = `scale(${sc})`;
-      canvas.style.width = Math.max(1280, Math.floor(w / sc)) + "px";
+      canvas.style.width = `${canvasWidth}px`;
+      stage.style.width = `${Math.ceil(canvasWidth * sc)}px`;
+      stage.style.height = `${Math.ceil(760 * sc)}px`;
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -429,7 +434,15 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
     : null;
 
   return (
-    <div ref={hostRef} className="flex h-[600px] items-center justify-start overflow-hidden rounded-2xl border border-black/5 bg-white p-2 shadow-sm">
+    <div
+      ref={hostRef}
+      data-testid="campus-map-scroll"
+      role="region"
+      aria-label={t("map.campus")}
+      tabIndex={0}
+      className="flex h-[600px] items-center justify-start overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-2xl border border-black/5 bg-white p-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}
+    >
       <style>{`
         @keyframes campusSpin{to{transform:rotate(360deg);}}
         @keyframes campusFadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
@@ -437,9 +450,13 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
       `}</style>
 
       <div
-        ref={canvasRef}
-        style={css("position:relative;width:1280px;height:760px;flex:none;transform-origin:left center;border-radius:14px;overflow:hidden;background:#f7f6f1;")}
+        ref={stageRef}
+        style={css("position:relative;flex:none;overflow:hidden;border-radius:14px;")}
       >
+        <div
+          ref={canvasRef}
+          style={css("position:absolute;left:0;top:0;width:1280px;height:760px;transform-origin:left top;border-radius:14px;overflow:hidden;background:#f7f6f1;")}
+        >
         {DECOR.map((d, i) => (
           <div key={i} style={css(d)} />
         ))}
@@ -566,6 +583,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
             </div>
           );
         })}
+        </div>
       </div>
 
       {modalOpen ? (

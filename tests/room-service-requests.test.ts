@@ -48,6 +48,16 @@ test("mobile navigation contains exactly the five required destinations", () => 
   assert.match(navigation, /md:hidden/);
 });
 
+test("desktop navigation exposes requests to every product role", async () => {
+  const { sidebarItemsForRole } = await import("../components/Sidebar");
+  for (const role of ["admin", "warehouse", "employee"] as const) {
+    assert.ok(
+      sidebarItemsForRole(role).some((item) => item.href === "/requests"),
+      role,
+    );
+  }
+});
+
 test("room QR scanning and downloads are discoverable outside the mobile menu", () => {
   const sidebar = read("components/Sidebar.tsx");
   const buildings = read("components/InventoryBuildingsManager.tsx");

@@ -13,6 +13,7 @@ import {
   Building2,
   ChevronLeft,
   ClipboardCheck,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   LoaderCircle,
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
   { href: "/scan", labelKey: "nav.scanQr", icon: ScanLine },
+  { href: "/requests", labelKey: "nav.requests", icon: ClipboardList },
   { href: "/transfers", labelKey: "nav.scanItem", icon: ArrowLeftRight },
   {
     href: "/items/decommissioned",
@@ -61,6 +63,7 @@ const EMPLOYEE_NAV_PATHS = new Set([
   "/",
   "/items",
   "/scan",
+  "/requests",
   "/transfers",
   "/profile",
 ]);

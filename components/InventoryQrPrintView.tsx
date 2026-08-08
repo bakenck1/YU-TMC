@@ -19,7 +19,7 @@ export default function InventoryQrPrintView({
   const codeUrl = `/api/inventory/items/${item.id}/qr?kind=${kind}&format=svg`;
   const isBarcode = kind === "barcode";
   return (
-    <main className="mx-auto min-h-screen max-w-3xl bg-white p-6 text-zinc-900 sm:p-10">
+    <main className="mx-auto min-h-screen max-w-3xl bg-white p-6 text-zinc-900 print:min-h-0 print:max-w-none print:p-0 sm:p-10">
       <div className="mb-6 flex flex-wrap gap-2 print:hidden">
         <button
           type="button"
@@ -48,7 +48,7 @@ export default function InventoryQrPrintView({
         </Link>
       </div>
       <div className="grid gap-5 print:gap-0">
-      <section className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:border-black">
+      <section className="mx-auto flex aspect-[3/2] w-full max-w-[148mm] items-center gap-8 rounded-xl border-2 border-zinc-900 p-8 print:aspect-auto print:w-auto print:max-w-none print:justify-center print:gap-0 print:border-0 print:p-0">
         <Image
           src={codeUrl}
           alt={`${isBarcode ? t("itemDetails.barcode") : t("items.qrCode")}: ${item.name}`}
@@ -56,9 +56,13 @@ export default function InventoryQrPrintView({
           height={isBarcode ? 160 : 280}
           unoptimized
           priority
-          className={isBarcode ? "h-auto w-[65%]" : "h-auto w-[45%]"}
+          className={
+            isBarcode
+              ? "h-auto w-[65%] print:w-[110mm]"
+              : "h-auto w-[45%] print:w-[70mm]"
+          }
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 print:hidden">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
             YU Inventory
           </p>

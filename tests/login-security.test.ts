@@ -25,6 +25,15 @@ test("login rejects cross-site credential submission before authentication", () 
   assert.match(source, /applicationErrorResponse\(error, rateLimitHeaders\(apiLimit\)\)/);
 });
 
+test("deployments can explicitly configure secure cookies without changing the production default", () => {
+  const source = readFileSync("app/api/auth/login/route.ts", "utf8");
+
+  assert.match(source, /configured === "true"/);
+  assert.match(source, /configured === "false"/);
+  assert.match(source, /process\.env\.NODE_ENV === "production"/);
+  assert.match(source, /secure: shouldUseSecureSessionCookie\(\)/);
+});
+
 test("login validates and bounds JSON before parsing credentials", () => {
   const source = readFileSync("app/api/auth/login/route.ts", "utf8");
   const guard = source.indexOf("assertLoginJsonRequest(request)");

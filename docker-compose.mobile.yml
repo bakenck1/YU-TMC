@@ -15,6 +15,8 @@ services:
       retries: 30
     volumes:
       - postgres-mobile-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
 
   app:
     restart: unless-stopped
@@ -28,7 +30,7 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://yu_inventory:local-development-password@postgres:5432/yu_inventory_dev
       DATABASE_MIGRATOR_URL: postgresql://yu_inventory:local-development-password@postgres:5432/yu_inventory_dev
-      DATABASE_DEPLOYMENT_ID: yu-inventory-docker-development
+      DATABASE_DEPLOYMENT_ID: yu-inventory-local-development
       DATABASE_SSL_MODE: disable
       DATABASE_POOL_MAX: 5
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
@@ -36,18 +38,33 @@ services:
       DATABASE_STATEMENT_TIMEOUT_MS: 30000
       DATABASE_MIGRATION_LOCK_TIMEOUT_MS: 60000
       YU_DATA_DIRECTORY: /app/.data
+      SESSION_COOKIE_SECURE: "true"
       TRUSTED_CLIENT_IP_HEADER: x-forwarded-for
     volumes:
       - ./.data:/app/.data
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     init: true
     command: >-
       sh -c "npm run db:migrate -- --target=development
       && npm run db:smoke -- --target=development
-      && npm run db:import-auth -- --target=development
-      && npm run db:seed -- --target=development
       && npm run start -- --hostname 0.0.0.0"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.mobile:/etc/caddy/Caddyfile:ro
+      - caddy-mobile-data:/data
+      - caddy-mobile-config:/config
 
 volumes:
   postgres-mobile-data:
+  caddy-mobile-data:
+  caddy-mobile-config:

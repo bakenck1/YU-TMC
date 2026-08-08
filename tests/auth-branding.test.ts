@@ -13,3 +13,6 @@ test("uses the YU Inventory logo in the authentication header", () => {
   assert.match(source, /alt="YU Inventory"/);
   assert.doesNotMatch(source, />\s*YU\s*</);
 });
+
+
+
