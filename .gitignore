@@ -37,6 +37,7 @@ yarn-error.log*
 /.data/postgres-development/
 /.data/backups/
 /.data/caddy-public/
+/_migration/
 
 # production error monitor state
 /errors/.monitor-state.json

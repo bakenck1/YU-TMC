@@ -19,7 +19,7 @@
     "db:reset-users": "tsx scripts/db/reset-users.ts"
   },
   "dependencies": {
-    "@embedded-postgres/windows-x64": "^18.4.0-beta.17",
+    "@embedded-postgres/windows-x64": "17.10.0-beta.17",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "drizzle-orm": "^0.45.2",
