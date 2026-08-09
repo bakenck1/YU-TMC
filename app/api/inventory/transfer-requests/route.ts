@@ -16,5 +16,11 @@ export async function POST(request: Request) {
     onCreated: (event) => {
       after(() => services.push.notifyTmcTransferRequest(event));
     },
+    onCreationNotificationSchedulingError: (event, error) => {
+      console.error("tmc_transfer_push_schedule_failed", {
+        requestId: event.requestId,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    },
   })(request);
 }

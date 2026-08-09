@@ -230,6 +230,28 @@ test("TMC push uses retry and stale subscription cleanup without failing the req
   assert.deepEqual(fixture.waits, [1, 2]);
 });
 
+test("TMC push is a no-op without VAPID and does not retry permanent failures", async () => {
+  const unconfigured = createFixture(null);
+  unconfigured.addSubscription("unconfigured-tmc", null);
+  await unconfigured.service.notifyTmcTransferRequest({ requestId: "22222222-2222-4222-8222-222222222222", recipientId: EMPLOYEE.userId, itemCount: 1 });
+  assert.deepEqual(unconfigured.sent, []);
+
+  const fixture = createFixture();
+  fixture.addSubscription("permanent-tmc", null);
+  fixture.sender.send = async () => { throw Object.assign(new Error("forbidden"), { statusCode: 403 }); };
+  await fixture.service.notifyTmcTransferRequest({ requestId: "22222222-2222-4222-8222-222222222222", recipientId: EMPLOYEE.userId, itemCount: 1 });
+  assert.deepEqual(fixture.waits, []);
+  assert.ok(fixture.logs.some(({ event }) => event === "push_tmc_delivery_failed"));
+});
+
+test("TMC subscription lookup failure is isolated from the committed request", async () => {
+  const fixture = createFixture();
+  fixture.repository.listByUser = async () => { throw new Error("database unavailable"); };
+  await fixture.service.notifyTmcTransferRequest({ requestId: "22222222-2222-4222-8222-222222222222", recipientId: EMPLOYEE.userId, itemCount: 1 });
+  assert.deepEqual(fixture.sent, []);
+  assert.ok(fixture.logs.some(({ event }) => event === "push_tmc_subscription_lookup_failed"));
+});
+
 test("stale cleanup preserves an endpoint reassigned during delivery", async () => {
   const fixture = createFixture();
   fixture.addSubscription("reassigned", null);
@@ -432,6 +454,7 @@ function createFixture(
 
   return {
     records,
+    repository,
     locks,
     logs,
     sender,

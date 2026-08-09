@@ -25,6 +25,7 @@ if (process.env.TEST_DATABASE_URL) {
     "tests/database/tmc-operation-migration.test.ts",
     "tests/database/tmc-operation-repositories.test.ts",
     "tests/database/tmc-transfer-request-transactions.test.ts",
+    "tests/database/web-push-repositories.test.ts",
   ]) {
     run(
       process.execPath,

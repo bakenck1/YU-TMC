@@ -35,13 +35,14 @@ services:
       APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:?public HTTPS origin is required}
       TRUSTED_CLIENT_IP_HEADER: ${TRUSTED_CLIENT_IP_HEADER:?trusted ingress client-IP header is required}
       SESSION_COOKIE_SECURE: "true"
-      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
-      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
-      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:?VAPID public key is required}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:?VAPID private key is required}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:?VAPID subject is required}
     ports:
       - "127.0.0.1:3000:3000"
     init: true
     restart: unless-stopped
+    stop_grace_period: 35s
     read_only: true
     tmpfs:
       - /tmp:size=64m,noexec,nosuid

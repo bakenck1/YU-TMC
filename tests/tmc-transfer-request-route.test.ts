@@ -110,6 +110,25 @@ test("POST schedules one aggregate notification only for a freshly created reque
   });
   await noRequest(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }));
   assert.equal(scheduled.length, 1);
+
+  const schedulingErrors: unknown[] = [];
+  const schedulingFailure = createTmcTransferRequestPostHandler({
+    authenticate: async () => ACTOR,
+    createIdempotent: async () => ({ kind: "completed", body: { result: CREATED_RESULT }, resourceId: REQUEST_ID, status: 201 }),
+    onCreated: () => { throw new Error("after unavailable"); },
+    onCreationNotificationSchedulingError: (event, error) => schedulingErrors.push({ event, error }),
+  });
+  const response = await schedulingFailure(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }));
+  assert.equal(response.status, 201);
+  assert.deepEqual((schedulingErrors[0] as { event: { requestId: string } }).event, { requestId: REQUEST_ID, recipientId: RECIPIENT_ID, itemCount: 1 });
+
+  const diagnosticFailure = createTmcTransferRequestPostHandler({
+    authenticate: async () => ACTOR,
+    createIdempotent: async () => ({ kind: "completed", body: { result: CREATED_RESULT }, resourceId: REQUEST_ID, status: 201 }),
+    onCreated: () => { throw new Error("after unavailable"); },
+    onCreationNotificationSchedulingError: () => { throw new Error("logger unavailable"); },
+  });
+  assert.equal((await diagnosticFailure(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }))).status, 201);
 });
 
 test("POST transfer-requests preserves replay status and exact stored body", async () => {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
 
 import { pushPermissionError } from "../lib/client-push-subscription";
 import { syncExistingPushSubscription } from "../lib/client-push-subscription";
@@ -24,6 +25,83 @@ test("service worker displays assignment pushes and opens only app-local URLs", 
   assert.match(worker, /url\.origin === self\.location\.origin/);
 });
 
+test("service worker keeps TMC deep links local and reuses an open app window", async () => {
+  const listeners = new Map<string, (event: Record<string, unknown>) => void>();
+  const shown: Array<{ title: string; options: Record<string, unknown> }> = [];
+  const opened: string[] = [];
+  const navigated: string[] = [];
+  const focused: string[] = [];
+  const worker = {
+    location: { origin: "https://inventory.test" },
+    addEventListener(type: string, listener: (event: Record<string, unknown>) => void) {
+      listeners.set(type, listener);
+    },
+    registration: {
+      async showNotification(title: string, options: Record<string, unknown>) { shown.push({ title, options }); },
+    },
+    clients: {
+      async matchAll() {
+        return [{
+          url: "https://inventory.test/tmc",
+          async navigate(url: string) { navigated.push(url); return { async focus() { focused.push(url); } }; },
+        }];
+      },
+      async openWindow(url: string) { opened.push(url); },
+      async claim() {},
+    },
+  };
+  vm.runInNewContext(await source("public/sw.js"), { self: worker, URL, Promise });
+  const pending: Promise<unknown>[] = [];
+  listeners.get("push")!({
+    data: { json: () => ({ title: "TMC", body: "1", url: "/tmc/transfer-requests/abc" }) },
+    waitUntil(promise: Promise<unknown>) { pending.push(promise); },
+  });
+  await Promise.all(pending.splice(0));
+  assert.equal(shown[0]?.options.data && (shown[0].options.data as { url: string }).url, "/tmc/transfer-requests/abc");
+  listeners.get("notificationclick")!({
+    notification: { close() {}, data: { url: "//evil.test/steal" } },
+    waitUntil(promise: Promise<unknown>) { pending.push(promise); },
+  });
+  await Promise.all(pending);
+  assert.deepEqual(navigated, ["https://inventory.test/"]);
+  assert.deepEqual(focused, ["https://inventory.test/"]);
+  assert.deepEqual(opened, []);
+});
+
+test("service worker opens the exact TMC card for focus, navigate, and navigation fallback paths", async () => {
+  const target = "https://inventory.test/tmc/transfer-requests/abc";
+  const exact = await clickWorker("/tmc/transfer-requests/abc", [{
+    url: target,
+    async focus() { this.focused.push(target); },
+    focused: [] as string[],
+  }]);
+  assert.deepEqual((exact.clients[0] as { focused: string[] }).focused, [target]);
+  assert.deepEqual(exact.opened, []);
+
+  const navigated = await clickWorker("/tmc/transfer-requests/abc", [{
+    url: "https://inventory.test/tmc",
+    async navigate(url: string) { this.navigated.push(url); return { focus: async () => this.focused.push(url) }; },
+    navigated: [] as string[],
+    focused: [] as string[],
+  }]);
+  assert.deepEqual((navigated.clients[0] as { navigated: string[] }).navigated, [target]);
+  assert.deepEqual((navigated.clients[0] as { focused: string[] }).focused, [target]);
+  assert.deepEqual(navigated.opened, []);
+
+  for (const outcome of ["null", "reject"] as const) {
+    const fallback = await clickWorker("/tmc/transfer-requests/abc", [{
+      url: "https://inventory.test/tmc",
+      async navigate() {
+        if (outcome === "reject") throw new Error("navigation failed");
+        return null;
+      },
+    }]);
+    assert.deepEqual(fallback.opened, [target]);
+  }
+  const noClient = await clickWorker("/tmc/transfer-requests/abc", []);
+  assert.deepEqual(noClient.opened, [target]);
+});
+
 test("TMC request push is scheduled once after create and is available to every role", async () => {
   const [route, landing, pushRepository, productionCompose, mobileCompose] = await Promise.all([
     source("app/api/inventory/transfer-requests/route.ts"),
@@ -40,6 +118,7 @@ test("TMC request push is scheduled once after create and is available to every 
     assert.match(compose, /WEB_PUSH_VAPID_PUBLIC_KEY/);
     assert.match(compose, /WEB_PUSH_VAPID_PRIVATE_KEY/);
     assert.match(compose, /WEB_PUSH_VAPID_SUBJECT/);
+    assert.match(compose, /stop_grace_period: 35s/);
   }
 });
 
@@ -68,6 +147,9 @@ test("dismissed notification permission remains retryable", async () => {
   assert.match(control, /\| "dismissed"/);
   assert.match(control, /disabled=\{busy\}/);
   assert.match(control, /state === "dismissed"/);
+  assert.match(control, /aria-busy=\{busy\}/);
+  assert.match(control, /role="status"/);
+  assert.match(control, /hintKey = "push\.assignmentHint"/);
 });
 
 test("VAPID key rotation removes an incompatible browser subscription", async () => {
@@ -357,6 +439,34 @@ test("assignment data flows from admin selection to notifier after persistence",
   assert.match(migration, /CREATE TABLE "yu_inventory"\."web_push_subscriptions"/);
   assert.match(migration, /web_push_subscriptions_endpoint_unique/);
 });
+
+async function clickWorker(
+  url: string,
+  clients: Array<Record<string, unknown>>,
+) {
+  const listeners = new Map<string, (event: Record<string, unknown>) => void>();
+  const opened: string[] = [];
+  const worker = {
+    location: { origin: "https://inventory.test" },
+    addEventListener(type: string, listener: (event: Record<string, unknown>) => void) {
+      listeners.set(type, listener);
+    },
+    registration: { async showNotification() {} },
+    clients: {
+      async matchAll() { return clients; },
+      async openWindow(target: string) { opened.push(target); },
+      async claim() {},
+    },
+  };
+  vm.runInNewContext(await source("public/sw.js"), { self: worker, URL, Promise });
+  let wait: Promise<unknown> | null = null;
+  listeners.get("notificationclick")!({
+    notification: { close() {}, data: { url } },
+    waitUntil(promise: Promise<unknown>) { wait = promise; },
+  });
+  await wait;
+  return { clients, opened };
+}
 
 async function source(relativePath: string) {
   return readFile(new URL(relativePath, ROOT), "utf8");

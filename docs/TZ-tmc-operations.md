@@ -341,7 +341,7 @@ TDD обязателен для:
 - [x] searchable user picker;
 - [x] карточка групповой заявки;
 - [x] «Принять все» и «Принять выбранные»;
-- push/deep-link;
+- [x] push/deep-link;
 - TDD component tests.
 
 ### Этап 3 — компьютерный сценарий

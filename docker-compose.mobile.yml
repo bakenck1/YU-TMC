@@ -94,6 +94,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     init: true
+    stop_grace_period: 35s
     read_only: true
     tmpfs:
       - /tmp:size=64m,noexec,nosuid

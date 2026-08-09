@@ -129,7 +129,7 @@ export default function PushNotificationControl({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div aria-busy={busy} className="flex flex-wrap items-center gap-3">
       <button
         type="button"
         onClick={() => void (state === "enabled" ? disable() : enable())}
@@ -162,7 +162,7 @@ export default function PushNotificationControl({
           {t("push.error")}
         </p>
       ) : (
-        <p className="text-sm text-zinc-500">
+        <p role="status" className="text-sm text-zinc-500">
           {t(hintKey)}
         </p>
       )}

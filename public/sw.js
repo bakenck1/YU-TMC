@@ -59,7 +59,9 @@ self.addEventListener("notificationclick", (event) => {
         });
         if (appClient?.navigate) {
           return appClient.navigate(targetUrl)
-            .then((client) => client?.focus())
+            .then((client) => client
+              ? client.focus()
+              : self.clients.openWindow(targetUrl))
             .catch(() => self.clients.openWindow(targetUrl));
         }
         return self.clients.openWindow(targetUrl);

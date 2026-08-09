@@ -27,6 +27,10 @@ export interface TmcTransferRequestPostDependencies {
     recipientId: string;
     itemCount: number;
   }): void;
+  onCreationNotificationSchedulingError?(
+    event: { requestId: string; recipientId: string; itemCount: number },
+    error: unknown,
+  ): void;
 }
 
 export function createTmcTransferRequestPostHandler(
@@ -46,13 +50,19 @@ export function createTmcTransferRequestPostHandler(
         idempotencyKey,
       );
       if (execution.kind === "completed" && execution.body.result.request) {
+        const event = {
+          requestId: execution.body.result.request.id,
+          recipientId: execution.body.result.request.recipient.id,
+          itemCount: execution.body.result.included,
+        };
         try {
-          dependencies.onCreated?.({
-            requestId: execution.body.result.request.id,
-            recipientId: execution.body.result.request.recipient.id,
-            itemCount: execution.body.result.included,
-          });
-        } catch {
+          dependencies.onCreated?.(event);
+        } catch (error) {
+          try {
+            dependencies.onCreationNotificationSchedulingError?.(event, error);
+          } catch {
+            // Diagnostics must be as best-effort as the notification itself.
+          }
           // Notification scheduling is best-effort and must not change the
           // already committed idempotent command response.
         }
