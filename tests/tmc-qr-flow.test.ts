@@ -86,7 +86,7 @@ test("rejects non-item, unavailable, and unresolved QR responses explicitly", ()
   );
 });
 
-test("TMC operation shell delegates all three operations to one QR-only flow", () => {
+test("TMC operation shell uses QR-only scanning and sends each confirmed operation to its bounded API", () => {
   const shell = readFileSync("components/TmcOperationShell.tsx", "utf8");
   const flow = readFileSync("components/TmcItemQrFlow.tsx", "utf8");
   const scanner = readFileSync("components/InventoryItemCodeScanner.tsx", "utf8");
@@ -110,7 +110,13 @@ test("TMC operation shell delegates all three operations to one QR-only flow", (
   assert.match(scanner, /htmlFor=\{manualInputId\}/);
   assert.match(scanner, /id=\{manualInputId\}/);
   assert.match(scanner, /<video[^>]+aria-hidden="true"/);
-  assert.doesNotMatch(flow, /method:\s*["']POST|\/transfers|history/i);
+  assert.match(flow, /TmcUserPicker/);
+  assert.match(flow, /tmc\.operation\.acceptItem/);
+  assert.match(flow, /tmc\.operation\.sendRequest/);
+  assert.match(flow, /\/api\/inventory\/items\/\$\{encodeURIComponent\(item\.id\)\}\/responsibility\/accept/);
+  assert.match(flow, /\/api\/inventory\/transfer-requests/);
+  assert.match(flow, /"idempotency-key": createAttempt\.current\.key/);
+  assert.doesNotMatch(flow, /\/api\/inventory\/transfers/);
 });
 
 test("QR resolver coalesces duplicate scans and publishes one selected item", async () => {

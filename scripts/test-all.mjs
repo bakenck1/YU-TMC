@@ -18,6 +18,16 @@ runNodeTests(
   ["--conditions=react-server"],
 );
 runNodeTests([...clientTests].sort(), []);
+run(
+  process.execPath,
+  [path.join(root, "node_modules/typescript/bin/tsc"), "--project", "tests/typecheck/tsconfig.components.json", "--pretty", "false"],
+  { ...process.env, NODE_ENV: "test" },
+);
+run(
+  process.execPath,
+  [path.join(root, "node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.components.config.mts"],
+  { ...process.env, NODE_ENV: "test" },
+);
 
 if (process.env.TEST_DATABASE_URL) {
   for (const databaseTest of [

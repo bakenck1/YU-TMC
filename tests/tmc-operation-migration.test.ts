@@ -135,10 +135,13 @@ test("TMC migration metadata extends the committed predecessor cleanly", () => {
   const journal = JSON.parse(
     readFileSync(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ) as { entries: Array<{ idx: number; when: number; tag: string }> };
-  const current = journal.entries.at(-1);
-  const previous = journal.entries.at(-2);
+  const currentIndex = journal.entries.findIndex(
+    (entry) => entry.tag === "20260808110000_tmc_operation_requests",
+  );
+  const current = currentIndex >= 0 ? journal.entries[currentIndex] : undefined;
+  const previous = currentIndex > 0 ? journal.entries[currentIndex - 1] : undefined;
 
-  assert.equal(current?.tag, "20260808110000_tmc_operation_requests");
+  assert.ok(current, "missing TMC migration journal entry");
   assert.equal(current?.idx, (previous?.idx ?? -1) + 1);
   assert.ok((current?.when ?? 0) > (previous?.when ?? Number.MAX_SAFE_INTEGER));
   for (const entry of journal.entries) {

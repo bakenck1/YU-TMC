@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, BellOff, LoaderCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { TranslationKey } from "@/lib/i18n";
 
@@ -35,23 +35,34 @@ export default function PushNotificationControl({
     useState<PushPublicConfiguration | null>(null);
   const [state, setState] = useState<PushState>("loading");
   const [busy, setBusy] = useState(false);
+  const lifecycleSequence = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
-    void initialize().catch(() => {
-      if (!cancelled) setState("error");
+    const sequence = ++lifecycleSequence.current;
+    queueMicrotask(() => {
+      if (!isCurrent()) return;
+      setConfiguration(null);
+      setState("loading");
+      setBusy(false);
+      void initialize().catch(() => {
+        if (isCurrent()) setState("error");
+      });
     });
     return () => {
-      cancelled = true;
+      if (lifecycleSequence.current === sequence) lifecycleSequence.current += 1;
     };
+
+    function isCurrent() {
+      return lifecycleSequence.current === sequence;
+    }
 
     async function initialize() {
       if (!supportsWebPush()) {
-        if (!cancelled) setState("unsupported");
+        if (isCurrent()) setState("unsupported");
         return;
       }
       const config = await fetchPushConfiguration();
-      if (cancelled) return;
+      if (!isCurrent()) return;
       setConfiguration(config);
       if (!config.configured || !config.publicKey) {
         setState("unconfigured");
@@ -62,14 +73,15 @@ export default function PushNotificationControl({
         return;
       }
       const subscription = await currentPushSubscription();
-      if (cancelled) return;
+      if (!isCurrent()) return;
       if (subscription) {
         const synced = await syncExistingPushSubscription(config.publicKey, language);
+        if (!isCurrent()) return;
         if (!synced) {
           setState("disabled");
           return;
         }
-        if (!cancelled) setState("enabled");
+        setState("enabled");
       } else {
         setState("disabled");
       }
@@ -78,11 +90,13 @@ export default function PushNotificationControl({
 
   async function enable() {
     if (!configuration?.publicKey || busy) return;
+    const sequence = lifecycleSequence.current;
     setBusy(true);
     try {
       await enablePushNotifications(configuration.publicKey, language);
-      setState("enabled");
+      if (lifecycleSequence.current === sequence) setState("enabled");
     } catch (error) {
+      if (lifecycleSequence.current !== sequence) return;
       if (error instanceof Error && error.message === "push_permission_denied") {
         setState("denied");
       } else if (
@@ -94,20 +108,21 @@ export default function PushNotificationControl({
         setState("error");
       }
     } finally {
-      setBusy(false);
+      if (lifecycleSequence.current === sequence) setBusy(false);
     }
   }
 
   async function disable() {
     if (busy) return;
+    const sequence = lifecycleSequence.current;
     setBusy(true);
     try {
       await disablePushNotifications();
-      setState("disabled");
+      if (lifecycleSequence.current === sequence) setState("disabled");
     } catch {
-      setState("error");
+      if (lifecycleSequence.current === sequence) setState("error");
     } finally {
-      setBusy(false);
+      if (lifecycleSequence.current === sequence) setBusy(false);
     }
   }
 

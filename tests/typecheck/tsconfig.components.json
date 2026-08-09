@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [
+    "../../components/PushNotificationControl.tsx",
+    "../../components/TmcItemQrFlow.tsx",
+    "../../components/TmcTransferRequestCard.tsx",
+    "../../components/TmcUserPicker.tsx",
+    "../../tests/components/**/*.ts",
+    "../../tests/components/**/*.tsx"
+  ]
+}

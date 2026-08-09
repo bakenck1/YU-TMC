@@ -94,7 +94,6 @@ export default function TmcUserPicker({
     onChange(user);
     setOpen(false);
     controllerRef.current?.reset();
-    inputRef.current?.focus();
   }
 
   function clear() {
