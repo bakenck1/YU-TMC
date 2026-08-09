@@ -340,7 +340,7 @@ TDD обязателен для:
 - [x] QR-flow;
 - [x] searchable user picker;
 - [x] карточка групповой заявки;
-- «Принять все» и «Принять выбранные»;
+- [x] «Принять все» и «Принять выбранные»;
 - push/deep-link;
 - TDD component tests.
 

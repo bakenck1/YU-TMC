@@ -134,7 +134,11 @@ export class InventoryResponsibilityService {
         throw conflict("transfer_not_pending");
       }
       const item = await responsibility.findItemState(current.itemId);
-      if (!item || item.responsibleUserId !== actor.userId) {
+      if (
+        !item ||
+        !item.responsibilityPeriodId ||
+        item.responsibleUserId !== actor.userId
+      ) {
         throw conflict("responsibility_changed");
       }
       if (
@@ -160,12 +164,15 @@ export class InventoryResponsibilityService {
       });
       if (!updated) throw conflict("version_conflict");
       if (input.decision === "confirm") {
-        await responsibility.closeResponsibility({
+        const responsibilityClosed = await responsibility.closeResponsibility({
           itemId: current.itemId,
+          expectedResponsibilityPeriodId: item.responsibilityPeriodId,
+          expectedResponsibleUserId: actor.userId,
           endedBy: actor.userId,
           endedAt: closedAt,
           endReason: "transfer_confirmed",
         });
+        if (!responsibilityClosed) throw conflict("responsibility_changed");
         await responsibility.insertResponsibility({
           id: this.ids.create(),
           itemId: current.itemId,
@@ -309,13 +316,16 @@ export class InventoryResponsibilityService {
       });
       if (!updated) throw conflict("version_conflict");
       const item = await responsibility.findItemState(current.itemId);
-      if (item?.responsibleUserId) {
-        await responsibility.closeResponsibility({
+      if (item?.responsibleUserId && item.responsibilityPeriodId) {
+        const responsibilityClosed = await responsibility.closeResponsibility({
           itemId: current.itemId,
+          expectedResponsibilityPeriodId: item.responsibilityPeriodId,
+          expectedResponsibleUserId: item.responsibleUserId,
           endedBy: actor.userId,
           endedAt: occurredAt,
           endReason: reason,
         });
+        if (!responsibilityClosed) throw conflict("responsibility_changed");
       }
       if (responsibleUserId) {
         await responsibility.insertResponsibility({

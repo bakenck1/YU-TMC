@@ -217,6 +217,50 @@ describe("PostgreSQL TMC operation repositories", () => {
     }
     expect(await requests.findById(rolledBackRequestId)).toBeNull();
   });
+
+  it("atomically accepts and rejects a mixed decision with one responsibility handoff", async () => {
+    const initiatorId = randomUUID();
+    const recipientId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    const itemIds = [randomUUID(), randomUUID()];
+    const periodIds = [randomUUID(), randomUUID()];
+    const requestId = randomUUID();
+    const requestItemIds = [randomUUID(), randomUUID()];
+    const decidedAt = new Date("2026-08-10T12:00:00.000Z");
+    await seedUsers(initiatorId, recipientId);
+    await seedLocation(buildingId, roomId, initiatorId);
+    for (let index = 0; index < itemIds.length; index += 1) {
+      await seedItemAndResponsibility({ itemId: itemIds[index]!, periodId: periodIds[index]!, roomId, responsibleId: initiatorId, ordinal: index + 10 });
+    }
+    const requests = createPostgresTmcOperationRepositories(database).transferRequests;
+    await requests.insertRequest({ id: requestId, initiatorId, recipientId, comment: null, createdAt: decidedAt, expiresAt: new Date(decidedAt.getTime() + 86_400_000) });
+    for (let index = 0; index < itemIds.length; index += 1) {
+      await requests.insertRequestItem({ id: requestItemIds[index]!, requestId, itemId: itemIds[index]!, expectedItemVersion: 1, responsibilityPeriodIdAtRequest: periodIds[index]!, currentResponsibleIdAtRequest: initiatorId, createdAt: decidedAt });
+    }
+
+    const client = await database.connect();
+    try {
+      await client.query("begin");
+      const tx = createPostgresTmcOperationRepositories(client).transferRequests;
+      expect((await tx.findByIdForUpdate(requestId))?.status).toBe("pending");
+      expect(await tx.decideItem({ requestId, requestItemId: requestItemIds[0]!, itemId: itemIds[0]!, responsibilityPeriodIdAtRequest: periodIds[0]!, currentResponsibleIdAtRequest: initiatorId, expectedVersion: 1, decision: "accept", recipientId, decidedBy: recipientId, decidedAt, newResponsibilityPeriodId: randomUUID() })).toBe("accepted");
+      expect(await tx.decideItem({ requestId, requestItemId: requestItemIds[1]!, itemId: itemIds[1]!, responsibilityPeriodIdAtRequest: periodIds[1]!, currentResponsibleIdAtRequest: initiatorId, expectedVersion: 1, decision: "reject", recipientId, decidedBy: recipientId, decidedAt, newResponsibilityPeriodId: randomUUID() })).toBe("rejected");
+      expect(await tx.closeRequest({ requestId, expectedVersion: 1, status: "accepted", closedBy: recipientId, closedAt: decidedAt, isAdministrativeDecision: false, administrativeReason: null })).toBe(true);
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const aggregate = await requests.findById(requestId);
+    expect(aggregate).toMatchObject({ status: "accepted", version: 2 });
+    expect(new Map(aggregate?.items.map((item) => [item.itemId, { result: item.result, version: item.version }]))).toEqual(new Map([[itemIds[0]!, { result: "accepted", version: 2 }], [itemIds[1]!, { result: "rejected", version: 2 }]]));
+    const owners = await database.query<{ item_id: string; responsible_user_id: string }>(`select item_id, responsible_user_id from "yu_inventory"."responsibility_periods" where item_id = any($1::uuid[]) and ended_at is null order by item_id`, [itemIds]);
+    expect(new Map(owners.rows.map((row) => [row.item_id, row.responsible_user_id]))).toEqual(new Map([[itemIds[0]!, recipientId], [itemIds[1]!, initiatorId]]));
+  });
 });
 
 async function seedUsers(initiatorId: string, recipientId: string) {
@@ -224,11 +268,11 @@ async function seedUsers(initiatorId: string, recipientId: string) {
     `insert into "yu_inventory"."users"
        (id, code, email, full_name, role, created_at, updated_at)
      values
-       ($1, 'REPO-INIT', 'repository-initiator@example.com',
+       ($1, $3, $4,
         'Repository Initiator', 'employee', now(), now()),
-       ($2, 'REPO-RECIPIENT', 'repository-recipient@example.com',
+       ($2, $5, $6,
         'Repository Recipient', 'employee', now(), now())`,
-    [initiatorId, recipientId],
+    [initiatorId, recipientId, `RI-${initiatorId.slice(0, 8)}`, `${initiatorId}@example.com`, `RR-${recipientId.slice(0, 8)}`, `${recipientId}@example.com`],
   );
 }
 

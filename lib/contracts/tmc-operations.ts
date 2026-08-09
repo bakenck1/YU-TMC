@@ -372,6 +372,14 @@ export function parseCreateTmcTransferRequestResult(
   return parsed.data as CreateTmcTransferRequestResultDto;
 }
 
+export function parseTmcTransferRequest(value: unknown): TmcTransferRequestDto {
+  const parsed = requestSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error("tmc_idempotency_response_invalid", { cause: parsed.error });
+  }
+  return parsed.data as TmcTransferRequestDto;
+}
+
 export interface TmcBulkOperationResultDto {
   total: number;
   succeeded: number;

@@ -3,6 +3,8 @@ import "server-only";
 import type { QueryResultRow } from "pg";
 
 import type {
+  CloseTmcTransferRequestRecord,
+  DecideTmcTransferRequestItemRecord,
   InsertedTmcTransferRequestItemRecord,
   InsertTmcTransferRequestItemRecord,
   InsertTmcTransferRequestRecord,
@@ -208,6 +210,14 @@ class PostgresTmcTransferRequestRepository
     return mapRequest(firstRow, result.rows);
   }
 
+  async findByIdForUpdate(id: string): Promise<TmcTransferRequestRecord | null> {
+    const locked = await this.source.query<{ id: string } & QueryResultRow>(
+      `select id from ${REQUESTS} where id = $1 for update`,
+      [id],
+    );
+    return locked.rows[0] ? this.findById(id) : null;
+  }
+
   async findItemPhoto(requestId: string, itemId: string) {
     const result = await this.source.query<{
       binary_data: Buffer | null;
@@ -229,6 +239,140 @@ class PostgresTmcTransferRequestRepository
     return row?.binary_data && row.trusted_mime_type === "image/jpeg"
       ? { bytes: new Uint8Array(row.binary_data), mimeType: "image/jpeg" as const }
       : null;
+  }
+
+  async decideItem(
+    input: DecideTmcTransferRequestItemRecord,
+  ): Promise<"accepted" | "rejected" | "invalidated"> {
+    const requestItem = await this.source.query<{
+      version: number;
+      result: string;
+    } & QueryResultRow>(
+      `select version, result
+         from ${REQUEST_ITEMS}
+        where id = $1 and request_id = $2 and item_id = $3
+        for update`,
+      [input.requestItemId, input.requestId, input.itemId],
+    );
+    const row = requestItem.rows[0];
+    if (!row || row.result !== "pending" || Number(row.version) !== input.expectedVersion) {
+      throw new TmcOperationRepositoryConflictError("version_conflict", {
+        reason: "request_item_version_conflict",
+      });
+    }
+    const itemResult = await this.source.query<{
+      status: string;
+      archived_at: Date | null;
+    } & QueryResultRow>(
+      `select status, archived_at from ${ITEMS} where id = $1 for update`,
+      [input.itemId],
+    );
+    const periodResult = await this.source.query<{
+      item_id: string;
+      responsible_user_id: string;
+      ended_at: Date | null;
+    } & QueryResultRow>(
+      `select item_id, responsible_user_id, ended_at
+         from ${RESPONSIBILITY_PERIODS}
+        where id = $1
+        for update`,
+      [input.responsibilityPeriodIdAtRequest],
+    );
+    const item = itemResult.rows[0];
+    const period = periodResult.rows[0];
+    const itemActive = item?.status === "active" && item.archived_at === null;
+    const responsibilityCurrent =
+      period?.item_id === input.itemId &&
+      period.responsible_user_id === input.currentResponsibleIdAtRequest &&
+      period.ended_at === null;
+    const result = !itemActive || !responsibilityCurrent
+      ? "invalidated" as const
+      : input.decision === "accept"
+        ? "accepted" as const
+        : "rejected" as const;
+    const invalidReason = !itemActive
+      ? "item_inactive"
+      : !responsibilityCurrent
+        ? "responsibility_changed"
+        : null;
+    if (result === "accepted") {
+      const closed = await this.source.query(
+        `update ${RESPONSIBILITY_PERIODS}
+            set ended_at = $2, ended_by = $3,
+                end_reason = 'tmc_transfer_accepted'
+          where id = $1 and ended_at is null`,
+        [input.responsibilityPeriodIdAtRequest, input.decidedAt, input.decidedBy],
+      );
+      if ((closed.rowCount ?? 0) !== 1) {
+        throw new TmcOperationRepositoryConflictError("responsibility_changed", {
+          reason: "responsibility_period_close_conflict",
+        });
+      }
+      await this.source.query(
+        `insert into ${RESPONSIBILITY_PERIODS}
+           (id, item_id, responsible_user_id, source, started_at, started_by)
+         values ($1, $2, $3, 'transfer', $4, $5)`,
+        [
+          input.newResponsibilityPeriodId,
+          input.itemId,
+          input.recipientId,
+          input.decidedAt,
+          input.decidedBy,
+        ],
+      );
+    }
+    const updated = await this.source.query(
+      `update ${REQUEST_ITEMS}
+          set result = $2,
+              invalid_reason = $3,
+              decided_at = $4,
+              decided_by = $5,
+              version = version + 1
+        where id = $1 and version = $6 and result = 'pending'`,
+      [
+        input.requestItemId,
+        result,
+        invalidReason,
+        input.decidedAt,
+        input.decidedBy,
+        input.expectedVersion,
+      ],
+    );
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new TmcOperationRepositoryConflictError("version_conflict", {
+        reason: "request_item_update_conflict",
+      });
+    }
+    return result;
+  }
+
+  async closeRequest(input: CloseTmcTransferRequestRecord): Promise<boolean> {
+    const result = await this.source.query(
+      `update ${REQUESTS} request
+          set status = $3,
+              closed_at = $4,
+              closed_by = $5,
+              is_administrative_decision = $6,
+              administrative_reason = $7,
+              version = version + 1
+        where request.id = $1
+          and request.version = $2
+          and request.status = 'pending'
+          and not exists (
+            select 1 from ${REQUEST_ITEMS} item
+             where item.request_id = request.id and item.result = 'pending'
+          )`,
+      [
+        input.requestId,
+        input.expectedVersion,
+        input.status,
+        input.closedAt,
+        input.closedBy,
+        input.isAdministrativeDecision,
+        input.administrativeReason,
+      ],
+    );
+    return (result.rowCount ?? 0) === 1;
   }
 
   async insertRequest(input: InsertTmcTransferRequestRecord): Promise<void> {

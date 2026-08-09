@@ -3,6 +3,7 @@ import type { UserRole } from "@/lib/contracts/users";
 
 export interface ItemResponsibilityState {
   itemId: string;
+  responsibilityPeriodId: string | null;
   responsibleUserId: string | null;
   responsibleName: string | null;
   itemStatus: "active" | "maintenance" | "decommissioned";
@@ -47,6 +48,8 @@ export interface InsertResponsibilityRecord {
 
 export interface CloseResponsibilityRecord {
   itemId: string;
+  expectedResponsibilityPeriodId: string;
+  expectedResponsibleUserId: string;
   endedBy: string;
   endedAt: Date;
   endReason: string;
@@ -107,7 +110,7 @@ export interface InventoryResponsibilityRepository {
   listTransfersForUser(userId: string): Promise<TransferRecord[]>;
   listTimeline(itemId: string): Promise<ResponsibilityTimelineRecord[]>;
   insertResponsibility(input: InsertResponsibilityRecord): Promise<void>;
-  closeResponsibility(input: CloseResponsibilityRecord): Promise<void>;
+  closeResponsibility(input: CloseResponsibilityRecord): Promise<boolean>;
   insertTransfer(input: InsertTransferRecord): Promise<TransferRecord>;
   decideTransfer(input: DecideTransferRecord): Promise<TransferRecord | null>;
   cancelTransfer(input: CancelTransferRecord): Promise<TransferRecord | null>;

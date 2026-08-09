@@ -118,6 +118,30 @@ export interface InsertedTmcTransferRequestItemRecord {
   version: number;
 }
 
+export interface DecideTmcTransferRequestItemRecord {
+  requestId: string;
+  requestItemId: string;
+  itemId: string;
+  responsibilityPeriodIdAtRequest: string;
+  currentResponsibleIdAtRequest: string;
+  expectedVersion: number;
+  decision: "accept" | "reject";
+  recipientId: string;
+  decidedBy: string;
+  decidedAt: Date;
+  newResponsibilityPeriodId: string;
+}
+
+export interface CloseTmcTransferRequestRecord {
+  requestId: string;
+  expectedVersion: number;
+  status: "accepted" | "rejected";
+  closedBy: string;
+  closedAt: Date;
+  isAdministrativeDecision: boolean;
+  administrativeReason: string | null;
+}
+
 export type TmcOperationRepositoryConflictProblem = Extract<
   TmcOperationProblemCode,
   | "item_not_found"
@@ -147,10 +171,15 @@ export interface TmcTransferRequestRepository {
     itemIds: readonly string[],
   ): Promise<TmcTransferCandidateRecord[]>;
   findById(id: string): Promise<TmcTransferRequestRecord | null>;
+  findByIdForUpdate(id: string): Promise<TmcTransferRequestRecord | null>;
   findItemPhoto(
     requestId: string,
     itemId: string,
   ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" } | null>;
+  decideItem(
+    input: DecideTmcTransferRequestItemRecord,
+  ): Promise<"accepted" | "rejected" | "invalidated">;
+  closeRequest(input: CloseTmcTransferRequestRecord): Promise<boolean>;
   insertRequest(input: InsertTmcTransferRequestRecord): Promise<void>;
   insertRequestItem(
     input: InsertTmcTransferRequestItemRecord,

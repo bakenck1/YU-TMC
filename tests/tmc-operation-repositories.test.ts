@@ -15,6 +15,10 @@ interface QueryCall {
   values: readonly unknown[] | undefined;
 }
 
+function uuid(value: number) {
+  return `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
+}
+
 class QueryQueue {
   readonly calls: QueryCall[] = [];
 
@@ -448,6 +452,58 @@ test("findItemPhoto returns null for an item outside the request", async () => {
     "ffffffff-ffff-4fff-8fff-ffffffffffff",
     "11111111-1111-4111-8111-111111111111",
   ), null);
+});
+
+test("decideItem atomically hands responsibility over only for a valid accept", async () => {
+  const source = new QueryQueue([
+    { rows: [{ version: 1, result: "pending" }] },
+    { rows: [{ status: "active", archived_at: null }] },
+    { rows: [{ item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+  assert.equal(await repository.decideItem({
+    requestId: uuid(10), requestItemId: uuid(11), itemId: uuid(1),
+    responsibilityPeriodIdAtRequest: uuid(12), currentResponsibleIdAtRequest: uuid(2),
+    expectedVersion: 1, decision: "accept", recipientId: uuid(3), decidedBy: uuid(3),
+    decidedAt: new Date("2026-08-10T12:00:00.000Z"), newResponsibilityPeriodId: uuid(13),
+  }), "accepted");
+  assert.equal(source.calls.length, 6);
+  assert.match(source.calls[3]!.text, /tmc_transfer_accepted/i);
+  assert.match(source.calls[4]!.text, /'transfer'/i);
+  assert.match(source.calls[5]!.text, /result = \$2[\s\S]+version = version \+ 1/i);
+});
+
+test("decideItem invalidates stale inventory without creating responsibility", async () => {
+  const source = new QueryQueue([
+    { rows: [{ version: 1, result: "pending" }] },
+    { rows: [{ status: "decommissioned", archived_at: new Date() }] },
+    { rows: [{ item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
+    { rows: [], rowCount: 1 },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+  assert.equal(await repository.decideItem({
+    requestId: uuid(10), requestItemId: uuid(11), itemId: uuid(1),
+    responsibilityPeriodIdAtRequest: uuid(12), currentResponsibleIdAtRequest: uuid(2),
+    expectedVersion: 1, decision: "accept", recipientId: uuid(3), decidedBy: uuid(3),
+    decidedAt: new Date(), newResponsibilityPeriodId: uuid(13),
+  }), "invalidated");
+  assert.equal(source.calls.length, 4);
+  assert.equal(source.calls.some((call) => /insert into[\s\S]+responsibility_periods/i.test(call.text)), false);
+  assert.equal(source.calls[3]!.values?.[2], "item_inactive");
+});
+
+test("closeRequest uses parent CAS and requires no pending children", async () => {
+  const source = new QueryQueue([{ rows: [], rowCount: 1 }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+  assert.equal(await repository.closeRequest({
+    requestId: uuid(10), expectedVersion: 2, status: "accepted", closedBy: uuid(3),
+    closedAt: new Date(), isAdministrativeDecision: false, administrativeReason: null,
+  }), true);
+  assert.match(source.calls[0]!.text, /request\.version = \$2/i);
+  assert.match(source.calls[0]!.text, /not exists[\s\S]+result = 'pending'/i);
 });
 
 function candidateRow(overrides: Record<string, unknown> = {}) {

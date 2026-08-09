@@ -30,6 +30,7 @@ export default async function TmcTransferRequestPage({
       request={request}
       canDecide={canDecide}
       showOverdue={user.role === "admin"}
+      requiresAdministrativeReason={user.role === "admin" && request.recipient.id !== user.userId}
     />
   );
 }

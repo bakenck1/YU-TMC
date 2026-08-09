@@ -7,13 +7,16 @@
   "include": [
     "../../app/(protected)/tmc/transfer-requests/[id]/page.tsx",
     "../../app/api/inventory/transfer-requests/[id]/route.ts",
+    "../../app/api/inventory/transfer-requests/[id]/decision/route.ts",
     "../../app/api/inventory/transfer-requests/[id]/items/[itemId]/photo/route.ts",
     "../../components/TmcTransferRequestCard.tsx",
     "../../lib/application/services/tmc-transfer-request-service.ts",
     "../../lib/server/http/tmc-transfer-request-detail-handler.ts",
+    "../../lib/server/http/tmc-transfer-request-decision-handler.ts",
     "../../lib/server/http/tmc-transfer-request-photo-handler.ts",
     "../../lib/tmc-transfer-request-card.ts",
     "../tmc-transfer-request-card.test.ts",
     "../tmc-transfer-request-detail-route.test.ts"
+    ,"../tmc-transfer-request-decision-route.test.ts"
   ]
 }

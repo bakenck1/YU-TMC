@@ -1,14 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { MapPin, Package, UserRound } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
+import { parseTmcTransferRequest } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
 import {
+  buildTmcRequestDecisions,
   createTmcRequestSelection,
+  shouldRetainTmcDecisionAttempt,
   toggleTmcRequestSelection,
 } from "@/lib/tmc-transfer-request-card";
 
@@ -38,15 +42,34 @@ export default function TmcTransferRequestCard({
   request,
   canDecide,
   showOverdue,
+  requiresAdministrativeReason,
 }: {
   request: TmcTransferRequestDto;
   canDecide: boolean;
   showOverdue: boolean;
+  requiresAdministrativeReason: boolean;
 }) {
   const { t, language } = useAppSettings();
+  const router = useRouter();
   const [selection, setSelection] = useState<ReadonlySet<string>>(() =>
     createTmcRequestSelection(request, canDecide),
   );
+  const [administrativeReason, setAdministrativeReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<
+    | { kind: "success"; accepted: number; total: number }
+    | { kind: "error"; message: TranslationKey }
+    | null
+  >(null);
+  const submissionSequence = useRef(0);
+  const inFlight = useRef(false);
+  const abortController = useRef<AbortController | null>(null);
+  const logicalAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const administrativeReasonRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => () => {
+    submissionSequence.current += 1;
+    abortController.current?.abort();
+  }, []);
   const locale = language === "kk" ? "kk-KZ" : language === "en" ? "en-US" : "ru-RU";
   const money = new Intl.NumberFormat(locale, { style: "currency", currency: "KZT" });
   const createdAt = new Intl.DateTimeFormat(locale, {
@@ -54,6 +77,94 @@ export default function TmcTransferRequestCard({
     timeStyle: "short",
     timeZone: "Asia/Qyzylorda",
   }).format(new Date(request.createdAt));
+  const pendingItems = request.items.filter((item) => item.result === "pending");
+
+  async function submitDecision(mode: "all" | "selected") {
+    if (inFlight.current || pendingItems.length === 0) return;
+    if (
+      mode === "selected" &&
+      selection.size === 0 &&
+      !window.confirm(t("tmc.request.rejectAllConfirm"))
+    ) return;
+    if (requiresAdministrativeReason && !administrativeReason.trim()) {
+      setFeedback({ kind: "error", message: "tmc.request.administrativeReasonRequired" });
+      administrativeReasonRef.current?.focus();
+      return;
+    }
+    const payload = {
+      requestVersion: request.version,
+      decisions: buildTmcRequestDecisions(request, selection, mode),
+      ...(requiresAdministrativeReason ? { administrativeReason } : {}),
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (!logicalAttempt.current || logicalAttempt.current.fingerprint !== fingerprint) {
+      logicalAttempt.current = {
+        fingerprint,
+        key: `tmc-decision:${crypto.randomUUID()}`,
+      };
+    }
+    const sequence = ++submissionSequence.current;
+    inFlight.current = true;
+    setSubmitting(true);
+    setFeedback(null);
+    const controller = new AbortController();
+    abortController.current = controller;
+    try {
+      const response = await fetch(
+        `/api/inventory/transfer-requests/${request.id}/decision`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": logicalAttempt.current.key,
+          },
+          body: fingerprint,
+          signal: controller.signal,
+        },
+      );
+      const body: unknown = await response.json();
+      if (!response.ok || !body || typeof body !== "object" || !("request" in body)) {
+        const errorCode = body && typeof body === "object" && "error" in body
+          ? String(body.error)
+          : "decision_failed";
+        if (sequence !== submissionSequence.current) return;
+        if (errorCode === "idempotency_request_in_progress") {
+          setFeedback({ kind: "error", message: "tmc.request.decisionInProgress" });
+          return;
+        }
+        if (!shouldRetainTmcDecisionAttempt(response.status, errorCode)) {
+          logicalAttempt.current = null;
+        }
+        if (response.status === 409) {
+          setFeedback({ kind: "error", message: "tmc.request.decisionStale" });
+          router.refresh();
+          return;
+        }
+        throw new Error(errorCode);
+      }
+      const updated = parseTmcTransferRequest(body.request);
+      if (sequence !== submissionSequence.current) return;
+      logicalAttempt.current = null;
+      setFeedback({
+        kind: "success",
+        accepted: updated.summary.accepted,
+        total: updated.summary.total,
+      });
+      router.refresh();
+    } catch (error) {
+      if (sequence === submissionSequence.current && !(error instanceof DOMException && error.name === "AbortError")) {
+        setFeedback({ kind: "error", message: "tmc.request.decisionError" });
+      }
+    } finally {
+      if (sequence === submissionSequence.current) {
+        inFlight.current = false;
+        abortController.current = null;
+        setSubmitting(false);
+      }
+    }
+  }
 
   return (
     <section className="space-y-4" aria-labelledby="tmc-request-title">
@@ -72,6 +183,7 @@ export default function TmcTransferRequestCard({
           <Meta label={t("tmc.request.summary")} value={`${request.summary.pending} / ${request.summary.total}`} />
         </dl>
         {showOverdue && request.overdue ? <p role="status" className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">{t("tmc.request.overdue")}</p> : null}
+        {request.status === "accepted" || request.status === "rejected" ? <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">{t("tmc.request.result").replace("{accepted}", String(request.summary.accepted)).replace("{total}", String(request.summary.total))}</p> : null}
         <div className="mt-4 rounded-xl bg-zinc-50 p-3 text-sm">
           <p className="font-medium text-zinc-500">{t("tmc.request.comment")}</p>
           <p className="mt-1 whitespace-pre-wrap break-words text-zinc-800">{request.comment || t("tmc.request.noComment")}</p>
@@ -121,6 +233,39 @@ export default function TmcTransferRequestCard({
           );
         })}
       </div>
+      {canDecide && pendingItems.length > 0 && feedback?.kind !== "success" ? (
+        <div aria-busy={submitting} className="sticky bottom-3 rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-xl backdrop-blur">
+          {requiresAdministrativeReason ? (
+            <label className="block text-sm font-semibold text-zinc-800">
+              {t("tmc.request.administrativeReason")}
+              <textarea
+                ref={administrativeReasonRef}
+                value={administrativeReason}
+                onChange={(event) => {
+                  setAdministrativeReason(event.target.value);
+                  if (feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired") setFeedback(null);
+                }}
+                required
+                aria-invalid={feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired"}
+                aria-describedby={feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired" ? "tmc-administrative-reason-error" : undefined}
+                maxLength={1000}
+                rows={3}
+                className="mt-2 w-full rounded-xl border border-zinc-200 p-3 font-normal outline-none focus:border-emerald-500"
+              />
+              {feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired" ? <span id="tmc-administrative-reason-error" role="alert" className="mt-1 block font-normal text-red-700">{t(feedback.message)}</span> : null}
+            </label>
+          ) : null}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">{t("tmc.request.acceptAll")}</button>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-11 rounded-xl border border-emerald-700 bg-white px-4 text-sm font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button>
+          </div>
+        </div>
+      ) : null}
+      {feedback?.kind === "success" ? (
+        <p role="status" className="rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">{t("tmc.request.result").replace("{accepted}", String(feedback.accepted)).replace("{total}", String(feedback.total))}</p>
+      ) : feedback?.kind === "error" && feedback.message !== "tmc.request.administrativeReasonRequired" ? (
+        <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">{t(feedback.message)}</p>
+      ) : null}
     </section>
   );
 }

@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  buildTmcRequestDecisions,
   createTmcRequestSelection,
+  shouldRetainTmcDecisionAttempt,
   toggleTmcRequestSelection,
 } from "../lib/tmc-transfer-request-card";
 import type { TmcTransferRequestDto } from "../lib/contracts/tmc-operations";
@@ -17,6 +19,23 @@ test("request selection starts with pending items only and cannot add terminal i
   selection = toggleTmcRequestSelection(selection, request.items[0], true);
   assert.deepEqual([...selection], []);
   assert.deepEqual([...createTmcRequestSelection(request, false)], []);
+});
+
+test("decision retry retains its idempotency key only for uncertain outcomes", () => {
+  assert.equal(shouldRetainTmcDecisionAttempt(503, "upstream_unavailable"), true);
+  assert.equal(shouldRetainTmcDecisionAttempt(409, "idempotency_request_in_progress"), true);
+  assert.equal(shouldRetainTmcDecisionAttempt(409, "version_conflict"), false);
+  assert.equal(shouldRetainTmcDecisionAttempt(400, "invalid_request"), false);
+});
+
+test("accept-all ignores checkboxes while selected explicitly rejects unchecked pending items", () => {
+  const request = requestDto();
+  const none = new Set<string>();
+  assert.deepEqual(buildTmcRequestDecisions(request, none, "all").map((item) => item.decision), ["accept"]);
+  assert.deepEqual(buildTmcRequestDecisions(request, none, "selected").map((item) => item.decision), ["reject"]);
+  const selected = new Set([request.items[0].id]);
+  assert.deepEqual(buildTmcRequestDecisions(request, selected, "selected").map((item) => item.decision), ["accept"]);
+  assert.equal(buildTmcRequestDecisions(request, selected, "selected")[0]?.itemVersion, request.items[0].version);
 });
 
 test("group request card exposes all required read-only metadata accessibly", () => {
@@ -36,7 +55,9 @@ test("group request card exposes all required read-only metadata accessibly", ()
   assert.match(source, /item\.item\.photoUrl/);
   assert.match(source, /min-h-11/);
   assert.doesNotMatch(source, /dangerouslySetInnerHTML/);
-  assert.doesNotMatch(source, /accept-selected|decision/i);
+  assert.match(source, /tmc\.request\.acceptAll/);
+  assert.match(source, /tmc\.request\.acceptSelected/);
+  assert.match(source, /window\.confirm/);
 });
 
 function requestDto(): TmcTransferRequestDto {

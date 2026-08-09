@@ -13,12 +13,13 @@ import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   CreateTmcTransferRequestInput,
   CreateTmcTransferRequestResultDto,
+  DecideTmcTransferRequestInput,
   TmcOperationProblemCode,
   TmcTransferRequestDto,
   TmcTransferRequestItemDto,
   TmcTransferRequestSummaryDto,
 } from "@/lib/contracts/tmc-operations";
-import { parseCreateTmcTransferRequestResult } from "@/lib/contracts/tmc-operations";
+import { parseCreateTmcTransferRequestResult, parseTmcTransferRequest } from "@/lib/contracts/tmc-operations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import {
@@ -32,6 +33,7 @@ const MAX_COMMENT_CODE_POINTS = 1_000;
 const REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const CREATE_OPERATION = "tmc.transfer_request.create";
+const DECIDE_OPERATION = "tmc.transfer_request.decision";
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 
 export interface TmcTransferRequestServiceClock {
@@ -48,6 +50,14 @@ export interface IdempotentTmcTransferRequestCreation {
   result: CreateTmcTransferRequestResultDto;
   resourceId?: string;
   status: number;
+}
+
+export interface IdempotentTmcTransferRequestDecision {
+  body: { request: TmcTransferRequestDto };
+  kind: "completed" | "replayed";
+  request: TmcTransferRequestDto;
+  resourceId: string;
+  status: 200;
 }
 
 type ClassifiedItem =
@@ -129,6 +139,154 @@ export class TmcTransferRequestService {
       if (!photo) throw requestNotFound();
       return photo;
     });
+  }
+
+  async decide(
+    requestId: string,
+    input: DecideTmcTransferRequestInput,
+    actor: AuthorizationActor,
+  ): Promise<TmcTransferRequestDto> {
+    const normalized = normalizeDecisionInput(requestId, input, actor);
+    try {
+      return await this.unitOfWork.transaction(async ({ transferRequests }) => {
+      const request = await transferRequests.findByIdForUpdate(normalized.requestId);
+      if (!request) throw requestNotFound();
+      const actorId = normalized.actorId;
+      const isRecipient = request.recipient.id === actorId;
+      const currentActor = await transferRequests.findUserById(actorId);
+      if (!currentActor || !currentActor.active || currentActor.deletedAt) {
+        throw requestNotFound();
+      }
+      const isAdministrativeDecision = !isRecipient && currentActor.role === "admin";
+      if (!isRecipient && !isAdministrativeDecision) throw requestNotFound();
+      const recipient = isRecipient
+        ? currentActor
+        : await transferRequests.findUserById(request.recipient.id);
+      if (!recipient || !recipient.active || recipient.deletedAt) {
+        throw new ApplicationError("conflict", "recipient_unavailable");
+      }
+      const administrativeReason = normalizeAdministrativeReason(
+        normalized.administrativeReason,
+        isAdministrativeDecision,
+      );
+      if (request.status !== "pending") {
+        throw new ApplicationError("conflict", "request_already_closed");
+      }
+      if (request.version !== normalized.requestVersion) {
+        throw new ApplicationError("conflict", "version_conflict");
+      }
+      const pending = request.items.filter((item) => item.result === "pending");
+      const decisions = new Map(normalized.decisions.map((decision) => [decision.itemId, decision]));
+      if (
+        pending.length === 0 ||
+        decisions.size !== pending.length ||
+        pending.some((item) => !decisions.has(item.itemId))
+      ) {
+        throw new ApplicationError("validation", "decision_coverage_mismatch");
+      }
+      for (const item of pending) {
+        if (decisions.get(item.itemId)?.itemVersion !== item.version) {
+          throw new ApplicationError("conflict", "version_conflict");
+        }
+      }
+      const decidedAt = this.clock.now();
+      const results: Array<"accepted" | "rejected" | "invalidated"> = [];
+      for (const item of [...pending].sort((left, right) => left.itemId.localeCompare(right.itemId))) {
+        const decision = decisions.get(item.itemId)!;
+        results.push(await transferRequests.decideItem({
+          requestId: request.id,
+          requestItemId: item.id,
+          itemId: item.itemId,
+          responsibilityPeriodIdAtRequest: item.responsibilityPeriodIdAtRequest,
+          currentResponsibleIdAtRequest: item.currentResponsibleIdAtRequest,
+          expectedVersion: item.version,
+          decision: decision.decision,
+          recipientId: request.recipient.id,
+          decidedBy: actorId,
+          decidedAt,
+          newResponsibilityPeriodId: this.ids.create(),
+        }));
+      }
+      const hasAccepted =
+        request.items.some((item) => item.result === "accepted") ||
+        results.includes("accepted");
+      const closed = await transferRequests.closeRequest({
+        requestId: request.id,
+        expectedVersion: request.version,
+        status: hasAccepted ? "accepted" : "rejected",
+        closedBy: actorId,
+        closedAt: decidedAt,
+        isAdministrativeDecision,
+        administrativeReason,
+      });
+      if (!closed) throw new ApplicationError("conflict", "version_conflict");
+      const updated = await transferRequests.findById(request.id);
+      if (!updated) throw incompleteProjection();
+        return toRequestDto(updated, this.clock.now());
+      }, { isolation: "serializable", maxAttempts: 3 });
+    } catch (error) {
+      if (error instanceof TmcOperationRepositoryConflictError) {
+        throw new ApplicationError("conflict", error.problem, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  async decideIdempotent(
+    requestId: string,
+    input: DecideTmcTransferRequestInput,
+    actor: AuthorizationActor,
+    idempotencyKey: string,
+  ): Promise<IdempotentTmcTransferRequestDecision> {
+    const normalized = normalizeDecisionInput(requestId, input, actor);
+    const key = normalizeTmcIdempotencyKey(idempotencyKey);
+    const execution = await executeIdempotentCommand(
+      this.unitOfWork,
+      {
+        id: this.ids.create(),
+        actorId: normalized.actorId,
+        operation: DECIDE_OPERATION,
+        key,
+        requestHash: await hashDecisionRequest(normalized),
+        expiresInMs: IDEMPOTENCY_LIFETIME_MS,
+      },
+      async () => {
+        const request = await this.decide(
+          normalized.requestId,
+          {
+            requestVersion: normalized.requestVersion,
+            decisions: normalized.decisions,
+            administrativeReason: normalized.administrativeReason,
+          },
+          actor,
+        );
+        return { body: { request }, resourceId: request.id, status: 200 };
+      },
+      {
+        afterReserve: async ({ transferRequests }) => {
+          const request = await transferRequests.findById(normalized.requestId);
+          if (!request) throw requestNotFound();
+          const currentActor = await transferRequests.findUserById(normalized.actorId);
+          if (
+            !currentActor ||
+            !currentActor.active ||
+            currentActor.deletedAt ||
+            (request.recipient.id !== normalized.actorId && currentActor.role !== "admin")
+          ) {
+            throw requestNotFound();
+          }
+        },
+        transaction: { isolation: "serializable", maxAttempts: 3 },
+      },
+    );
+    const request = readStoredDecision(execution.response, normalized.requestId);
+    return {
+      body: { request },
+      kind: execution.kind,
+      request,
+      resourceId: request.id,
+      status: 200,
+    };
   }
 
   async createIdempotent(
@@ -438,6 +596,27 @@ async function hashCreateRequest(
     .join("");
 }
 
+async function hashDecisionRequest(
+  input: ReturnType<typeof normalizeDecisionInput>,
+) {
+  const payload = new TextEncoder().encode(JSON.stringify({
+    operation: DECIDE_OPERATION,
+    requestId: input.requestId,
+    requestVersion: input.requestVersion,
+    decisions: [...input.decisions].sort((left, right) =>
+      left.itemId.localeCompare(right.itemId),
+    ),
+    administrativeReason:
+      typeof input.administrativeReason === "string"
+        ? input.administrativeReason.normalize("NFKC").trim()
+        : null,
+  }));
+  const digest = await crypto.subtle.digest("SHA-256", payload);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function readStoredCreateResult(response: {
   body: Record<string, unknown>;
   resourceId?: string;
@@ -452,6 +631,17 @@ function readStoredCreateResult(response: {
     throw new Error("tmc_idempotency_response_invalid");
   }
   return result;
+}
+
+function readStoredDecision(
+  response: { body: Record<string, unknown>; resourceId?: string; status: number },
+  requestId: string,
+) {
+  const request = parseTmcTransferRequest(response.body.request);
+  if (response.status !== 200 || response.resourceId !== requestId || request.id !== requestId) {
+    throw new Error("tmc_idempotency_response_invalid");
+  }
+  return request;
 }
 
 function normalizeComment(value: string | null | undefined) {
@@ -683,4 +873,54 @@ function forbidden() {
 
 function requestNotFound() {
   return new ApplicationError("not_found", "request_not_found");
+}
+
+function normalizeDecisionInput(
+  requestId: string,
+  input: DecideTmcTransferRequestInput,
+  actor: AuthorizationActor,
+) {
+  if (!isUuid(requestId) || !isUuid(actor.userId)) throw requestNotFound();
+  if (
+    !Number.isInteger(input.requestVersion) ||
+    input.requestVersion < 1 ||
+    !Array.isArray(input.decisions) ||
+    input.decisions.length < 1 ||
+    input.decisions.length > MAX_ITEMS
+  ) throw validation("invalid_decision");
+  const decisions = input.decisions.map((decision) => {
+    if (
+      !isUuid(decision.itemId) ||
+      !Number.isInteger(decision.itemVersion) ||
+      decision.itemVersion < 1 ||
+      !["accept", "reject"].includes(decision.decision)
+    ) throw validation("invalid_decision");
+    return { ...decision, itemId: decision.itemId.toLowerCase() };
+  });
+  if (new Set(decisions.map((decision) => decision.itemId)).size !== decisions.length) {
+    throw validation("duplicate_item");
+  }
+  return {
+    requestId: requestId.toLowerCase(),
+    actorId: actor.userId.toLowerCase(),
+    requestVersion: input.requestVersion,
+    decisions,
+    administrativeReason: input.administrativeReason,
+  };
+}
+
+function normalizeAdministrativeReason(
+  value: string | null | undefined,
+  required: boolean,
+) {
+  const normalized = typeof value === "string" ? value.normalize("NFKC").trim() : "";
+  if (normalized.includes("\u0000")) {
+    throw validation("invalid_administrative_reason");
+  }
+  if (Array.from(normalized).length > MAX_COMMENT_CODE_POINTS) {
+    throw validation("administrative_reason_too_long");
+  }
+  if (required && !normalized) throw validation("administrative_reason_required");
+  if (!required && normalized) throw validation("administrative_reason_not_allowed");
+  return required ? normalized : null;
 }

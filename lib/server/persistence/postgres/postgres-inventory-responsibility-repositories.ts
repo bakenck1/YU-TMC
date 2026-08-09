@@ -25,6 +25,7 @@ const AUDIT = '"yu_inventory"."audit_records"';
 
 interface StateRow extends QueryResultRow {
   item_id: string;
+  responsibility_period_id: string | null;
   item_status: ItemResponsibilityState["itemStatus"];
   responsible_user_id: string | null;
   responsible_name: string | null;
@@ -74,11 +75,12 @@ class PostgresInventoryResponsibilityRepository
   async findItemState(itemId: string): Promise<ItemResponsibilityState | null> {
     const result = await this.source.query<StateRow>(
       `select i.id as item_id, i.status as item_status,
+              rp.id as responsibility_period_id,
               rp.responsible_user_id,
               u.full_name as responsible_name
          from ${ITEMS} i
          left join lateral (
-           select responsible_user_id
+           select id, responsible_user_id
              from ${RESPONSIBILITY}
             where item_id = i.id and ended_at is null
             limit 1
@@ -91,6 +93,7 @@ class PostgresInventoryResponsibilityRepository
     return row
       ? {
           itemId: row.item_id,
+          responsibilityPeriodId: row.responsibility_period_id,
           responsibleUserId: row.responsible_user_id,
           responsibleName: row.responsible_name,
           itemStatus: row.item_status,
@@ -179,16 +182,22 @@ class PostgresInventoryResponsibilityRepository
     );
   }
 
-  async closeResponsibility(input: CloseResponsibilityRecord): Promise<void> {
+  async closeResponsibility(input: CloseResponsibilityRecord): Promise<boolean> {
     const result = await this.source.query(
       `update ${RESPONSIBILITY}
-          set ended_at = $2, ended_by = $3, end_reason = $4
-        where item_id = $1 and ended_at is null`,
-      [input.itemId, input.endedAt, input.endedBy, input.endReason],
+          set ended_at = $4, ended_by = $5, end_reason = $6
+        where id = $1 and item_id = $2 and responsible_user_id = $3
+          and ended_at is null`,
+      [
+        input.expectedResponsibilityPeriodId,
+        input.itemId,
+        input.expectedResponsibleUserId,
+        input.endedAt,
+        input.endedBy,
+        input.endReason,
+      ],
     );
-    if (result.rowCount !== 1) {
-      throw new Error("open_responsibility_not_found");
-    }
+    return result.rowCount === 1;
   }
 
   async insertTransfer(input: InsertTransferRecord): Promise<TransferRecord> {

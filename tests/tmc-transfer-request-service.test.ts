@@ -10,6 +10,8 @@ import type {
   InsertTmcTransferRequestItemRecord,
   InsertTmcTransferRequestRecord,
   InsertedTmcTransferRequestItemRecord,
+  DecideTmcTransferRequestItemRecord,
+  CloseTmcTransferRequestRecord,
   TmcOperationRepositories,
   TmcTransferCandidateRecord,
   TmcTransferRequestRecord,
@@ -80,6 +82,180 @@ test("request-scoped photo access requires a participant and item membership", a
     (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
   );
   assert.equal(harness.repository.findByIdCalls, calls);
+});
+
+test("recipient accepts selected pending items and rejects every unchecked item atomically", async () => {
+  const itemIds = [uuid(1), uuid(2), uuid(3)];
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord(itemIds.map((id) => candidate(id)));
+  const result = await harness.service.decide(
+    harness.repository.aggregate.id,
+    {
+      requestVersion: 1,
+      decisions: harness.repository.aggregate.items.map((item, index) => ({
+        itemId: item.itemId,
+        itemVersion: item.version,
+        decision: index < 2 ? "accept" as const : "reject" as const,
+      })),
+    },
+    { userId: RECIPIENT_ID, role: "employee" },
+  );
+  assert.deepEqual(result.summary, {
+    total: 3, pending: 0, accepted: 2, rejected: 1, cancelled: 0, invalidated: 0,
+  });
+  assert.equal(result.status, "accepted");
+  assert.deepEqual(harness.repository.decisionCalls.map((call) => call.decision), ["accept", "accept", "reject"]);
+});
+
+test("decision requires exact pending coverage and an admin override reason", async () => {
+  const harness = createHarness({ actors: [user({ id: uuid(70), role: "admin" })] });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
+  await assert.rejects(
+    harness.service.decide(
+      harness.repository.aggregate.id,
+      { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" }] },
+      { userId: RECIPIENT_ID, role: "employee" },
+    ),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "decision_coverage_mismatch",
+  );
+  await assert.rejects(
+    harness.service.decide(
+      harness.repository.aggregate.id,
+      { requestVersion: 1, decisions: harness.repository.aggregate.items.map((item) => ({ itemId: item.itemId, itemVersion: item.version, decision: "accept" })) },
+      { userId: uuid(70), role: "admin" },
+    ),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "administrative_reason_required",
+  );
+  assert.equal(harness.repository.decisionCalls.length, 0);
+});
+
+test("decision hides an unavailable recipient from a non-participant", async () => {
+  const outsider = user({ id: uuid(71) });
+  const harness = createHarness({
+    recipient: user({ active: false }),
+    actors: [outsider],
+  });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  await assert.rejects(
+    harness.service.decide(
+      harness.repository.aggregate.id,
+      { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" }] },
+      { userId: outsider.id, role: "employee" },
+    ),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found",
+  );
+  assert.equal(harness.repository.decisionCalls.length, 0);
+});
+
+test("decision uses the current database role and persists an administrator reason", async () => {
+  const administrator = user({ id: uuid(70), role: "admin" });
+  const harness = createHarness({ actors: [administrator] });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  const result = await harness.service.decide(
+    harness.repository.aggregate.id,
+    { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" }], administrativeReason: "  Проверено  " },
+    { userId: administrator.id, role: "employee" },
+  );
+  assert.equal(result.isAdministrativeDecision, true);
+  assert.equal(result.administrativeReason, "Проверено");
+
+  const staleSessionAdmin = createHarness({ actors: [user({ id: uuid(72), role: "employee" })] });
+  staleSessionAdmin.repository.aggregate = requestRecord([candidate(uuid(2))]);
+  await assert.rejects(
+    staleSessionAdmin.service.decide(
+      staleSessionAdmin.repository.aggregate.id,
+      { requestVersion: 1, decisions: [{ itemId: uuid(2), itemVersion: 1, decision: "accept" }], administrativeReason: "override" },
+      { userId: uuid(72), role: "admin" },
+    ),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found",
+  );
+});
+
+test("decision rejects NUL reasons and all client version conflicts before writes", async () => {
+  const administrator = user({ id: uuid(70), role: "admin" });
+  for (const input of [
+    { requestVersion: 2, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" as const }], administrativeReason: "reason" },
+    { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 2, decision: "accept" as const }], administrativeReason: "reason" },
+    { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" as const }], administrativeReason: "bad\u0000reason" },
+  ]) {
+    const harness = createHarness({ actors: [administrator] });
+    harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+    await assert.rejects(harness.service.decide(harness.repository.aggregate.id, input, { userId: administrator.id, role: "admin" }));
+    assert.equal(harness.repository.decisionCalls.length, 0);
+  }
+});
+
+test("decision records invalidated outcomes and rolls back an earlier item on a late conflict", async () => {
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
+  harness.repository.decisionResults.set(uuid(1), "invalidated");
+  const input = {
+    requestVersion: 1,
+    decisions: harness.repository.aggregate.items.map((item) => ({ itemId: item.itemId, itemVersion: item.version, decision: "accept" as const })),
+  };
+  const invalidated = await harness.service.decide(harness.repository.aggregate.id, input, { userId: RECIPIENT_ID, role: "employee" });
+  assert.deepEqual(invalidated.summary, { total: 2, pending: 0, accepted: 1, rejected: 0, cancelled: 0, invalidated: 1 });
+
+  const rollback = createHarness();
+  rollback.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
+  rollback.repository.decisionFailureItemId = uuid(2);
+  await assert.rejects(
+    rollback.service.decide(rollback.repository.aggregate.id, input, { userId: RECIPIENT_ID, role: "employee" }),
+    /version_conflict/,
+  );
+  assert.equal(rollback.repository.aggregate.items[0]?.result, "pending");
+  assert.equal(rollback.repository.aggregate.status, "pending");
+});
+
+test("decision replays idempotently without applying responsibility twice", async () => {
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
+  const input = {
+    requestVersion: 1,
+    decisions: harness.repository.aggregate.items.map((item) => ({
+      itemId: item.itemId,
+      itemVersion: item.version,
+      decision: "accept" as const,
+    })),
+  };
+  const first = await harness.service.decideIdempotent(
+    harness.repository.aggregate.id,
+    input,
+    { userId: RECIPIENT_ID, role: "employee" },
+    "tmc-decision-000001",
+  );
+  const replay = await harness.service.decideIdempotent(
+    harness.repository.aggregate.id,
+    { ...input, decisions: [...input.decisions].reverse() },
+    { userId: RECIPIENT_ID, role: "employee" },
+    "tmc-decision-000001",
+  );
+  assert.equal(first.kind, "completed");
+  assert.equal(replay.kind, "replayed");
+  assert.deepEqual(replay.request, first.request);
+  assert.equal(harness.repository.decisionCalls.length, 2);
+});
+
+test("decision replay reauthorizes the current database role and rejects changed payload", async () => {
+  const administrator = user({ id: uuid(70), role: "admin" });
+  const harness = createHarness({ actors: [administrator] });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  const input = { requestVersion: 1, decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" as const }], administrativeReason: "reason" };
+  await harness.service.decideIdempotent(harness.repository.aggregate.id, input, { userId: administrator.id, role: "admin" }, "tmc-decision-admin-1");
+  harness.repository.users.set(administrator.id, { ...administrator, role: "employee" });
+  await assert.rejects(
+    harness.service.decideIdempotent(harness.repository.aggregate.id, input, { userId: administrator.id, role: "admin" }, "tmc-decision-admin-1"),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found",
+  );
+
+  const recipientHarness = createHarness();
+  recipientHarness.repository.aggregate = requestRecord([candidate(uuid(2))]);
+  const recipientInput = { requestVersion: 1, decisions: [{ itemId: uuid(2), itemVersion: 1, decision: "accept" as const }] };
+  await recipientHarness.service.decideIdempotent(recipientHarness.repository.aggregate.id, recipientInput, { userId: RECIPIENT_ID, role: "employee" }, "tmc-decision-recipient-1");
+  await assert.rejects(
+    recipientHarness.service.decideIdempotent(recipientHarness.repository.aggregate.id, { ...recipientInput, decisions: [{ ...recipientInput.decisions[0]!, decision: "reject" }] }, { userId: RECIPIENT_ID, role: "employee" }, "tmc-decision-recipient-1"),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "idempotency_key_reused",
+  );
 });
 
 test("replays the exact TMC create result without a second mutation", async () => {
@@ -846,6 +1022,8 @@ class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
     const requestCount = memory.insertedRequests.length;
     const itemCount = memory.insertedItems.length;
     const resultCount = memory.insertedItemResults.length;
+    const decisionCount = memory.decisionCalls.length;
+    const aggregateSnapshot = structuredClone(memory.aggregate);
     const idempotencySnapshot = this.idempotency.snapshot();
     this.depth += 1;
     try {
@@ -857,6 +1035,8 @@ class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
       memory.insertedRequests.length = requestCount;
       memory.insertedItems.length = itemCount;
       memory.insertedItemResults.length = resultCount;
+      memory.decisionCalls.length = decisionCount;
+      memory.aggregate = aggregateSnapshot;
       this.idempotency.restore(idempotencySnapshot);
       throw error;
     } finally {
@@ -943,6 +1123,9 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
   users = new Map<string, TmcTransferUserRecord>();
   photo: { bytes: Uint8Array; mimeType: "image/jpeg" } | null = null;
   photoCalls: string[][] = [];
+  decisionCalls: DecideTmcTransferRequestItemRecord[] = [];
+  decisionResults = new Map<string, "accepted" | "rejected" | "invalidated">();
+  decisionFailureItemId: string | null = null;
 
   async findUserById(id: string) {
     this.calls.push("findUserById");
@@ -977,9 +1160,43 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
       })),
     };
   }
+  async findByIdForUpdate(id: string) {
+    return this.findById(id);
+  }
   async findItemPhoto(requestId: string, itemId: string) {
     this.photoCalls.push([requestId, itemId]);
     return this.photo;
+  }
+  async decideItem(input: DecideTmcTransferRequestItemRecord) {
+    this.decisionCalls.push(input);
+    if (input.itemId === this.decisionFailureItemId) {
+      throw new ApplicationError("conflict", "version_conflict");
+    }
+    const item = this.aggregate?.items.find((candidate) => candidate.id === input.requestItemId);
+    if (!item || item.result !== "pending" || item.version !== input.expectedVersion) {
+      throw new ApplicationError("conflict", "version_conflict");
+    }
+    const result = this.decisionResults.get(input.itemId) ?? (input.decision === "accept" ? "accepted" as const : "rejected" as const);
+    Object.assign(item, {
+      result,
+      invalidReason: result === "invalidated" ? "responsibility_changed" : null,
+      decidedAt: input.decidedAt,
+      decidedBy: operationUser(input.decidedBy),
+      version: item.version + 1,
+    });
+    return result;
+  }
+  async closeRequest(input: CloseTmcTransferRequestRecord) {
+    if (!this.aggregate || this.aggregate.version !== input.expectedVersion) return false;
+    Object.assign(this.aggregate, {
+      status: input.status,
+      closedAt: input.closedAt,
+      closedBy: operationUser(input.closedBy),
+      isAdministrativeDecision: input.isAdministrativeDecision,
+      administrativeReason: input.administrativeReason,
+      version: this.aggregate.version + 1,
+    });
+    return true;
   }
   async insertRequest(input: InsertTmcTransferRequestRecord) {
     this.calls.push("insertRequest");
