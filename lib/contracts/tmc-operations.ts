@@ -12,6 +12,7 @@ export type {
 export const TMC_OPERATION_PROBLEM_CODES = [
   "item_not_found",
   "item_inactive",
+  "item_unassigned",
   "forbidden",
   "already_responsible",
   "active_transfer_exists",

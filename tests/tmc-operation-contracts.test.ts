@@ -19,6 +19,7 @@ test("TMC request domain enums stay aligned with PostgreSQL", () => {
   assert.deepEqual(TMC_OPERATION_PROBLEM_CODES, [
     "item_not_found",
     "item_inactive",
+    "item_unassigned",
     "forbidden",
     "already_responsible",
     "active_transfer_exists",
