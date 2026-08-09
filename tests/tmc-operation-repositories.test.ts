@@ -1,0 +1,488 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import test from "node:test";
+
+import {
+  TmcOperationRepositoryConflictError,
+  type TmcTransferRequestRecord,
+} from "../lib/application/ports/tmc-operation-repositories";
+import { createPostgresTmcOperationRepositories } from "../lib/server/persistence/postgres/postgres-tmc-operation-repositories";
+import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
+
+interface QueryCall {
+  text: string;
+  values: readonly unknown[] | undefined;
+}
+
+class QueryQueue {
+  readonly calls: QueryCall[] = [];
+
+  constructor(
+    private readonly responses: Array<
+      | { rows: unknown[]; rowCount?: number }
+      | Error
+    >,
+  ) {}
+
+  readonly query = async (
+    text: string,
+    values?: readonly unknown[],
+  ) => {
+    this.calls.push({ text, values });
+    const response = this.responses.shift();
+    if (!response) throw new Error("unexpected_query");
+    if (response instanceof Error) throw response;
+    return {
+      command: "SELECT",
+      fields: [],
+      oid: 0,
+      rowCount: response.rowCount ?? response.rows.length,
+      rows: response.rows,
+    };
+  };
+
+  asSource() {
+    return { query: this.query } as unknown as PostgresRepositorySource;
+  }
+}
+
+test("TMC repository ports and PostgreSQL adapter type-check together", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join("node_modules", "typescript", "bin", "tsc"),
+      "--project",
+      path.join(
+        "tests",
+        "typecheck",
+        "tsconfig.tmc-operation-repositories.json",
+      ),
+      "--pretty",
+      "false",
+    ],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+  assert.equal(
+    result.status,
+    0,
+    [result.stdout, result.stderr].filter(Boolean).join("\n"),
+  );
+});
+
+test("findCandidates returns validation data without hiding problematic items", async () => {
+  const archivedAt = new Date("2026-08-09T10:00:00.000Z");
+  const source = new QueryQueue([
+    {
+      rows: [
+        candidateRow({ has_active_transfer: false }),
+        candidateRow({
+          item_id: "22222222-2222-4222-8222-222222222222",
+          item_status: "decommissioned",
+          archived_at: archivedAt,
+          responsibility_period_id: null,
+          responsible_user_id: null,
+          responsible_full_name: null,
+          responsible_email: null,
+          responsible_role: null,
+          responsible_is_active: null,
+          responsible_deleted_at: null,
+          has_active_transfer: true,
+        }),
+        candidateRow({
+          item_id: "33333333-3333-4333-8333-333333333333",
+          has_active_transfer: true,
+        }),
+      ],
+    },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+  const requestedIds = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+  ];
+
+  const result = await repository.findCandidates(requestedIds);
+
+  assert.equal(source.calls.length, 1);
+  assert.deepEqual(source.calls[0]?.values, [requestedIds]);
+  assert.match(source.calls[0]!.text, /any\(\$1::uuid\[\]\)/i);
+  assert.match(source.calls[0]!.text, /pending_current_owner/);
+  assert.match(source.calls[0]!.text, /request_item\.result = 'pending'/);
+  assert.deepEqual(result[0], {
+    itemId: "11111111-1111-4111-8111-111111111111",
+    itemVersion: 7,
+    itemStatus: "active",
+    archivedAt: null,
+    name: "Ноутбук",
+    inventoryNumber: "INV-001",
+    quantity: 2,
+    unitPrice: 125000.5,
+    photoUrl: "/api/inventory/items/11111111-1111-4111-8111-111111111111/photo?v=7",
+    buildingId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    buildingName: "Корпус A",
+    roomId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    roomDesignation: "101",
+    responsibilityPeriodId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    responsibleUser: {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      fullName: "Текущий сотрудник",
+      email: "owner@example.com",
+      role: "employee",
+      active: true,
+      deletedAt: null,
+    },
+    hasActiveTransfer: false,
+  });
+  assert.equal(result[1]?.archivedAt?.toISOString(), archivedAt.toISOString());
+  assert.equal(result[1]?.responsibleUser, null);
+  assert.deepEqual(
+    result.map(({ hasActiveTransfer }) => hasActiveTransfer),
+    [false, true, true],
+  );
+});
+
+test("findUserById returns active, inactive, and missing recipients", async () => {
+  const deletedAt = new Date("2026-08-09T09:00:00.000Z");
+  const source = new QueryQueue([
+    { rows: [{
+      id: "88888888-8888-4888-8888-888888888888",
+      full_name: "Active Recipient",
+      email: "active@example.com",
+      role: "employee",
+      is_active: true,
+      deleted_at: null,
+    }] },
+    { rows: [{
+      id: "77777777-7777-4777-8777-777777777777",
+      full_name: "Inactive Recipient",
+      email: "inactive@example.com",
+      role: "warehouse",
+      is_active: false,
+      deleted_at: deletedAt,
+    }] },
+    { rows: [] },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  assert.deepEqual(
+    await repository.findUserById("88888888-8888-4888-8888-888888888888"),
+    {
+      id: "88888888-8888-4888-8888-888888888888",
+      fullName: "Active Recipient",
+      email: "active@example.com",
+      role: "employee",
+      active: true,
+      deletedAt: null,
+    },
+  );
+  assert.deepEqual(
+    await repository.findUserById("77777777-7777-4777-8777-777777777777"),
+    {
+      id: "77777777-7777-4777-8777-777777777777",
+      fullName: "Inactive Recipient",
+      email: "inactive@example.com",
+      role: "warehouse",
+      active: false,
+      deletedAt,
+    },
+  );
+  assert.equal(
+    await repository.findUserById("66666666-6666-4666-8666-666666666666"),
+    null,
+  );
+  assert.equal(source.calls.length, 3);
+  assert.doesNotMatch(source.calls[0]!.text, /is_active\s*=\s*true/i);
+});
+
+test("findCandidates avoids SQL for an empty item set", async () => {
+  const source = new QueryQueue([]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  await assert.doesNotReject(async () => {
+    assert.deepEqual(await repository.findCandidates([]), []);
+  });
+  assert.equal(source.calls.length, 0);
+});
+
+test("insertRequest and insertRequestItem persist the responsibility snapshot", async () => {
+  const createdAt = new Date("2026-08-09T11:00:00.000Z");
+  const expiresAt = new Date("2026-08-10T11:00:00.000Z");
+  const source = new QueryQueue([
+    { rows: [], rowCount: 1 },
+    {
+      rows: [{
+        id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        request_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        item_id: "11111111-1111-4111-8111-111111111111",
+        responsibility_period_id_at_request:
+          "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        current_responsible_id_at_request:
+          "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        result: "pending",
+        invalid_reason: null,
+        created_at: createdAt,
+        decided_at: null,
+        decided_by: null,
+        version: 1,
+      }],
+    },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  await repository.insertRequest({
+    id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    initiatorId: "99999999-9999-4999-8999-999999999999",
+    recipientId: "88888888-8888-4888-8888-888888888888",
+    comment: null,
+    createdAt,
+    expiresAt,
+  });
+  const item = await repository.insertRequestItem({
+    id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    itemId: "11111111-1111-4111-8111-111111111111",
+    responsibilityPeriodIdAtRequest:
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    currentResponsibleIdAtRequest:
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    createdAt,
+  });
+
+  assert.match(source.calls[0]!.text, /tmc_transfer_requests/);
+  assert.deepEqual(source.calls[0]?.values, [
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    "99999999-9999-4999-8999-999999999999",
+    "88888888-8888-4888-8888-888888888888",
+    null,
+    createdAt,
+    expiresAt,
+  ]);
+  assert.match(source.calls[1]!.text, /responsibility_period_id_at_request/);
+  assert.deepEqual(source.calls[1]?.values, [
+    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    "11111111-1111-4111-8111-111111111111",
+    "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    createdAt,
+  ]);
+  assert.equal(item.result, "pending");
+  assert.equal(item.version, 1);
+});
+
+test("insertRequestItem maps only known constraints to item problem codes", async () => {
+  const constraints = [
+    ["tmc_transfer_request_items_pending_item_unique", "active_transfer_exists"],
+    ["tmc_active_item_transfer_unique", "active_transfer_exists"],
+    ["tmc_transfer_request_items_period_snapshot_fk", "responsibility_changed"],
+    ["tmc_transfer_request_items_request_item_unique", "duplicate_item"],
+  ] as const;
+
+  for (const [constraint, expectedProblem] of constraints) {
+    const databaseError = Object.assign(new Error("constraint"), {
+      code: constraint.includes("fk") ? "23503" : "23505",
+      constraint,
+    });
+    const repository = createPostgresTmcOperationRepositories(
+      new QueryQueue([databaseError]).asSource(),
+    ).transferRequests;
+    await assert.rejects(
+      repository.insertRequestItem(insertItemInput()),
+      (error) =>
+        error instanceof TmcOperationRepositoryConflictError &&
+        error.problem === expectedProblem &&
+        error.cause === databaseError,
+    );
+  }
+
+  const unrelated = Object.assign(new Error("other unique"), {
+    code: "23505",
+    constraint: "users_email_unique",
+  });
+  const repository = createPostgresTmcOperationRepositories(
+    new QueryQueue([unrelated]).asSource(),
+  ).transferRequests;
+  await assert.rejects(repository.insertRequestItem(insertItemInput()), (error) =>
+    error === unrelated,
+  );
+});
+
+test("findById maps the aggregate and preserves captured responsibility", async () => {
+  const createdAt = new Date("2026-08-09T11:00:00.000Z");
+  const source = new QueryQueue([
+    { rows: [aggregateRow(createdAt)] },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  const result = await repository.findById(
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  );
+
+  assert.ok(result);
+  assert.equal(result.createdAt.toISOString(), createdAt.toISOString());
+  assert.equal(result.items[0]?.currentResponsibleIdAtRequest,
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+  assert.equal(result.items[0]?.responsibleUserProfile.fullName,
+    "Captured Owner");
+  assert.equal(result.items[0]?.item.unitPrice, 125000.5);
+  assert.equal(result.items[0]?.item.quantity, 2);
+  assert.equal(result.items[0]?.item.photoUrl,
+    "/api/inventory/items/11111111-1111-4111-8111-111111111111/photo?v=7");
+  assert.equal(source.calls.length, 1);
+  assert.match(
+    source.calls[0]!.text,
+    /order by request_item\.created_at nulls last, request_item\.id/i,
+  );
+  assert.doesNotMatch(source.calls[0]!.text, /now\(\)|overdue/i);
+});
+
+test("findById rejects an impossible parent without item rows", async () => {
+  const source = new QueryQueue([
+    { rows: [aggregateRowWithoutItem(new Date())] },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+  await assert.rejects(
+    repository.findById("ffffffff-ffff-4fff-8fff-ffffffffffff"),
+    /tmc_transfer_request_without_items/,
+  );
+});
+
+test("findById returns null without querying items for a missing request", async () => {
+  const source = new QueryQueue([{ rows: [] }]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  assert.equal(
+    await repository.findById("ffffffff-ffff-4fff-8fff-ffffffffffff"),
+    null,
+  );
+  assert.equal(source.calls.length, 1);
+});
+
+function candidateRow(overrides: Record<string, unknown> = {}) {
+  return {
+    item_id: "11111111-1111-4111-8111-111111111111",
+    item_version: 7,
+    item_status: "active",
+    archived_at: null,
+    item_name: "Ноутбук",
+    inventory_number: "INV-001",
+    quantity: "2",
+    unit_price: "125000.50",
+    photo_id: "77777777-7777-4777-8777-777777777777",
+    building_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    building_name: "Корпус A",
+    room_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    room_designation: "101",
+    responsibility_period_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    responsible_user_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    responsible_full_name: "Текущий сотрудник",
+    responsible_email: "owner@example.com",
+    responsible_role: "employee",
+    responsible_is_active: true,
+    responsible_deleted_at: null,
+    has_active_transfer: false,
+    ...overrides,
+  };
+}
+
+function insertItemInput() {
+  return {
+    id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    itemId: "11111111-1111-4111-8111-111111111111",
+    responsibilityPeriodIdAtRequest:
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    currentResponsibleIdAtRequest:
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    createdAt: new Date("2026-08-09T11:00:00.000Z"),
+  };
+}
+
+function requestRow(createdAt: Date) {
+  return {
+    request_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    initiator_id: "99999999-9999-4999-8999-999999999999",
+    initiator_full_name: "Initiator",
+    initiator_email: "initiator@example.com",
+    initiator_role: "admin",
+    recipient_id: "88888888-8888-4888-8888-888888888888",
+    recipient_full_name: "Recipient",
+    recipient_email: "recipient@example.com",
+    recipient_role: "employee",
+    request_status: "pending",
+    comment: null,
+    request_created_at: createdAt,
+    expires_at: new Date(createdAt.getTime() + 86_400_000),
+    closed_at: null,
+    closed_by: null,
+    closed_by_full_name: null,
+    closed_by_email: null,
+    closed_by_role: null,
+    is_administrative_decision: false,
+    administrative_reason: null,
+    request_version: "1",
+  };
+}
+
+function requestItemRow(createdAt: Date) {
+  return {
+    request_item_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    item_id: "11111111-1111-4111-8111-111111111111",
+    responsibility_period_id_at_request:
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    current_responsible_id_at_request:
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    current_responsible_full_name: "Captured Owner",
+    current_responsible_email: "captured@example.com",
+    current_responsible_role: "employee",
+    result: "pending",
+    invalid_reason: null,
+    request_item_created_at: createdAt,
+    decided_at: null,
+    decided_by: null,
+    decided_by_full_name: null,
+    decided_by_email: null,
+    decided_by_role: null,
+    request_item_version: "1",
+    item_name: "Ноутбук",
+    inventory_number: "INV-001",
+    quantity: "2",
+    unit_price: "125000.50",
+    item_version: "7",
+    photo_id: "77777777-7777-4777-8777-777777777777",
+    building_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    building_name: "Корпус A",
+    room_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    room_designation: "101",
+  };
+}
+
+function aggregateRow(createdAt: Date) {
+  return { ...requestRow(createdAt), ...requestItemRow(createdAt) };
+}
+
+function aggregateRowWithoutItem(createdAt: Date) {
+  return {
+    ...requestRow(createdAt),
+    request_item_id: null,
+  };
+}
+
+void (null as unknown as TmcTransferRequestRecord);

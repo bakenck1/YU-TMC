@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../lib/application/ports/tmc-operation-repositories.ts",
+    "../../lib/server/persistence/postgres/postgres-tmc-operation-repositories.ts",
+    "../tmc-operation-repositories.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

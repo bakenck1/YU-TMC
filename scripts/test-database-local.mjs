@@ -71,6 +71,7 @@ try {
   for (const databaseTest of [
     "tests/database/persistent-users.test.ts",
     "tests/database/tmc-operation-migration.test.ts",
+    "tests/database/tmc-operation-repositories.test.ts",
   ]) {
     run(process.execPath, [
       path.join(root, "node_modules/vitest/vitest.mjs"),

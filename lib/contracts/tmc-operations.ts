@@ -31,7 +31,7 @@ export interface TmcOperationUserDto {
   role: UserRole;
 }
 
-export interface TmcTransferItemSnapshotDto {
+export interface TmcTransferItemCardDto {
   id: string;
   name: string;
   inventoryNumber: string;
@@ -69,10 +69,11 @@ export type TmcTransferRequestItemState =
 export interface TmcTransferRequestItemBaseDto {
   id: string;
   requestId: string;
-  item: TmcTransferItemSnapshotDto;
+  item: TmcTransferItemCardDto;
   responsibilityPeriodIdAtRequest: string;
   currentResponsibleIdAtRequest: string;
-  currentResponsibleAtRequest: TmcOperationUserDto;
+  /** Current profile of the user captured by currentResponsibleIdAtRequest. */
+  responsibleUserProfile: TmcOperationUserDto;
   createdAt: string;
   version: number;
 }
