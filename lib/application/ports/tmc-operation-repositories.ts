@@ -97,6 +97,7 @@ export interface InsertTmcTransferRequestItemRecord {
   id: string;
   requestId: string;
   itemId: string;
+  expectedItemVersion: number;
   responsibilityPeriodIdAtRequest: string;
   currentResponsibleIdAtRequest: string;
   createdAt: Date;
@@ -118,7 +119,12 @@ export interface InsertedTmcTransferRequestItemRecord {
 
 export type TmcOperationRepositoryConflictProblem = Extract<
   TmcOperationProblemCode,
-  "active_transfer_exists" | "responsibility_changed" | "duplicate_item"
+  | "item_not_found"
+  | "item_inactive"
+  | "active_transfer_exists"
+  | "responsibility_changed"
+  | "version_conflict"
+  | "duplicate_item"
 >;
 
 export class TmcOperationRepositoryConflictError extends Error {

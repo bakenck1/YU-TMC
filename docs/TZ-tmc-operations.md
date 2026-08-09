@@ -328,7 +328,7 @@ TDD обязателен для:
 - [x] доменные типы;
 - [x] репозитории;
 - [x] сервис заявок;
-- транзакции и optimistic concurrency;
+- [x] транзакции и optimistic concurrency;
 - permissions;
 - idempotency;
 - TDD server tests.

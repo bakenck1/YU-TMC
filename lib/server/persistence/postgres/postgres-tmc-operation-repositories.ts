@@ -7,6 +7,7 @@ import type {
   InsertTmcTransferRequestItemRecord,
   InsertTmcTransferRequestRecord,
   TmcOperationRepositories,
+  TmcOperationRepositoryConflictProblem,
   TmcOperationUserRecord,
   TmcTransferCandidateRecord,
   TmcTransferRequestItemRecord,
@@ -128,6 +129,25 @@ interface InsertedRequestItemRow extends QueryResultRow {
   version: number | string;
 }
 
+interface AtomicInsertRequestItemRow extends QueryResultRow {
+  id: string | null;
+  request_id: string | null;
+  item_id: string | null;
+  responsibility_period_id_at_request: string | null;
+  current_responsible_id_at_request: string | null;
+  result: InsertedTmcTransferRequestItemRecord["result"] | null;
+  invalid_reason: string | null;
+  created_at: Date | null;
+  decided_at: Date | null;
+  decided_by: string | null;
+  version: number | string | null;
+  item_exists: boolean;
+  item_status: TmcTransferCandidateRecord["itemStatus"] | null;
+  archived_at: Date | null;
+  item_version: number | string | null;
+  expected_period_open: boolean;
+}
+
 export function createPostgresTmcOperationRepositories(
   source: PostgresRepositorySource,
 ): TmcOperationRepositories {
@@ -145,7 +165,8 @@ class PostgresTmcTransferRequestRepository
     const result = await this.source.query<TransferUserRow>(
       `select id, full_name, email, role, is_active, deleted_at
          from ${USERS}
-        where id = $1`,
+        where id = $1
+        for update`,
       [id],
     );
     const row = result.rows[0];
@@ -205,19 +226,65 @@ class PostgresTmcTransferRequestRepository
     input: InsertTmcTransferRequestItemRecord,
   ): Promise<InsertedTmcTransferRequestItemRecord> {
     try {
-      const result = await this.source.query<InsertedRequestItemRow>(
-        `insert into ${REQUEST_ITEMS}
-           (id, request_id, item_id, responsibility_period_id_at_request,
-            current_responsible_id_at_request, created_at)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id, request_id, item_id,
-           responsibility_period_id_at_request,
-           current_responsible_id_at_request, result, invalid_reason,
-           created_at, decided_at, decided_by, version`,
+      const result = await this.source.query<AtomicInsertRequestItemRow>(
+        `with locked_item as materialized (
+           select item.id, item.version, item.status, item.archived_at
+             from ${ITEMS} item
+            where item.id = $3
+            for no key update
+         ), locked_period as materialized (
+           select period.id, period.item_id, period.responsible_user_id,
+                  period.ended_at
+             from ${RESPONSIBILITY_PERIODS} period
+            where period.id = $5
+            for no key update
+         ), validation as (
+           select item.id is not null as item_exists,
+                  item.status as item_status, item.archived_at,
+                  item.version as item_version,
+                  coalesce(
+                    period.item_id = $3
+                    and period.responsible_user_id = $6
+                    and period.ended_at is null,
+                    false
+                  ) as expected_period_open
+             from (values (1)) probe(marker)
+             left join locked_item item on true
+             left join locked_period period on true
+         ), inserted as (
+           insert into ${REQUEST_ITEMS}
+             (id, request_id, item_id, responsibility_period_id_at_request,
+              current_responsible_id_at_request, created_at)
+           select $1, $2, item.id, period.id, period.responsible_user_id, $7
+             from locked_item item
+             join locked_period period
+               on period.item_id = item.id
+              and period.responsible_user_id = $6
+              and period.ended_at is null
+            where item.version = $4
+              and item.status = 'active'
+              and item.archived_at is null
+           returning id, request_id, item_id,
+             responsibility_period_id_at_request,
+             current_responsible_id_at_request, result, invalid_reason,
+             created_at, decided_at, decided_by, version
+         )
+         select inserted.id, inserted.request_id, inserted.item_id,
+                inserted.responsibility_period_id_at_request,
+                inserted.current_responsible_id_at_request,
+                inserted.result, inserted.invalid_reason,
+                inserted.created_at, inserted.decided_at,
+                inserted.decided_by, inserted.version,
+                validation.item_exists, validation.item_status,
+                validation.archived_at, validation.item_version,
+                validation.expected_period_open
+           from validation
+           left join inserted on true`,
         [
           input.id,
           input.requestId,
           input.itemId,
+          input.expectedItemVersion,
           input.responsibilityPeriodIdAtRequest,
           input.currentResponsibleIdAtRequest,
           input.createdAt,
@@ -225,13 +292,51 @@ class PostgresTmcTransferRequestRepository
       );
       const row = result.rows[0];
       if (!row) throw new Error("tmc_transfer_request_item_insert_failed");
-      return mapInsertedRequestItem(row);
+      if (!row.id) {
+        throw new TmcOperationRepositoryConflictError(
+          atomicInsertProblem(row, input),
+          {
+            reason: "atomic_item_check_failed",
+          },
+        );
+      }
+      return mapInsertedRequestItem({
+        id: row.id,
+        request_id: required(row.request_id),
+        item_id: required(row.item_id),
+        responsibility_period_id_at_request: required(
+          row.responsibility_period_id_at_request,
+        ),
+        current_responsible_id_at_request: required(
+          row.current_responsible_id_at_request,
+        ),
+        result: required(row.result),
+        invalid_reason: row.invalid_reason,
+        created_at: required(row.created_at),
+        decided_at: row.decided_at,
+        decided_by: row.decided_by,
+        version: required(row.version),
+      });
     } catch (error) {
       const problem = constraintProblem(error);
       if (problem) throw new TmcOperationRepositoryConflictError(problem, error);
       throw error;
     }
   }
+
+}
+
+function atomicInsertProblem(
+  row: AtomicInsertRequestItemRow,
+  input: InsertTmcTransferRequestItemRecord,
+): TmcOperationRepositoryConflictProblem {
+  if (!row.item_exists) return "item_not_found";
+  if (row.item_status !== "active" || row.archived_at) return "item_inactive";
+  if (Number(row.item_version) !== input.expectedItemVersion) {
+    return "version_conflict";
+  }
+  if (!row.expected_period_open) return "responsibility_changed";
+  return "responsibility_changed";
 }
 
 function candidateSelect() {

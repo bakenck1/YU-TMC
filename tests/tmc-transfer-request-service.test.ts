@@ -11,6 +11,7 @@ import type {
   TmcTransferRequestRepository,
   TmcTransferUserRecord,
 } from "../lib/application/ports/tmc-operation-repositories";
+import { TmcOperationRepositoryConflictError } from "../lib/application/ports/tmc-operation-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { TmcTransferRequestService } from "../lib/application/services/tmc-transfer-request-service";
 import { ApplicationError } from "../lib/domain/application-error";
@@ -204,6 +205,7 @@ test("creates one parent, snapshots included items, and hydrates persisted DTO",
     harness.repository.insertedItems.map((item) => ({
       requestId: item.requestId,
       itemId: item.itemId,
+      expectedVersion: item.expectedItemVersion,
       period: item.responsibilityPeriodIdAtRequest,
       responsible: item.currentResponsibleIdAtRequest,
       createdAt: item.createdAt,
@@ -211,6 +213,7 @@ test("creates one parent, snapshots included items, and hydrates persisted DTO",
     candidates.map((item) => ({
       requestId: "90000000-0000-4000-8000-000000000001",
       itemId: item.itemId,
+      expectedVersion: item.itemVersion,
       period: item.responsibilityPeriodId,
       responsible: item.responsibleUser?.id,
       createdAt: NOW,
@@ -294,6 +297,58 @@ test("fails closed when the persisted aggregate is missing or incomplete", async
   }
 });
 
+test("continues after known late item conflicts and preserves outcome order", async () => {
+  const itemIds = [uuid(1), uuid(2), uuid(3)];
+  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
+  harness.repository.failures.set(
+    itemIds[1]!,
+    new TmcOperationRepositoryConflictError("active_transfer_exists", new Error("late conflict")),
+  );
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+  );
+
+  assert.equal(result.request?.items.length, 2);
+  assert.deepEqual(result.items.map((item) =>
+    item.outcome === "problem" ? item.problem : item.outcome), [
+    "included",
+    "active_transfer_exists",
+    "included",
+  ]);
+  assert.deepEqual(
+    harness.repository.insertedItems.map(({ itemId }) => itemId),
+    [itemIds[0], itemIds[2]],
+  );
+});
+
+test("rolls back an empty parent when every included item conflicts late", async () => {
+  const itemIds = [uuid(1), uuid(2)];
+  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
+  for (const itemId of itemIds) {
+    harness.repository.failures.set(
+      itemId,
+      new TmcOperationRepositoryConflictError("responsibility_changed", new Error("late conflict")),
+    );
+  }
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+  );
+
+  assert.equal(result.request, null);
+  assert.equal(result.included, 0);
+  assert.deepEqual(result.items.map((item) =>
+    item.outcome === "problem" ? item.problem : item.outcome), [
+    "responsibility_changed",
+    "responsibility_changed",
+  ]);
+  assert.equal(harness.repository.insertedRequests.length, 0);
+  assert.equal(harness.repository.insertedItems.length, 0);
+});
+
 function createHarness(options: {
   recipient?: TmcTransferUserRecord | null;
   candidates?: TmcTransferCandidateRecord[];
@@ -331,13 +386,31 @@ function createHarness(options: {
 
 class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
   transactions = 0;
+  private depth = 0;
   constructor(private readonly repository: TmcTransferRequestRepository) {}
   read<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
     return work({ transferRequests: this.repository });
   }
-  transaction<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
-    this.transactions += 1;
-    return work({ transferRequests: this.repository });
+  async transaction<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
+    const outer = this.depth === 0;
+    if (outer) this.transactions += 1;
+    const memory = this.repository as MemoryRequestRepository;
+    const requestCount = memory.insertedRequests.length;
+    const itemCount = memory.insertedItems.length;
+    const resultCount = memory.insertedItemResults.length;
+    this.depth += 1;
+    try {
+      return await work({ transferRequests: this.repository });
+    } catch (error) {
+      if (outer) {
+        memory.insertedRequests.length = requestCount;
+        memory.insertedItems.length = itemCount;
+        memory.insertedItemResults.length = resultCount;
+      }
+      throw error;
+    } finally {
+      this.depth -= 1;
+    }
   }
 }
 
@@ -352,6 +425,7 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
   findByIdCalls = 0;
   requestedRecipientIds: string[] = [];
   requestedCandidateIds: string[][] = [];
+  failures = new Map<string, TmcOperationRepositoryConflictError>();
 
   async findUserById(id: string) {
     this.calls.push("findUserById");
@@ -391,6 +465,8 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
   }
   async insertRequestItem(input: InsertTmcTransferRequestItemRecord) {
     this.calls.push("insertRequestItem");
+    const failure = this.failures.get(input.itemId);
+    if (failure) throw failure;
     this.insertedItems.push(input);
     const result: InsertedTmcTransferRequestItemRecord = {
       ...input,

@@ -199,6 +199,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
   );
   assert.equal(source.calls.length, 3);
   assert.doesNotMatch(source.calls[0]!.text, /is_active\s*=\s*true/i);
+  assert.match(source.calls[0]!.text, /for update/i);
 });
 
 test("findCandidates avoids SQL for an empty item set", async () => {
@@ -252,6 +253,7 @@ test("insertRequest and insertRequestItem persist the responsibility snapshot", 
     id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
     itemId: "11111111-1111-4111-8111-111111111111",
+    expectedItemVersion: 7,
     responsibilityPeriodIdAtRequest:
       "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     currentResponsibleIdAtRequest:
@@ -273,12 +275,53 @@ test("insertRequest and insertRequestItem persist the responsibility snapshot", 
     "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     "ffffffff-ffff-4fff-8fff-ffffffffffff",
     "11111111-1111-4111-8111-111111111111",
+    7,
     "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     createdAt,
   ]);
   assert.equal(item.result, "pending");
   assert.equal(item.version, 1);
+});
+
+test("insertRequestItem maps a failed atomic item-version check", async () => {
+  const source = new QueryQueue([
+    {
+      rows: [{
+        id: null,
+        request_id: null,
+        item_id: null,
+        responsibility_period_id_at_request: null,
+        current_responsible_id_at_request: null,
+        result: null,
+        invalid_reason: null,
+        created_at: null,
+        decided_at: null,
+        decided_by: null,
+        version: null,
+        item_exists: true,
+        item_status: "active",
+        archived_at: null,
+        item_version: "8",
+        expected_period_open: true,
+      }],
+    },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+
+  await assert.rejects(
+    repository.insertRequestItem(insertItemInput()),
+    (error) =>
+      error instanceof TmcOperationRepositoryConflictError &&
+      error.problem === "version_conflict",
+  );
+  assert.equal(source.calls.length, 1);
+  assert.match(source.calls[0]!.text, /with locked_item[\s\S]+insert/i);
+  assert.match(source.calls[0]!.text, /for no key update/i);
+  assert.match(source.calls[0]!.text, /item\.version\s*=\s*\$4/i);
+  assert.match(source.calls[0]!.text, /period\.ended_at\s+is\s+null/i);
 });
 
 test("insertRequestItem maps only known constraints to item problem codes", async () => {
@@ -407,6 +450,7 @@ function insertItemInput() {
     id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     requestId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
     itemId: "11111111-1111-4111-8111-111111111111",
+    expectedItemVersion: 7,
     responsibilityPeriodIdAtRequest:
       "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     currentResponsibleIdAtRequest:

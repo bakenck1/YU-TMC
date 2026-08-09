@@ -6,6 +6,7 @@ import type {
   TmcTransferRequestItemRecord,
   TmcTransferRequestRecord,
 } from "@/lib/application/ports/tmc-operation-repositories";
+import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   CreateTmcTransferRequestInput,
@@ -43,6 +44,11 @@ type ClassifiedItem =
       problem: TmcOperationProblemCode;
     };
 
+type RejectedCreateResult = Extract<
+  CreateTmcTransferRequestResultDto,
+  { request: null }
+>;
+
 export class TmcTransferRequestService {
   constructor(
     private readonly unitOfWork: UnitOfWork<TmcOperationRepositories>,
@@ -56,7 +62,8 @@ export class TmcTransferRequestService {
   ): Promise<CreateTmcTransferRequestResultDto> {
     const normalized = normalizeCreateInput(input);
 
-    return this.unitOfWork.transaction(async ({ transferRequests }) => {
+    try {
+      return await this.unitOfWork.transaction(async ({ transferRequests }) => {
       const recipient = await transferRequests.findUserById(
         normalized.recipientId,
       );
@@ -115,17 +122,57 @@ export class TmcTransferRequestService {
         string,
         InsertedTmcTransferRequestItemRecord
       >();
+      const lateProblemsByItemId = new Map<string, TmcOperationProblemCode>();
       for (const item of included) {
-        const inserted = await transferRequests.insertRequestItem({
-          id: this.ids.create(),
-          requestId,
-          itemId: item.itemId,
-          responsibilityPeriodIdAtRequest:
-            item.candidate.responsibilityPeriodId!,
-          currentResponsibleIdAtRequest: item.candidate.responsibleUser!.id,
-          createdAt,
+        try {
+          const inserted = await this.unitOfWork.transaction(
+            ({ transferRequests: nestedRequests }) =>
+              nestedRequests.insertRequestItem({
+                id: this.ids.create(),
+                requestId,
+                itemId: item.itemId,
+                expectedItemVersion: item.candidate.itemVersion,
+                responsibilityPeriodIdAtRequest:
+                  item.candidate.responsibilityPeriodId!,
+                currentResponsibleIdAtRequest:
+                  item.candidate.responsibleUser!.id,
+                createdAt,
+              }),
+          );
+          insertedByItemId.set(item.itemId, inserted);
+        } catch (error) {
+          if (!(error instanceof TmcOperationRepositoryConflictError)) {
+            throw error;
+          }
+          lateProblemsByItemId.set(item.itemId, error.problem);
+        }
+      }
+
+      if (insertedByItemId.size === 0) {
+        throw new EmptyTmcTransferRequestError({
+          request: null,
+          total: classified.length,
+          included: 0,
+          problems: classified.length,
+          items: classified.map((item) => {
+            const lateProblem = lateProblemsByItemId.get(item.itemId);
+            if (item.outcome === "problem") {
+              return {
+                itemId: item.itemId,
+                outcome: "problem" as const,
+                problem: item.problem,
+              };
+            }
+            if (!lateProblem) {
+              throw new Error("tmc_transfer_request_classification_invalid");
+            }
+            return {
+              itemId: item.itemId,
+              outcome: "problem" as const,
+              problem: lateProblem,
+            };
+          }),
         });
-        insertedByItemId.set(item.itemId, inserted);
       }
 
       const persisted = await transferRequests.findById(requestId);
@@ -136,6 +183,14 @@ export class TmcTransferRequestService {
             itemId: item.itemId,
             outcome: "problem" as const,
             problem: item.problem,
+          };
+        }
+        const lateProblem = lateProblemsByItemId.get(item.itemId);
+        if (lateProblem) {
+          return {
+            itemId: item.itemId,
+            outcome: "problem" as const,
+            problem: lateProblem,
           };
         }
         const inserted = insertedByItemId.get(item.itemId)!;
@@ -154,7 +209,18 @@ export class TmcTransferRequestService {
         problems: items.length - insertedByItemId.size,
         items,
       };
-    });
+      }, { isolation: "serializable", maxAttempts: 3 });
+    } catch (error) {
+      if (error instanceof EmptyTmcTransferRequestError) return error.result;
+      throw error;
+    }
+  }
+}
+
+class EmptyTmcTransferRequestError extends Error {
+  constructor(readonly result: RejectedCreateResult) {
+    super("No TMC transfer request items remained after atomic validation.");
+    this.name = "EmptyTmcTransferRequestError";
   }
 }
 

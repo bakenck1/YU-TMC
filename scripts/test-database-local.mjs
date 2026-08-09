@@ -72,6 +72,7 @@ try {
     "tests/database/persistent-users.test.ts",
     "tests/database/tmc-operation-migration.test.ts",
     "tests/database/tmc-operation-repositories.test.ts",
+    "tests/database/tmc-transfer-request-transactions.test.ts",
   ]) {
     run(process.execPath, [
       path.join(root, "node_modules/vitest/vitest.mjs"),
