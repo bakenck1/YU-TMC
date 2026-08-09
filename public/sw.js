@@ -50,6 +50,18 @@ self.addEventListener("notificationclick", (event) => {
       .then((clients) => {
         const existing = clients.find((client) => client.url === targetUrl);
         if (existing) return existing.focus();
+        const appClient = clients.find((client) => {
+          try {
+            return new URL(client.url).origin === self.location.origin;
+          } catch {
+            return false;
+          }
+        });
+        if (appClient?.navigate) {
+          return appClient.navigate(targetUrl)
+            .then((client) => client?.focus())
+            .catch(() => self.clients.openWindow(targetUrl));
+        }
         return self.clients.openWindow(targetUrl);
       }),
   );

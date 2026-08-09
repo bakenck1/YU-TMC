@@ -17,7 +17,7 @@ const ITEM_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const REQUEST_ID = "90000000-0000-4000-8000-000000000001";
 const IDEMPOTENCY_KEY = "tmc-route-create-001";
 const CREATED_RESULT = {
-  request: { id: REQUEST_ID },
+  request: { id: REQUEST_ID, recipient: { id: RECIPIENT_ID } },
   total: 1,
   included: 1,
   problems: 0,
@@ -88,6 +88,28 @@ test("POST transfer-requests forwards only authenticated server identity and exa
     itemIds: [ITEM_ID, ITEM_ID],
     comment: "  Передача  ",
   }, ACTOR, IDEMPOTENCY_KEY]]);
+});
+
+test("POST schedules one aggregate notification only for a freshly created request", async () => {
+  const scheduled: unknown[] = [];
+  let kind: "completed" | "replayed" = "completed";
+  const handler = createTmcTransferRequestPostHandler({
+    authenticate: async () => ACTOR,
+    createIdempotent: async () => ({ kind, body: { result: CREATED_RESULT }, resourceId: REQUEST_ID, status: 201 }),
+    onCreated: (event) => scheduled.push(event),
+  });
+  await handler(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }));
+  kind = "replayed";
+  await handler(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }));
+  assert.deepEqual(scheduled, [{ requestId: REQUEST_ID, recipientId: RECIPIENT_ID, itemCount: 1 }]);
+
+  const noRequest = createTmcTransferRequestPostHandler({
+    authenticate: async () => ACTOR,
+    createIdempotent: async () => ({ kind: "completed", body: { result: PROBLEM_RESULT }, status: 200 }),
+    onCreated: (event) => scheduled.push(event),
+  });
+  await noRequest(jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID] }));
+  assert.equal(scheduled.length, 1);
 });
 
 test("POST transfer-requests preserves replay status and exact stored body", async () => {

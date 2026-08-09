@@ -62,6 +62,12 @@ export interface MaintenanceRequestPush {
   recipientIds: string[];
 }
 
+export interface TmcTransferRequestPush {
+  requestId: string;
+  recipientId: string;
+  itemCount: number;
+}
+
 export class WebPushService {
   constructor(
     private readonly unitOfWork: UnitOfWork<WebPushRepositories>,
@@ -222,6 +228,92 @@ export class WebPushService {
     }
   }
 
+  async notifyTmcTransferRequest(input: TmcTransferRequestPush): Promise<void> {
+    if (!this.configuration) return;
+    let subscriptions: WebPushSubscriptionRecord[];
+    try {
+      subscriptions = await this.unitOfWork.read(({ webPushSubscriptions }) =>
+        webPushSubscriptions.listByUser(input.recipientId),
+      );
+    } catch (error) {
+      this.logger.error("push_tmc_subscription_lookup_failed", {
+        requestId: input.requestId,
+        recipientId: input.recipientId,
+        statusCode: pushStatusCode(error),
+      });
+      return;
+    }
+    const now = this.clock.now();
+    const active = subscriptions.filter(
+      (subscription) => !subscription.expirationTime || subscription.expirationTime > now,
+    );
+    const stale = subscriptions.filter(
+      (subscription) => subscription.expirationTime && subscription.expirationTime <= now,
+    );
+    const topic = input.requestId.replaceAll("-", "").slice(0, 32);
+    const outcomes = await Promise.all(active.map(async (subscription) => {
+      const outcome = await this.deliverTmcWithRetry(subscription, input, topic);
+      if (outcome === "stale") stale.push(subscription);
+      return outcome;
+    }));
+    if (stale.length > 0) {
+      try {
+        await this.unitOfWork.transaction(async ({ webPushSubscriptions }) => {
+          await Promise.all([...new Map(stale.map((subscription) => [subscription.id, subscription])).values()]
+            .map((subscription) => webPushSubscriptions.deleteIfUnchanged(subscription)));
+        });
+      } catch (error) {
+        this.logger.error("push_tmc_subscription_cleanup_failed", {
+          requestId: input.requestId,
+          recipientId: input.recipientId,
+          statusCode: pushStatusCode(error),
+        });
+      }
+    }
+    const failed = outcomes.filter((outcome) => outcome === "failed").length;
+    if (failed > 0) {
+      this.logger.error("push_tmc_delivery_incomplete", {
+        requestId: input.requestId,
+        recipientId: input.recipientId,
+        failed,
+        total: active.length,
+      });
+    }
+  }
+
+  private async deliverTmcWithRetry(
+    subscription: WebPushSubscriptionRecord,
+    input: TmcTransferRequestPush,
+    topic: string,
+  ): Promise<"delivered" | "stale" | "failed"> {
+    const maxAttempts = Math.max(1, this.retryPolicy.maxAttempts);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.sender.send(
+          subscription,
+          tmcTransferRequestPayload(input, subscription.language),
+          this.configuration!,
+          topic,
+        );
+        return "delivered";
+      } catch (error) {
+        if (isExpiredPushSubscription(error)) return "stale";
+        if (!isRetryablePushFailure(error) || attempt === maxAttempts) {
+          this.logger.error("push_tmc_delivery_failed", {
+            requestId: input.requestId,
+            recipientId: input.recipientId,
+            subscriptionId: subscription.id,
+            statusCode: pushStatusCode(error),
+            attempts: attempt,
+          });
+          return "failed";
+        }
+        await this.retryPolicy.wait(attempt);
+      }
+    }
+    return "failed";
+  }
+
   private async deliverWithRetry(
     subscription: WebPushSubscriptionRecord,
     payload: string,
@@ -350,6 +442,21 @@ function maintenanceRequestPayload(
     badge: "/icons/icon-192.png",
     tag: `maintenance-${input.itemId}`,
     url: `/items/${encodeURIComponent(input.itemId)}`,
+  });
+}
+
+function tmcTransferRequestPayload(
+  input: TmcTransferRequestPush,
+  languageInput: unknown,
+) {
+  const language = isAppLanguage(languageInput) ? languageInput : "ru";
+  return JSON.stringify({
+    title: translate(language, "push.tmcTransferTitle"),
+    body: translate(language, "push.tmcTransferBody", { count: input.itemCount }),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `tmc-transfer-${input.requestId}`,
+    url: `/tmc/transfer-requests/${encodeURIComponent(input.requestId)}`,
   });
 }
 

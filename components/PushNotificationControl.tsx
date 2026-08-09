@@ -3,6 +3,7 @@
 import { Bell, BellOff, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
+import type { TranslationKey } from "@/lib/i18n";
 
 import {
   currentPushSubscription,
@@ -24,7 +25,11 @@ type PushState =
   | "denied"
   | "error";
 
-export default function PushNotificationControl() {
+export default function PushNotificationControl({
+  hintKey = "push.assignmentHint",
+}: {
+  hintKey?: TranslationKey;
+}) {
   const { language, t } = useAppSettings();
   const [configuration, setConfiguration] =
     useState<PushPublicConfiguration | null>(null);
@@ -129,7 +134,7 @@ export default function PushNotificationControl() {
         type="button"
         onClick={() => void (state === "enabled" ? disable() : enable())}
         disabled={busy}
-        className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-50 ${
+        className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-50 ${
           state === "enabled"
             ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
             : "border border-black/10 bg-white text-zinc-700"
@@ -158,7 +163,7 @@ export default function PushNotificationControl() {
         </p>
       ) : (
         <p className="text-sm text-zinc-500">
-          {t("push.assignmentHint")}
+          {t(hintKey)}
         </p>
       )}
     </div>

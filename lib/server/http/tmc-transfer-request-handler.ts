@@ -22,6 +22,11 @@ export interface TmcTransferRequestPostDependencies {
     IdempotentTmcTransferRequestCreation,
     "body" | "kind" | "resourceId" | "status"
   >>;
+  onCreated?(event: {
+    requestId: string;
+    recipientId: string;
+    itemCount: number;
+  }): void;
 }
 
 export function createTmcTransferRequestPostHandler(
@@ -40,6 +45,18 @@ export function createTmcTransferRequestPostHandler(
         { userId: user.userId, role: user.role },
         idempotencyKey,
       );
+      if (execution.kind === "completed" && execution.body.result.request) {
+        try {
+          dependencies.onCreated?.({
+            requestId: execution.body.result.request.id,
+            recipientId: execution.body.result.request.recipient.id,
+            itemCount: execution.body.result.included,
+          });
+        } catch {
+          // Notification scheduling is best-effort and must not change the
+          // already committed idempotent command response.
+        }
+      }
       return Response.json(execution.body, {
         status: execution.status,
         headers: responseHeaders(execution.kind === "replayed"),

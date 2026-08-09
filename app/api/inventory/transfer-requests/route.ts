@@ -1,20 +1,20 @@
 import { getApplicationServices } from "@/lib/server/application";
 import { createTmcTransferRequestPostHandler } from "@/lib/server/http/tmc-transfer-request-handler";
 import { requireCurrentUser } from "@/lib/server/security/request-user";
+import { after } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const post = createTmcTransferRequestPostHandler({
-  authenticate: requireCurrentUser,
-  createIdempotent: (input, actor, idempotencyKey) =>
-    getApplicationServices().tmcTransferRequests.createIdempotent(
-      input,
-      actor,
-      idempotencyKey,
-    ),
-});
+export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  return post(request);
+  const services = getApplicationServices();
+  return createTmcTransferRequestPostHandler({
+    authenticate: requireCurrentUser,
+    createIdempotent: (input, actor, idempotencyKey) =>
+      services.tmcTransferRequests.createIdempotent(input, actor, idempotencyKey),
+    onCreated: (event) => {
+      after(() => services.push.notifyTmcTransferRequest(event));
+    },
+  })(request);
 }

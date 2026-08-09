@@ -86,6 +86,9 @@ services:
       YU_DATA_DIRECTORY: /app/.data
       SESSION_COOKIE_SECURE: "true"
       TRUSTED_CLIENT_IP_HEADER: x-real-ip
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
     volumes:
       - ./.data:/app/.data
     ports:

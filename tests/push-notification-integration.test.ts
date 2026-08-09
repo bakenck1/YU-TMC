@@ -19,8 +19,28 @@ test("service worker displays assignment pushes and opens only app-local URLs", 
   assert.match(worker, /registration\.showNotification/);
   assert.match(worker, /addEventListener\("notificationclick"/);
   assert.match(worker, /clients\.openWindow\(targetUrl\)/);
+  assert.match(worker, /appClient\.navigate\(targetUrl\)/);
   assert.match(worker, /safeAppPath\(event\.notification\.data\?\.url\)/);
   assert.match(worker, /url\.origin === self\.location\.origin/);
+});
+
+test("TMC request push is scheduled once after create and is available to every role", async () => {
+  const [route, landing, pushRepository, productionCompose, mobileCompose] = await Promise.all([
+    source("app/api/inventory/transfer-requests/route.ts"),
+    source("components/TmcLanding.tsx"),
+    source("lib/server/persistence/postgres/postgres-web-push-repositories.ts"),
+    source("docker-compose.production.yml"),
+    source("docker-compose.mobile.yml"),
+  ]);
+  assert.match(route, /after\(\(\) => services\.push\.notifyTmcTransferRequest\(event\)\)/);
+  assert.match(route, /export const maxDuration = 30/);
+  assert.match(landing, /PushNotificationControl/);
+  assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee'\)/);
+  for (const compose of [productionCompose, mobileCompose]) {
+    assert.match(compose, /WEB_PUSH_VAPID_PUBLIC_KEY/);
+    assert.match(compose, /WEB_PUSH_VAPID_PRIVATE_KEY/);
+    assert.match(compose, /WEB_PUSH_VAPID_SUBJECT/);
+  }
 });
 
 test("subscription lifecycle is authenticated and removed before logout", async () => {

@@ -185,6 +185,51 @@ test("delivers assignment payload and prunes expired push endpoints", async () =
   );
 });
 
+test("delivers one localized aggregate TMC request push with an exact deep link", async () => {
+  const fixture = createFixture();
+  fixture.addSubscription("russian", null, "ru");
+  fixture.addSubscription("kazakh", null, "kk");
+  fixture.addSubscription("english", null, "en");
+  const payloads: Array<{ payload: string; topic: string }> = [];
+  fixture.sender.send = async (_subscription, payload, _configuration, topic) => {
+    payloads.push({ payload, topic });
+  };
+  const requestId = "22222222-2222-4222-8222-222222222222";
+
+  await fixture.service.notifyTmcTransferRequest({
+    requestId,
+    recipientId: EMPLOYEE.userId,
+    itemCount: 17,
+  });
+
+  assert.equal(payloads.length, 3);
+  for (const { payload, topic } of payloads) {
+    const parsed = JSON.parse(payload) as { title: string; body: string; url: string; tag: string };
+    assert.equal(parsed.url, `/tmc/transfer-requests/${requestId}`);
+    assert.match(parsed.body, /17/);
+    assert.equal(parsed.tag, `tmc-transfer-${requestId}`);
+    assert.equal(topic, requestId.replaceAll("-", "").slice(0, 32));
+    assert.doesNotMatch(payload, /comment|cost|price|email/i);
+  }
+  assert.equal(new Set(payloads.map(({ payload }) => JSON.parse(payload).title)).size, 3);
+});
+
+test("TMC push uses retry and stale subscription cleanup without failing the request", async () => {
+  const fixture = createFixture();
+  fixture.addSubscription("gone-tmc", null);
+  fixture.addSubscription("temporary-tmc", null);
+  fixture.addSubscription("expired-tmc", new Date(NOW.getTime() - 1));
+  fixture.sender.send = async (subscription) => {
+    if (subscription.endpoint.endsWith("gone-tmc")) throw Object.assign(new Error("gone"), { statusCode: 410 });
+    if (subscription.endpoint.endsWith("temporary-tmc")) throw Object.assign(new Error("retry"), { statusCode: 503 });
+  };
+  await fixture.service.notifyTmcTransferRequest({ requestId: "22222222-2222-4222-8222-222222222222", recipientId: EMPLOYEE.userId, itemCount: 1 });
+  assert.equal(fixture.records.has(fixture.endpoint("gone-tmc")), false);
+  assert.equal(fixture.records.has(fixture.endpoint("expired-tmc")), false);
+  assert.equal(fixture.records.has(fixture.endpoint("temporary-tmc")), true);
+  assert.deepEqual(fixture.waits, [1, 2]);
+});
+
 test("stale cleanup preserves an endpoint reassigned during delivery", async () => {
   const fixture = createFixture();
   fixture.addSubscription("reassigned", null);

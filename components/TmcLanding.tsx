@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine } from "lucide-react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
+import PushNotificationControl from "@/components/PushNotificationControl";
 import {
   TMC_ENTRY_POINT,
   TMC_OPERATIONS,
@@ -45,6 +46,9 @@ export default function TmcLanding() {
             </Link>
           );
         })}
+      </div>
+      <div className="mt-5 border-t border-zinc-100 pt-5">
+        <PushNotificationControl hintKey="push.tmcHint" />
       </div>
     </section>
   );
