@@ -4,6 +4,11 @@ import type {
   UserDto,
   UserRole,
 } from "@/lib/contracts/users";
+import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+import {
+  normalizeTmcRecipientQuery,
+  TMC_RECIPIENT_RESULT_LIMIT,
+} from "@/lib/tmc-recipient-search";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
@@ -354,6 +359,21 @@ export class UserService {
       (await users.list())
         .filter((user) => !user.deletedAt)
         .map(toUserDto),
+    );
+  }
+
+  async searchTmcRecipients(
+    query: string,
+    actorUserId: string,
+  ): Promise<TmcOperationUserDto[]> {
+    const normalizedQuery = normalizeTmcRecipientQuery(query);
+    if (Array.from(normalizedQuery).length < 2) return [];
+    return this.unitOfWork.read(({ users }) =>
+      users.searchActiveRecipients(
+        normalizedQuery,
+        actorUserId,
+        TMC_RECIPIENT_RESULT_LIMIT,
+      ),
     );
   }
 

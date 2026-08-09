@@ -16,6 +16,13 @@ export interface UserRecord {
   deletedAt: Date | null;
 }
 
+export interface UserDirectoryEntryRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  role: UserRole;
+}
+
 export interface PasswordCredentialRecord {
   userId: string;
   salt: string;
@@ -54,6 +61,11 @@ export interface InsertPasswordCredential {
 
 export interface UserRepository {
   list(): Promise<UserRecord[]>;
+  searchActiveRecipients(
+    query: string,
+    excludeUserId: string,
+    limit: number,
+  ): Promise<UserDirectoryEntryRecord[]>;
   findById(id: string): Promise<UserRecord | null>;
   findByIdForUpdate(id: string): Promise<UserRecord | null>;
   findByNormalizedEmail(email: string): Promise<UserRecord | null>;

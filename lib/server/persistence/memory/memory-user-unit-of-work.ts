@@ -15,6 +15,7 @@ import type {
   UserRepository,
 } from "@/lib/application/ports/user-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { searchEligibleTmcRecipients } from "@/lib/tmc-recipient-search";
 
 interface MemoryState {
   users: Map<string, UserRecord>;
@@ -76,6 +77,19 @@ class MemoryUserRepository implements UserRepository {
     return [...this.state.users.values()]
       .map(cloneUser)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async searchActiveRecipients(
+    query: string,
+    excludeUserId: string,
+    limit: number,
+  ) {
+    return searchEligibleTmcRecipients(
+      [...this.state.users.values()],
+      excludeUserId,
+      query,
+      limit,
+    );
   }
 
   async findById(id: string): Promise<UserRecord | null> {

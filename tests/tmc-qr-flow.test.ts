@@ -110,7 +110,7 @@ test("TMC operation shell delegates all three operations to one QR-only flow", (
   assert.match(scanner, /htmlFor=\{manualInputId\}/);
   assert.match(scanner, /id=\{manualInputId\}/);
   assert.match(scanner, /<video[^>]+aria-hidden="true"/);
-  assert.doesNotMatch(flow, /method:\s*["']POST|\/transfers|picker|history/i);
+  assert.doesNotMatch(flow, /method:\s*["']POST|\/transfers|history/i);
 });
 
 test("QR resolver coalesces duplicate scans and publishes one selected item", async () => {

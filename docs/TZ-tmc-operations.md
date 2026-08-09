@@ -338,7 +338,7 @@ TDD обязателен для:
 - [x] пункт «Принять / Выдать ТМЦ»;
 - [x] три операции;
 - [x] QR-flow;
-- searchable user picker;
+- [x] searchable user picker;
 - карточка групповой заявки;
 - «Принять все» и «Принять выбранные»;
 - push/deep-link;

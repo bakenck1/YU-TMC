@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../app/api/inventory/transfer-recipient-candidates/route.ts",
+    "../../components/TmcItemQrFlow.tsx",
+    "../../components/TmcUserPicker.tsx",
+    "../../lib/application/services/user-service.ts",
+    "../../lib/server/http/tmc-recipient-candidates-handler.ts",
+    "../../lib/tmc-recipient-search.ts",
+    "../tmc-user-picker.test.ts",
+    "../tmc-recipient-candidates-route.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

@@ -170,6 +170,23 @@ function serviceWithUsers(records: UserRecord[]) {
     async list() {
       return records;
     },
+    async searchActiveRecipients(query, excludeUserId, limit) {
+      return records
+        .filter(
+          (user) =>
+            user.active &&
+            !user.deletedAt &&
+            user.id !== excludeUserId &&
+            [user.fullName, user.email].some((value) =>
+              value.toLowerCase().includes(query),
+            ),
+        )
+        .sort((left, right) =>
+          left.fullName.localeCompare(right.fullName) || left.id.localeCompare(right.id),
+        )
+        .slice(0, limit)
+        .map(({ id, fullName, email, role }) => ({ id, fullName, email, role }));
+    },
     async findById(id: string) {
       return records.find((user) => user.id === id) ?? null;
     },

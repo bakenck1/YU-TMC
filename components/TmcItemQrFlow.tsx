@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
+import TmcUserPicker from "@/components/TmcUserPicker";
+import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
 import type { TmcOperationNavigation } from "@/lib/tmc-navigation";
 import {
@@ -31,6 +33,7 @@ export default function TmcItemQrFlow({
   const { t } = useAppSettings();
   const [scannerOpen, setScannerOpen] = useState(true);
   const [flowState, setFlowState] = useState<TmcQrFlowState>({ status: "idle" });
+  const [recipient, setRecipient] = useState<TmcOperationUserDto | null>(null);
   const scanButtonRef = useRef<HTMLButtonElement>(null);
   const resolverRef = useRef<TmcItemQrResolverController | null>(null);
 
@@ -52,7 +55,13 @@ export default function TmcItemQrFlow({
 
   function scanAgain() {
     resolverRef.current?.reset();
+    setRecipient(null);
     setScannerOpen(true);
+  }
+
+  function removeItem() {
+    resolverRef.current?.reset();
+    setRecipient(null);
   }
 
   const item = flowState.status === "selected" ? flowState.item : null;
@@ -98,12 +107,16 @@ export default function TmcItemQrFlow({
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               {t("tmc.qr.scanAgain")}
             </button>
-            <button type="button" onClick={() => resolverRef.current?.reset()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700">
+            <button type="button" onClick={removeItem} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700">
               <X className="h-4 w-4" aria-hidden="true" />
               {t("tmc.qr.remove")}
             </button>
           </div>
         </article>
+      ) : null}
+
+      {item && operation.id !== "receive" ? (
+        <TmcUserPicker value={recipient} onChange={setRecipient} />
       ) : null}
 
       {flowState.status === "idle" && !scannerOpen ? (

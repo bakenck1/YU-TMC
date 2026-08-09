@@ -12,6 +12,7 @@ import type {
   PasswordCredentialRepository,
   UpdateUserRecord,
   UserRecord,
+  UserDirectoryEntryRecord,
   UserRepositories,
   UserRepository,
 } from "@/lib/application/ports/user-repositories";
@@ -47,6 +48,13 @@ interface CredentialRow extends QueryResultRow {
   updated_at: Date;
 }
 
+interface UserDirectoryEntryRow extends QueryResultRow {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserDirectoryEntryRecord["role"];
+}
+
 export function createPostgresUserRepositories(
   source: PostgresRepositorySource,
 ): UserRepositories {
@@ -68,6 +76,34 @@ class PostgresUserRepository implements UserRepository {
        order by created_at desc, id`,
     );
     return result.rows.map(mapUser);
+  }
+
+  async searchActiveRecipients(
+    query: string,
+    excludeUserId: string,
+    limit: number,
+  ): Promise<UserDirectoryEntryRecord[]> {
+    const boundedLimit = Math.max(1, Math.min(limit, 20));
+    const result = await this.source.query<UserDirectoryEntryRow>(
+      `select id, full_name, email, role
+       from ${USERS}
+       where is_active = true
+         and deleted_at is null
+         and id <> $2
+         and (
+           position($1 in lower(full_name)) > 0
+           or position($1 in lower(email)) > 0
+         )
+       order by lower(full_name), lower(email), id
+       limit $3`,
+      [query, excludeUserId, boundedLimit],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      fullName: row.full_name.trim(),
+      email: row.email,
+      role: row.role,
+    }));
   }
 
   async findById(id: string): Promise<UserRecord | null> {
