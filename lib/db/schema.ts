@@ -173,6 +173,28 @@ export const idempotencyStateEnum = inventorySchema.enum(
   IDEMPOTENCY_STATES,
 );
 
+const TMC_TRANSFER_REQUEST_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+] as const;
+const TMC_TRANSFER_ITEM_RESULTS = [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+  "invalidated",
+] as const;
+export const tmcTransferRequestStatusEnum = inventorySchema.enum(
+  "tmc_transfer_request_status",
+  TMC_TRANSFER_REQUEST_STATUSES,
+);
+export const tmcTransferItemResultEnum = inventorySchema.enum(
+  "tmc_transfer_item_result",
+  TMC_TRANSFER_ITEM_RESULTS,
+);
+
 export const userCodeSequence = inventorySchema.sequence(
   "user_code_sequence",
   {
@@ -956,6 +978,11 @@ export const responsibilityPeriodsTable = inventorySchema.table(
     uniqueIndex("responsibility_periods_open_item_unique")
       .on(table.itemId)
       .where(sql`${table.endedAt} IS NULL`),
+    unique("responsibility_periods_tmc_snapshot_unique").on(
+      table.id,
+      table.itemId,
+      table.responsibleUserId,
+    ),
   ],
 );
 
@@ -1092,6 +1119,194 @@ export const transfersTable = inventorySchema.table(
     index("transfers_requested_by_idx").on(table.requestedBy),
     index("transfers_override_responsible_idx").on(
       table.overrideResponsibleId,
+    ),
+  ],
+);
+
+export const tmcTransferRequestsTable = inventorySchema.table(
+  "tmc_transfer_requests",
+  {
+    id: uuid().primaryKey(),
+    initiatorId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    recipientId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    status: tmcTransferRequestStatusEnum().notNull().default("pending"),
+    comment: varchar({ length: 1000 }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`now() + interval '24 hours'`),
+    closedAt: timestamp({ withTimezone: true, mode: "date" }),
+    closedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    isAdministrativeDecision: boolean().notNull().default(false),
+    administrativeReason: varchar({ length: 1000 }),
+    version: integer().notNull().default(1),
+  },
+  (table) => [
+    check(
+      "tmc_transfer_requests_participants_check",
+      sql`${table.initiatorId} <> ${table.recipientId}`,
+    ),
+    check(
+      "tmc_transfer_requests_comment_check",
+      sql`${table.comment} IS NULL OR btrim(${table.comment}) <> ''`,
+    ),
+    check(
+      "tmc_transfer_requests_state_check",
+      sql`(
+            ${table.status} = 'pending'
+            AND ${table.closedAt} IS NULL
+            AND ${table.closedBy} IS NULL
+            AND ${table.isAdministrativeDecision} = false
+            AND ${table.administrativeReason} IS NULL
+          ) OR (
+            ${table.status} <> 'pending'
+            AND ${table.closedAt} IS NOT NULL
+            AND ${table.closedBy} IS NOT NULL
+            AND (
+              (
+                ${table.isAdministrativeDecision} = true
+                AND ${table.administrativeReason} IS NOT NULL
+                AND btrim(${table.administrativeReason}) <> ''
+              ) OR (
+                ${table.isAdministrativeDecision} = false
+                AND ${table.administrativeReason} IS NULL
+              )
+            )
+          )`,
+    ),
+    check(
+      "tmc_transfer_requests_time_check",
+      sql`${table.expiresAt} > ${table.createdAt}
+          AND (${table.closedAt} IS NULL OR ${table.closedAt} >= ${table.createdAt})`,
+    ),
+    check("tmc_transfer_requests_version_check", sql`${table.version} > 0`),
+    index("tmc_transfer_requests_status_expires_idx").on(
+      table.status,
+      table.expiresAt,
+    ),
+    index("tmc_transfer_requests_recipient_status_created_idx").on(
+      table.recipientId,
+      table.status,
+      table.createdAt,
+    ),
+    index("tmc_transfer_requests_initiator_created_idx").on(
+      table.initiatorId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const tmcTransferRequestItemsTable = inventorySchema.table(
+  "tmc_transfer_request_items",
+  {
+    id: uuid().primaryKey(),
+    requestId: uuid()
+      .notNull()
+      .references(() => tmcTransferRequestsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    itemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    responsibilityPeriodIdAtRequest: uuid().notNull(),
+    currentResponsibleIdAtRequest: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    result: tmcTransferItemResultEnum().notNull().default("pending"),
+    invalidReason: varchar({ length: 1000 }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    decidedAt: timestamp({ withTimezone: true, mode: "date" }),
+    decidedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    version: integer().notNull().default(1),
+  },
+  (table) => [
+    foreignKey({
+      name: "tmc_transfer_request_items_period_snapshot_fk",
+      columns: [
+        table.responsibilityPeriodIdAtRequest,
+        table.itemId,
+        table.currentResponsibleIdAtRequest,
+      ],
+      foreignColumns: [
+        responsibilityPeriodsTable.id,
+        responsibilityPeriodsTable.itemId,
+        responsibilityPeriodsTable.responsibleUserId,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "tmc_transfer_request_items_state_check",
+      sql`(
+            ${table.result} = 'pending'
+            AND ${table.decidedAt} IS NULL
+            AND ${table.decidedBy} IS NULL
+            AND ${table.invalidReason} IS NULL
+          ) OR (
+            ${table.result} <> 'pending'
+            AND ${table.decidedAt} IS NOT NULL
+            AND ${table.decidedBy} IS NOT NULL
+            AND (
+              (
+                ${table.result} = 'invalidated'
+                AND ${table.invalidReason} IS NOT NULL
+                AND btrim(${table.invalidReason}) <> ''
+              ) OR (
+                ${table.result} <> 'invalidated'
+                AND ${table.invalidReason} IS NULL
+              )
+            )
+          )`,
+    ),
+    check(
+      "tmc_transfer_request_items_time_check",
+      sql`${table.decidedAt} IS NULL OR ${table.decidedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      "tmc_transfer_request_items_version_check",
+      sql`${table.version} > 0`,
+    ),
+    unique("tmc_transfer_request_items_request_item_unique").on(
+      table.requestId,
+      table.itemId,
+    ),
+    uniqueIndex("tmc_transfer_request_items_pending_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.result} = 'pending'`),
+    index("tmc_transfer_request_items_request_result_idx").on(
+      table.requestId,
+      table.result,
+    ),
+    index("tmc_transfer_request_items_item_result_idx").on(
+      table.itemId,
+      table.result,
     ),
   ],
 );
@@ -1847,6 +2062,39 @@ export const notificationEventsTable = inventorySchema.table(
       .on(table.adminQueueSequence)
       .where(sql`${table.audienceKind} = 'admin_queue'`),
     index("notification_events_actor_idx").on(table.actorId),
+  ],
+);
+
+export const tmcOperationNotificationsTable = inventorySchema.table(
+  "tmc_operation_notifications",
+  {
+    notificationEventId: uuid()
+      .notNull()
+      .references(() => notificationEventsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    requestId: uuid()
+      .notNull()
+      .references(() => tmcTransferRequestsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    itemId: uuid().references(() => itemsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "tmc_operation_notifications_pk",
+      columns: [table.notificationEventId],
+    }),
+    index("tmc_operation_notifications_request_idx").on(table.requestId),
+    index("tmc_operation_notifications_item_idx").on(table.itemId),
   ],
 );
 

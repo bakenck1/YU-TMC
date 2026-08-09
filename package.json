@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:all": "node scripts/test-all.mjs",
+    "test:database:local": "node scripts/test-database-local.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
@@ -50,7 +52,8 @@
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "brace-expansion@1.1.16": "1.1.18",

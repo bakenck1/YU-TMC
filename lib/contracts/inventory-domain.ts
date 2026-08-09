@@ -137,6 +137,9 @@ export const NOTIFICATION_EVENT_TYPES = [
   "transfer.rejected",
   "transfer.cancelled",
   "transfer.overridden",
+  "tmc_transfer.requested",
+  "tmc_transfer.completed",
+  "tmc_transfer.overdue",
   "decision.created",
   "decision.admin_queue_created",
   "decision.disputed",
@@ -152,6 +155,7 @@ export type NotificationEventType =
 export const NOTIFICATION_SUBJECT_KINDS = [
   "item",
   "transfer",
+  "tmc_transfer_request",
   "decision",
   "inspection",
 ] as const;

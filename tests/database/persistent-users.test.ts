@@ -134,11 +134,11 @@ describe("persistent PostgreSQL users", () => {
     adminActorId = activeAdmins[0]!.id;
   });
 
-  it("cannot race owner authorization against an admin promotion", async () => {
-    const owner = await service.createUser({
-      email: "race-owner@example.com",
-      fullName: "Race Owner",
-      role: "owner",
+  it("cannot race employee authorization against an admin promotion", async () => {
+    const employee = await service.createUser({
+      email: "race-employee@example.com",
+      fullName: "Race Employee",
+      role: "employee",
       active: true,
       initialPassword: "Race-Owner-Password-2026!",
     }, adminActorId);
@@ -164,7 +164,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: target.emailVerified,
         active: target.active,
         version: target.version + 1,
-      }, owner.id),
+      }, employee.id),
     ]);
 
     expect(promotion.status).toBe("fulfilled");
@@ -215,22 +215,25 @@ describe("persistent PostgreSQL users", () => {
     }
   });
 
-  it("commits a user and credential atomically", async () => {
+  it("keeps credentials attached to committed users", async () => {
     const database = createPostgresPool(migrationConfig, { max: 1 });
     try {
       const result = await database.query<{
         users: number;
-        credentials: number;
+        orphanCredentials: number;
         bootstrap: number;
       }>(
         `select
           (select count(*)::int from "yu_inventory"."users") as users,
-          (select count(*)::int from "yu_inventory"."user_password_credentials") as credentials,
+          (select count(*)::int
+             from "yu_inventory"."user_password_credentials" credential
+             left join "yu_inventory"."users" app_user on app_user.id = credential.user_id
+            where app_user.id is null) as "orphanCredentials",
           (select count(*)::int from "yu_inventory"."auth_bootstrap"
             where completed_at is not null) as bootstrap`,
       );
       expect(result.rows[0]).toMatchObject({
-        credentials: 1,
+        orphanCredentials: 0,
         bootstrap: 1,
       });
       expect(result.rows[0]!.users).toBeGreaterThan(1);
