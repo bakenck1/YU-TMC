@@ -9,9 +9,13 @@
   },
   "include": [
     "../../app/(protected)/tmc/page.tsx",
+    "../../app/(protected)/tmc/receive/page.tsx",
+    "../../app/(protected)/tmc/issue/page.tsx",
+    "../../app/(protected)/tmc/transfer/page.tsx",
     "../../components/Dashboard.tsx",
     "../../components/Header.tsx",
     "../../components/TmcLanding.tsx",
+    "../../components/TmcOperationShell.tsx",
     "../../lib/security/authorization.ts",
     "../../lib/tmc-navigation.ts",
     "../tmc-entry-point.test.ts"
