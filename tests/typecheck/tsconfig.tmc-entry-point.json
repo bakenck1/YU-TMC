@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../app/(protected)/tmc/page.tsx",
+    "../../components/Dashboard.tsx",
+    "../../components/Header.tsx",
+    "../../components/TmcLanding.tsx",
+    "../../lib/security/authorization.ts",
+    "../../lib/tmc-navigation.ts",
+    "../tmc-entry-point.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

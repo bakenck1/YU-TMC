@@ -32,6 +32,7 @@ const ROUTE_PERMISSIONS = [
   ["/users", "legacy.users.read"],
   ["/items", "legacy.items.read"],
   ["/transfers", "inventory.transfer.request_self"],
+  ["/tmc", "inventory.tmc.transfer_request.create"],
   ["/", "legacy.dashboard.read"],
 ] as const satisfies readonly (readonly [string, AppPermission])[];
 

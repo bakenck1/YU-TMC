@@ -13,6 +13,7 @@ const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
   "/items": "nav.items",
   "/transfers": "nav.transfers",
+  "/tmc": "tmc.entryPoint",
   "/inventory": "nav.objects",
   "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
