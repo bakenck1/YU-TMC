@@ -12,6 +12,7 @@ import { InventoryInspectionService } from "@/lib/application/services/inventory
 import { WebPushService } from "@/lib/application/services/web-push-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
+import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
 import { FileSettingsRepository } from "@/lib/server/persistence/file/file-settings-repository";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
@@ -25,6 +26,7 @@ import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/
 import { createPostgresInventoryInspectionRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-inspection-repositories";
 import { createPostgresWebPushRepositories } from "@/lib/server/persistence/postgres/postgres-web-push-repositories";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
+import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
 import {
   NodeWebPushSender,
@@ -41,6 +43,7 @@ export interface ApplicationServices {
   readonly inspections: InventoryInspectionService;
   readonly push: WebPushService;
   readonly settings: SettingsService;
+  readonly tmcTransferRequests: TmcTransferRequestService;
   readonly users: UserService;
 }
 
@@ -125,6 +128,11 @@ function createApplicationServices(): ApplicationServices {
     ),
     push,
     settings: new SettingsService(new FileSettingsRepository()),
+    tmcTransferRequests: new TmcTransferRequestService(
+      createPostgresUnitOfWork(createPostgresTmcOperationRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+    ),
     users: new UserService(
       userUnitOfWork,
       new ScryptPasswordHasher(),

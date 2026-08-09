@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../app/api/inventory/transfer-requests/route.ts",
+    "../../lib/server/http/tmc-transfer-request-handler.ts",
+    "../tmc-transfer-request-route.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

@@ -43,6 +43,7 @@ export interface TmcTransferRequestServiceIds {
 }
 
 export interface IdempotentTmcTransferRequestCreation {
+  body: { result: CreateTmcTransferRequestResultDto };
   kind: "completed" | "replayed";
   result: CreateTmcTransferRequestResultDto;
   resourceId?: string;
@@ -84,7 +85,7 @@ export class TmcTransferRequestService {
     ) {
       throw forbidden();
     }
-    const key = normalizeIdempotencyKey(idempotencyKey);
+    const key = normalizeTmcIdempotencyKey(idempotencyKey);
     const normalized = normalizeCreateInput(input);
     const actorId = actor.userId.toLowerCase();
     const commandActor = { ...actor, userId: actorId };
@@ -134,6 +135,7 @@ export class TmcTransferRequestService {
     );
     const result = readStoredCreateResult(execution.response);
     return {
+      body: { result },
       kind: execution.kind,
       result,
       ...(execution.response.resourceId
@@ -357,7 +359,7 @@ function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
   };
 }
 
-function normalizeIdempotencyKey(value: unknown) {
+export function normalizeTmcIdempotencyKey(value: unknown) {
   if (value === undefined || value === null || value === "") {
     throw validation("idempotency_key_required");
   }

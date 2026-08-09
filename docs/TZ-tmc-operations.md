@@ -331,7 +331,7 @@ TDD обязателен для:
 - [x] транзакции и optimistic concurrency;
 - [x] permissions;
 - [x] idempotency;
-- TDD server tests.
+- [x] TDD server tests.
 
 ### Этап 2 — мобильный сценарий
 

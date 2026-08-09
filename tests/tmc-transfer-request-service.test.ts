@@ -103,6 +103,7 @@ test("replays an all-problem result without creating a parent", async () => {
 
   assert.equal(first.result.request, null);
   assert.deepEqual(second, {
+    body: { result: first.result },
     kind: "replayed",
     result: first.result,
     status: 200,
