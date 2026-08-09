@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
+  IdempotencyRequestInput,
+  IdempotencyReservation,
+  IdempotencyResponse,
+} from "../lib/application/ports/inventory-concurrency-repositories";
+import type {
   InsertTmcTransferRequestItemRecord,
   InsertTmcTransferRequestRecord,
   InsertedTmcTransferRequestItemRecord,
@@ -22,6 +27,188 @@ const ACTOR = {
 };
 const RECIPIENT_ID = "22222222-2222-4222-8222-222222222222";
 const NOW = new Date("2026-08-09T12:00:00.000Z");
+const IDEMPOTENCY_KEY = "tmc-create-000001";
+
+test("replays the exact TMC create result without a second mutation", async () => {
+  const itemId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const harness = createHarness({ candidates: [candidate(itemId)] });
+
+  const first = await harness.service.createIdempotent(
+    {
+      recipientId: RECIPIENT_ID.toUpperCase(),
+      itemIds: [itemId.toUpperCase()],
+      comment: "  Ａ transfer  ",
+    },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  const second = await harness.service.createIdempotent(
+    {
+      recipientId: RECIPIENT_ID,
+      itemIds: [itemId],
+      comment: "A transfer",
+    },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+
+  assert.equal(first.kind, "completed");
+  assert.equal(first.status, 201);
+  assert.equal(first.resourceId, first.result.request?.id);
+  assert.equal(second.kind, "replayed");
+  assert.deepEqual(second, { ...first, kind: "replayed" });
+  assert.equal(harness.repository.insertedRequests.length, 1);
+  assert.equal(harness.repository.insertedItems.length, 1);
+});
+
+test("rejects reuse of a TMC idempotency key for a different payload", async () => {
+  const itemIds = [uuid(1), uuid(2)];
+  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
+
+  await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  await assert.rejects(
+    harness.service.createIdempotent(
+      { recipientId: RECIPIENT_ID, itemIds: [...itemIds].reverse() },
+      ACTOR,
+      IDEMPOTENCY_KEY,
+    ),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.kind === "conflict" &&
+      error.publicCode === "idempotency_key_reused",
+  );
+  assert.equal(harness.repository.insertedRequests.length, 1);
+});
+
+test("replays an all-problem result without creating a parent", async () => {
+  const itemId = uuid(1);
+  const harness = createHarness({
+    candidates: [candidate(itemId, { responsibleUser: null })],
+  });
+
+  const first = await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  const second = await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+
+  assert.equal(first.result.request, null);
+  assert.deepEqual(second, {
+    kind: "replayed",
+    result: first.result,
+    status: 200,
+  });
+  assert.equal(harness.repository.insertedRequests.length, 0);
+});
+
+test("rejects invalid TMC idempotency keys before a transaction", async () => {
+  for (const key of [undefined, "short", "x".repeat(129), "invalid key"] as const) {
+    const harness = createHarness();
+    await assert.rejects(
+      harness.service.createIdempotent(
+        { recipientId: RECIPIENT_ID, itemIds: [uuid(1)] },
+        ACTOR,
+        key as never,
+      ),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.kind === "validation",
+    );
+    assert.equal(harness.unitOfWork.transactions, 0);
+  }
+});
+
+test("rolls back the TMC mutation when idempotency completion fails", async () => {
+  const itemId = uuid(1);
+  const harness = createHarness({ candidates: [candidate(itemId)] });
+  harness.unitOfWork.idempotency.failNextCompletion = true;
+
+  await assert.rejects(
+    harness.service.createIdempotent(
+      { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+      ACTOR,
+      IDEMPOTENCY_KEY,
+    ),
+    /injected_idempotency_completion_failure/,
+  );
+  assert.equal(harness.repository.insertedRequests.length, 0);
+  assert.equal(harness.repository.insertedItems.length, 0);
+
+  const retried = await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  assert.equal(retried.kind, "completed");
+  assert.equal(harness.repository.insertedRequests.length, 1);
+});
+
+test("rejects a corrupted persisted TMC replay response", async () => {
+  const itemId = uuid(1);
+  const harness = createHarness({ candidates: [candidate(itemId)] });
+  await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  harness.unitOfWork.idempotency.corruptCompletedResponse({
+    body: { result: { total: "not-a-number" } },
+    status: 201,
+  });
+
+  await assert.rejects(
+    harness.service.createIdempotent(
+      { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+      ACTOR,
+      IDEMPOTENCY_KEY,
+    ),
+    /tmc_idempotency_response_invalid/,
+  );
+});
+
+test("replays an all-late-conflict result without retrying item inserts", async () => {
+  const itemIds = [uuid(1), uuid(2)];
+  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
+  for (const itemId of itemIds) {
+    harness.repository.failures.set(
+      itemId,
+      new TmcOperationRepositoryConflictError(
+        "responsibility_changed",
+        new Error("late conflict"),
+      ),
+    );
+  }
+
+  const first = await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+  const insertCalls = harness.repository.calls.filter(
+    (call) => call === "insertRequestItem",
+  ).length;
+  const replay = await harness.service.createIdempotent(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+    IDEMPOTENCY_KEY,
+  );
+
+  assert.equal(first.result.request, null);
+  assert.equal(replay.kind, "replayed");
+  assert.equal(harness.repository.insertedRequests.length, 0);
+  assert.equal(
+    harness.repository.calls.filter((call) => call === "insertRequestItem").length,
+    insertCalls,
+  );
+});
 
 test("rejects an unknown runtime role before repository access", async () => {
   const harness = createHarness();
@@ -589,10 +776,14 @@ function createHarness(options: {
 
 class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
   transactions = 0;
+  readonly idempotency = new MemoryIdempotencyRepository();
   private depth = 0;
   constructor(private readonly repository: TmcTransferRequestRepository) {}
   read<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
-    return work({ transferRequests: this.repository });
+    return work({
+      idempotency: this.idempotency,
+      transferRequests: this.repository,
+    });
   }
   async transaction<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
     const outer = this.depth === 0;
@@ -601,19 +792,85 @@ class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
     const requestCount = memory.insertedRequests.length;
     const itemCount = memory.insertedItems.length;
     const resultCount = memory.insertedItemResults.length;
+    const idempotencySnapshot = this.idempotency.snapshot();
     this.depth += 1;
     try {
-      return await work({ transferRequests: this.repository });
+      return await work({
+        idempotency: this.idempotency,
+        transferRequests: this.repository,
+      });
     } catch (error) {
-      if (outer) {
-        memory.insertedRequests.length = requestCount;
-        memory.insertedItems.length = itemCount;
-        memory.insertedItemResults.length = resultCount;
-      }
+      memory.insertedRequests.length = requestCount;
+      memory.insertedItems.length = itemCount;
+      memory.insertedItemResults.length = resultCount;
+      this.idempotency.restore(idempotencySnapshot);
       throw error;
     } finally {
       this.depth -= 1;
     }
+  }
+}
+
+interface MemoryIdempotencyRecord {
+  id: string;
+  requestHash: string;
+  response: IdempotencyResponse | null;
+  state: "processing" | "completed";
+}
+
+class MemoryIdempotencyRepository {
+  failNextCompletion = false;
+  private records = new Map<string, MemoryIdempotencyRecord>();
+
+  async reserve(input: IdempotencyRequestInput): Promise<IdempotencyReservation> {
+    const scope = `${input.actorId}\u0000${input.operation}\u0000${input.key}`;
+    const existing = this.records.get(scope);
+    if (!existing) {
+      this.records.set(scope, {
+        id: input.id,
+        requestHash: input.requestHash,
+        response: null,
+        state: "processing",
+      });
+      return { kind: "reserved", id: input.id };
+    }
+    if (existing.requestHash !== input.requestHash) {
+      return { kind: "key_reused" };
+    }
+    if (existing.state === "processing") return { kind: "in_progress" };
+    return {
+      kind: "replay",
+      response: structuredClone(existing.response!),
+    };
+  }
+
+  async complete(id: string, response: IdempotencyResponse) {
+    const record = [...this.records.values()].find((value) => value.id === id);
+    if (!record || record.state !== "processing") {
+      throw new ApplicationError("conflict", "idempotency_request_not_processing");
+    }
+    record.state = "completed";
+    record.response = structuredClone(response);
+    if (this.failNextCompletion) {
+      this.failNextCompletion = false;
+      throw new Error("injected_idempotency_completion_failure");
+    }
+  }
+
+  snapshot() {
+    return structuredClone(this.records);
+  }
+
+  restore(snapshot: Map<string, MemoryIdempotencyRecord>) {
+    this.records = snapshot;
+  }
+
+  corruptCompletedResponse(response: IdempotencyResponse) {
+    const record = [...this.records.values()].find(
+      (value) => value.state === "completed",
+    );
+    if (!record) throw new Error("missing_completed_idempotency_record");
+    record.response = structuredClone(response);
   }
 }
 
@@ -657,6 +914,7 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
       ...aggregate,
       items: aggregate.items.map((item) => ({
         ...item,
+        requestId: aggregate.id,
         id: this.insertedItemResults.find(
           (inserted) => inserted.itemId === item.itemId,
         )?.id ?? item.id,

@@ -1,9 +1,15 @@
-import type {
-  TmcTransferItemResult,
-  TmcTransferRequestStatus,
-} from "@/lib/contracts/inventory-domain";
-import type { UserRole } from "@/lib/contracts/users";
+import { z } from "zod";
 
+import {
+  TMC_TRANSFER_ITEM_RESULTS,
+  TMC_TRANSFER_REQUEST_STATUSES,
+  type TmcTransferItemResult,
+  type TmcTransferRequestStatus,
+} from "@/lib/contracts/inventory-domain";
+import {
+  USER_ROLES,
+  type UserRole,
+} from "@/lib/contracts/users";
 export type {
   TmcTransferItemResult,
   TmcTransferRequestStatus,
@@ -206,6 +212,165 @@ interface RejectedTmcTransferRequestResultDto {
 export type CreateTmcTransferRequestResultDto =
   | CreatedTmcTransferRequestResultDto
   | RejectedTmcTransferRequestResultDto;
+
+const uuidSchema = z.string().uuid();
+const timestampSchema = z.string().refine(
+  (value) => {
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+  },
+  { message: "Expected a canonical ISO timestamp." },
+);
+const operationUserSchema = z.object({
+  id: uuidSchema,
+  fullName: z.string(),
+  email: z.string(),
+  role: z.enum(USER_ROLES),
+}).strict();
+const itemCardSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  inventoryNumber: z.string(),
+  quantity: z.number().finite(),
+  unitPrice: z.number().finite(),
+  photoUrl: z.string().nullable(),
+  location: z.object({
+    buildingId: uuidSchema,
+    buildingName: z.string(),
+    roomId: uuidSchema,
+    roomDesignation: z.string(),
+  }).strict(),
+}).strict();
+const requestItemSchema = z.object({
+  id: uuidSchema,
+  requestId: uuidSchema,
+  item: itemCardSchema,
+  responsibilityPeriodIdAtRequest: uuidSchema,
+  currentResponsibleIdAtRequest: uuidSchema,
+  responsibleUserProfile: operationUserSchema,
+  result: z.enum(TMC_TRANSFER_ITEM_RESULTS),
+  invalidReason: z.string().nullable(),
+  createdAt: timestampSchema,
+  decidedAt: timestampSchema.nullable(),
+  decidedBy: operationUserSchema.nullable(),
+  version: z.number().int().positive(),
+}).strict().superRefine((item, context) => {
+  if (item.result === "pending") {
+    if (item.invalidReason || item.decidedAt || item.decidedBy) {
+      context.addIssue({ code: "custom", message: "Invalid pending item state." });
+    }
+    return;
+  }
+  if (!item.decidedAt || !item.decidedBy) {
+    context.addIssue({ code: "custom", message: "Incomplete terminal item state." });
+  }
+  if (item.result === "invalidated" ? !item.invalidReason : item.invalidReason !== null) {
+    context.addIssue({ code: "custom", message: "Invalid item reason state." });
+  }
+});
+const summarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  accepted: z.number().int().nonnegative(),
+  rejected: z.number().int().nonnegative(),
+  cancelled: z.number().int().nonnegative(),
+  invalidated: z.number().int().nonnegative(),
+}).strict();
+const requestSchema = z.object({
+  id: uuidSchema,
+  initiator: operationUserSchema,
+  recipient: operationUserSchema,
+  status: z.enum(TMC_TRANSFER_REQUEST_STATUSES),
+  comment: z.string().nullable(),
+  createdAt: timestampSchema,
+  expiresAt: timestampSchema,
+  overdue: z.boolean(),
+  closedAt: timestampSchema.nullable(),
+  closedBy: operationUserSchema.nullable(),
+  isAdministrativeDecision: z.boolean(),
+  administrativeReason: z.string().nullable(),
+  version: z.number().int().positive(),
+  summary: summarySchema,
+  items: z.array(requestItemSchema),
+}).strict().superRefine((request, context) => {
+  const counts = {
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+    cancelled: 0,
+    invalidated: 0,
+  };
+  for (const item of request.items) {
+    counts[item.result] += 1;
+    if (item.requestId !== request.id) {
+      context.addIssue({ code: "custom", message: "Request item scope mismatch." });
+    }
+  }
+  if (
+    request.summary.total !== request.items.length ||
+    Object.entries(counts).some(([state, count]) =>
+      request.summary[state as keyof typeof counts] !== count)
+  ) {
+    context.addIssue({ code: "custom", message: "Request summary mismatch." });
+  }
+  if (request.status === "pending") {
+    if (
+      request.closedAt || request.closedBy ||
+      request.isAdministrativeDecision || request.administrativeReason
+    ) {
+      context.addIssue({ code: "custom", message: "Invalid pending request state." });
+    }
+  } else if (
+    !request.closedAt || !request.closedBy ||
+    (request.isAdministrativeDecision
+      ? !request.administrativeReason
+      : request.administrativeReason !== null)
+  ) {
+    context.addIssue({ code: "custom", message: "Invalid terminal request state." });
+  }
+});
+const creationOutcomeSchema = z.union([
+  z.object({
+    itemId: uuidSchema,
+    outcome: z.literal("included"),
+    requestItemId: uuidSchema,
+    requestItemVersion: z.number().int().positive(),
+  }).strict(),
+  z.object({
+    itemId: uuidSchema,
+    outcome: z.literal("problem"),
+    problem: z.enum(TMC_OPERATION_PROBLEM_CODES),
+  }).strict(),
+]);
+const createResultSchema = z.object({
+  request: requestSchema.nullable(),
+  total: z.number().int().nonnegative(),
+  included: z.number().int().nonnegative(),
+  problems: z.number().int().nonnegative(),
+  items: z.array(creationOutcomeSchema),
+}).strict().superRefine((result, context) => {
+  const included = result.items.filter((item) => item.outcome === "included").length;
+  const problems = result.items.length - included;
+  if (
+    result.total !== result.items.length ||
+    result.included !== included ||
+    result.problems !== problems ||
+    result.total !== result.included + result.problems ||
+    (result.request ? result.request.items.length !== included : included !== 0)
+  ) {
+    context.addIssue({ code: "custom", message: "Creation result summary mismatch." });
+  }
+});
+
+export function parseCreateTmcTransferRequestResult(
+  value: unknown,
+): CreateTmcTransferRequestResultDto {
+  const parsed = createResultSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error("tmc_idempotency_response_invalid", { cause: parsed.error });
+  }
+  return parsed.data as CreateTmcTransferRequestResultDto;
+}
 
 export interface TmcBulkOperationResultDto {
   total: number;

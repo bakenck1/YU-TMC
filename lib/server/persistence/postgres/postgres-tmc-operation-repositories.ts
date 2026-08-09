@@ -17,6 +17,7 @@ import type {
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import { PostgresIdempotencyRequestRepository } from "@/lib/server/persistence/postgres/postgres-inventory-concurrency-repositories";
 
 const ITEMS = '"yu_inventory"."items"';
 const ROOMS = '"yu_inventory"."rooms"';
@@ -152,6 +153,7 @@ export function createPostgresTmcOperationRepositories(
   source: PostgresRepositorySource,
 ): TmcOperationRepositories {
   return {
+    idempotency: new PostgresIdempotencyRequestRepository(source),
     transferRequests: new PostgresTmcTransferRequestRepository(source),
   };
 }

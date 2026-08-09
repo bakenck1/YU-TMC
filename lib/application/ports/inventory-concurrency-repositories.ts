@@ -29,7 +29,7 @@ export interface IdempotencyRequestInput {
   operation: string;
   key: string;
   requestHash: string;
-  expiresAt: Date;
+  expiresInMs: number;
   id: string;
 }
 
@@ -50,7 +50,6 @@ export interface IdempotencyRequestRepository {
   complete(
     id: string,
     response: IdempotencyResponse,
-    completedAt: Date,
   ): Promise<void>;
 }
 

@@ -77,10 +77,21 @@ export class PostgresIdempotencyRequestRepository
   constructor(private readonly source: PostgresRepositorySource) {}
 
   async reserve(input: IdempotencyRequestInput): Promise<IdempotencyReservation> {
+    const lock = await this.source.query<{
+      acquired: boolean;
+    } & QueryResultRow>(
+      `select pg_try_advisory_xact_lock(
+         hashtextextended($1, 918273645)
+       ) as acquired`,
+      [JSON.stringify([input.actorId, input.operation, input.key])],
+    );
+    if (!lock.rows[0]?.acquired) return { kind: "in_progress" };
+
     const inserted = await this.source.query<{ id: string } & QueryResultRow>(
       `insert into ${IDEMPOTENCY}
          (id, actor_id, operation, idempotency_key, request_hash, expires_at)
-       values ($1, $2, $3, $4, $5, $6)
+       values ($1, $2, $3, $4, $5,
+               transaction_timestamp() + ($6 * interval '1 millisecond'))
        on conflict (actor_id, operation, idempotency_key) do update
        set id = excluded.id,
            request_hash = excluded.request_hash,
@@ -99,7 +110,7 @@ export class PostgresIdempotencyRequestRepository
         input.operation,
         input.key,
         input.requestHash,
-        input.expiresAt,
+        input.expiresInMs,
       ],
     );
     if (inserted.rows[0]) return { kind: "reserved", id: inserted.rows[0].id };
@@ -130,14 +141,17 @@ export class PostgresIdempotencyRequestRepository
   async complete(
     id: string,
     response: IdempotencyResponse,
-    completedAt: Date,
   ): Promise<void> {
     const result = await this.source.query(
       `update ${IDEMPOTENCY}
        set state = 'completed', response_status = $2, response_body = $3,
-           resource_id = $4, completed_at = $5
+           resource_id = $4, completed_at = transaction_timestamp(),
+           expires_at = case
+             when $4::uuid is not null then 'infinity'::timestamptz
+             else expires_at
+           end
        where id = $1 and state = 'processing'`,
-      [id, response.status, response.body, response.resourceId ?? null, completedAt],
+      [id, response.status, response.body, response.resourceId ?? null],
     );
     if ((result.rowCount ?? 0) !== 1) {
       throw new ApplicationError("conflict", "idempotency_request_not_processing");

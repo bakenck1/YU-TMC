@@ -5,6 +5,7 @@ import type {
 } from "@/lib/contracts/inventory-domain";
 import type { TmcOperationProblemCode } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
+import type { IdempotencyRequestRepository } from "@/lib/application/ports/inventory-concurrency-repositories";
 
 export interface TmcOperationUserRecord {
   id: string;
@@ -153,5 +154,6 @@ export interface TmcTransferRequestRepository {
 }
 
 export interface TmcOperationRepositories {
+  idempotency: IdempotencyRequestRepository;
   transferRequests: TmcTransferRequestRepository;
 }

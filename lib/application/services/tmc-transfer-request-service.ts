@@ -8,6 +8,7 @@ import type {
   TmcTransferUserRecord,
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
+import { executeIdempotentCommand } from "@/lib/application/services/idempotent-command-service";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   CreateTmcTransferRequestInput,
@@ -17,6 +18,7 @@ import type {
   TmcTransferRequestItemDto,
   TmcTransferRequestSummaryDto,
 } from "@/lib/contracts/tmc-operations";
+import { parseCreateTmcTransferRequestResult } from "@/lib/contracts/tmc-operations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import {
@@ -28,6 +30,9 @@ import {
 const MAX_ITEMS = 50;
 const MAX_COMMENT_CODE_POINTS = 1_000;
 const REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+const CREATE_OPERATION = "tmc.transfer_request.create";
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 
 export interface TmcTransferRequestServiceClock {
   now(): Date;
@@ -35,6 +40,13 @@ export interface TmcTransferRequestServiceClock {
 
 export interface TmcTransferRequestServiceIds {
   create(): string;
+}
+
+export interface IdempotentTmcTransferRequestCreation {
+  kind: "completed" | "replayed";
+  result: CreateTmcTransferRequestResultDto;
+  resourceId?: string;
+  status: number;
 }
 
 type ClassifiedItem =
@@ -60,6 +72,76 @@ export class TmcTransferRequestService {
     private readonly clock: TmcTransferRequestServiceClock,
     private readonly ids: TmcTransferRequestServiceIds,
   ) {}
+
+  async createIdempotent(
+    input: CreateTmcTransferRequestInput,
+    actor: AuthorizationActor,
+    idempotencyKey: string,
+  ): Promise<IdempotentTmcTransferRequestCreation> {
+    if (
+      !isUuid(actor.userId) ||
+      !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+    ) {
+      throw forbidden();
+    }
+    const key = normalizeIdempotencyKey(idempotencyKey);
+    const normalized = normalizeCreateInput(input);
+    const actorId = actor.userId.toLowerCase();
+    const commandActor = { ...actor, userId: actorId };
+    const execution = await executeIdempotentCommand(
+      this.unitOfWork,
+      {
+        id: this.ids.create(),
+        actorId,
+        operation: CREATE_OPERATION,
+        key,
+        requestHash: await hashCreateRequest(normalized),
+        expiresInMs: IDEMPOTENCY_LIFETIME_MS,
+      },
+      async () => {
+        const result = await this.create(normalized, commandActor);
+        return {
+          body: { result },
+          ...(result.request ? { resourceId: result.request.id } : {}),
+          status: result.request ? 201 : 200,
+        };
+      },
+      {
+        afterReserve: async ({ transferRequests }) => {
+          const users = new Map<string, TmcTransferUserRecord>();
+          for (const userId of [...new Set([
+            actorId,
+            normalized.recipientId,
+          ])].sort()) {
+            const user = await transferRequests.findUserById(userId);
+            if (user) users.set(user.id, user);
+          }
+          const currentActor = users.get(actorId);
+          if (
+            !currentActor ||
+            !currentActor.active ||
+            currentActor.deletedAt ||
+            !hasPermission(
+              currentActor.role,
+              "inventory.tmc.transfer_request.create",
+            )
+          ) {
+            throw forbidden();
+          }
+        },
+        transaction: { isolation: "serializable", maxAttempts: 3 },
+      },
+    );
+    const result = readStoredCreateResult(execution.response);
+    return {
+      kind: execution.kind,
+      result,
+      ...(execution.response.resourceId
+        ? { resourceId: execution.response.resourceId }
+        : {}),
+      status: execution.response.status,
+    };
+  }
 
   async create(
     input: CreateTmcTransferRequestInput,
@@ -273,6 +355,44 @@ function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
     itemIds: input.itemIds.map((itemId) => itemId.toLowerCase()),
     comment: normalizeComment(input.comment),
   };
+}
+
+function normalizeIdempotencyKey(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    throw validation("idempotency_key_required");
+  }
+  if (typeof value !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(value)) {
+    throw validation("idempotency_key_invalid");
+  }
+  return value;
+}
+
+async function hashCreateRequest(
+  input: ReturnType<typeof normalizeCreateInput>,
+) {
+  const payload = new TextEncoder().encode(
+    JSON.stringify({ operation: CREATE_OPERATION, ...input }),
+  );
+  const digest = await crypto.subtle.digest("SHA-256", payload);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function readStoredCreateResult(response: {
+  body: Record<string, unknown>;
+  resourceId?: string;
+  status: number;
+}) {
+  const result = parseCreateTmcTransferRequestResult(response.body.result);
+  if (result.request) {
+    if (response.status !== 201 || response.resourceId !== result.request.id) {
+      throw new Error("tmc_idempotency_response_invalid");
+    }
+  } else if (response.status !== 200 || response.resourceId !== undefined) {
+    throw new Error("tmc_idempotency_response_invalid");
+  }
+  return result;
 }
 
 function normalizeComment(value: string | null | undefined) {
