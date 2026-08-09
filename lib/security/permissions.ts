@@ -33,6 +33,7 @@ export const APP_PERMISSIONS = [
   "inventory.transfer.decide_as_current_responsible",
   "inventory.transfer.cancel_as_requester",
   "inventory.transfer.override",
+  "inventory.tmc.transfer_request.create",
   "inventory.inspection.create_self",
   "inventory.inspection.create_for_technician",
   "inventory.inspection.read_own",
@@ -102,6 +103,7 @@ export const PERMISSION_ROLES = {
   "inventory.transfer.decide_as_current_responsible": EMPLOYEE_ONLY,
   "inventory.transfer.cancel_as_requester": EMPLOYEE_ONLY,
   "inventory.transfer.override": ADMIN_ONLY,
+  "inventory.tmc.transfer_request.create": ALL_ROLES,
   "inventory.inspection.create_self": TECHNICIAN_ONLY,
   "inventory.inspection.create_for_technician": ADMIN_ONLY,
   "inventory.inspection.read_own": ASSIGNABLE_TECHNICIANS,
@@ -175,6 +177,10 @@ export type InventoryAuthorizationRequest =
   | {
       operation: "transfer.override";
       administrativeReason?: string;
+    }
+  | {
+      operation: "tmc.transfer_request.create";
+      currentResponsibleId: string;
     }
   | {
       operation: "decision.respond";
@@ -349,6 +355,12 @@ export function canPerformInventoryOperation(
       return (
         hasAdministrativeReason(request.administrativeReason) &&
         hasPermission(actor.role, "inventory.transfer.override")
+      );
+    case "tmc.transfer_request.create":
+      return (
+        hasPermission(actor.role, "inventory.tmc.transfer_request.create") &&
+        (actor.role === "admin" ||
+          actor.userId === request.currentResponsibleId)
       );
     case "decision.respond":
       return (

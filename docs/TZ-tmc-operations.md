@@ -329,7 +329,7 @@ TDD обязателен для:
 - [x] репозитории;
 - [x] сервис заявок;
 - [x] транзакции и optimistic concurrency;
-- permissions;
+- [x] permissions;
 - idempotency;
 - TDD server tests.
 

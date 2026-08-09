@@ -5,6 +5,7 @@ import type {
   TmcTransferCandidateRecord,
   TmcTransferRequestItemRecord,
   TmcTransferRequestRecord,
+  TmcTransferUserRecord,
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
@@ -18,7 +19,11 @@ import type {
 } from "@/lib/contracts/tmc-operations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
-import type { AuthorizationActor } from "@/lib/security/permissions";
+import {
+  canPerformInventoryOperation,
+  hasPermission,
+  type AuthorizationActor,
+} from "@/lib/security/permissions";
 
 const MAX_ITEMS = 50;
 const MAX_COMMENT_CODE_POINTS = 1_000;
@@ -60,18 +65,47 @@ export class TmcTransferRequestService {
     input: CreateTmcTransferRequestInput,
     actor: AuthorizationActor,
   ): Promise<CreateTmcTransferRequestResultDto> {
+    if (
+      !isUuid(actor.userId) ||
+      !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+    ) {
+      throw forbidden();
+    }
+    const actorId = actor.userId.toLowerCase();
     const normalized = normalizeCreateInput(input);
 
     try {
       return await this.unitOfWork.transaction(async ({ transferRequests }) => {
-      const recipient = await transferRequests.findUserById(
+      const users = new Map<string, TmcTransferUserRecord>();
+      for (const userId of [...new Set([
+        actorId,
         normalized.recipientId,
-      );
+      ])].sort()) {
+        const user = await transferRequests.findUserById(userId);
+        if (user) users.set(user.id, user);
+      }
+      const currentActor = users.get(actorId);
+      if (
+        !currentActor ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        !hasPermission(
+          currentActor.role,
+          "inventory.tmc.transfer_request.create",
+        )
+      ) {
+        throw forbidden();
+      }
+      const authorizedActor: AuthorizationActor = {
+        userId: currentActor.id,
+        role: currentActor.role,
+      };
+      const recipient = users.get(normalized.recipientId);
       if (!recipient) throw validation("recipient_not_found");
       if (!recipient.active || recipient.deletedAt) {
         throw validation("recipient_unavailable");
       }
-      if (recipient.id === actor.userId) {
+      if (recipient.id === authorizedActor.userId) {
         throw validation("recipient_must_differ_from_initiator");
       }
 
@@ -82,6 +116,7 @@ export class TmcTransferRequestService {
         normalized.itemIds,
         candidates,
         recipient.id,
+        authorizedActor,
       );
       const included = classified.filter(
         (item): item is Extract<ClassifiedItem, { outcome: "candidate" }> =>
@@ -111,7 +146,7 @@ export class TmcTransferRequestService {
       const createdAt = this.clock.now();
       await transferRequests.insertRequest({
         id: requestId,
-        initiatorId: actor.userId,
+        initiatorId: authorizedActor.userId,
         recipientId: recipient.id,
         comment: normalized.comment,
         createdAt,
@@ -255,6 +290,7 @@ function classifyItems(
   itemIds: readonly string[],
   candidates: readonly TmcTransferCandidateRecord[],
   recipientId: string,
+  actor: AuthorizationActor,
 ): ClassifiedItem[] {
   const candidatesById = new Map(
     candidates.map((candidate) => [candidate.itemId, candidate]),
@@ -265,6 +301,14 @@ function classifyItems(
     seen.add(itemId);
     const candidate = candidatesById.get(itemId);
     if (!candidate) return problem(itemId, "item_not_found");
+    if (
+      !canPerformInventoryOperation(actor, {
+        operation: "tmc.transfer_request.create",
+        currentResponsibleId: candidate.responsibleUser?.id ?? "",
+      })
+    ) {
+      return problem(itemId, "forbidden");
+    }
     if (candidate.itemStatus !== "active" || candidate.archivedAt) {
       return problem(itemId, "item_inactive");
     }
@@ -450,4 +494,8 @@ function toUserDto(user: TmcOperationUserRecord) {
 
 function validation(publicCode: string) {
   return new ApplicationError("validation", publicCode);
+}
+
+function forbidden() {
+  return new ApplicationError("forbidden", "forbidden");
 }

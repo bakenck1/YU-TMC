@@ -199,7 +199,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
   );
   assert.equal(source.calls.length, 3);
   assert.doesNotMatch(source.calls[0]!.text, /is_active\s*=\s*true/i);
-  assert.match(source.calls[0]!.text, /for update/i);
+  assert.match(source.calls[0]!.text, /for no key update/i);
 });
 
 test("findCandidates avoids SQL for an empty item set", async () => {

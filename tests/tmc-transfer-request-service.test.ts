@@ -23,6 +23,194 @@ const ACTOR = {
 const RECIPIENT_ID = "22222222-2222-4222-8222-222222222222";
 const NOW = new Date("2026-08-09T12:00:00.000Z");
 
+test("rejects an unknown runtime role before repository access", async () => {
+  const harness = createHarness();
+
+  await assert.rejects(
+    harness.service.create(
+      { recipientId: RECIPIENT_ID, itemIds: [uuid(1)] },
+      { userId: ACTOR.userId, role: "unexpected" } as never,
+    ),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.kind === "forbidden" &&
+      error.publicCode === "forbidden",
+  );
+
+  assert.equal(harness.unitOfWork.transactions, 0);
+  assert.deepEqual(harness.repository.calls, []);
+  assert.equal(harness.ids.created, 0);
+});
+
+test("allows a warehouse user to transfer an item they currently own", async () => {
+  const itemId = uuid(1);
+  const warehouse = { userId: ACTOR.userId, role: "warehouse" as const };
+  const harness = createHarness({
+    actors: [user({ id: warehouse.userId, role: warehouse.role })],
+    candidates: [candidate(itemId)],
+  });
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    warehouse,
+  );
+
+  assert.equal(result.included, 1);
+  assert.equal(harness.repository.insertedRequests[0]?.initiatorId, warehouse.userId);
+});
+
+test("uses the current database role instead of a stale admin actor", async () => {
+  const staleAdmin = { userId: uuid(70), role: "admin" as const };
+  const itemId = uuid(1);
+  const harness = createHarness({
+    actors: [user({ id: staleAdmin.userId, role: "employee" })],
+    candidates: [candidate(itemId, {
+      responsibleUser: user({ id: uuid(77) }),
+    })],
+  });
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    staleAdmin,
+  );
+
+  assert.equal(result.request, null);
+  assert.deepEqual(result.items, [{
+    itemId,
+    outcome: "problem",
+    problem: "forbidden",
+  }]);
+});
+
+test("rejects an inactive or deleted current actor inside the transaction", async () => {
+  for (const actorRecord of [
+    user({ id: ACTOR.userId, active: false }),
+    user({ id: ACTOR.userId, deletedAt: NOW }),
+  ]) {
+    const harness = createHarness({
+      actors: [actorRecord],
+      candidates: [candidate(uuid(1))],
+    });
+
+    await assert.rejects(
+      harness.service.create(
+        { recipientId: RECIPIENT_ID, itemIds: [uuid(1)] },
+        ACTOR,
+      ),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.kind === "forbidden",
+    );
+    assert.equal(harness.unitOfWork.transactions, 1);
+    assert.equal(harness.repository.calls.includes("findCandidates"), false);
+    assert.equal(harness.ids.created, 0);
+  }
+});
+
+test("applies employee ownership per item without revealing foreign state", async () => {
+  const itemIds = [uuid(1), uuid(2), uuid(3)];
+  const ownCandidates = [candidate(itemIds[0]!), candidate(itemIds[2]!)];
+  const harness = createHarness({
+    candidates: [
+      ownCandidates[0]!,
+      candidate(itemIds[1]!, {
+        itemStatus: "maintenance",
+        hasActiveTransfer: true,
+        responsibleUser: user({ id: uuid(77) }),
+      }),
+      ownCandidates[1]!,
+    ],
+  });
+  harness.repository.aggregate = requestRecord(ownCandidates);
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+  );
+
+  assert.deepEqual(
+    result.items.map((item) =>
+      item.outcome === "problem" ? item.problem : item.outcome),
+    ["included", "forbidden", "included"],
+  );
+  assert.deepEqual(
+    harness.repository.insertedItems.map((item) => item.itemId),
+    [itemIds[0], itemIds[2]],
+  );
+});
+
+test("does not persist a parent for an all-foreign employee batch", async () => {
+  const itemIds = [uuid(1), uuid(2)];
+  const harness = createHarness({
+    candidates: itemIds.map((itemId) =>
+      candidate(itemId, { responsibleUser: user({ id: uuid(77) }) })),
+  });
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds },
+    ACTOR,
+  );
+
+  assert.equal(result.request, null);
+  assert.deepEqual(
+    result.items.map((item) =>
+      item.outcome === "problem" ? item.problem : item.outcome),
+    ["forbidden", "forbidden"],
+  );
+  assert.equal(harness.repository.insertedRequests.length, 0);
+  assert.equal(harness.repository.insertedItems.length, 0);
+});
+
+test("allows an administrator to group items from different owners", async () => {
+  const admin = { userId: uuid(70), role: "admin" as const };
+  const itemIds = [uuid(1), uuid(2)];
+  const candidates = itemIds.map((itemId, index) =>
+    candidate(itemId, {
+      responsibilityPeriodId: uuid(90 + index),
+      responsibleUser: user({ id: uuid(75 + index) }),
+    }));
+  const harness = createHarness({
+    actors: [user({ id: admin.userId, role: admin.role })],
+    candidates,
+  });
+  harness.repository.aggregate = requestRecord(candidates);
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds },
+    admin,
+  );
+
+  assert.equal(result.included, 2);
+  assert.deepEqual(
+    harness.repository.insertedItems.map((item) =>
+      item.currentResponsibleIdAtRequest),
+    [uuid(75), uuid(76)],
+  );
+  assert.equal(harness.repository.insertedRequests[0]?.initiatorId, admin.userId);
+});
+
+test("does not let an administrator transfer an item to its current owner", async () => {
+  const itemId = uuid(1);
+  const harness = createHarness({
+    actors: [user({ id: uuid(70), role: "admin" })],
+    candidates: [candidate(itemId, {
+      responsibleUser: user({ id: RECIPIENT_ID }),
+    })],
+  });
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    { userId: uuid(70), role: "admin" },
+  );
+
+  assert.equal(result.request, null);
+  assert.deepEqual(result.items, [{
+    itemId,
+    outcome: "problem",
+    problem: "already_responsible",
+  }]);
+  assert.equal(harness.repository.insertedRequests.length, 0);
+});
+
 test("rejects malformed create input before repository access", async () => {
   const invalidInputs = [
     { recipientId: "not-a-uuid", itemIds: [uuid(1)] },
@@ -61,7 +249,10 @@ test("canonicalizes UUIDs and detects duplicates across letter case", async () =
     ACTOR,
   );
 
-  assert.deepEqual(harness.repository.requestedRecipientIds, [RECIPIENT_ID]);
+  assert.deepEqual(
+    harness.repository.requestedRecipientIds,
+    [ACTOR.userId, RECIPIENT_ID],
+  );
   assert.deepEqual(harness.repository.requestedCandidateIds, [[itemId, itemId]]);
   assert.deepEqual(result.items, [
     {
@@ -115,7 +306,11 @@ test("classifies a mixed batch with deterministic precedence and input order", a
       candidate(ids[5]!, { responsibleUser: user({ id: RECIPIENT_ID }) }),
       candidate(ids[2]!, { itemStatus: "maintenance" }),
       candidate(ids[0]!),
-      candidate(ids[4]!, { responsibilityPeriodId: null, responsibleUser: null }),
+      candidate(ids[4]!, {
+        itemStatus: "maintenance",
+        responsibilityPeriodId: null,
+        responsibleUser: null,
+      }),
       candidate(ids[3]!, { archivedAt: NOW }),
       candidate(ids[6]!, { hasActiveTransfer: true }),
     ],
@@ -142,8 +337,8 @@ test("classifies a mixed batch with deterministic precedence and input order", a
       [ids[1], "item_not_found"],
       [ids[2], "item_inactive"],
       [ids[3], "item_inactive"],
-      [ids[4], "item_unassigned"],
-      [ids[5], "already_responsible"],
+      [ids[4], "forbidden"],
+      [ids[5], "forbidden"],
       [ids[6], "active_transfer_exists"],
       [ids[0], "duplicate_item"],
     ],
@@ -351,12 +546,20 @@ test("rolls back an empty parent when every included item conflicts late", async
 
 function createHarness(options: {
   recipient?: TmcTransferUserRecord | null;
+  actors?: TmcTransferUserRecord[];
   candidates?: TmcTransferCandidateRecord[];
   now?: Date;
   times?: Date[];
 } = {}) {
   const repository = new MemoryRequestRepository();
   repository.recipient = options.recipient === undefined ? user() : options.recipient;
+  if (repository.recipient) {
+    repository.users.set(repository.recipient.id, repository.recipient);
+  }
+  repository.users.set(ACTOR.userId, user({ id: ACTOR.userId }));
+  for (const actor of options.actors ?? []) {
+    repository.users.set(actor.id, actor);
+  }
   repository.candidates = options.candidates ?? [];
   const unitOfWork = new MemoryUnitOfWork(repository);
   const ids = {
@@ -426,11 +629,12 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
   requestedRecipientIds: string[] = [];
   requestedCandidateIds: string[][] = [];
   failures = new Map<string, TmcOperationRepositoryConflictError>();
+  users = new Map<string, TmcTransferUserRecord>();
 
   async findUserById(id: string) {
     this.calls.push("findUserById");
     this.requestedRecipientIds.push(id);
-    return this.recipient;
+    return this.users.get(id) ?? null;
   }
   async findCandidates(itemIds: readonly string[]) {
     this.calls.push("findCandidates");

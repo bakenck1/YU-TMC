@@ -166,7 +166,7 @@ class PostgresTmcTransferRequestRepository
       `select id, full_name, email, role, is_active, deleted_at
          from ${USERS}
         where id = $1
-        for update`,
+        for no key update`,
       [id],
     );
     const row = result.rows[0];
