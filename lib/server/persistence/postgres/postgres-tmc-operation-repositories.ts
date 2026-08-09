@@ -208,6 +208,29 @@ class PostgresTmcTransferRequestRepository
     return mapRequest(firstRow, result.rows);
   }
 
+  async findItemPhoto(requestId: string, itemId: string) {
+    const result = await this.source.query<{
+      binary_data: Buffer | null;
+      trusted_mime_type: string | null;
+    } & QueryResultRow>(
+      `select photo.binary_data, photo.trusted_mime_type
+         from ${REQUEST_ITEMS} request_item
+         inner join ${PHOTOS} photo
+           on photo.item_id = request_item.item_id
+          and photo.purpose = 'item'
+          and photo.status = 'attached'
+        where request_item.request_id = $1
+          and request_item.item_id = $2
+        order by photo.attached_at desc nulls last, photo.id
+        limit 1`,
+      [requestId, itemId],
+    );
+    const row = result.rows[0];
+    return row?.binary_data && row.trusted_mime_type === "image/jpeg"
+      ? { bytes: new Uint8Array(row.binary_data), mimeType: "image/jpeg" as const }
+      : null;
+  }
+
   async insertRequest(input: InsertTmcTransferRequestRecord): Promise<void> {
     await this.source.query(
       `insert into ${REQUESTS}

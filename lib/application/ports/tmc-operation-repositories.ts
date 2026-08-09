@@ -147,6 +147,10 @@ export interface TmcTransferRequestRepository {
     itemIds: readonly string[],
   ): Promise<TmcTransferCandidateRecord[]>;
   findById(id: string): Promise<TmcTransferRequestRecord | null>;
+  findItemPhoto(
+    requestId: string,
+    itemId: string,
+  ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" } | null>;
   insertRequest(input: InsertTmcTransferRequestRecord): Promise<void>;
   insertRequestItem(
     input: InsertTmcTransferRequestItemRecord,

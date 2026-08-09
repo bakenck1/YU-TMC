@@ -29,6 +29,59 @@ const RECIPIENT_ID = "22222222-2222-4222-8222-222222222222";
 const NOW = new Date("2026-08-09T12:00:00.000Z");
 const IDEMPOTENCY_KEY = "tmc-create-000001";
 
+test("participants and admin can read a request while BOLA is hidden as not found", async () => {
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  for (const actor of [
+    ACTOR,
+    { userId: RECIPIENT_ID, role: "employee" as const },
+    { userId: uuid(70), role: "admin" as const },
+  ]) {
+    assert.equal((await harness.service.getById(harness.repository.aggregate.id, actor)).id, harness.repository.aggregate.id);
+  }
+  await assert.rejects(
+    harness.service.getById(harness.repository.aggregate.id, { userId: uuid(71), role: "employee" }),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found" && error.publicCode === "request_not_found",
+  );
+  const calls = harness.repository.findByIdCalls;
+  await assert.rejects(
+    harness.service.getById("invalid", ACTOR),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found",
+  );
+  assert.equal(harness.repository.findByIdCalls, calls);
+});
+
+test("request-scoped photo access requires a participant and item membership", async () => {
+  const harness = createHarness();
+  const itemId = uuid(1);
+  harness.repository.aggregate = requestRecord([candidate(itemId)]);
+  harness.repository.photo = { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+  for (const actor of [
+    ACTOR,
+    { userId: RECIPIENT_ID, role: "employee" as const },
+    { userId: uuid(70), role: "admin" as const },
+  ]) {
+    assert.deepEqual(await harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, actor), harness.repository.photo);
+  }
+  assert.equal(harness.repository.photoCalls.length, 3);
+  await assert.rejects(
+    harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, { userId: uuid(71), role: "employee" }),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
+  );
+  assert.equal(harness.repository.photoCalls.length, 3);
+  harness.repository.photo = null;
+  await assert.rejects(
+    harness.service.getItemPhoto(harness.repository.aggregate.id, uuid(99), ACTOR),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
+  );
+  const calls = harness.repository.findByIdCalls;
+  await assert.rejects(
+    harness.service.getItemPhoto("invalid", itemId, ACTOR),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
+  );
+  assert.equal(harness.repository.findByIdCalls, calls);
+});
+
 test("replays the exact TMC create result without a second mutation", async () => {
   const itemId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const harness = createHarness({ candidates: [candidate(itemId)] });
@@ -888,6 +941,8 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
   requestedCandidateIds: string[][] = [];
   failures = new Map<string, TmcOperationRepositoryConflictError>();
   users = new Map<string, TmcTransferUserRecord>();
+  photo: { bytes: Uint8Array; mimeType: "image/jpeg" } | null = null;
+  photoCalls: string[][] = [];
 
   async findUserById(id: string) {
     this.calls.push("findUserById");
@@ -921,6 +976,10 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
         )?.id ?? item.id,
       })),
     };
+  }
+  async findItemPhoto(requestId: string, itemId: string) {
+    this.photoCalls.push([requestId, itemId]);
+    return this.photo;
   }
   async insertRequest(input: InsertTmcTransferRequestRecord) {
     this.calls.push("insertRequest");

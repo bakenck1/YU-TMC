@@ -74,6 +74,63 @@ export class TmcTransferRequestService {
     private readonly ids: TmcTransferRequestServiceIds,
   ) {}
 
+  async getById(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<TmcTransferRequestDto> {
+    if (
+      !isUuid(id) ||
+      !isUuid(actor.userId) ||
+      !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+    ) throw requestNotFound();
+    const request = await this.unitOfWork.read(({ transferRequests }) =>
+      transferRequests.findById(id.toLowerCase()),
+    );
+    const actorId = actor.userId.toLowerCase();
+    if (
+      !request ||
+      (actor.role !== "admin" &&
+        request.initiator.id !== actorId &&
+        request.recipient.id !== actorId)
+    ) {
+      throw requestNotFound();
+    }
+    return toRequestDto(request, this.clock.now());
+  }
+
+  async getItemPhoto(
+    requestId: string,
+    itemId: string,
+    actor: AuthorizationActor,
+  ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" }> {
+    if (
+      !isUuid(requestId) ||
+      !isUuid(itemId) ||
+      !isUuid(actor.userId) ||
+      !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+    ) {
+      throw requestNotFound();
+    }
+    return this.unitOfWork.read(async ({ transferRequests }) => {
+      const request = await transferRequests.findById(requestId.toLowerCase());
+      const actorId = actor.userId.toLowerCase();
+      if (
+        !request ||
+        (actor.role !== "admin" &&
+          request.initiator.id !== actorId &&
+          request.recipient.id !== actorId)
+      ) {
+        throw requestNotFound();
+      }
+      const photo = await transferRequests.findItemPhoto(
+        request.id,
+        itemId.toLowerCase(),
+      );
+      if (!photo) throw requestNotFound();
+      return photo;
+    });
+  }
+
   async createIdempotent(
     input: CreateTmcTransferRequestInput,
     actor: AuthorizationActor,
@@ -543,7 +600,9 @@ function toRequestItemDto(
       inventoryNumber: record.item.inventoryNumber,
       quantity: record.item.quantity,
       unitPrice: record.item.unitPrice,
-      photoUrl: record.item.photoUrl,
+      photoUrl: record.item.photoUrl
+        ? `/api/inventory/transfer-requests/${record.requestId}/items/${record.item.id}/photo`
+        : null,
       location: {
         buildingId: record.item.buildingId,
         buildingName: record.item.buildingName,
@@ -620,4 +679,8 @@ function validation(publicCode: string) {
 
 function forbidden() {
   return new ApplicationError("forbidden", "forbidden");
+}
+
+function requestNotFound() {
+  return new ApplicationError("not_found", "request_not_found");
 }

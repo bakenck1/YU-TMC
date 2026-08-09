@@ -418,6 +418,38 @@ test("findById returns null without querying items for a missing request", async
   assert.equal(source.calls.length, 1);
 });
 
+test("findItemPhoto is scoped by both request and item and returns JPEG bytes", async () => {
+  const source = new QueryQueue([{
+    rows: [{ binary_data: Buffer.from([1, 2, 3]), trusted_mime_type: "image/jpeg" }],
+  }]);
+  const repository = createPostgresTmcOperationRepositories(
+    source.asSource(),
+  ).transferRequests;
+  const requestId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const itemId = "11111111-1111-4111-8111-111111111111";
+
+  assert.deepEqual(await repository.findItemPhoto(requestId, itemId), {
+    bytes: new Uint8Array([1, 2, 3]),
+    mimeType: "image/jpeg",
+  });
+  assert.deepEqual(source.calls[0]?.values, [requestId, itemId]);
+  assert.match(source.calls[0]!.text, /request_item\.request_id = \$1/i);
+  assert.match(source.calls[0]!.text, /request_item\.item_id = \$2/i);
+  assert.match(source.calls[0]!.text, /photo\.purpose = 'item'/i);
+  assert.match(source.calls[0]!.text, /photo\.status = 'attached'/i);
+  assert.match(source.calls[0]!.text, /photo\.attached_at desc[^\n]*photo\.id/i);
+});
+
+test("findItemPhoto returns null for an item outside the request", async () => {
+  const repository = createPostgresTmcOperationRepositories(
+    new QueryQueue([{ rows: [] }]).asSource(),
+  ).transferRequests;
+  assert.equal(await repository.findItemPhoto(
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    "11111111-1111-4111-8111-111111111111",
+  ), null);
+});
+
 function candidateRow(overrides: Record<string, unknown> = {}) {
   return {
     item_id: "11111111-1111-4111-8111-111111111111",
