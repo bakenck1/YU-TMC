@@ -12,6 +12,9 @@
     "../../app/(protected)/tmc/receive/page.tsx",
     "../../app/(protected)/tmc/issue/page.tsx",
     "../../app/(protected)/tmc/transfer/page.tsx",
+    "../../app/api/inventory/qr/resolve/route.ts",
+    "../../components/InventoryItemCodeScanner.tsx",
+    "../../components/InventoryRoomQrScanner.tsx",
     "../../components/Dashboard.tsx",
     "../../components/Header.tsx",
     "../../components/TmcLanding.tsx",
@@ -19,10 +22,14 @@
     "../../components/TmcOperationShell.tsx",
     "../../lib/tmc-qr-flow.ts",
     "../../lib/tmc-qr-resolver.ts",
+    "../../lib/application/services/qr-resolution-service.ts",
+    "../../lib/security/permissions.ts",
     "../../lib/security/authorization.ts",
     "../../lib/tmc-navigation.ts",
     "../tmc-entry-point.test.ts",
-    "../tmc-qr-flow.test.ts"
+    "../tmc-qr-flow.test.ts",
+    "../code-resolution.test.ts",
+    "../pwa-camera-scanner.test.ts"
   ],
   "exclude": ["../../node_modules"]
 }

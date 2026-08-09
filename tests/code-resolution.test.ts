@@ -187,6 +187,17 @@ test("item-only QR permission never discloses non-item or inactive targets", asy
         ?.kind,
       "room",
     );
+    await assert.rejects(
+      () =>
+        service.resolve(
+          "INV-42",
+          { userId: role, role },
+          "qr",
+          "item",
+        ),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.publicCode === "not_accessible",
+    );
   }
 });
 

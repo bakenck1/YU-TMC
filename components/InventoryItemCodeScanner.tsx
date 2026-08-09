@@ -1,7 +1,7 @@
 "use client";
 
 import { Barcode, Camera, Keyboard, QrCode, ScanLine, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   startBarcodeScanner,
@@ -20,6 +20,7 @@ export default function InventoryItemCodeScanner({
   mode?: "default" | "qr-only";
 }) {
   const { t } = useAppSettings();
+  const manualInputId = useId();
   const videoRef = useRef<HTMLVideoElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -135,9 +136,9 @@ export default function InventoryItemCodeScanner({
           <button type="button" onClick={() => { stop(); setFormat("code_39"); setMessageKey("scanner.aimBarcode"); }} aria-pressed={format === "code_39"} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${format === "code_39" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button>
           <button type="button" onClick={() => { stop(); setFormat("qr_code"); setMessageKey("scanner.aimQr"); }} aria-pressed={format === "qr_code"} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${format === "qr_code" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}><QrCode className="h-4 w-4" />QR</button>
         </div> : null}
-        <div className="relative mt-5 overflow-hidden rounded-2xl bg-zinc-950"><video ref={videoRef} muted playsInline className="aspect-video w-full object-cover" /><div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2 bg-gradient-to-t from-black/70 to-transparent px-5 pb-5 text-center text-sm text-white"><ScanLine className="h-6 w-6" /><span>{t(messageKey)}</span></div></div>
+        <div className="relative mt-5 overflow-hidden rounded-2xl bg-zinc-950"><video ref={videoRef} muted playsInline aria-hidden="true" className="aspect-video w-full object-cover" /><div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2 bg-gradient-to-t from-black/70 to-transparent px-5 pb-5 text-center text-sm text-white"><ScanLine className="h-6 w-6" /><span>{t(messageKey)}</span></div></div>
         <button type="button" onClick={() => void startCamera()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark"><Camera className="h-4 w-4" />{t("camera.open")}</button>
-        <div className="mt-5 border-t border-zinc-100 pt-5"><label className="block text-sm font-medium text-zinc-700">{t("scanner.manual")}</label><div className="mt-2 flex gap-2"><input value={manualValue} onChange={(event) => setManualValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") choose(manualValue); }} placeholder={t("scanner.codePlaceholder")} className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500" /><button type="button" onClick={() => choose(manualValue)} disabled={!manualValue.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 px-3 text-sm font-semibold text-zinc-700 disabled:opacity-50"><Keyboard className="h-4 w-4" />{t(qrOnly ? "scanner.verify" : "scanner.add")}</button></div></div>
+        <div className="mt-5 border-t border-zinc-100 pt-5"><label htmlFor={manualInputId} className="block text-sm font-medium text-zinc-700">{t("scanner.manual")}</label><div className="mt-2 flex gap-2"><input id={manualInputId} value={manualValue} onChange={(event) => setManualValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") choose(manualValue); }} placeholder={t("scanner.codePlaceholder")} className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500" /><button type="button" onClick={() => choose(manualValue)} disabled={!manualValue.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 px-3 text-sm font-semibold text-zinc-700 disabled:opacity-50"><Keyboard className="h-4 w-4" />{t(qrOnly ? "scanner.verify" : "scanner.add")}</button></div></div>
       </section>
     </div>
   );
