@@ -2,6 +2,7 @@ import type { CreateRoomInput } from "@/lib/contracts/inventory-locations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requirePermission,
@@ -41,7 +42,7 @@ export async function POST(
     if (!UUID_PATTERN.test(id)) throw invalidRequest();
     const room = await getApplicationServices().locations.createRoom(
       id,
-      parseCreateRoom(await request.json()),
+      parseCreateRoom(await readLimitedJson(request)),
       authorizationActor(user),
     );
     return Response.json({ room }, { status: 201 });

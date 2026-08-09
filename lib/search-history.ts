@@ -34,3 +34,16 @@ export function parseSearchHistory(value: string | null): string[] {
     return [];
   }
 }
+
+export function clearSensitiveSearchStorage(storage: Storage = window.localStorage) {
+  const prefixes = [
+    "yu-inventory:item-search-history:",
+    "yu-inventory:item-filter-history:",
+  ];
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (key && prefixes.some((prefix) => key.startsWith(prefix))) {
+      storage.removeItem(key);
+    }
+  }
+}

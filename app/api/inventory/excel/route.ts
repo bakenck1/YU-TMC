@@ -13,6 +13,7 @@ import {
   type ImportRoom,
 } from "@/lib/server/excel/inventory-excel";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedFormData, readLimitedJson } from "@/lib/server/http/request-body";
 import { authorizationActor, requireCurrentUser } from "@/lib/server/security/request-user";
 import { hasPermission } from "@/lib/security/permissions";
 
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
     const action = new URL(request.url).searchParams.get("action");
     if (action === "export") {
       if (!hasPermission(user.role, "inventory.report.export")) throw forbidden();
-      const body = (await request.json()) as {
+      const body = (await readLimitedJson(request, 128 * 1024)) as {
         dataset?: string;
         itemIds?: unknown;
         columns?: unknown;
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
     }
     if (action !== "preview" && action !== "import") throw invalidRequest();
     if (!hasPermission(user.role, "inventory.item.bulk_manage")) throw forbidden();
-    const formData = await request.formData();
+    const formData = await readLimitedFormData(request, MAX_FILE_BYTES + 64 * 1024);
     const file = formData.get("file");
     if (!(file instanceof File) || file.size < 1 || file.size > MAX_FILE_BYTES || !file.name.toLowerCase().endsWith(".xlsx")) {
       throw new ApplicationError("validation", "invalid_excel_file");

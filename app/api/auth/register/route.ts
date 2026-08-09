@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getApplicationServices } from "@/lib/server/application";
+import { readLimitedJson } from "@/lib/server/http/request-body";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
   initializeAdminCredential,
   isPasswordLoginConfigured,
@@ -15,6 +18,7 @@ import {
 } from "@/lib/security/rate-limiter";
 import {
   createSessionToken,
+  sessionCookieOptions,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
 } from "@/lib/security/session";
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const registrationLimit = consumeRegistrationLimit(request);
+  const registrationLimit = await consumeRegistrationLimit(request);
   if (!registrationLimit.allowed) {
     return rateLimitedResponse(registrationLimit, "too_many_registration_attempts");
   }
@@ -64,12 +68,9 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { error: "invalid_request" },
-      { status: 400, headers: rateLimitHeaders(apiLimit) },
-    );
+    body = await readLimitedJson(request, 8 * 1024);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
   }
 
   if (!body || typeof body !== "object") {
@@ -127,6 +128,15 @@ export async function POST(request: Request) {
       { status: 409, headers: rateLimitHeaders(apiLimit) },
     );
   }
+  const account = await getApplicationServices().users.resolveCurrentAccount(
+    user.email,
+  );
+  if (!account) {
+    return Response.json(
+      { error: "authentication_not_configured" },
+      { status: 503, headers: rateLimitHeaders(apiLimit) },
+    );
+  }
 
   const response = NextResponse.json(
     { registered: true, user },
@@ -134,11 +144,8 @@ export async function POST(request: Request) {
   );
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
-    value: createSessionToken(user, SESSION_TTL_SECONDS),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
+    value: createSessionToken(user, SESSION_TTL_SECONDS, account.sessionVersion),
+    ...sessionCookieOptions(),
   });
   return response;
 }

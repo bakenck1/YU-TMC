@@ -345,11 +345,7 @@ function maintenanceRequestPayload(
   const language = isAppLanguage(languageInput) ? languageInput : "ru";
   return JSON.stringify({
     title: translate(language, "push.maintenanceTitle"),
-    body: translate(language, "push.maintenanceBody", {
-      name: input.itemName,
-      inventoryNumber: input.inventoryNumber,
-      reason: input.reason,
-    }),
+    body: translate(language, "push.maintenanceTitle"),
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: `maintenance-${input.itemId}`,

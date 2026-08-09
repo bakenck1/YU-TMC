@@ -16,6 +16,7 @@ import {
 } from "@/lib/security/google-sso";
 import {
   createSessionToken,
+  sessionCookieOptions,
   isSessionConfigured,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
@@ -112,12 +113,15 @@ export async function GET(request: NextRequest) {
     const response = finish(request, config.redirectUri, destination);
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
-      value: createSessionToken(authentication.user),
-      httpOnly: true,
-      secure: new URL(config.redirectUri).protocol === "https:",
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_TTL_SECONDS,
+      value: createSessionToken(
+        authentication.user,
+        SESSION_TTL_SECONDS,
+        authentication.sessionVersion,
+      ),
+      ...sessionCookieOptions({
+        maxAge: SESSION_TTL_SECONDS,
+        sameSite: "lax",
+      }),
     });
     return response;
   } catch {

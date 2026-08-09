@@ -1,6 +1,7 @@
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -48,7 +49,7 @@ async function mutateComponents(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     if (
       !body ||
       typeof body !== "object" ||

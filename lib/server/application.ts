@@ -93,7 +93,7 @@ function createApplicationServices(): ApplicationServices {
       { create: () => randomBytes(16) },
       {
         next: (year) =>
-          `TMP-${year}-${String(Date.now() % 1_000_000).padStart(6, "0")}`,
+          `TMP-${year}-${randomBytes(10).toString("hex").toUpperCase()}`,
       },
     ),
     locations: new InventoryLocationService(

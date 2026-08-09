@@ -1,0 +1,48 @@
+name: yu-inventory-production
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+      target: migrator
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?runtime database URL is required}
+      DATABASE_MIGRATOR_URL: ${DATABASE_MIGRATOR_URL:?migrator database URL is required}
+      DATABASE_DEPLOYMENT_ID: ${DATABASE_DEPLOYMENT_ID:?deployment ID is required}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
+      DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      DATABASE_MIGRATION_LOCK_TIMEOUT_MS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_MS:-60000}
+    command: ["npm", "run", "db:migrate", "--", "--target=production"]
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+      target: runner
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?runtime database URL is required}
+      DATABASE_DEPLOYMENT_ID: ${DATABASE_DEPLOYMENT_ID:?deployment ID is required}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
+      DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      SESSION_SECRET: ${SESSION_SECRET:?random session secret is required}
+      APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:?public HTTPS origin is required}
+      TRUSTED_CLIENT_IP_HEADER: ${TRUSTED_CLIENT_IP_HEADER:?trusted ingress client-IP header is required}
+      SESSION_COOKIE_SECURE: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

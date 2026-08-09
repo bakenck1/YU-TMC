@@ -1,8 +1,11 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { configuredPublicOrigin } from "@/lib/security/public-origin";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function originForIncomingRequest(request: Request): string {
+  const configured = configuredPublicOrigin();
+  if (configured) return configured;
   const requestUrl = new URL(request.url);
   const host = request.headers.get("host")?.trim();
   const forwardedProtocol = request.headers
@@ -36,7 +39,9 @@ export function requireSameOriginMutation(request: Request) {
   }
 
   const origin = request.headers.get("origin");
-  if (!origin) return;
+  if (!origin) {
+    throw new ApplicationError("forbidden", "cross_site_request_blocked");
+  }
 
   try {
     if (new URL(origin).origin !== originForIncomingRequest(request)) {

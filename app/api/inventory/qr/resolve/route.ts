@@ -18,10 +18,14 @@ export async function GET(request: Request) {
     const kindInput = url.searchParams.get("kind");
     const kind =
       kindInput === "barcode" || kindInput === "qr" ? kindInput : "auto";
+    const targetInput = url.searchParams.get("target");
+    const target =
+      targetInput === "item" || targetInput === "room" ? targetInput : "any";
     const resolution = await getApplicationServices().qr.resolve(
       value,
       authorizationActor(user),
       kind,
+      target,
     );
     return Response.json({ resolution });
   } catch (error) {

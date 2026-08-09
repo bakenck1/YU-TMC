@@ -83,14 +83,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   constructor(private readonly source: PostgresRepositorySource) {}
 
   async roomExists(id: string): Promise<boolean> {
-    const result = await this.source.query<{ exists: boolean }>(
-      `select exists(
-         select 1 from ${ROOMS}
-          where id = $1 and status = 'active'
-       ) as exists`,
+    const result = await this.source.query<{ id: string }>(
+      `select id from ${ROOMS}
+        where id = $1 and status = 'active'
+        for update`,
       [id],
     );
-    return result.rows[0]?.exists === true;
+    return result.rowCount === 1;
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
@@ -291,20 +290,33 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   async insertCommentAttachment(
     input: InsertInventoryItemCommentAttachmentRecord,
   ): Promise<void> {
-    await this.source.query(
-      `insert into ${COMMENT_ATTACHMENTS}
-         (id, comment_id, file_name, media_type, size_bytes, binary_data, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        input.id,
-        input.commentId,
-        input.fileName,
-        input.mediaType,
-        input.sizeBytes,
-        input.binaryData,
-        input.createdAt,
-      ],
-    );
+    try {
+      await this.source.query(
+        `insert into ${COMMENT_ATTACHMENTS}
+           (id, comment_id, file_name, media_type, size_bytes, binary_data, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          input.id,
+          input.commentId,
+          input.fileName,
+          input.mediaType,
+          input.sizeBytes,
+          input.binaryData,
+          input.createdAt,
+        ],
+      );
+    } catch (error) {
+      const databaseError = error as { code?: string; constraint?: string };
+      if (
+        databaseError.code === "23514" &&
+        databaseError.constraint === "item_comment_attachments_daily_quota"
+      ) {
+        throw new ApplicationError("rate_limited", "attachment_quota_exceeded", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   async findCommentAttachment(

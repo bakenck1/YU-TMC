@@ -18,8 +18,10 @@ import {
   type AuthenticatedUser,
   type AuthRole,
 } from "./authorization";
+import { isSecureSecretValue } from "./secret-configuration";
+import { SESSION_COOKIE_NAME } from "./session-constants";
 
-export const SESSION_COOKIE_NAME = "yu_inventory_session";
+export { SESSION_COOKIE_NAME } from "./session-constants";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 export const REMEMBERED_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 let cachedSessionSecret: string | null = null;
@@ -35,11 +37,13 @@ export interface SessionPayload {
   iat: number;
   exp: number;
   jti: string;
+  ver: number;
 }
 
 function sessionSecret() {
-  const secret = process.env.SESSION_SECRET;
-  if (secret && secret.length >= 32) return secret;
+  const secret = process.env.SESSION_SECRET?.trim();
+  if (isSecureSecretValue(secret, 43)) return secret;
+  if (process.env.NODE_ENV === "production") return null;
   if (cachedSessionSecret) return cachedSessionSecret;
 
   try {
@@ -54,11 +58,12 @@ function sessionSecret() {
 
   try {
     const secretFile = sessionSecretFile();
-    mkdirSync(path.dirname(secretFile), { recursive: true });
+    mkdirSync(path.dirname(secretFile), { recursive: true, mode: 0o700 });
     const generated = randomBytes(48).toString("base64url");
     writeFileSync(secretFile, generated, {
       encoding: "utf8",
       flag: "wx",
+      mode: 0o600,
     });
     cachedSessionSecret = generated;
     return generated;
@@ -76,6 +81,32 @@ function sessionSecret() {
   }
 }
 
+export function shouldUseSecureSessionCookie() {
+  if (process.env.NODE_ENV === "production") return true;
+  return process.env.SESSION_COOKIE_SECURE?.trim() === "true";
+}
+
+export function sessionCookieOptions(options?: {
+  maxAge?: number;
+  sameSite?: "strict" | "lax";
+}) {
+  return {
+    httpOnly: true,
+    secure: shouldUseSecureSessionCookie(),
+    sameSite: options?.sameSite ?? ("strict" as const),
+    path: "/",
+    ...(options?.maxAge === undefined ? {} : { maxAge: options.maxAge }),
+  };
+}
+
+export function expiredSessionCookieOptions() {
+  return {
+    ...sessionCookieOptions(),
+    expires: new Date(0),
+    maxAge: 0,
+  };
+}
+
 function signature(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
@@ -86,6 +117,12 @@ export function createSignedServerValue(purpose: string, value: string) {
   const encodedValue = Buffer.from(value).toString("base64url");
   const signedPayload = `${purpose}.${encodedValue}`;
   return `${encodedValue}.${signature(signedPayload, secret)}`;
+}
+
+export function createServerValueDigest(purpose: string, value: string) {
+  const secret = sessionSecret();
+  if (!secret) throw new Error("SESSION_SECRET must contain at least 43 secure characters");
+  return signature(`${purpose}.${value}`, secret);
 }
 
 export function verifySignedServerValue(
@@ -122,6 +159,7 @@ export function isSessionConfigured() {
 export function createSessionToken(
   user: AuthenticatedUser,
   ttlSeconds = SESSION_TTL_SECONDS,
+  sessionVersion = 1,
 ) {
   const secret = sessionSecret();
   if (!secret) throw new Error("SESSION_SECRET must contain at least 32 characters");
@@ -134,6 +172,7 @@ export function createSessionToken(
     iat: now,
     exp: now + ttlSeconds,
     jti: randomUUID(),
+    ver: sessionVersion,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${encodedPayload}.${signature(encodedPayload, secret)}`;
@@ -170,6 +209,8 @@ export function verifySessionToken(token: string): SessionPayload | null {
       typeof payload.iat !== "number" ||
       typeof payload.exp !== "number" ||
       typeof payload.jti !== "string" ||
+      !Number.isSafeInteger(payload.ver) ||
+      payload.ver! < 1 ||
       payload.exp <= now
     ) {
       return null;

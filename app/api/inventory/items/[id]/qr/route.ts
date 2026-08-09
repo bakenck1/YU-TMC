@@ -8,6 +8,7 @@ import {
 } from "@/lib/domain/code39";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { hasPermission } from "@/lib/security/permissions";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -32,6 +33,9 @@ export async function GET(
     );
     const url = new URL(request.url);
     const kind = url.searchParams.get("kind") === "qr" ? "qr" : "barcode";
+    if (kind === "qr" && !hasPermission(user.role, "inventory.qr.manage")) {
+      throw new ApplicationError("forbidden", "forbidden");
+    }
     if (kind === "qr" && !item.qrCode) {
       throw new ApplicationError("not_found", "item_qr_not_found");
     }

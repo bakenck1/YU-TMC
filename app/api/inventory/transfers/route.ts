@@ -2,6 +2,7 @@ import type { CreateTransferInput } from "@/lib/contracts/inventory-responsibili
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const input = parseInput(await request.json());
+    const input = parseInput(await readLimitedJson(request));
     const transfer = await getApplicationServices().responsibility.requestTransfer(
       input,
       authorizationActor(user),

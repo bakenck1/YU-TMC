@@ -2,6 +2,10 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
+  readLimitedFormData,
+  readLimitedJson,
+} from "@/lib/server/http/request-body";
+import {
   authorizationActor,
   requireCurrentUser,
 } from "@/lib/server/security/request-user";
@@ -39,7 +43,7 @@ export async function POST(
       | { fileName: string; mediaType: string; binaryData: Uint8Array }
       | undefined;
     if (contentType.toLowerCase().startsWith("multipart/form-data")) {
-      const form = await request.formData();
+      const form = await readLimitedFormData(request, 2 * 1024 * 1024 + 64 * 1024);
       message = form.get("message");
       const file = form.get("attachment");
       if (file instanceof File && file.size > 0) {
@@ -51,7 +55,7 @@ export async function POST(
         };
       }
     } else {
-      const body: unknown = await request.json();
+      const body = await readLimitedJson(request, 16 * 1024);
       if (!body || typeof body !== "object") throw invalidRequest();
       message = (body as Record<string, unknown>).message;
     }

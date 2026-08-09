@@ -88,6 +88,17 @@ class PostgresInventoryLocationRepository
     return result.rows[0] ? mapBuilding(result.rows[0]) : null;
   }
 
+  async findBuildingByIdForUpdate(id: string): Promise<BuildingRecord | null> {
+    const result = await this.source.query<BuildingRow>(
+      `select b.*, ''::text as qr_code, 0::int as room_count
+         from ${BUILDINGS} b
+        where b.id = $1
+        for update`,
+      [id],
+    );
+    return result.rows[0] ? mapBuilding(result.rows[0]) : null;
+  }
+
   async insertBuilding(input: InsertBuildingRecord): Promise<BuildingRecord> {
     const result = await this.source.query<BuildingRow>(
       `insert into ${BUILDINGS}
@@ -214,6 +225,18 @@ class PostgresInventoryLocationRepository
   async findRoomById(id: string): Promise<RoomRecord | null> {
     const result = await this.source.query<RoomRow>(
       roomSelect("where r.id = $1"),
+      [id],
+    );
+    return result.rows[0] ? mapRoom(result.rows[0]) : null;
+  }
+
+  async findRoomByIdForUpdate(id: string): Promise<RoomRecord | null> {
+    const result = await this.source.query<RoomRow>(
+      `select r.*, null::text as primary_responsible_name,
+              ''::text as qr_code
+         from ${ROOMS} r
+        where r.id = $1
+        for update`,
       [id],
     );
     return result.rows[0] ? mapRoom(result.rows[0]) : null;

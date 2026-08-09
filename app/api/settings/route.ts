@@ -5,6 +5,7 @@ import {
 } from "@/lib/security/rate-limiter";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import { validationError } from "@/lib/domain/application-error";
 import { requirePermission } from "@/lib/server/security/request-user";
 
@@ -33,7 +34,7 @@ export async function PATCH(request: Request) {
     await requirePermission(request, "legacy.settings.manage");
     let input: unknown;
     try {
-      input = await request.json();
+      input = await readLimitedJson(request);
     } catch {
       throw validationError("invalid_settings_payload");
     }

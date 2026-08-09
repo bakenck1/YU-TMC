@@ -1,4 +1,5 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 
 export const MAX_LOGIN_JSON_BYTES = 4 * 1024;
 
@@ -20,31 +21,10 @@ export function assertLoginJsonRequest(request: Request): void {
 }
 
 export async function readLoginJsonRequest(request: Request): Promise<unknown> {
-  const reader = request.body?.getReader();
-  if (!reader) throw new SyntaxError("Missing JSON request body");
-
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    byteLength += value.byteLength;
-    if (byteLength > MAX_LOGIN_JSON_BYTES) {
-      await reader.cancel();
-      throw new ApplicationError("payload_too_large", "payload_too_large");
-    }
-    chunks.push(value);
-  }
-
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch {
+    return await readLimitedJson(request, MAX_LOGIN_JSON_BYTES);
+  } catch (error) {
+    if (error instanceof ApplicationError) throw error;
     throw new SyntaxError("Invalid JSON request body");
   }
 }

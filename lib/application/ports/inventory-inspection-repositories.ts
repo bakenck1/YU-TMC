@@ -127,6 +127,7 @@ export interface AppendInspectionAuditRecord {
 export interface InventoryInspectionRepository {
   listInspections(technicianId?: string): Promise<InspectionRecord[]>;
   findInspection(id: string): Promise<InspectionRecord | null>;
+  findInspectionForUpdate(id: string): Promise<InspectionRecord | null>;
   findAssignableTechnician(
     id: string,
   ): Promise<AssignableTechnicianRecord | null>;

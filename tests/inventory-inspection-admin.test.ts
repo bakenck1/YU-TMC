@@ -25,6 +25,7 @@ test("administrator can create, populate and record an inspection", async () => 
   const repository: InventoryInspectionRepository = {
     listInspections: async () => [...inspections.values()],
     findInspection: async (id) => inspections.get(id) ?? null,
+    findInspectionForUpdate: async (id) => inspections.get(id) ?? null,
     findAssignableTechnician: async (id) =>
       id === TECHNICIAN_ID ? { id, role: "employee" } : null,
     listRooms: async (inspectionId) =>

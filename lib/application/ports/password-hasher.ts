@@ -9,4 +9,5 @@ export interface PasswordHasher {
     password: string,
     credential: { salt: string; hash: Uint8Array } | null,
   ): Promise<boolean>;
+  needsRehash?(credential: { salt: string; hash: Uint8Array }): boolean;
 }

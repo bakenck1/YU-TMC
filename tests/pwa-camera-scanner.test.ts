@@ -77,6 +77,7 @@ test("uses ZXing camera decoding for Code 39 by default and optional QR", async 
   assert.match(inspections, /startBarcodeScanner\(\{/);
   assert.match(itemScanner, /startBarcodeScanner\(\{/);
   assert.match(roomScanner, /startBarcodeScanner\(\{/);
+  assert.match(roomScanner, /&target=room/);
   assert.match(
     roomScanner,
     /function stopCamera\(\)[\s\S]*?setCameraState\("idle"\)/,

@@ -5,6 +5,7 @@ import {
 } from "@/lib/security/login-protection";
 import {
   consumePasswordResetConfirmationLimit,
+  restoreConsumedPasswordResetCode,
   verifyAndConsumePasswordResetCode,
 } from "@/lib/security/password-reset";
 import { requireSameOriginMutation } from "@/lib/security/request-integrity";
@@ -13,6 +14,8 @@ import {
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
+import { readLimitedJson } from "@/lib/server/http/request-body";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,19 +37,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const confirmationLimit = consumePasswordResetConfirmationLimit(request);
+  const confirmationLimit = await consumePasswordResetConfirmationLimit(request);
   if (!confirmationLimit.allowed) {
     return rateLimitedResponse(confirmationLimit, "too_many_reset_attempts");
   }
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { error: "invalid_request" },
-      { status: 400, headers: rateLimitHeaders(apiLimit) },
-    );
+    body = await readLimitedJson(request, 8 * 1024);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
   }
 
   if (!body || typeof body !== "object") {
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       { status: 400, headers: rateLimitHeaders(apiLimit) },
     );
   }
-  if (!verifyAndConsumePasswordResetCode(email, code)) {
+  if (!(await verifyAndConsumePasswordResetCode(email, code))) {
     return Response.json(
       { error: "invalid_reset_code" },
       { status: 400, headers: rateLimitHeaders(apiLimit) },
@@ -91,13 +91,19 @@ export async function POST(request: Request) {
     updated = false;
   }
   if (!updated) {
+    try {
+      await restoreConsumedPasswordResetCode(email, code);
+    } catch {
+      // The credential update already failed. Do not mask the safe generic
+      // response if recovery storage is unavailable too.
+    }
     return Response.json(
       { error: "password_reset_failed" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
     );
   }
 
-  clearFailedLogins(email);
+  await clearFailedLogins(email);
   return Response.json(
     { updated: true },
     { headers: rateLimitHeaders(apiLimit) },

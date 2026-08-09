@@ -14,6 +14,9 @@ import {
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
+import { readLimitedJson } from "@/lib/server/http/request-body";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { isSecureSecretValue } from "@/lib/security/secret-configuration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,12 +40,9 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { error: "invalid_request" },
-      { status: 400, headers: rateLimitHeaders(apiLimit) },
-    );
+    body = await readLimitedJson(request, 4 * 1024);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
   }
 
   const email = normalizeEmail(
@@ -57,12 +57,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const resetLimit = consumePasswordResetRequestLimits(request, email);
+  const resetLimit = await consumePasswordResetRequestLimits(request, email);
   if (!resetLimit.allowed) {
     return rateLimitedResponse(resetLimit, "too_many_reset_requests");
   }
 
   const webhookUrl = process.env.AUTH_PASSWORD_RESET_WEBHOOK_URL?.trim();
+  const webhookSecret = process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET?.trim();
   const publicOrigin = process.env.AUTH_PASSWORD_RESET_PUBLIC_ORIGIN?.trim();
   let configured: boolean;
   try {
@@ -73,7 +74,14 @@ export async function POST(request: Request) {
   } catch {
     configured = false;
   }
-  if (!configured || !webhookUrl || !publicOrigin) {
+  if (
+    !configured ||
+    !webhookUrl ||
+    !publicOrigin ||
+    !isSafePasswordResetWebhook(webhookUrl) ||
+    (process.env.NODE_ENV === "production" &&
+      !isSecureSecretValue(webhookSecret))
+  ) {
     return Response.json(
       { error: "password_reset_not_configured" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
@@ -95,6 +103,7 @@ export async function POST(request: Request) {
     const resetUrl = createPasswordResetUrl(publicOrigin, email);
     return deliverPasswordReset({
       webhookUrl,
+      webhookSecret,
       email,
       name: user.name,
       resetUrl,
@@ -109,20 +118,21 @@ export async function POST(request: Request) {
 
 async function deliverPasswordReset(input: {
   webhookUrl: string;
+  webhookSecret?: string;
   email: string;
   name: string;
   resetUrl: string;
 }) {
-  const code = createPasswordResetCode(input.email);
+  const code = await createPasswordResetCode(input.email);
   try {
     const webhookResponse = await fetch(input.webhookUrl, {
       method: "POST",
       redirect: "error",
       headers: {
         "Content-Type": "application/json",
-        ...(process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET
+        ...(input.webhookSecret
           ? {
-              Authorization: `Bearer ${process.env.AUTH_PASSWORD_RESET_WEBHOOK_SECRET}`,
+              Authorization: `Bearer ${input.webhookSecret}`,
             }
           : {}),
       },
@@ -137,9 +147,28 @@ async function deliverPasswordReset(input: {
       signal: AbortSignal.timeout(8_000),
     });
     if (!webhookResponse.ok) throw new Error("password_reset_delivery_failed");
-    commitPasswordResetCode(input.email, code);
+    await commitPasswordResetCode(input.email, code);
   } catch (error) {
-    revokePasswordResetCode(input.email, code);
+    await revokePasswordResetCode(input.email, code);
     console.error("Password-reset delivery failed", error);
+  }
+}
+
+function isSafePasswordResetWebhook(value: string) {
+  try {
+    const url = new URL(value);
+    const localDevelopment =
+      process.env.NODE_ENV !== "production" &&
+      url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+    return (
+      (url.protocol === "https:" || localDevelopment) &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
   }
 }

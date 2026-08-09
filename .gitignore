@@ -39,8 +39,8 @@ yarn-error.log*
 /.data/caddy-public/
 /_migration/
 
-# production error monitor state
-/errors/.monitor-state.json
+# production error reports may contain sensitive log context
+/errors/
 
 # vercel
 .vercel

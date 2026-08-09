@@ -123,6 +123,18 @@ class PostgresInventoryInspectionRepository
     return result.rows[0] ? mapInspection(result.rows[0]) : null;
   }
 
+  async findInspectionForUpdate(id: string): Promise<InspectionRecord | null> {
+    const result = await this.source.query<InspectionRow>(
+      `select id, name, technician_id, status, version, created_at, updated_at,
+              coalesce(deadline_at, created_at + interval '30 days') as deadline_at
+         from ${INSPECTIONS}
+        where id = $1
+        for update`,
+      [id],
+    );
+    return result.rows[0] ? mapInspection(result.rows[0]) : null;
+  }
+
   async findAssignableTechnician(id: string) {
     const result = await this.source.query<AssignableTechnicianRow>(
       `select id, role

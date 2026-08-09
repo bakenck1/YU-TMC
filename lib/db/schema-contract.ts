@@ -81,7 +81,11 @@ export async function writeSchemaContract(
       `revoke delete on all tables in schema "yu_inventory" from ${runtimeRole}`,
     );
     await client.query(
-      `grant delete on table "yu_inventory"."web_push_subscriptions" to ${runtimeRole}`,
+      `grant delete on table
+         "yu_inventory"."web_push_subscriptions",
+         "yu_inventory"."password_reset_challenges",
+         "yu_inventory"."security_rate_limits"
+       to ${runtimeRole}`,
     );
     await client.query(
       `revoke insert, update on table ${CONTRACT_TABLE} from ${runtimeRole}`,

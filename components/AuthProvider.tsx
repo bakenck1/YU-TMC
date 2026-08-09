@@ -14,6 +14,7 @@ import {
   type AuthenticatedUser,
 } from "@/lib/security/authorization";
 import { removePushSubscriptionBeforeLogout } from "@/lib/client-push-subscription";
+import { clearSensitiveSearchStorage } from "@/lib/search-history";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
@@ -90,6 +91,11 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error("logout_failed");
+    try {
+      clearSensitiveSearchStorage();
+    } catch {
+      // Storage can be unavailable in private browsing and embedded webviews.
+    }
     setUser(null);
   }, []);
 

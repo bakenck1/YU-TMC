@@ -105,7 +105,7 @@ export class InventoryLocationService {
     const auditId = this.ids.create();
 
     return this.unitOfWork.transaction(async ({ locations }) => {
-      const current = await locations.findBuildingById(id);
+      const current = await locations.findBuildingByIdForUpdate(id);
       if (!current) {
         throw new ApplicationError("not_found", "building_not_found");
       }
@@ -158,7 +158,7 @@ export class InventoryLocationService {
     requireVersion(version);
     const occurredAt = this.clock.now();
     await this.unitOfWork.transaction(async ({ locations }) => {
-      const current = await locations.findBuildingById(id);
+      const current = await locations.findBuildingByIdForUpdate(id);
       if (!current) throw new ApplicationError("not_found", "building_not_found");
       if (current.version !== version) throw versionConflict();
       if ((await locations.countActiveRooms(id)) > 0) {
@@ -223,7 +223,7 @@ export class InventoryLocationService {
     const qrCode = qrIdentifierFromEntropy(this.qrEntropy.create());
 
     return this.unitOfWork.transaction(async ({ locations }) => {
-      const building = await locations.findBuildingById(buildingId);
+      const building = await locations.findBuildingByIdForUpdate(buildingId);
       if (!building || building.status !== "active") {
         throw new ApplicationError("not_found", "building_not_found");
       }
@@ -275,7 +275,7 @@ export class InventoryLocationService {
     const auditId = this.ids.create();
 
     return this.unitOfWork.transaction(async ({ locations }) => {
-      const current = await locations.findRoomById(id);
+      const current = await locations.findRoomByIdForUpdate(id);
       if (!current) throw new ApplicationError("not_found", "room_not_found");
       if (current.version !== input.version) {
         throw new ApplicationError("conflict", "version_conflict");
@@ -328,7 +328,7 @@ export class InventoryLocationService {
     requireVersion(version);
     const occurredAt = this.clock.now();
     await this.unitOfWork.transaction(async ({ locations }) => {
-      const current = await locations.findRoomById(id);
+      const current = await locations.findRoomByIdForUpdate(id);
       if (!current) throw new ApplicationError("not_found", "room_not_found");
       if (current.version !== version) throw versionConflict();
       if ((await locations.countActiveItems(id)) > 0) {

@@ -1,6 +1,7 @@
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -15,7 +16,7 @@ export async function PATCH(
 ) {
   try {
     const user = await requireCurrentUser(request);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     if (!body || typeof body !== "object") throw invalidRequest();
     const input = body as Record<string, unknown>;
     if (

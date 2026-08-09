@@ -332,7 +332,7 @@ test("assignment data flows from admin selection to notifier after persistence",
   assert.match(schemaContract, /grant select, insert, update on all tables/);
   assert.match(
     schemaContract,
-    /grant delete on table "yu_inventory"\."web_push_subscriptions"/,
+    /grant delete on table\s+"yu_inventory"\."web_push_subscriptions"/,
   );
   assert.match(migration, /CREATE TABLE "yu_inventory"\."web_push_subscriptions"/);
   assert.match(migration, /web_push_subscriptions_endpoint_unique/);

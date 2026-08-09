@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import {
   getClientIp,
   InMemoryRateLimiter,
+  clearDurableRateLimit,
+  consumeDurableRateLimit,
   type RateLimitResult,
 } from "./rate-limiter";
 
@@ -31,17 +33,34 @@ function emailRateLimitKey(email: string) {
 }
 
 export function consumeLoginIpLimit(request: Request) {
+  if (process.env.NODE_ENV !== "test") {
+    return consumeDurableRateLimit({
+      namespace: "login-ip-v2",
+      key: getClientIp(request),
+      limit: 30,
+      windowMs: LOGIN_FAILURE_WINDOW_MS,
+    });
+  }
   return loginIpLimiter.consume(getClientIp(request));
 }
 
-export function checkFailedLoginLimit(email: string): RateLimitResult {
-  return failedLoginEmailLimiter.check(emailRateLimitKey(email));
+export function consumeLoginEmailLimit(email: string): RateLimitResult | Promise<RateLimitResult> {
+  const key = emailRateLimitKey(email);
+  if (process.env.NODE_ENV !== "test") {
+    return consumeDurableRateLimit({
+      namespace: "login-email-v2",
+      key,
+      limit: LOGIN_FAILURE_LIMIT,
+      windowMs: LOGIN_FAILURE_WINDOW_MS,
+    });
+  }
+  return failedLoginEmailLimiter.consume(key);
 }
 
-export function recordFailedLogin(email: string): RateLimitResult {
-  return failedLoginEmailLimiter.consume(emailRateLimitKey(email));
-}
-
-export function clearFailedLogins(email: string) {
-  failedLoginEmailLimiter.reset(emailRateLimitKey(email));
+export async function clearFailedLogins(email: string) {
+  const key = emailRateLimitKey(email);
+  failedLoginEmailLimiter.reset(key);
+  if (process.env.NODE_ENV !== "test") {
+    await clearDurableRateLimit("login-email-v2", key);
+  }
 }

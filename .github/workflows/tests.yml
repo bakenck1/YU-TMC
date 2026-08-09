@@ -1,5 +1,8 @@
 name: Reliable test suite
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master, "codex/**"]
@@ -31,8 +34,10 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -46,5 +51,13 @@ jobs:
           --dbname yu_inventory_test
           --command
           "CREATE ROLE yu_inventory_test_runtime LOGIN PASSWORD 'local-runtime-test-password'"
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:all
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Production build and security invariants
+        env:
+          NODE_ENV: production
+          SESSION_SECRET: ci-only-production-build-secret-with-at-least-43-characters
+          APP_PUBLIC_ORIGIN: https://inventory-ci.example.invalid
+        run: |
+          npm run build
+          npm run security:check

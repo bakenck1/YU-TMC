@@ -12,6 +12,7 @@ import {
   createSignedServerValue,
   verifySignedServerValue,
 } from "@/lib/security/session";
+import { isSecureSecretValue } from "@/lib/security/secret-configuration";
 
 const GOOGLE_AUTHORIZATION_ENDPOINT =
   "https://accounts.google.com/o/oauth2/v2/auth";
@@ -102,7 +103,11 @@ export function googleSsoConfig(
     REQUIRED_GOOGLE_WORKSPACE_DOMAIN
   ).toLowerCase();
 
-  if (!clientId || !clientSecret || !redirectUri) return null;
+  if (
+    !clientId ||
+    !isSecureSecretValue(clientSecret, 24) ||
+    !redirectUri
+  ) return null;
   let callback: URL;
   try {
     callback = new URL(redirectUri);

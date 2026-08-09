@@ -40,26 +40,26 @@ test("forgot-password responds before delivery and rejects cross-site submission
   assert.doesNotMatch(source, /new URL\("\/reset-password", request\.url\)/);
 });
 
-test("newest delivered reset generation wins out-of-order webhook completion", () => {
+test("newest delivered reset generation wins out-of-order webhook completion", async () => {
   const email = "reset-race@example.com";
-  const older = createPasswordResetCode(email);
-  const newer = createPasswordResetCode(email);
+  const older = await createPasswordResetCode(email);
+  const newer = await createPasswordResetCode(email);
 
-  commitPasswordResetCode(email, newer);
-  commitPasswordResetCode(email, older);
+  await commitPasswordResetCode(email, newer);
+  await commitPasswordResetCode(email, older);
 
-  assert.equal(verifyAndConsumePasswordResetCode(email, older), false);
-  assert.equal(verifyAndConsumePasswordResetCode(email, newer), true);
-  assert.equal(verifyAndConsumePasswordResetCode(email, newer), false);
+  assert.equal(await verifyAndConsumePasswordResetCode(email, older), false);
+  assert.equal(await verifyAndConsumePasswordResetCode(email, newer), true);
+  assert.equal(await verifyAndConsumePasswordResetCode(email, newer), false);
 });
 
-test("failed newer delivery preserves the last delivered reset code", () => {
+test("failed newer delivery preserves the last delivered reset code", async () => {
   const email = "reset-revoke@example.com";
-  const delivered = createPasswordResetCode(email);
-  commitPasswordResetCode(email, delivered);
-  const failed = createPasswordResetCode(email);
+  const delivered = await createPasswordResetCode(email);
+  await commitPasswordResetCode(email, delivered);
+  const failed = await createPasswordResetCode(email);
 
-  revokePasswordResetCode(email, failed);
+  await revokePasswordResetCode(email, failed);
 
-  assert.equal(verifyAndConsumePasswordResetCode(email, delivered), true);
+  assert.equal(await verifyAndConsumePasswordResetCode(email, delivered), true);
 });

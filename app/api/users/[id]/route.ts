@@ -2,6 +2,7 @@ import { USER_ROLES, type UpdateUserInput } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import { requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ export async function PATCH(
     const actor = await requirePermission(request, "legacy.users.manage");
     const { id } = await params;
     requireUserId(id);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     const input = parseUpdateUser(body);
     const user = await getApplicationServices().users.updateUser(
       id,

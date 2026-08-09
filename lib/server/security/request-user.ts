@@ -24,7 +24,7 @@ export async function requireCurrentUser(request: Request) {
   if (!session) {
     throw new ApplicationError("unauthorized", "unauthorized");
   }
-  return requireSessionSubject(session.sub);
+  return requireSessionSubject(session.sub, session.ver);
 }
 
 export async function requireCurrentUserToken(token: string | undefined) {
@@ -38,18 +38,18 @@ export async function requireCurrentUserToken(token: string | undefined) {
 export async function resolveCurrentUserToken(token: string | undefined) {
   const session = token ? verifySessionToken(token) : null;
   if (!session) return null;
-  return resolveSessionSubject(session.sub);
+  return resolveSessionSubject(session.sub, session.ver);
 }
 
-async function requireSessionSubject(subject: string) {
-  const user = await resolveSessionSubject(subject);
+async function requireSessionSubject(subject: string, sessionVersion: number) {
+  const user = await resolveSessionSubject(subject, sessionVersion);
   if (!user) {
     throw new ApplicationError("unauthorized", "unauthorized");
   }
   return user;
 }
 
-async function resolveSessionSubject(subject: string) {
+async function resolveSessionSubject(subject: string, sessionVersion: number) {
   let user;
   try {
     user = await getApplicationServices().users.resolveCurrentAccount(subject);
@@ -58,7 +58,7 @@ async function resolveSessionSubject(subject: string) {
       cause: error,
     });
   }
-  return user;
+  return user?.sessionVersion === sessionVersion ? user : null;
 }
 
 export async function requirePermission(

@@ -117,7 +117,7 @@ export class InventoryInspectionService {
       throw new ApplicationError("validation", "invalid_request");
     }
     return this.unitOfWork.transaction(async ({ inspections }) => {
-      const inspection = await inspections.findInspection(inspectionId);
+      const inspection = await inspections.findInspectionForUpdate(inspectionId);
       if (
         !inspection ||
         !canPerformInventoryOperation(actor, {
@@ -184,7 +184,7 @@ export class InventoryInspectionService {
     }
     const comment = normalizeOptionalComment(input.comment);
     return this.unitOfWork.transaction(async ({ inspections }) => {
-      const inspection = await inspections.findInspection(inspectionId);
+      const inspection = await inspections.findInspectionForUpdate(inspectionId);
       if (!inspection) throw notFound("inspection_not_found");
       if (inspection.technicianId !== actor.userId && !canRecordAll) {
         throw notFound("inspection_not_found");

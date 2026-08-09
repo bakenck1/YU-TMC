@@ -6,6 +6,7 @@ import {
 } from "@/lib/security/rate-limiter";
 import {
   SESSION_COOKIE_NAME,
+  expiredSessionCookieOptions,
   verifySessionToken,
 } from "@/lib/security/session";
 import { getApplicationServices } from "@/lib/server/application";
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   let user;
   try {
-    user = await getApplicationServices().users.resolveSessionSubject(
+    user = await getApplicationServices().users.resolveCurrentAccount(
       session.sub,
     );
   } catch {
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!user) {
+  if (!user || user.sessionVersion !== session.ver) {
     const response = NextResponse.json(
       { authenticated: false },
       { status: 401, headers: rateLimitHeaders(apiLimit) },
@@ -46,17 +47,20 @@ export async function GET(request: NextRequest) {
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: "",
-      expires: new Date(0),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
+      ...expiredSessionCookieOptions(),
     });
     return response;
   }
 
   return Response.json(
-    { authenticated: true, user },
+    {
+      authenticated: true,
+      user: {
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    },
     { headers: rateLimitHeaders(apiLimit) },
   );
 }

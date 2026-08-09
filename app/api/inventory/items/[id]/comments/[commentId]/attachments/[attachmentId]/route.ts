@@ -31,7 +31,7 @@ export async function GET(
         "cache-control": "private, no-store",
         "content-disposition": attachmentDisposition(attachment.fileName),
         "content-length": String(attachment.sizeBytes),
-        "content-type": attachment.mediaType,
+        "content-type": "application/octet-stream",
         "x-content-type-options": "nosniff",
       },
     });

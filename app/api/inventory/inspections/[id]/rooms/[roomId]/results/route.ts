@@ -3,6 +3,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -23,7 +24,7 @@ export async function POST(
     const result = await getApplicationServices().inspections.recordItemResult(
       id,
       roomId,
-      parseInput(await request.json()),
+      parseInput(await readLimitedJson(request)),
       authorizationActor(user),
     );
     return Response.json({ result }, { status: 201 });

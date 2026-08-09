@@ -8,6 +8,11 @@ import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
+  assertPhotoJsonRequest,
+  readPhotoJsonRequest,
+} from "@/lib/server/http/photo-request";
+import { readLimitedJson } from "@/lib/server/http/request-body";
+import {
   authorizationActor,
   requireCurrentUser,
 } from "@/lib/server/security/request-user";
@@ -41,7 +46,8 @@ export async function PATCH(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
-    const body: unknown = await request.json();
+    assertPhotoJsonRequest(request);
+    const body = await readPhotoJsonRequest(request);
     const actor = authorizationActor(user);
     const services = getApplicationServices();
     const serviceRequest = isServicePatch(body);
@@ -150,7 +156,7 @@ export async function DELETE(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request, 8 * 1024);
     if (
       !body ||
       typeof body !== "object" ||

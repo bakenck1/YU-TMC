@@ -5,6 +5,7 @@ import type {
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requirePermission,
@@ -26,7 +27,7 @@ export async function PATCH(
     if (!UUID_PATTERN.test(id)) throw invalidRequest();
     const room = await getApplicationServices().locations.updateRoom(
       id,
-      parseUpdateRoom(await request.json()),
+      parseUpdateRoom(await readLimitedJson(request)),
       authorizationActor(user),
     );
     return Response.json({ room });
@@ -43,7 +44,7 @@ export async function DELETE(
     const user = await requirePermission(request, "inventory.room.manage");
     const { id } = await params;
     if (!UUID_PATTERN.test(id)) throw invalidRequest();
-    const input = parseArchive(await request.json());
+    const input = parseArchive(await readLimitedJson(request));
     await getApplicationServices().locations.archiveRoom(
       id,
       input.version,

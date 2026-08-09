@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test:all": "node scripts/test-all.mjs",
     "test:database:local": "node scripts/test-database-local.mjs",
+    "security:check": "node scripts/security-check.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
@@ -21,7 +22,6 @@
     "db:reset-users": "tsx scripts/db/reset-users.ts"
   },
   "dependencies": {
-    "@embedded-postgres/windows-x64": "17.10.0-beta.17",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "drizzle-orm": "^0.45.2",
@@ -55,6 +55,9 @@
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
+  "optionalDependencies": {
+    "@embedded-postgres/windows-x64": "17.10.0-beta.17"
+  },
   "overrides": {
     "brace-expansion@1.1.16": "1.1.18",
     "brace-expansion@5.0.7": "5.0.9",
@@ -64,8 +67,10 @@
     "exceljs": {
       "uuid": "11.1.1"
     },
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.17",
+    "postcss": "8.5.25",
     "next": {
-      "postcss": "8.5.25",
       "sharp": "0.35.3"
     }
   }

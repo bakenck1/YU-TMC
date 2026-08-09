@@ -20,5 +20,10 @@ http://172.20.10.2 {
 
 https://172.20.10.2 {
 	tls internal
-	reverse_proxy app:3000
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy app:3000 {
+		header_up X-Real-IP {remote_host}
+	}
 }

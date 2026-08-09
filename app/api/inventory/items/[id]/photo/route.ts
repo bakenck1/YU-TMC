@@ -8,6 +8,7 @@ import {
   itemPhotoResponse,
   readPhotoJsonRequest,
 } from "@/lib/server/http/photo-request";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -62,7 +63,7 @@ export async function DELETE(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request, 8 * 1024);
     if (
       !body ||
       typeof body !== "object" ||

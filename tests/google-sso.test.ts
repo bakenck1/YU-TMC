@@ -13,7 +13,7 @@ import {
 
 const CONFIG = {
   clientId: "client.apps.googleusercontent.com",
-  clientSecret: "secret",
+  clientSecret: "test-google-client-secret-32-bytes-minimum",
   redirectUri: "https://inventory.yu.edu.kz/api/auth/google/callback",
   hostedDomain: "yu.edu.kz",
 };

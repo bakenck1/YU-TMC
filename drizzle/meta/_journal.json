@@ -120,6 +120,13 @@
       "when": 1786186800000,
       "tag": "20260808110000_tmc_operation_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786190400000,
+      "tag": "20260808120000_security_resource_quotas",
+      "breakpoints": true
     }
   ]
 }

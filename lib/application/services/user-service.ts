@@ -33,10 +33,15 @@ export interface AuthenticatedAccount {
 
 export interface CurrentAccount extends AuthenticatedAccount {
   userId: string;
+  sessionVersion: number;
 }
 
 export type AuthenticationResult =
-  | { status: "authenticated"; user: AuthenticatedAccount }
+  | {
+      status: "authenticated";
+      user: AuthenticatedAccount;
+      sessionVersion: number;
+    }
   | { status: "blocked" }
   | { status: "invalid" };
 
@@ -79,9 +84,23 @@ export class UserService {
     if (!account.user.active) {
       return { status: "blocked" };
     }
+    if (
+      account.credential &&
+      this.passwordHasher.needsRehash?.(account.credential)
+    ) {
+      const upgraded = await this.passwordHasher.hash(password);
+      await this.unitOfWork.transaction(({ credentials }) =>
+        credentials.replace({
+          userId: account.user!.id,
+          ...upgraded,
+          updatedAt: this.clock.now(),
+        }),
+      );
+    }
     return {
       status: "authenticated",
       user: authenticatedAccount(account.user),
+      sessionVersion: account.user.version,
     };
   }
 
@@ -109,17 +128,7 @@ export class UserService {
         if (!user) {
           user = await users.findByNormalizedEmailForUpdate(email);
           if (!user) {
-            const createdAt = this.clock.now();
-            user = await users.insert({
-              id: this.ids.create(),
-              email,
-              fullName: externalIdentityName(input.name, email),
-              role: "employee",
-              phone: null,
-              emailVerified: true,
-              active: true,
-              createdAt,
-            });
+            return { status: "invalid" };
           } else {
             if (user.deletedAt) return { status: "invalid" };
             if (!user.active) return { status: "blocked" };
@@ -158,6 +167,7 @@ export class UserService {
         return {
           status: "authenticated",
           user: authenticatedAccount(user),
+          sessionVersion: user.version,
         };
       },
       { isolation: "read-committed" },
@@ -290,13 +300,46 @@ export class UserService {
 
     const passwordHash = await this.passwordHasher.hash(password);
     return this.unitOfWork.transaction(async (repositories) => {
-      const user = await repositories.users.findByNormalizedEmail(email);
+      const user = await repositories.users.findByNormalizedEmailForUpdate(email);
       if (!user || !user.active || user.deletedAt) return false;
-      return repositories.credentials.replace({
+      const replaced = await repositories.credentials.replace({
         userId: user.id,
         ...passwordHash,
         updatedAt: this.clock.now(),
       });
+      if (!replaced) return false;
+      const updated = await repositories.users.update({
+        id: user.id,
+        fullName: user.fullName,
+        role: user.role,
+        phone: user.phone,
+        emailVerified: user.emailVerified,
+        active: user.active,
+        expectedVersion: user.version,
+        updatedAt: this.clock.now(),
+      });
+      return updated !== null;
+    });
+  }
+
+  async revokeSessions(emailInput: string): Promise<boolean> {
+    const email = normalizeUserEmail(emailInput);
+    if (!email) return false;
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const user = await users.findByNormalizedEmailForUpdate(email);
+      if (!user || !user.active || user.deletedAt) return false;
+      return (
+        (await users.update({
+          id: user.id,
+          fullName: user.fullName,
+          role: user.role,
+          phone: user.phone,
+          emailVerified: user.emailVerified,
+          active: user.active,
+          expectedVersion: user.version,
+          updatedAt: this.clock.now(),
+        })) !== null
+      );
     });
   }
 
@@ -493,6 +536,7 @@ function authenticatedAccount(user: UserRecord): AuthenticatedAccount {
 function currentAccount(user: UserRecord): CurrentAccount {
   return {
     userId: user.id,
+    sessionVersion: user.version,
     ...authenticatedAccount(user),
   };
 }
@@ -518,14 +562,6 @@ export function normalizeUserEmail(value: string): string {
 
 function isWorkspaceEmail(email: string) {
   return email.endsWith("@yu.edu.kz");
-}
-
-function externalIdentityName(value: string | null | undefined, email: string) {
-  const name = value?.trim();
-  if (name && name.length >= 2 && name.length <= 120) return name;
-  const localPart = email.split("@", 1)[0]?.trim();
-  const fallback = localPart && localPart.length >= 2 ? localPart : "YU user";
-  return fallback.slice(0, 120);
 }
 
 function requireEmail(value: string): string {

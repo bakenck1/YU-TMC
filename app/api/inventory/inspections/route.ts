@@ -2,6 +2,7 @@ import type { CreateInspectionInput } from "@/lib/contracts/inventory-inspection
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import { after } from "next/server";
 import {
   authorizationActor,
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     if (
       !body ||
       typeof body !== "object" ||

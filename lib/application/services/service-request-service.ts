@@ -47,6 +47,17 @@ export class ServiceRequestService {
       "missing",
     ].includes(input.type)) throw validation();
     const description = normalizeDescription(input.description);
+    await this.unitOfWork.read(async ({ requests }) => {
+      const context = await requests.findItemContext(input.itemId);
+      if (!context) throw new ApplicationError("not_found", "item_not_found");
+      if (
+        actor.role === "employee" &&
+        context.roomResponsibleId !== actor.userId &&
+        context.itemResponsibleId !== actor.userId
+      ) {
+        throw forbidden();
+      }
+    });
     const photo = await this.photos.normalize(input.photo?.imageDataUrl);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ requests }) => {

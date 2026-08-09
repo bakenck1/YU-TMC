@@ -2,6 +2,7 @@ import { USER_ROLES, type CreateUserInput } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import { requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await requirePermission(request, "legacy.users.manage");
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     const input = parseCreateUser(body);
     const user = await getApplicationServices().users.createUser(
       input,

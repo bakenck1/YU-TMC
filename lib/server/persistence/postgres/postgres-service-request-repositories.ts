@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { QueryResultRow } from "pg";
+import { ApplicationError } from "@/lib/domain/application-error";
 import type {
   InsertServiceRequestRecord,
   ServiceRequestPhotoRecord,
@@ -115,7 +116,8 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
   }
 
   async insert(input: InsertServiceRequestRecord) {
-    await this.source.query(
+    try {
+      await this.source.query(
       `insert into ${REQUESTS}
          (id, item_id, room_id, author_id, type, description, status,
           photo_media_type, photo_byte_size, photo_width, photo_height,
@@ -135,7 +137,27 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
         input.photoBytes,
         input.occurredAt,
       ],
-    );
+      );
+    } catch (error) {
+      const databaseError = error as { code?: string; constraint?: string };
+      if (
+        databaseError.code === "23505" &&
+        databaseError.constraint === "service_requests_open_item_unique"
+      ) {
+        throw new ApplicationError("conflict", "open_service_request_exists", {
+          cause: error,
+        });
+      }
+      if (
+        databaseError.code === "23514" &&
+        databaseError.constraint === "service_requests_daily_quota"
+      ) {
+        throw new ApplicationError("rate_limited", "service_request_quota_exceeded", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
     const created = await this.findById(input.id);
     if (!created) throw new Error("Service request insert did not return a row.");
     return created;

@@ -25,13 +25,11 @@ test("login rejects cross-site credential submission before authentication", () 
   assert.match(source, /applicationErrorResponse\(error, rateLimitHeaders\(apiLimit\)\)/);
 });
 
-test("deployments can explicitly configure secure cookies without changing the production default", () => {
-  const source = readFileSync("app/api/auth/login/route.ts", "utf8");
-
-  assert.match(source, /configured === "true"/);
-  assert.match(source, /configured === "false"/);
-  assert.match(source, /process\.env\.NODE_ENV === "production"/);
-  assert.match(source, /secure: shouldUseSecureSessionCookie\(\)/);
+test("all authentication routes use the shared secure cookie policy", () => {
+  for (const route of ["login", "register", "logout", "session"]) {
+    const source = readFileSync(`app/api/auth/${route}/route.ts`, "utf8");
+    assert.match(source, /sessionCookieOptions|expiredSessionCookieOptions/);
+  }
 });
 
 test("login validates and bounds JSON before parsing credentials", () => {
@@ -43,12 +41,12 @@ test("login validates and bounds JSON before parsing credentials", () => {
   assert.doesNotMatch(source, /request\.json\(\)/);
 });
 
-test("email failure throttling cannot lock out a valid password", () => {
+test("durable email throttling runs before expensive password verification", () => {
   const source = readFileSync("app/api/auth/login/route.ts", "utf8");
   const authentication = source.indexOf("users.authenticate(");
-  const emailLimit = source.indexOf("checkFailedLoginLimit(email)");
+  const emailLimit = source.indexOf("consumeLoginEmailLimit(email)");
 
-  assert.ok(authentication >= 0 && authentication < emailLimit);
+  assert.ok(emailLimit >= 0 && emailLimit < authentication);
 });
 
 test("client-supplied forwarding headers are ignored without trusted proxy configuration", () => {

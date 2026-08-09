@@ -1,6 +1,7 @@
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request, 16 * 1024);
     await getApplicationServices().push.subscribe(
       body as Record<string, unknown>,
       authorizationActor(user),
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const body = (await request.json()) as { endpoint?: unknown };
+    const body = (await readLimitedJson(request, 8 * 1024)) as { endpoint?: unknown };
     await getApplicationServices().push.unsubscribe(
       body?.endpoint,
       authorizationActor(user),

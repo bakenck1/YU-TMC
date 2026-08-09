@@ -24,10 +24,12 @@ export class QrResolutionService {
     input: unknown,
     actor: AuthorizationActor,
     kind: "auto" | "barcode" | "qr" = "auto",
+    targetScope: "any" | "item" | "room" = "any",
   ): Promise<QrResolutionDto> {
     const fullAccess = hasPermission(actor.role, "inventory.qr.resolve_full");
     const itemAccess = hasPermission(actor.role, "inventory.qr.resolve_item");
-    if (!fullAccess && !itemAccess) {
+    const roomAccess = hasPermission(actor.role, "inventory.qr.resolve_room");
+    if (!fullAccess && !itemAccess && !roomAccess) {
       throw new ApplicationError("forbidden", "forbidden");
     }
 
@@ -52,7 +54,12 @@ export class QrResolutionService {
           target: null,
         };
       }
-      assertRecordAccessible(record, fullAccess);
+      assertRecordAccessible(record, {
+        fullAccess,
+        itemAccess,
+        roomAccess,
+        targetScope,
+      });
       return toDto(record, fullAccess || itemAccess, actor.userId);
     }
 
@@ -89,10 +96,15 @@ export class QrResolutionService {
         target: null,
       };
     }
-    // A physical QR is not a universal capability for employee accounts.
-    // Employees may identify active items, but must receive the same opaque
-    // response for foreign target kinds, revoked codes, and inactive items.
-    assertRecordAccessible(record, fullAccess);
+    // A physical QR is not a universal capability. Item-only lookups stay
+    // opaque for foreign targets; active rooms require the explicit room
+    // scope used by the authenticated room scanner.
+    assertRecordAccessible(record, {
+      fullAccess,
+      itemAccess,
+      roomAccess,
+      targetScope,
+    });
 
     return toDto(record, fullAccess || itemAccess, actor.userId);
   }
@@ -100,13 +112,29 @@ export class QrResolutionService {
 
 function assertRecordAccessible(
   record: QrResolutionRecord,
-  fullAccess: boolean,
+  access: {
+    fullAccess: boolean;
+    itemAccess: boolean;
+    roomAccess: boolean;
+    targetScope: "any" | "item" | "room";
+  },
 ): void {
   if (
-    !fullAccess &&
-    ((record.targetKind !== "item" && record.targetKind !== "room") ||
-      record.qrStatus !== "active" ||
-      record.targetStatus !== "active")
+    access.targetScope !== "any" &&
+    record.targetKind !== access.targetScope
+  ) {
+    throw new ApplicationError("not_found", "not_accessible");
+  }
+  if (access.fullAccess) return;
+  if (
+    record.qrStatus !== "active" ||
+    record.targetStatus !== "active" ||
+    !(
+      (record.targetKind === "item" && access.itemAccess) ||
+      (record.targetKind === "room" &&
+        access.targetScope === "room" &&
+        access.roomAccess)
+    )
   ) {
     throw new ApplicationError("not_found", "not_accessible");
   }

@@ -1,9 +1,7 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import { notFound } from "next/navigation";
-import ItemDetails from "@/components/ItemDetails";
 import InventoryItemDetails from "@/components/InventoryItemDetails";
 import ProblemReportButton from "@/components/ProblemReportButton";
-import { items } from "@/lib/data";
 import { getApplicationServices } from "@/lib/server/application";
 import { hasPermission } from "@/lib/security/permissions";
 import { isInventoryBuildingName } from "@/lib/campus-directory";
@@ -17,7 +15,7 @@ export default async function ItemPage({
   const { id } = await params;
   const user = await requireAuthorizedPage(`/items/${id}`);
 
-  if (/^[0-9a-f-]{36}$/i.test(id)) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     const actor = {
       userId: user.userId,
       role: user.role,
@@ -81,14 +79,5 @@ export default async function ItemPage({
     );
   }
 
-  const item = items.find((entry) => entry.id === id);
-
-  if (!item) notFound();
-
-  return (
-    <ItemDetails
-      item={item}
-      canManage={hasPermission(user.role, "inventory.item.edit_content")}
-    />
-  );
+  notFound();
 }

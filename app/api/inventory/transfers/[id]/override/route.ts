@@ -2,6 +2,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -18,7 +19,7 @@ export async function POST(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     if (!isUuid(id)) throw invalidRequest();
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     if (!body || typeof body !== "object") throw invalidRequest();
     const input = body as Record<string, unknown>;
     if (

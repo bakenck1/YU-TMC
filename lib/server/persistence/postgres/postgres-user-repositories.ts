@@ -330,8 +330,9 @@ class PostgresPasswordCredentialRepository
 
   async insert(input: InsertPasswordCredential): Promise<void> {
     await this.source.query(
-      `insert into ${CREDENTIALS} (user_id, salt, hash, updated_at)
-       values ($1, $2, $3, $4)`,
+      `insert into ${CREDENTIALS}
+         (user_id, salt, hash, scrypt_n, scrypt_r, scrypt_p, key_length, updated_at)
+       values ($1, $2, $3, 16384, 8, 5, 64, $4)`,
       [input.userId, input.salt, Buffer.from(input.hash).toString("hex"), input.updatedAt],
     );
   }
@@ -344,7 +345,7 @@ class PostgresPasswordCredentialRepository
            algorithm = 'scrypt',
            scrypt_n = 16384,
            scrypt_r = 8,
-           scrypt_p = 1,
+           scrypt_p = 5,
            key_length = 64,
            updated_at = $4
        where user_id = $1`,

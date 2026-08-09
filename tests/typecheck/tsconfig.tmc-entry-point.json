@@ -15,10 +15,14 @@
     "../../components/Dashboard.tsx",
     "../../components/Header.tsx",
     "../../components/TmcLanding.tsx",
+    "../../components/TmcItemQrFlow.tsx",
     "../../components/TmcOperationShell.tsx",
+    "../../lib/tmc-qr-flow.ts",
+    "../../lib/tmc-qr-resolver.ts",
     "../../lib/security/authorization.ts",
     "../../lib/tmc-navigation.ts",
-    "../tmc-entry-point.test.ts"
+    "../tmc-entry-point.test.ts",
+    "../tmc-qr-flow.test.ts"
   ],
   "exclude": ["../../node_modules"]
 }

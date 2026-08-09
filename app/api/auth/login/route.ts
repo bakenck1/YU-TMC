@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { getApplicationServices } from "@/lib/server/application";
 import {
-  checkFailedLoginLimit,
   clearFailedLogins,
+  consumeLoginEmailLimit,
   consumeLoginIpLimit,
   normalizeEmail,
-  recordFailedLogin,
 } from "@/lib/security/login-protection";
 import {
   consumeApiRateLimit,
@@ -19,6 +18,7 @@ import {
   REMEMBERED_SESSION_TTL_SECONDS,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
+  sessionCookieOptions,
 } from "@/lib/security/session";
 import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import {
@@ -28,13 +28,6 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function shouldUseSecureSessionCookie() {
-  const configured = process.env.SESSION_COOKIE_SECURE?.trim();
-  if (configured === "true") return true;
-  if (configured === "false") return false;
-  return process.env.NODE_ENV === "production";
-}
 
 function validEmail(email: string) {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -50,7 +43,7 @@ export async function POST(request: Request) {
     return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
   }
 
-  const ipLimit = consumeLoginIpLimit(request);
+  const ipLimit = await consumeLoginIpLimit(request);
   if (!ipLimit.allowed) return rateLimitedResponse(ipLimit, "too_many_login_attempts");
 
   try {
@@ -118,6 +111,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const emailLimit = await consumeLoginEmailLimit(email);
+  if (!emailLimit.allowed) {
+    return rateLimitedResponse(emailLimit, "too_many_login_attempts");
+  }
+
   let authentication: Awaited<
     ReturnType<ReturnType<typeof getApplicationServices>["users"]["authenticate"]>
   >;
@@ -134,15 +132,6 @@ export async function POST(request: Request) {
   }
 
   if (authentication.status === "invalid") {
-    const emailLimit = checkFailedLoginLimit(email);
-    if (!emailLimit.allowed) {
-      return rateLimitedResponse(emailLimit, "too_many_login_attempts");
-    }
-    const failedAttempt = recordFailedLogin(email);
-    if (!failedAttempt.allowed) {
-      return rateLimitedResponse(failedAttempt, "too_many_login_attempts");
-    }
-
     return Response.json(
       { error: "invalid_credentials" },
       { status: 401, headers: rateLimitHeaders(apiLimit) },
@@ -156,7 +145,7 @@ export async function POST(request: Request) {
     );
   }
 
-  clearFailedLogins(email);
+  await clearFailedLogins(email);
   const user = authentication.user;
   const ttlSeconds = rememberMe
     ? REMEMBERED_SESSION_TTL_SECONDS
@@ -167,12 +156,8 @@ export async function POST(request: Request) {
   );
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
-    value: createSessionToken(user, ttlSeconds),
-    httpOnly: true,
-    secure: shouldUseSecureSessionCookie(),
-    sameSite: "strict",
-    path: "/",
-    ...(rememberMe ? { maxAge: ttlSeconds } : {}),
+    value: createSessionToken(user, ttlSeconds, authentication.sessionVersion),
+    ...sessionCookieOptions(rememberMe ? { maxAge: ttlSeconds } : undefined),
   });
   return response;
 }

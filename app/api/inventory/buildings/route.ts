@@ -2,6 +2,7 @@ import type { CreateBuildingInput } from "@/lib/contracts/inventory-locations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requirePermission,
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requirePermission(request, "inventory.building.create");
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     const building =
       await getApplicationServices().locations.createBuilding(
         parseCreateBuilding(body),

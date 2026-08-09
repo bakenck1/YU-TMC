@@ -301,8 +301,6 @@ test("lists a merged operation feed with actor contact and safe component detail
   assert.equal(result[1]?.detail?.comment, "private transfer comment");
   assert.deepEqual(result[2]?.detail, {
     status: "maintenance",
-    fromRoomId: IDS[1],
-    toRoomId: OTHER_ROOM_ID,
     fromLocation: "Корпус A (101)",
     toLocation: "Корпус B (202)",
   });
@@ -336,8 +334,8 @@ test("lists a merged operation feed with actor contact and safe component detail
   assert.equal(warehouseResult[0]?.actorEmail, null);
 });
 
-test("administrator and employee can add normalized item comments while warehouse cannot", async () => {
-  const current = item(IDS[0]);
+test("administrator and assigned employee can add normalized item comments while warehouse cannot", async () => {
+  const current = item(IDS[0], "employee-1");
   const comments: InventoryItemCommentRecord[] = [];
   const audits: Array<Record<string, unknown>> = [];
   const service = createService({
@@ -351,6 +349,7 @@ test("administrator and employee can add normalized item comments while warehous
         authorEmail: "employee@example.com",
         message: values.message,
         createdAt: record.occurredAt,
+        attachment: null,
       });
     },
     listComments: async () => comments,
@@ -385,7 +384,7 @@ test("administrator and employee can add normalized item comments while warehous
 });
 
 test("comment attachments are normalized, stored atomically, and exposed to readers", async () => {
-  const current = item(IDS[0]);
+  const current = item(IDS[0], "employee-1");
   const audits: Array<Record<string, unknown>> = [];
   const attachments: Array<Record<string, unknown>> = [];
   const service = createService({

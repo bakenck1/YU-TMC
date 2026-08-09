@@ -1,6 +1,8 @@
 import "server-only";
 
 import { isIP } from "node:net";
+import { getDatabasePool } from "@/lib/db/client";
+import { createServerValueDigest } from "./session";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -126,6 +128,71 @@ export class InMemoryRateLimiter {
 
     for (const [key] of oldest) this.state.buckets.delete(key);
   }
+}
+
+export async function consumeDurableRateLimit(options: {
+  namespace: string;
+  key: string;
+  limit: number;
+  windowMs: number;
+}): Promise<RateLimitResult> {
+  const windowSeconds = Math.ceil(options.windowMs / 1000);
+  if (!options.namespace || options.namespace.length > 64) {
+    throw new Error("Invalid durable rate-limit namespace");
+  }
+  if (!Number.isInteger(options.limit) || options.limit < 1) {
+    throw new Error("Invalid durable rate limit");
+  }
+  const keyDigest = createServerValueDigest(
+    `rate-limit:${options.namespace}`,
+    options.key,
+  );
+  const result = await getDatabasePool().query<{
+    count: number;
+    reset_at_ms: string;
+  }>(
+    `with cleanup as (
+       delete from "yu_inventory"."security_rate_limits"
+        where expires_at < clock_timestamp()
+     ), bucket as (
+       select to_timestamp(
+         floor(extract(epoch from clock_timestamp()) / $3::integer) * $3::integer
+       ) as window_start
+     )
+     insert into "yu_inventory"."security_rate_limits"
+       (namespace, key_digest, window_start, count, expires_at)
+     select $1, $2, window_start, 1,
+            window_start + make_interval(secs => $3::integer * 2)
+       from bucket
+     on conflict (namespace, key_digest, window_start)
+     do update set count = "yu_inventory"."security_rate_limits".count + 1
+     returning count,
+       (extract(epoch from (window_start + make_interval(secs => $3::integer))) * 1000)::bigint::text
+       as reset_at_ms`,
+    [options.namespace, keyDigest, windowSeconds],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error("Durable rate limiter did not return a bucket");
+  const count = Number(row.count);
+  const resetAt = Number(row.reset_at_ms);
+  const now = Date.now();
+  return {
+    allowed: count <= options.limit,
+    limit: options.limit,
+    remaining: Math.max(0, options.limit - count),
+    resetAt,
+    retryAfterSeconds:
+      count <= options.limit ? 0 : Math.max(1, Math.ceil((resetAt - now) / 1000)),
+  };
+}
+
+export async function clearDurableRateLimit(namespace: string, key: string) {
+  const keyDigest = createServerValueDigest(`rate-limit:${namespace}`, key);
+  await getDatabasePool().query(
+    `delete from "yu_inventory"."security_rate_limits"
+      where namespace = $1 and key_digest = $2`,
+    [namespace, keyDigest],
+  );
 }
 
 export function rateLimitHeaders(result: RateLimitResult) {

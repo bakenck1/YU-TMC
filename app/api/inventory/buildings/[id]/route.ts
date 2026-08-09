@@ -5,6 +5,7 @@ import type {
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requirePermission,
@@ -24,7 +25,7 @@ export async function PATCH(
     const user = await requirePermission(request, "inventory.building.manage");
     const { id } = await params;
     if (!UUID_PATTERN.test(id)) throw invalidRequest();
-    const body: unknown = await request.json();
+    const body = await readLimitedJson(request);
     const building =
       await getApplicationServices().locations.updateBuilding(
         id,
@@ -45,7 +46,7 @@ export async function DELETE(
     const user = await requirePermission(request, "inventory.building.manage");
     const { id } = await params;
     if (!UUID_PATTERN.test(id)) throw invalidRequest();
-    const input = parseArchive(await request.json());
+    const input = parseArchive(await readLimitedJson(request));
     await getApplicationServices().locations.archiveBuilding(
       id,
       input.version,

@@ -14,7 +14,7 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-development-data:/var/lib/postgresql/data
 
@@ -31,7 +31,7 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "55433:5432"
+      - "127.0.0.1:55433:5432"
     volumes:
       - ./scripts/db/init-test-database.sql:/docker-entrypoint-initdb.d/10-runtime-role.sql:ro
     tmpfs:

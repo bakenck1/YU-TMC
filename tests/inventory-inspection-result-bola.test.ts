@@ -26,6 +26,8 @@ test("recording an inspection result does not reveal a foreign inspection", asyn
   const repository = {
     findInspection: async (id: string) =>
       id === foreignInspection.id ? foreignInspection : null,
+    findInspectionForUpdate: async (id: string) =>
+      id === foreignInspection.id ? foreignInspection : null,
   } as unknown as InventoryInspectionRepository;
   const repositories = {
     inspections: repository,

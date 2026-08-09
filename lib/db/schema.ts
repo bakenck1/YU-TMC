@@ -194,6 +194,11 @@ export const userCodeSequence = inventorySchema.sequence(
   },
 );
 
+export const passwordResetGenerationSequence = inventorySchema.sequence(
+  "password_reset_generation_sequence",
+  { startWith: 1, increment: 1, minValue: 1, cache: 1 },
+);
+
 export const usersTable = inventorySchema.table(
   "users",
   {
@@ -272,7 +277,7 @@ export const userPasswordCredentialsTable = inventorySchema.table(
     hash: text().notNull(),
     scryptN: integer().notNull().default(16_384),
     scryptR: integer().notNull().default(8),
-    scryptP: integer().notNull().default(1),
+    scryptP: integer().notNull().default(5),
     keyLength: integer().notNull().default(64),
     updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
   },
@@ -287,8 +292,53 @@ export const userPasswordCredentialsTable = inventorySchema.table(
     ),
     check(
       "user_password_credentials_parameters_check",
-      sql`${table.scryptN} = 16384 AND ${table.scryptR} = 8 AND ${table.scryptP} = 1 AND ${table.keyLength} = 64`,
+      sql`${table.scryptN} = 16384 AND ${table.scryptR} = 8 AND ${table.scryptP} in (1, 5) AND ${table.keyLength} = 64`,
     ),
+  ],
+);
+
+export const passwordResetChallengesTable = inventorySchema.table(
+  "password_reset_challenges",
+  {
+    id: uuid().primaryKey(),
+    emailKey: varchar({ length: 64 }).notNull(),
+    codeDigest: varchar({ length: 64 }).notNull().unique(),
+    status: varchar({ length: 16 }).notNull(),
+    generation: bigint({ mode: "number" })
+      .notNull()
+      .default(sql`nextval('"yu_inventory"."password_reset_generation_sequence"')`),
+    attempts: integer().notNull().default(0),
+    expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check("password_reset_challenges_status_check", sql`${table.status} in ('pending', 'delivered')`),
+    check("password_reset_challenges_attempts_check", sql`${table.attempts} between 0 and 5`),
+    uniqueIndex("password_reset_challenges_delivered_email_unique")
+      .on(table.emailKey)
+      .where(sql`${table.status} = 'delivered'`),
+    index("password_reset_challenges_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const securityRateLimitsTable = inventorySchema.table(
+  "security_rate_limits",
+  {
+    namespace: varchar({ length: 64 }).notNull(),
+    keyDigest: varchar({ length: 64 }).notNull(),
+    windowStart: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    count: integer().notNull().default(1),
+    expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "security_rate_limits_pk",
+      columns: [table.namespace, table.keyDigest, table.windowStart],
+    }),
+    check("security_rate_limits_count_check", sql`${table.count} >= 1`),
+    index("security_rate_limits_expiry_idx").on(table.expiresAt),
   ],
 );
 
@@ -684,6 +734,9 @@ export const serviceRequestsTable = inventorySchema.table(
       table.authorId,
       table.createdAt,
     ),
+    uniqueIndex("service_requests_open_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.status} in ('new', 'in_progress')`),
   ],
 );
 

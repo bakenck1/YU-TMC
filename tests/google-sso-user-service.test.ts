@@ -31,7 +31,7 @@ function record(
   };
 }
 
-test("Google identity binds an active account and creates a new employee", async () => {
+test("Google identity binds only a pre-provisioned active account", async () => {
   const active = record({
     id: "active",
     email: "employee@yu.edu.kz",
@@ -52,6 +52,7 @@ test("Google identity binds an active account and creates a new employee", async
     }),
     {
       status: "authenticated",
+      sessionVersion: 1,
       user: {
         email: "employee@yu.edu.kz",
         name: "Test User",
@@ -72,14 +73,7 @@ test("Google identity binds an active account and creates a new employee", async
       email: "unknown@yu.edu.kz",
       name: "New Workspace User",
     }),
-    {
-      status: "authenticated",
-      user: {
-        email: "unknown@yu.edu.kz",
-        name: "New Workspace User",
-        role: "employee",
-      },
-    },
+    { status: "invalid" },
   );
   assert.equal(
     (
@@ -113,7 +107,7 @@ test("Google identity binds an active account and creates a new employee", async
   );
 });
 
-test("concurrent first Google sign-ins create one user and one binding", async () => {
+test("concurrent unknown Google sign-ins do not provision accounts", async () => {
   const unitOfWork = new MemoryUserUnitOfWork();
   let nextId = 0;
   const service = new UserService(
@@ -140,13 +134,9 @@ test("concurrent first Google sign-ins create one user and one binding", async (
     service.authenticateGoogleIdentity(input),
   ]);
 
-  assert.deepEqual(
-    results.map((result) => result.status),
-    ["authenticated", "authenticated"],
-  );
+  assert.deepEqual(results.map((result) => result.status), ["invalid", "invalid"]);
   const users = await service.listUsers();
-  assert.equal(users.length, 1);
-  assert.equal(users[0]?.email, "concurrent@yu.edu.kz");
+  assert.equal(users.length, 0);
 });
 
 test("administrator can provision an active SSO-only user without a password", async () => {

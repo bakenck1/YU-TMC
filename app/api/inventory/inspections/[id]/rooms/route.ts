@@ -3,6 +3,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -19,7 +20,7 @@ export async function POST(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
-    const input = parseInput(await request.json());
+    const input = parseInput(await readLimitedJson(request));
     const services = getApplicationServices();
     const actor = authorizationActor(user);
     const room = await services.inspections.addRoom(

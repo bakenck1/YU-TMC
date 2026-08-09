@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { UserService } from "@/lib/application/services/user-service";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
+import { closeDatabase } from "@/lib/db/client";
 import { migrateDatabase } from "@/lib/db/migrations";
+import {
+  clearDurableRateLimit,
+  consumeDurableRateLimit,
+} from "@/lib/security/rate-limiter";
 import { createPostgresPool } from "@/lib/db/pool";
 import { PostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
@@ -33,6 +38,7 @@ describe("persistent PostgreSQL users", () => {
 
   afterAll(async () => {
     await pool?.end();
+    await closeDatabase();
     await resetSchemas(migrationConfig);
   });
 
@@ -63,6 +69,7 @@ describe("persistent PostgreSQL users", () => {
     )!.userId;
     await expect(service.authenticate(winner.email, password)).resolves.toEqual({
       status: "authenticated",
+      sessionVersion: 1,
       user: winner,
     });
   });
@@ -240,6 +247,56 @@ describe("persistent PostgreSQL users", () => {
     } finally {
       await database.end();
     }
+  });
+
+
+  it("grants runtime deletion only for ephemeral security data", async () => {
+    const database = createPostgresPool(runtimeConfig, { max: 1 });
+    try {
+      const result = await database.query<{
+        passwordReset: boolean;
+        rateLimits: boolean;
+        users: boolean;
+      }>(
+        `select
+          has_table_privilege(current_user, 'yu_inventory.password_reset_challenges', 'DELETE') as "passwordReset",
+          has_table_privilege(current_user, 'yu_inventory.security_rate_limits', 'DELETE') as "rateLimits",
+          has_table_privilege(current_user, 'yu_inventory.users', 'DELETE') as users`,
+      );
+      expect(result.rows[0]).toEqual({
+        passwordReset: true,
+        rateLimits: true,
+        users: false,
+      });
+    } finally {
+      await database.end();
+    }
+  });
+
+  it("enforces and clears a durable cross-instance rate limit", async () => {
+    const options = {
+      namespace: "integration-login",
+      key: randomUUID(),
+      limit: 2,
+      windowMs: 60_000,
+    };
+    await expect(consumeDurableRateLimit(options)).resolves.toMatchObject({
+      allowed: true,
+      remaining: 1,
+    });
+    await expect(consumeDurableRateLimit(options)).resolves.toMatchObject({
+      allowed: true,
+      remaining: 0,
+    });
+    await expect(consumeDurableRateLimit(options)).resolves.toMatchObject({
+      allowed: false,
+      remaining: 0,
+    });
+    await clearDurableRateLimit(options.namespace, options.key);
+    await expect(consumeDurableRateLimit(options)).resolves.toMatchObject({
+      allowed: true,
+      remaining: 1,
+    });
   });
 });
 

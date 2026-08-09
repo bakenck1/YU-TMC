@@ -1171,9 +1171,7 @@ function normalizeText(value: unknown, max: number, code: string) {
 
 const COMMENT_ATTACHMENT_MEDIA_TYPES = new Set([
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "image/jpeg",
   "image/png",
@@ -1199,12 +1197,66 @@ function normalizeCommentAttachment(input: InventoryItemCommentAttachmentInput) 
   ) {
     throw new ApplicationError("validation", "invalid_comment_attachment");
   }
+  const extension = fileName.split(".").at(-1)?.toLowerCase() ?? "";
+  if (!attachmentContentMatches(mediaType, extension, input.binaryData)) {
+    throw new ApplicationError("validation", "invalid_comment_attachment");
+  }
   return {
     fileName,
     mediaType,
     sizeBytes: input.binaryData.byteLength,
     binaryData: input.binaryData,
   };
+}
+
+function attachmentContentMatches(
+  mediaType: string,
+  extension: string,
+  bytes: Uint8Array,
+) {
+  const startsWith = (...signature: number[]) =>
+    signature.every((value, index) => bytes[index] === value);
+  const asciiPrefix = (length: number) =>
+    new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(length, bytes.length)));
+  switch (mediaType) {
+    case "application/pdf": {
+      if (extension !== "pdf" || asciiPrefix(5) !== "%PDF-") return false;
+      const content = asciiPrefix(bytes.length).toLowerCase();
+      return !["/javascript", "/js", "/launch", "/embeddedfile"].some((marker) =>
+        content.includes(marker),
+      );
+    }
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+      const expectedExtension = mediaType.includes("wordprocessingml") ? "docx" : "xlsx";
+      if (extension !== expectedExtension || !startsWith(0x50, 0x4b)) return false;
+      const directoryText = asciiPrefix(bytes.length).toLowerCase();
+      const expectedRoot = expectedExtension === "docx" ? "word/" : "xl/";
+      return (
+        directoryText.includes("[content_types].xml") &&
+        directoryText.includes(expectedRoot) &&
+        !["vbaproject.bin", "oleobject", "embeddings/", "externallink"].some((marker) =>
+          directoryText.includes(marker),
+        )
+      );
+    }
+    case "image/jpeg":
+      return ["jpg", "jpeg"].includes(extension) && startsWith(0xff, 0xd8, 0xff);
+    case "image/png":
+      return extension === "png" && startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    case "image/webp":
+      return extension === "webp" && asciiPrefix(4) === "RIFF" && asciiPrefix(12).slice(8) === "WEBP";
+    case "text/plain":
+      if (extension !== "txt" || bytes.includes(0)) return false;
+      try {
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        return true;
+      } catch {
+        return false;
+      }
+    default:
+      return false;
+  }
 }
 
 function normalizeId(value: unknown, code: string) {

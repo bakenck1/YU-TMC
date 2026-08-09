@@ -125,7 +125,7 @@ export default function InventoryRoomQrScanner({
     setMessageKey(null);
     try {
       const response = await fetch(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}&target=room`,
         { credentials: "same-origin", cache: "no-store" },
       );
       const body = (await response.json().catch(() => null)) as

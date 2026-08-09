@@ -60,15 +60,20 @@ test("adding a room rejects malformed room UUIDs before persistence", async () =
     ),
   );
 
-  assert.equal(error.kind, "validation");
-  assert.equal(error.publicCode, "invalid_request");
+  assert.equal(error.kind, "forbidden");
+  assert.equal(error.publicCode, "forbidden");
   assert.equal(roomLookupCount, 0);
 });
 
 function createService(
   repositoryOverrides: Partial<InventoryInspectionRepository>,
 ) {
-  const repository = repositoryOverrides as InventoryInspectionRepository;
+  const repository = {
+    ...repositoryOverrides,
+    findInspectionForUpdate:
+      repositoryOverrides.findInspectionForUpdate ??
+      repositoryOverrides.findInspection,
+  } as InventoryInspectionRepository;
   const repositories = {
     inspections: repository,
   } satisfies InventoryInspectionRepositories;

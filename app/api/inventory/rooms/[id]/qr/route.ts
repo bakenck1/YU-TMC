@@ -3,6 +3,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { configuredPublicOrigin } from "@/lib/security/public-origin";
 import {
   authorizationActor,
   requirePermission,
@@ -24,7 +25,8 @@ export async function GET(
       id,
       authorizationActor(user),
     );
-    const publicUrl = `${url.origin}/rooms/qr/${encodeURIComponent(room.qrCode)}`;
+    const origin = configuredPublicOrigin() ?? url.origin;
+    const publicUrl = `${origin}/rooms/qr/${encodeURIComponent(room.qrCode)}`;
     const format = url.searchParams.get("format") === "svg" ? "svg" : "png";
     const download = url.searchParams.get("download") === "1";
     if (format === "svg") {

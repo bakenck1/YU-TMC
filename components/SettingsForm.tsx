@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 
+const LANGUAGE_OPTIONS = [
+  { value: "ru", label: "Русский" },
+  { value: "kk", label: "Қазақша" },
+  { value: "en", label: "English" },
+] as const;
+
 function Toggle({
   checked,
   onChange,
@@ -61,9 +67,11 @@ export default function SettingsForm() {
           onChange={(e) => setLanguage(e.target.value)}
           className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-accent"
         >
-          <option value="ru">Русский</option>
-          <option value="kz">Қазақша</option>
-          <option value="en">English</option>
+          {LANGUAGE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
 

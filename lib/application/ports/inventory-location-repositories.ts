@@ -109,6 +109,7 @@ export interface InsertRoomQrRecord {
 export interface InventoryLocationRepository {
   listBuildings(): Promise<BuildingRecord[]>;
   findBuildingById(id: string): Promise<BuildingRecord | null>;
+  findBuildingByIdForUpdate(id: string): Promise<BuildingRecord | null>;
   insertBuilding(input: InsertBuildingRecord): Promise<BuildingRecord>;
   updateBuilding(input: UpdateBuildingRecord): Promise<BuildingRecord | null>;
   archiveBuilding(input: ArchiveBuildingRecord): Promise<BuildingRecord | null>;
@@ -117,6 +118,7 @@ export interface InventoryLocationRepository {
   appendAudit(input: AppendLocationAuditRecord): Promise<void>;
   listRooms(buildingId: string): Promise<RoomRecord[]>;
   findRoomById(id: string): Promise<RoomRecord | null>;
+  findRoomByIdForUpdate(id: string): Promise<RoomRecord | null>;
   insertRoom(input: InsertRoomRecord): Promise<RoomRecord>;
   updateRoom(input: UpdateRoomRecord): Promise<RoomRecord | null>;
   archiveRoom(input: ArchiveRoomRecord): Promise<RoomRecord | null>;

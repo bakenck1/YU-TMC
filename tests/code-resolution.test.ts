@@ -7,6 +7,7 @@ import type {
 } from "../lib/application/ports/qr-resolution-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { QrResolutionService } from "../lib/application/services/qr-resolution-service";
+import { ApplicationError } from "../lib/domain/application-error";
 
 const QR_RECORD: QrResolutionRecord = {
   canonicalKey: "INV-42",
@@ -144,6 +145,79 @@ test("auto mode resolves a printed YUI fallback after a QR miss", async () => {
   });
 
   assert.equal(result.target?.kind, "item");
+});
+
+test("item-only QR permission never discloses non-item or inactive targets", async () => {
+  let record = QR_RECORD;
+  const service = createService({
+    async findByCanonicalKey() {
+      return record;
+    },
+    async findItemByBarcode() {
+      return null;
+    },
+  });
+  const employee = { userId: "employee", role: "employee" } as const;
+
+  for (const restricted of [
+    QR_RECORD,
+    { ...QR_RECORD, targetKind: "building" as const },
+    { ...BARCODE_RECORD, qrStatus: "revoked" as const },
+    { ...BARCODE_RECORD, targetStatus: "maintenance" as const },
+  ]) {
+    record = restricted;
+    await assert.rejects(
+      () => service.resolve("INV-42", employee, "qr"),
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.kind === "not_found" &&
+        error.publicCode === "not_accessible",
+    );
+  }
+
+  record = BARCODE_RECORD;
+  assert.equal(
+    (await service.resolve("INV-42", employee, "qr")).target?.kind,
+    "item",
+  );
+  record = QR_RECORD;
+  for (const role of ["admin", "warehouse"] as const) {
+    assert.equal(
+      (await service.resolve("INV-42", { userId: role, role }, "qr")).target
+        ?.kind,
+      "room",
+    );
+  }
+});
+
+test("an explicit room scope preserves the authenticated room scanner", async () => {
+  const service = createService({
+    async findByCanonicalKey() {
+      return QR_RECORD;
+    },
+    async findItemByBarcode() {
+      return null;
+    },
+  });
+
+  const result = await service.resolve(
+    "INV-42",
+    { userId: "employee", role: "employee" },
+    "qr",
+    "room",
+  );
+  assert.equal(result.target?.kind, "room");
+  await assert.rejects(
+    () =>
+      service.resolve(
+        "INV-42",
+        { userId: "employee", role: "employee" },
+        "qr",
+        "item",
+      ),
+    (error: unknown) =>
+      error instanceof ApplicationError && error.publicCode === "not_accessible",
+  );
 });
 
 function createService(

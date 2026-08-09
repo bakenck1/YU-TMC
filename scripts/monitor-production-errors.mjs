@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
+import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -24,7 +23,8 @@ if (!Number.isFinite(sinceMinutes) || sinceMinutes <= 0) {
   throw new Error("--since-minutes must be a positive number");
 }
 
-await mkdir(outputDir, { recursive: true });
+await mkdir(outputDir, { recursive: true, mode: 0o700 });
+await chmod(outputDir, 0o700).catch(() => {});
 
 const rawLogs = await readLogs({ sourceCommand, sourceFile, stdin: !process.stdin.isTTY });
 const entries = parseLogEntries(rawLogs);
@@ -46,7 +46,8 @@ for (const incident of incidents) {
   const fileName = known?.fileName ?? makeFileName(incident.title, incident.fingerprint);
   const filePath = path.join(outputDir, fileName);
   const merged = mergeIncident(incident, known);
-  await writeFile(filePath, renderIncidentMarkdown(merged), "utf8");
+  await writeFile(filePath, renderIncidentMarkdown(merged), { encoding: "utf8", mode: 0o600 });
+  await chmod(filePath, 0o600).catch(() => {});
   updatedState.incidents[incident.fingerprint] = {
     fileName,
     title: incident.title,
@@ -105,12 +106,20 @@ function parseLogEntries(rawText) {
 }
 
 function parseEntry(block) {
-  const trimmed = block.trim();
+  const trimmed = redactSensitiveText(block).trim();
   if (!trimmed) return null;
 
   const json = tryParseJson(trimmed);
   const normalized = json ? normalizeJsonLog(json, block) : normalizeTextLog(block);
   return normalized;
+}
+
+function redactSensitiveText(value) {
+  return String(value)
+    .replace(/\b(authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "$1: [REDACTED]")
+    .replace(/([?&](?:token|code|password|secret|key|email)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/("(?:password|token|secret|authorization|cookie|code|email)"\s*:\s*")[^"]*(")/gi, "$1[REDACTED]$2")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]");
 }
 
 function normalizeJsonLog(obj, raw) {
@@ -440,7 +449,11 @@ async function loadState(filePath) {
 }
 
 async function persistState(filePath, state) {
-  await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await chmod(filePath, 0o600).catch(() => {});
 }
 
 function parseArgs(argv) {
@@ -509,4 +522,3 @@ function runCommand(command) {
     });
   });
 }
-

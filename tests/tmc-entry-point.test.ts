@@ -108,8 +108,8 @@ test("TMC operation links have real protected, localized shell routes", () => {
   assert.match(landing, /href=\{operation\.href\}/);
   assert.match(landing, /t\(operation\.labelKey\)/);
   assert.doesNotMatch(landing, /<button|<form|fetch\(|QR|scanner|picker/i);
-  assert.match(shell, /t\(operation\.labelKey\)/);
-  assert.doesNotMatch(shell, /<button|<form|fetch\(|QR|scanner|picker/i);
+  assert.match(shell, /<TmcItemQrFlow operation=\{operation\}/);
+  assert.doesNotMatch(shell, /<form|fetch\(|picker/i);
 
   for (const operation of TMC_OPERATIONS) {
     const page = readFileSync(
