@@ -45,6 +45,8 @@ import {
   RESPONSIBILITY_SOURCES,
   SERVICE_REQUEST_STATUSES,
   SERVICE_REQUEST_TYPES,
+  TMC_TRANSFER_ITEM_RESULTS,
+  TMC_TRANSFER_REQUEST_STATUSES,
   TRANSFER_OVERRIDE_OUTCOMES,
   TRANSFER_STATUSES,
 } from "@/lib/contracts/inventory-domain";
@@ -173,19 +175,6 @@ export const idempotencyStateEnum = inventorySchema.enum(
   IDEMPOTENCY_STATES,
 );
 
-const TMC_TRANSFER_REQUEST_STATUSES = [
-  "pending",
-  "accepted",
-  "rejected",
-  "cancelled",
-] as const;
-const TMC_TRANSFER_ITEM_RESULTS = [
-  "pending",
-  "accepted",
-  "rejected",
-  "cancelled",
-  "invalidated",
-] as const;
 export const tmcTransferRequestStatusEnum = inventorySchema.enum(
   "tmc_transfer_request_status",
   TMC_TRANSFER_REQUEST_STATUSES,

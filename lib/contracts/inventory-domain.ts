@@ -95,6 +95,25 @@ export const TRANSFER_OVERRIDE_OUTCOMES = [
 export type TransferOverrideOutcome =
   (typeof TRANSFER_OVERRIDE_OUTCOMES)[number];
 
+export const TMC_TRANSFER_REQUEST_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+] as const;
+export type TmcTransferRequestStatus =
+  (typeof TMC_TRANSFER_REQUEST_STATUSES)[number];
+
+export const TMC_TRANSFER_ITEM_RESULTS = [
+  "pending",
+  "accepted",
+  "rejected",
+  "cancelled",
+  "invalidated",
+] as const;
+export type TmcTransferItemResult =
+  (typeof TMC_TRANSFER_ITEM_RESULTS)[number];
+
 export const INSPECTION_STATUSES = [
   "draft",
   "awaiting_decisions",
