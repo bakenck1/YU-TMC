@@ -102,23 +102,34 @@ test("service worker opens the exact TMC card for focus, navigate, and navigatio
   assert.deepEqual(noClient.opened, [target]);
 });
 
-test("TMC request push is scheduled once after create and is available to every role", async () => {
-  const [route, landing, pushRepository, productionCompose, mobileCompose] = await Promise.all([
+test("durable TMC push worker is kicked after mutations and is available to every role", async () => {
+  const [route, decisionRoute, cancelRoute, landing, pushRepository, worker, dockerfile, productionCompose, mobileCompose] = await Promise.all([
     source("app/api/inventory/transfer-requests/route.ts"),
+    source("app/api/inventory/transfer-requests/[id]/decision/route.ts"),
+    source("app/api/inventory/transfer-requests/[id]/cancel/route.ts"),
     source("components/TmcLanding.tsx"),
     source("lib/server/persistence/postgres/postgres-web-push-repositories.ts"),
+    source("scripts/process-tmc-push-outbox.ts"),
+    source("Dockerfile.mobile"),
     source("docker-compose.production.yml"),
     source("docker-compose.mobile.yml"),
   ]);
-  assert.match(route, /after\(\(\) => services\.push\.notifyTmcTransferRequest\(event\)\)/);
+  for (const mutationRoute of [route, decisionRoute, cancelRoute]) {
+    assert.match(mutationRoute, /after\(\(\) => (?:services|getApplicationServices\(\))\.push\.processTmcPushOutbox\(\)\)/);
+  }
   assert.match(route, /export const maxDuration = 30/);
   assert.match(landing, /PushNotificationControl/);
   assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee'\)/);
+  assert.match(worker, /processTmcPushOutbox/);
+  assert.match(worker, /process\.argv\.includes\("--loop"\)/);
+  assert.match(dockerfile, /FROM dependencies AS worker/);
   for (const compose of [productionCompose, mobileCompose]) {
     assert.match(compose, /WEB_PUSH_VAPID_PUBLIC_KEY/);
     assert.match(compose, /WEB_PUSH_VAPID_PRIVATE_KEY/);
     assert.match(compose, /WEB_PUSH_VAPID_SUBJECT/);
     assert.match(compose, /stop_grace_period: 35s/);
+    assert.match(compose, /tmc-push-worker:/);
+    assert.match(compose, /target: worker/);
   }
 });
 

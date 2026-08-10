@@ -22,6 +22,7 @@ export function createTmcTransferRequestDecisionPostHandler(dependencies: {
     actor: { userId: string; role: UserRole },
     idempotencyKey: string,
   ): Promise<Pick<IdempotentTmcTransferRequestDecision, "body" | "kind" | "status">>;
+  onCompleted?(): void;
 }) {
   return async function post(request: Request, requestId: string): Promise<Response> {
     try {
@@ -30,6 +31,9 @@ export function createTmcTransferRequestDecisionPostHandler(dependencies: {
       const body = parseInput(await readLimitedJson(request, MAXIMUM_BODY_BYTES));
       const key = normalizeTmcIdempotencyKey(request.headers.get("idempotency-key"));
       const execution = await dependencies.decideIdempotent(requestId, body, actor, key);
+      if (execution.kind === "completed") {
+        try { dependencies.onCompleted?.(); } catch { /* Durable outbox remains available for the worker. */ }
+      }
       return Response.json(execution.body, {
         status: execution.status,
         headers: {

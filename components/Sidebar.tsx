@@ -41,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/items", labelKey: "nav.items", icon: Boxes },
   { href: "/scan", labelKey: "nav.scanQr", icon: ScanLine },
   { href: "/requests", labelKey: "nav.requests", icon: ClipboardList },
-  { href: "/transfers", labelKey: "nav.scanItem", icon: ArrowLeftRight },
+  { href: "/tmc", labelKey: "tmc.entryPoint", icon: ArrowLeftRight },
   {
     href: "/items/decommissioned",
     labelKey: "nav.decommissioned",
@@ -64,7 +64,7 @@ const EMPLOYEE_NAV_PATHS = new Set([
   "/items",
   "/scan",
   "/requests",
-  "/transfers",
+  "/tmc",
   "/profile",
 ]);
 

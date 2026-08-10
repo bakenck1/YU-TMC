@@ -6,14 +6,19 @@ import type {
   TmcTransferRequestItemRecord,
   TmcTransferRequestRecord,
   TmcTransferUserRecord,
+  TmcStageFourRepository,
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import { executeIdempotentCommand } from "@/lib/application/services/idempotent-command-service";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
+  CancelTmcTransferRequestInput,
   CreateTmcTransferRequestInput,
   CreateTmcTransferRequestResultDto,
   DecideTmcTransferRequestInput,
+  TmcNotificationFeedDto,
+  TmcTransferHistoryDto,
+  TmcTransferHistoryFilters,
   TmcOperationProblemCode,
   TmcTransferRequestDto,
   TmcTransferRequestItemDto,
@@ -34,6 +39,7 @@ const REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const CREATE_OPERATION = "tmc.transfer_request.create";
 const DECIDE_OPERATION = "tmc.transfer_request.decision";
+const CANCEL_OPERATION = "tmc.transfer_request.cancel";
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 
 export interface TmcTransferRequestServiceClock {
@@ -84,6 +90,100 @@ export class TmcTransferRequestService {
     private readonly ids: TmcTransferRequestServiceIds,
   ) {}
 
+  async listHistory(
+    filters: TmcTransferHistoryFilters,
+    actor: AuthorizationActor,
+  ): Promise<TmcTransferHistoryDto> {
+    const actorId = normalizeReader(actor);
+    const normalized = normalizeHistoryFilters(filters);
+    const now = this.clock.now();
+    const history = await this.unitOfWork.read(async ({ stageFour }) => {
+      const query = {
+        actorId,
+        includeAll: actor.role === "admin",
+        ...normalized,
+        now,
+        limit: normalized.limit + 1,
+      };
+      const [requests, locationChanges] = await Promise.all([
+        stageFour.listHistory(query),
+        stageFour.listLocationHistory(query),
+      ]);
+      return { requests, locationChanges };
+    });
+    const requests = history.requests.slice(0, normalized.limit);
+    const locationChanges = history.locationChanges.slice(0, normalized.limit);
+    return {
+      requests: requests.flatMap((request) => {
+        const projected = toHistoryRequestDto(
+          request,
+          now,
+          actorId,
+          actor.role,
+        );
+        return projected ? [projected] : [];
+      }),
+      locationChanges: locationChanges.map((record) => ({
+        ...record,
+        occurredAt: record.occurredAt.toISOString(),
+      })),
+      nextRequestCursor: history.requests.length > normalized.limit
+        ? encodeHistoryCursor(requests.at(-1)!.createdAt, requests.at(-1)!.id)
+        : null,
+      nextLocationCursor: history.locationChanges.length > normalized.limit
+        ? encodeHistoryCursor(locationChanges.at(-1)!.occurredAt, locationChanges.at(-1)!.id)
+        : null,
+    };
+  }
+
+  async listNotifications(
+    actor: AuthorizationActor,
+    limit = 25,
+  ): Promise<TmcNotificationFeedDto> {
+    const actorId = normalizeReader(actor);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+      throw validation("invalid_limit");
+    }
+    const now = this.clock.now();
+    return this.unitOfWork.read(async ({ stageFour }) => {
+      const query = {
+        actorId,
+        includeAdminQueue: actor.role === "admin",
+        now,
+        limit,
+      };
+      const [notifications, unreadCount] = await Promise.all([
+        stageFour.listNotifications(query),
+        stageFour.countUnreadNotifications(query),
+      ]);
+      return {
+        notifications: notifications.map((notification) => ({
+          ...notification,
+          occurredAt: notification.occurredAt.toISOString(),
+          readAt: notification.readAt?.toISOString() ?? null,
+        })),
+        unreadCount,
+      };
+    });
+  }
+
+  async markNotificationRead(
+    notificationId: string,
+    actor: AuthorizationActor,
+  ): Promise<void> {
+    const actorId = normalizeReader(actor);
+    if (!isUuid(notificationId)) throw notificationNotFound();
+    const updated = await this.unitOfWork.transaction(({ stageFour }) =>
+      stageFour.markNotificationRead({
+        notificationId: notificationId.toLowerCase(),
+        actorId,
+        includeAdminQueue: actor.role === "admin",
+        readAt: this.clock.now(),
+      }),
+    );
+    if (!updated) throw notificationNotFound();
+  }
+
   async getById(
     id: string,
     actor: AuthorizationActor,
@@ -97,15 +197,11 @@ export class TmcTransferRequestService {
       transferRequests.findById(id.toLowerCase()),
     );
     const actorId = actor.userId.toLowerCase();
-    if (
-      !request ||
-      (actor.role !== "admin" &&
-        request.initiator.id !== actorId &&
-        request.recipient.id !== actorId)
-    ) {
-      throw requestNotFound();
-    }
-    return toRequestDto(request, this.clock.now());
+    const projected = request
+      ? toReaderScopedRequestDto(request, this.clock.now(), actorId, actor.role)
+      : null;
+    if (!projected) throw requestNotFound();
+    return projected;
   }
 
   async getItemPhoto(
@@ -126,9 +222,7 @@ export class TmcTransferRequestService {
       const actorId = actor.userId.toLowerCase();
       if (
         !request ||
-        (actor.role !== "admin" &&
-          request.initiator.id !== actorId &&
-          request.recipient.id !== actorId)
+        !canReadRequest(request, actorId, actor.role)
       ) {
         throw requestNotFound();
       }
@@ -148,7 +242,7 @@ export class TmcTransferRequestService {
   ): Promise<TmcTransferRequestDto> {
     const normalized = normalizeDecisionInput(requestId, input, actor);
     try {
-      return await this.unitOfWork.transaction(async ({ transferRequests }) => {
+      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
       const request = await transferRequests.findByIdForUpdate(normalized.requestId);
       if (!request) throw requestNotFound();
       const actorId = normalized.actorId;
@@ -222,6 +316,7 @@ export class TmcTransferRequestService {
       if (!closed) throw new ApplicationError("conflict", "version_conflict");
       const updated = await transferRequests.findById(request.id);
       if (!updated) throw incompleteProjection();
+        await this.recordDecisionEffects(stageFour, request, updated, currentActor, decidedAt);
         return toRequestDto(updated, this.clock.now());
       }, { isolation: "serializable", maxAttempts: 3 });
     } catch (error) {
@@ -287,6 +382,76 @@ export class TmcTransferRequestService {
       resourceId: request.id,
       status: 200,
     };
+  }
+
+  async cancelIdempotent(
+    requestId: string,
+    input: CancelTmcTransferRequestInput,
+    actor: AuthorizationActor,
+    idempotencyKey: string,
+  ): Promise<IdempotentTmcTransferRequestCancellation> {
+    const normalized = normalizeCancellationInput(requestId, input, actor);
+    const key = normalizeTmcIdempotencyKey(idempotencyKey);
+    const execution = await executeIdempotentCommand(
+      this.unitOfWork,
+      {
+        id: this.ids.create(), actorId: normalized.actorId,
+        operation: CANCEL_OPERATION, key,
+        requestHash: await hashCancellationRequest(normalized),
+        expiresInMs: IDEMPOTENCY_LIFETIME_MS,
+      },
+      async () => {
+        const request = await this.cancel(normalized.requestId, {
+          requestVersion: normalized.requestVersion,
+          administrativeReason: normalized.administrativeReason,
+        }, actor);
+        return { body: { request }, resourceId: request.id, status: 200 };
+      },
+      {
+        afterReserve: async ({ transferRequests }) => {
+          const request = await transferRequests.findById(normalized.requestId);
+          const currentActor = await transferRequests.findUserById(normalized.actorId);
+          if (!request || !currentActor || !currentActor.active || currentActor.deletedAt ||
+              (request.initiator.id !== normalized.actorId && currentActor.role !== "admin")) {
+            throw requestNotFound();
+          }
+        },
+        transaction: { isolation: "serializable", maxAttempts: 3 },
+      },
+    );
+    const request = readStoredDecision(execution.response, normalized.requestId);
+    return { body: { request }, kind: execution.kind, request, resourceId: request.id, status: 200 };
+  }
+
+  async cancel(
+    requestId: string,
+    input: CancelTmcTransferRequestInput,
+    actor: AuthorizationActor,
+  ): Promise<TmcTransferRequestDto> {
+    const normalized = normalizeCancellationInput(requestId, input, actor);
+    return this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
+      const request = await transferRequests.findByIdForUpdate(normalized.requestId);
+      const currentActor = await transferRequests.findUserById(normalized.actorId);
+      if (!request || !currentActor || !currentActor.active || currentActor.deletedAt) throw requestNotFound();
+      const isInitiator = request.initiator.id === normalized.actorId;
+      const isAdministrator = currentActor.role === "admin";
+      if (!isInitiator && !isAdministrator) throw requestNotFound();
+      if (request.status !== "pending") throw new ApplicationError("conflict", "request_already_closed");
+      if (request.version !== normalized.requestVersion) throw new ApplicationError("conflict", "version_conflict");
+      const isAdministrativeDecision = isAdministrator && !isInitiator;
+      const administrativeReason = normalizeAdministrativeReason(normalized.administrativeReason, isAdministrativeDecision);
+      const cancelledAt = this.clock.now();
+      const cancelled = await transferRequests.cancelRequest({
+        requestId: request.id, expectedVersion: request.version,
+        cancelledBy: currentActor.id, cancelledAt,
+        isAdministrativeDecision, administrativeReason,
+      });
+      if (!cancelled) throw new ApplicationError("conflict", "version_conflict");
+      const updated = await transferRequests.findById(request.id);
+      if (!updated) throw incompleteProjection();
+      await this.recordCancellationEffects(stageFour, request, updated, currentActor, cancelledAt);
+      return toRequestDto(updated, this.clock.now());
+    }, { isolation: "serializable", maxAttempts: 3 });
   }
 
   async createIdempotent(
@@ -374,7 +539,7 @@ export class TmcTransferRequestService {
     const normalized = normalizeCreateInput(input);
 
     try {
-      return await this.unitOfWork.transaction(async ({ transferRequests }) => {
+      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
       const users = new Map<string, TmcTransferUserRecord>();
       for (const userId of [...new Set([
         actorId,
@@ -536,6 +701,12 @@ export class TmcTransferRequestService {
         };
       });
 
+      await this.recordCreationEffects(
+        stageFour,
+        persisted,
+        authorizedActor,
+        items.length - insertedByItemId.size,
+      );
       return {
         request: toRequestDto(persisted, this.clock.now()),
         total: items.length,
@@ -549,6 +720,406 @@ export class TmcTransferRequestService {
       throw error;
     }
   }
+
+  private async recordCreationEffects(
+    stageFour: TmcStageFourRepository,
+    request: TmcTransferRequestRecord,
+    actor: AuthorizationActor,
+    problemCount: number,
+  ) {
+    const domainEventId = this.ids.create();
+    await stageFour.appendAudit({
+      id: this.ids.create(),
+      domainEventId,
+      actorId: actor.userId,
+      actorRole: actor.role,
+      subjectKind: "tmc_transfer_request",
+      subjectId: request.id,
+      subjectRevision: request.version,
+      action: "tmc_transfer.requested",
+      beforeValues: null,
+      afterValues: {
+        status: request.status,
+        recipientId: request.recipient.id,
+        itemCount: request.items.length,
+        comment: request.comment,
+      },
+      occurredAt: request.createdAt,
+    });
+    for (const item of request.items) {
+      await stageFour.appendAudit({
+        id: this.ids.create(),
+        domainEventId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        subjectKind: "item",
+        subjectId: item.itemId,
+        subjectRevision: item.item.version,
+        action: "tmc_transfer.item_requested",
+        beforeValues: { responsibleUserId: item.currentResponsibleIdAtRequest },
+        afterValues: {
+          requestId: request.id,
+          requestItemId: item.id,
+          recipientId: request.recipient.id,
+        },
+        occurredAt: request.createdAt,
+      });
+    }
+    await stageFour.createNotification({
+      id: this.ids.create(),
+      domainEventId,
+      type: "tmc_transfer.requested",
+      actorId: actor.userId,
+      requestId: request.id,
+      itemId: null,
+      requestRevision: request.version,
+      recipientId: request.recipient.id,
+      audience: "direct_user",
+      safePayload: { itemCount: request.items.length, status: request.status },
+      occurredAt: request.createdAt,
+    });
+    await stageFour.createNotification({
+      id: this.ids.create(),
+      domainEventId: this.ids.create(),
+      type: "tmc_transfer.overdue",
+      actorId: actor.userId,
+      requestId: request.id,
+      itemId: null,
+      requestRevision: request.version,
+      audience: "admin_queue",
+      safePayload: { itemCount: request.items.length, status: "pending" },
+      occurredAt: request.expiresAt,
+    });
+    if (problemCount > 0) {
+      await stageFour.createNotification({
+        id: this.ids.create(),
+        domainEventId: this.ids.create(),
+        type: "tmc_transfer.problem",
+        actorId: actor.userId,
+        requestId: request.id,
+        itemId: null,
+        requestRevision: request.version,
+        audience: "admin_queue",
+        safePayload: { problemCount, itemCount: request.items.length },
+        occurredAt: request.createdAt,
+      });
+    }
+  }
+
+  private async recordDecisionEffects(
+    stageFour: TmcStageFourRepository,
+    before: TmcTransferRequestRecord,
+    after: TmcTransferRequestRecord,
+    actor: TmcTransferUserRecord,
+    occurredAt: Date,
+  ) {
+    const domainEventId = this.ids.create();
+    await stageFour.appendAudit({
+      id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
+      subjectKind: "tmc_transfer_request", subjectId: after.id,
+      subjectRevision: after.version, action: "tmc_transfer.completed",
+      beforeValues: { status: before.status, version: before.version },
+      afterValues: {
+        status: after.status,
+        version: after.version,
+        comment: after.comment,
+        administrativeReason: after.administrativeReason,
+      }, occurredAt,
+    });
+    for (const item of after.items) {
+      const previous = before.items.find((candidate) => candidate.id === item.id);
+      if (!previous || previous.result === item.result) continue;
+      await stageFour.appendAudit({
+        id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
+        subjectKind: "item", subjectId: item.itemId,
+        subjectRevision: item.item.version, action: `tmc_transfer.item_${item.result}`,
+        beforeValues: {
+          requestId: before.id,
+          requestItemId: previous.id,
+          result: previous.result,
+          responsibleUserId: previous.currentResponsibleIdAtRequest,
+        },
+        afterValues: {
+          requestId: after.id,
+          requestItemId: item.id,
+          result: item.result,
+          responsibleUserId: item.result === "accepted" ? after.recipient.id : previous.currentResponsibleIdAtRequest,
+        },
+        occurredAt,
+      });
+    }
+    await stageFour.createNotification({
+      id: this.ids.create(), domainEventId, type: "tmc_transfer.completed",
+      actorId: actor.id, requestId: after.id, itemId: null,
+      requestRevision: after.version, recipientId: after.initiator.id,
+      audience: "direct_user",
+      safePayload: { status: after.status, accepted: after.items.filter((item) => item.result === "accepted").length, itemCount: after.items.length },
+      occurredAt,
+    });
+    const owners = new Map<string, number>();
+    for (const item of after.items) {
+      if (item.result !== "accepted") continue;
+      owners.set(item.currentResponsibleIdAtRequest, (owners.get(item.currentResponsibleIdAtRequest) ?? 0) + 1);
+    }
+    for (const [ownerId, accepted] of owners) {
+      if (ownerId === after.initiator.id) continue;
+      await stageFour.createNotification({
+        id: this.ids.create(), domainEventId: this.ids.create(), type: "tmc_transfer.completed",
+        actorId: actor.id, requestId: after.id, itemId: null,
+        requestRevision: after.version, recipientId: ownerId,
+        audience: "direct_user",
+        safePayload: { status: after.status, accepted, itemCount: after.items.length }, occurredAt,
+      });
+    }
+    const invalidated = after.items.filter((item) => item.result === "invalidated").length;
+    if (invalidated > 0) {
+      await stageFour.createNotification({
+        id: this.ids.create(), domainEventId: this.ids.create(), type: "tmc_transfer.problem",
+        actorId: actor.id, requestId: after.id, itemId: null,
+        requestRevision: after.version, audience: "admin_queue",
+        safePayload: { problemCount: invalidated, status: after.status }, occurredAt,
+      });
+    }
+  }
+
+  private async recordCancellationEffects(
+    stageFour: TmcStageFourRepository,
+    before: TmcTransferRequestRecord,
+    after: TmcTransferRequestRecord,
+    actor: TmcTransferUserRecord,
+    occurredAt: Date,
+  ) {
+    const domainEventId = this.ids.create();
+    await stageFour.appendAudit({
+      id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
+      subjectKind: "tmc_transfer_request", subjectId: after.id,
+      subjectRevision: after.version, action: "tmc_transfer.cancelled",
+      beforeValues: { status: before.status, version: before.version },
+      afterValues: {
+        status: after.status,
+        version: after.version,
+        comment: after.comment,
+        administrativeReason: after.administrativeReason,
+      }, occurredAt,
+    });
+    for (const item of after.items) {
+      const previous = before.items.find((candidate) => candidate.id === item.id);
+      if (!previous || previous.result === item.result) continue;
+      await stageFour.appendAudit({
+        id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
+        subjectKind: "item", subjectId: item.itemId,
+        subjectRevision: item.item.version, action: "tmc_transfer.item_cancelled",
+        beforeValues: {
+          requestId: before.id,
+          requestItemId: previous.id,
+          result: previous.result,
+        },
+        afterValues: {
+          requestId: after.id,
+          requestItemId: item.id,
+          result: item.result,
+        },
+        occurredAt,
+      });
+    }
+    await stageFour.createNotification({
+      id: this.ids.create(), domainEventId, type: "tmc_transfer.cancelled",
+      actorId: actor.id, requestId: after.id, itemId: null,
+      requestRevision: after.version, recipientId: after.recipient.id,
+      audience: "direct_user",
+      safePayload: { status: after.status, itemCount: after.items.length }, occurredAt,
+    });
+    if (actor.id !== after.initiator.id && after.initiator.id !== after.recipient.id) {
+      await stageFour.createNotification({
+        id: this.ids.create(), domainEventId: this.ids.create(), type: "tmc_transfer.cancelled",
+        actorId: actor.id, requestId: after.id, itemId: null,
+        requestRevision: after.version, recipientId: after.initiator.id,
+        audience: "direct_user",
+        safePayload: { status: after.status, itemCount: after.items.length }, occurredAt,
+      });
+    }
+  }
+}
+
+export type IdempotentTmcTransferRequestCancellation = IdempotentTmcTransferRequestDecision;
+
+function normalizeReader(actor: AuthorizationActor): string {
+  if (
+    !isUuid(actor.userId) ||
+    !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+  ) {
+    throw forbidden();
+  }
+  return actor.userId.toLowerCase();
+}
+
+function canReadRequest(
+  request: TmcTransferRequestRecord,
+  actorId: string,
+  role: AuthorizationActor["role"],
+) {
+  return role === "admin" ||
+    request.initiator.id === actorId ||
+    request.recipient.id === actorId ||
+    request.items.some((item) => item.currentResponsibleIdAtRequest === actorId);
+}
+
+function toReaderScopedRequestDto(
+  request: TmcTransferRequestRecord,
+  now: Date,
+  actorId: string,
+  role: AuthorizationActor["role"],
+): TmcTransferRequestDto | null {
+  if (!canReadRequest(request, actorId, role)) return null;
+  if (
+    role === "admin" ||
+    request.initiator.id === actorId ||
+    request.recipient.id === actorId
+  ) {
+    return toRequestDto(request, now);
+  }
+  const participantItems = request.items.filter(
+    (item) => item.currentResponsibleIdAtRequest === actorId,
+  );
+  if (participantItems.length === 0) return null;
+  return toParticipantRequestDto(request, participantItems, now);
+}
+
+function toHistoryRequestDto(
+  request: TmcTransferRequestRecord,
+  now: Date,
+  actorId: string,
+  role: AuthorizationActor["role"],
+) {
+  return toReaderScopedRequestDto(request, now, actorId, role);
+}
+
+function toParticipantRequestDto(
+  request: TmcTransferRequestRecord,
+  participantItems: readonly TmcTransferRequestItemRecord[],
+  now: Date,
+): TmcTransferRequestDto {
+  const status = requestStatusForItems(participantItems);
+  if (status === "pending") {
+    return toRequestDto({
+      ...request,
+      status,
+      closedAt: null,
+      closedBy: null,
+      isAdministrativeDecision: false,
+      administrativeReason: null,
+      items: [...participantItems],
+    }, now);
+  }
+  const finalItem = [...participantItems]
+    .sort((left, right) =>
+      (right.decidedAt?.getTime() ?? 0) - (left.decidedAt?.getTime() ?? 0))[0];
+  if (!finalItem?.decidedAt || !finalItem.decidedBy) {
+    throw incompleteProjection();
+  }
+  return toRequestDto({
+    ...request,
+    status,
+    closedAt: finalItem.decidedAt,
+    closedBy: finalItem.decidedBy,
+    isAdministrativeDecision: false,
+    administrativeReason: null,
+    items: [...participantItems],
+  }, now);
+}
+
+function requestStatusForItems(
+  items: readonly TmcTransferRequestItemRecord[],
+): TmcTransferRequestRecord["status"] {
+  if (items.some((item) => item.result === "pending")) return "pending";
+  if (items.some((item) => item.result === "accepted")) return "accepted";
+  if (items.every((item) => item.result === "cancelled")) return "cancelled";
+  return "rejected";
+}
+
+function normalizeHistoryFilters(filters: TmcTransferHistoryFilters) {
+  if (!filters || typeof filters !== "object" || Array.isArray(filters)) {
+    throw validation("invalid_filters");
+  }
+  const identifiers = [
+    "initiatorId",
+    "recipientId",
+    "buildingId",
+    "roomId",
+    "itemId",
+  ] as const;
+  const normalizedIds: Partial<Record<(typeof identifiers)[number], string>> = {};
+  for (const field of identifiers) {
+    const value = filters[field];
+    if (value !== undefined) {
+      if (!isUuid(value)) throw validation(`invalid_${field}`);
+      normalizedIds[field] = value.toLowerCase();
+    }
+  }
+  const createdFrom = parseHistoryDate(filters.createdFrom, "createdFrom");
+  const createdTo = parseHistoryDate(filters.createdTo, "createdTo");
+  if (createdFrom && createdTo && createdFrom > createdTo) {
+    throw validation("invalid_period");
+  }
+  if (
+    filters.status !== undefined &&
+    !["pending", "accepted", "rejected", "cancelled"].includes(filters.status)
+  ) throw validation("invalid_status");
+  if (filters.overdue !== undefined && typeof filters.overdue !== "boolean") {
+    throw validation("invalid_overdue");
+  }
+  const limit = filters.limit ?? 50;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw validation("invalid_limit");
+  }
+  const requestCursor = parseHistoryCursor(filters.requestCursor, "requestCursor");
+  const locationCursor = parseHistoryCursor(filters.locationCursor, "locationCursor");
+  return {
+    ...normalizedIds,
+    ...(filters.status !== undefined ? { status: filters.status } : {}),
+    ...(createdFrom ? { createdFrom } : {}),
+    ...(createdTo ? { createdTo } : {}),
+    ...(filters.overdue !== undefined ? { overdue: filters.overdue } : {}),
+    ...(requestCursor ? { requestCursorCreatedAt: requestCursor.at, requestCursorId: requestCursor.id } : {}),
+    ...(locationCursor ? { locationCursorOccurredAt: locationCursor.at, locationCursorId: locationCursor.id } : {}),
+    limit,
+  };
+}
+
+function parseHistoryCursor(value: string | undefined, field: string) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length < 10 || value.length > 160 || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw validation(`invalid_${field}`);
+  }
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const separator = decoded.indexOf("|");
+    const rawDate = decoded.slice(0, separator);
+    const id = decoded.slice(separator + 1);
+    const at = new Date(rawDate);
+    if (separator < 1 || !Number.isFinite(at.getTime()) || !isUuid(id)) throw new Error("invalid");
+    return { at, id: id.toLowerCase() };
+  } catch {
+    throw validation(`invalid_${field}`);
+  }
+}
+
+function encodeHistoryCursor(at: Date, id: string) {
+  return Buffer.from(`${at.toISOString()}|${id}`, "utf8").toString("base64url");
+}
+
+function parseHistoryDate(value: string | undefined, field: string) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length > 40) {
+    throw validation(`invalid_${field}`);
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) throw validation(`invalid_${field}`);
+  return parsed;
+}
+
+function notificationNotFound() {
+  return new ApplicationError("not_found", "notification_not_found");
 }
 
 class EmptyTmcTransferRequestError extends Error {
@@ -606,6 +1177,24 @@ async function hashDecisionRequest(
     decisions: [...input.decisions].sort((left, right) =>
       left.itemId.localeCompare(right.itemId),
     ),
+    administrativeReason:
+      typeof input.administrativeReason === "string"
+        ? input.administrativeReason.normalize("NFKC").trim()
+        : null,
+  }));
+  const digest = await crypto.subtle.digest("SHA-256", payload);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function hashCancellationRequest(
+  input: ReturnType<typeof normalizeCancellationInput>,
+) {
+  const payload = new TextEncoder().encode(JSON.stringify({
+    operation: CANCEL_OPERATION,
+    requestId: input.requestId,
+    requestVersion: input.requestVersion,
     administrativeReason:
       typeof input.administrativeReason === "string"
         ? input.administrativeReason.normalize("NFKC").trim()
@@ -732,7 +1321,7 @@ function toRequestDto(
     comment: record.comment,
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt.toISOString(),
-    overdue: now.getTime() >= record.expiresAt.getTime(),
+    overdue: record.status === "pending" && now.getTime() >= record.expiresAt.getTime(),
     version: record.version,
     summary: summarize(record.items),
     items: record.items.map(toRequestItemDto),
@@ -905,6 +1494,24 @@ function normalizeDecisionInput(
     actorId: actor.userId.toLowerCase(),
     requestVersion: input.requestVersion,
     decisions,
+    administrativeReason: input.administrativeReason,
+  };
+}
+
+function normalizeCancellationInput(
+  requestId: string,
+  input: CancelTmcTransferRequestInput,
+  actor: AuthorizationActor,
+) {
+  if (!isUuid(requestId) || !isUuid(actor.userId)) throw requestNotFound();
+  if (!input || typeof input !== "object" ||
+      !Number.isSafeInteger(input.requestVersion) || input.requestVersion < 1) {
+    throw validation("invalid_cancellation");
+  }
+  return {
+    requestId: requestId.toLowerCase(),
+    actorId: actor.userId.toLowerCase(),
+    requestVersion: input.requestVersion,
     administrativeReason: input.administrativeReason,
   };
 }

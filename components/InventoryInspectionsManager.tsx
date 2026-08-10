@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Plus,
-  QrCode,
   ScanLine,
   WifiOff,
   X,
@@ -76,9 +75,6 @@ export default function InventoryInspectionsManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [qrValue, setQrValue] = useState("");
-  const [codeFormat, setCodeFormat] = useState<"code_39" | "qr_code">(
-    "code_39",
-  );
   const [resolution, setResolution] = useState<QrResolutionDto | null>(null);
   const [recordedResult, setRecordedResult] = useState<ItemResultDto | null>(null);
   const [resultComment, setResultComment] = useState("");
@@ -176,7 +172,7 @@ export default function InventoryInspectionsManager({
     setRecordedResult(null);
     try {
       const response = await fetch(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(scannedValue)}&kind=${codeFormat === "code_39" ? "barcode" : "qr"}`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(scannedValue)}&kind=barcode`,
       );
       const body = (await response.json()) as {
         resolution?: QrResolutionDto;
@@ -256,7 +252,7 @@ export default function InventoryInspectionsManager({
       if (!video || requestId !== cameraRequestRef.current) return;
       const session = await startBarcodeScanner({
         video,
-        format: codeFormat,
+        format: "code_39",
         onDetected(value) {
           if (requestId !== cameraRequestRef.current) return;
           setQrValue(value);
@@ -367,29 +363,8 @@ export default function InventoryInspectionsManager({
             {t("inspections.scanTitle")}
           </h2>
         </div>
-        <div className="mt-4 grid max-w-sm grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1">
-          <button
-            type="button"
-            onClick={() => {
-              stopCamera();
-              setCodeFormat("code_39");
-            }}
-            aria-pressed={codeFormat === "code_39"}
-            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${codeFormat === "code_39" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}
-          >
-            <Barcode className="h-4 w-4" /> {t("itemDetails.barcode")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              stopCamera();
-              setCodeFormat("qr_code");
-            }}
-            aria-pressed={codeFormat === "qr_code"}
-            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${codeFormat === "qr_code" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}
-          >
-            <QrCode className="h-4 w-4" /> QR
-          </button>
+        <div className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-50 px-3 text-sm font-semibold text-emerald-700">
+          <Barcode className="h-4 w-4" /> {t("itemDetails.barcode")}
         </div>
         {!online ? (
           <p role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">

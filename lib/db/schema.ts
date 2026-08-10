@@ -2249,6 +2249,56 @@ export const webPushSubscriptionsTable = inventorySchema.table(
   ],
 );
 
+export const tmcWebPushOutboxTable = inventorySchema.table(
+  "tmc_web_push_outbox",
+  {
+    notificationEventId: uuid()
+      .primaryKey()
+      .references(() => notificationEventsTable.id, { onDelete: "cascade" }),
+    availableAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    attempts: integer().notNull().default(0),
+    lockedBy: uuid(),
+    lockedUntil: timestamp({ withTimezone: true, mode: "date" }),
+    processedAt: timestamp({ withTimezone: true, mode: "date" }),
+    deadLetteredAt: timestamp({ withTimezone: true, mode: "date" }),
+    lastErrorCode: text(),
+    createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("tmc_web_push_outbox_attempts_check", sql`${table.attempts} >= 0`),
+    check("tmc_web_push_outbox_lock_check", sql`(${table.lockedBy} is null) = (${table.lockedUntil} is null)`),
+    index("tmc_web_push_outbox_due_idx")
+      .on(table.availableAt, table.notificationEventId)
+      .where(sql`${table.processedAt} is null and ${table.deadLetteredAt} is null`),
+  ],
+);
+
+export const tmcWebPushDeliveryAttemptsTable = inventorySchema.table(
+  "tmc_web_push_delivery_attempts",
+  {
+    notificationEventId: uuid()
+      .notNull()
+      .references(() => notificationEventsTable.id, { onDelete: "cascade" }),
+    subscriptionId: uuid()
+      .notNull()
+      .references(() => webPushSubscriptionsTable.id, { onDelete: "cascade" }),
+    subscriptionUpdatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    attempts: integer().notNull().default(0),
+    lockedBy: uuid(),
+    lockedUntil: timestamp({ withTimezone: true, mode: "date" }),
+    deliveredAt: timestamp({ withTimezone: true, mode: "date" }),
+    lastErrorCode: text(),
+  },
+  (table) => [
+    primaryKey({
+      name: "tmc_web_push_delivery_attempts_pk",
+      columns: [table.notificationEventId, table.subscriptionId],
+    }),
+    check("tmc_web_push_delivery_attempts_count_check", sql`${table.attempts} >= 0`),
+    check("tmc_web_push_delivery_attempts_lock_check", sql`(${table.lockedBy} is null) = (${table.lockedUntil} is null)`),
+  ],
+);
+
 export const auditRecordsTable = inventorySchema.table(
   "audit_records",
   {

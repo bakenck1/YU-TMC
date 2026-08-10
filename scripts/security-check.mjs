@@ -17,6 +17,15 @@ for (const exclusion of requiredDockerExclusions) {
     throw new Error(`Missing mandatory Docker exclusion: ${exclusion}`);
   }
 }
+for (const inclusion of [
+  "!lib/security/credentials.ts",
+  "!lib/security/secret-configuration.ts",
+  "!lib/server/persistence/legacy/legacy-credential-source.ts",
+]) {
+  if (!dockerIgnore.split(/\r?\n/).includes(inclusion)) {
+    throw new Error(`Missing mandatory Docker source inclusion: ${inclusion}`);
+  }
+}
 
 const nextConfig = readFileSync("next.config.ts", "utf8");
 const proxy = readFileSync("proxy.ts", "utf8");

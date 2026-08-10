@@ -40,6 +40,8 @@ export default async function ItemsPage() {
           items={items}
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
+          actorUserId={user.userId}
+          actorRole={user.role}
         />
       ) : (
         <ItemsTable
@@ -47,6 +49,12 @@ export default async function ItemsPage() {
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
           excelDataset={canExport ? "items" : undefined}
+          bulkActions={{
+            actorUserId: user.userId,
+            actorRole: user.role,
+            buildings,
+            rooms,
+          }}
           headerActions={
             canCreate ? (
               <InventoryItemCreateForm rooms={rooms} buildings={buildings} />

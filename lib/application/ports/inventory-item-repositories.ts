@@ -116,6 +116,14 @@ export interface UpdateInventoryItemProtectedRecord {
   occurredAt: Date;
 }
 
+export interface UpdateInventoryItemLocationRecord {
+  id: string;
+  roomId: string;
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
+}
+
 export interface UpdateInventoryItemStatusRecord {
   id: string;
   status: ItemStatus;
@@ -266,6 +274,9 @@ export interface InventoryItemRepository {
   findServiceItemPhoto(id: string): Promise<StoredItemPhoto | null>;
   updateItemProtected(
     input: UpdateInventoryItemProtectedRecord,
+  ): Promise<InventoryItemRecord | null>;
+  updateItemLocation(
+    input: UpdateInventoryItemLocationRecord,
   ): Promise<InventoryItemRecord | null>;
   updateItemStatus(
     input: UpdateInventoryItemStatusRecord,

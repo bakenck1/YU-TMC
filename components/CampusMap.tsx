@@ -288,7 +288,8 @@ type DecorativeField = {
 
 const DECORATIVE_FIELDS: DecorativeField[] = [
   { id: "basketball-1", kind: "basketball", left: "67%", top: 255, width: 150, height: 88 },
-  { id: "football-1", kind: "football", left: "67%", top: 395, width: 150, height: 88 },
+  { id: "football-2", kind: "football", left: "67%", top: 349, width: 150, height: 88 },
+  { id: "football-1", kind: "football", left: "67%", top: 443, width: 150, height: 88 },
 ];
 
 type View = "loading" | "building" | "floor" | "item";

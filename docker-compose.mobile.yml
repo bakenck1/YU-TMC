@@ -17,7 +17,7 @@ services:
       - postgres-mobile-data:/var/lib/postgresql/data
       - ./scripts/db/init-mobile-database.sql:/docker-entrypoint-initdb.d/10-runtime-role.sql:ro
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
 
   init-runtime-role:
     image: postgres:17-alpine
@@ -38,10 +38,10 @@ services:
       - ON_ERROR_STOP=1
       - -c
       - >-
-        DO $$ BEGIN
+        DO $$$$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'yu_inventory_runtime') THEN
         CREATE ROLE yu_inventory_runtime LOGIN PASSWORD 'local-runtime-password';
-        END IF; END $$;
+        END IF; END $$$$;
         GRANT CONNECT ON DATABASE yu_inventory_dev TO yu_inventory_runtime;
     restart: "no"
 
@@ -71,11 +71,18 @@ services:
       context: .
       dockerfile: Dockerfile.mobile
       target: runner
+    command:
+      - sh
+      - -c
+      - >-
+        export SESSION_SECRET="$$(cat /app/.data/session-secret)";
+        exec node server.js
     depends_on:
       migrate:
         condition: service_completed_successfully
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
+      DATABASE_TARGET: development
       DATABASE_URL: postgresql://yu_inventory_runtime:local-runtime-password@postgres:5432/yu_inventory_dev
       DATABASE_DEPLOYMENT_ID: yu-inventory-local-development
       DATABASE_SSL_MODE: disable
@@ -83,6 +90,8 @@ services:
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
       DATABASE_IDLE_TIMEOUT_MS: 30000
       DATABASE_STATEMENT_TIMEOUT_MS: 30000
+      APP_PUBLIC_ORIGIN: https://172.20.10.2
+      AUTH_PASSWORD_RESET_PUBLIC_ORIGIN: https://172.20.10.2
       YU_DATA_DIRECTORY: /app/.data
       SESSION_COOKIE_SECURE: "true"
       TRUSTED_CLIENT_IP_HEADER: x-real-ip
@@ -98,6 +107,35 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  tmc-push-worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+      target: worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_TARGET: development
+      DATABASE_URL: postgresql://yu_inventory_runtime:local-runtime-password@postgres:5432/yu_inventory_dev
+      DATABASE_DEPLOYMENT_ID: yu-inventory-local-development
+      DATABASE_SSL_MODE: disable
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
+      TMC_PUSH_WORKER_INTERVAL_MS: 30000
+    init: true
+    stop_grace_period: 35s
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
     security_opt:
       - no-new-privileges:true
     cap_drop:

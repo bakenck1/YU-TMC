@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, QrCode, RefreshCw, ScanLine, X } from "lucide-react";
+import { Barcode, Check, RefreshCw, ScanLine, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -51,7 +51,7 @@ export default function InventoryTransfersManager() {
     setScanResult(null);
     try {
       const response = await fetch(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(value)}&kind=auto`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(value)}&kind=barcode`,
         { cache: "no-store" },
       );
       const body = (await response.json()) as { resolution?: QrResolutionDto; error?: string };
@@ -199,7 +199,7 @@ export default function InventoryTransfersManager() {
 
       {scanResult ? (
         <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm" aria-label="Результат сканирования">
-          <div className="flex gap-3"><QrCode className="mt-0.5 h-5 w-5 text-emerald-600" /><div><h2 className="font-semibold text-zinc-900">{scanResult.title}</h2><p className="mt-1 text-sm text-zinc-500">{[scanResult.inventoryNumber, scanResult.buildingName, scanResult.roomDesignation].filter(Boolean).join(" · ")}</p></div></div>
+          <div className="flex gap-3"><Barcode className="mt-0.5 h-5 w-5 text-emerald-600" /><div><h2 className="font-semibold text-zinc-900">{scanResult.title}</h2><p className="mt-1 text-sm text-zinc-500">{[scanResult.inventoryNumber, scanResult.buildingName, scanResult.roomDesignation].filter(Boolean).join(" · ")}</p></div></div>
           {scanAction.kind === "claim_free" ? (
             <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Этот свободный предмет можно сразу закрепить за собой.</p>
           ) : null}

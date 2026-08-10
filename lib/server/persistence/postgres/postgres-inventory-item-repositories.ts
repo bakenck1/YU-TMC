@@ -679,6 +679,26 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     }
   }
 
+  async updateItemLocation(
+    input: import("@/lib/application/ports/inventory-item-repositories").UpdateInventoryItemLocationRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set room_id = $2, updated_by = $3, updated_at = $4,
+           version = version + 1
+       where id = $1 and version = $5 and status = 'active' and archived_at is null`,
+      [
+        input.id,
+        input.roomId,
+        input.actorId,
+        input.occurredAt,
+        input.expectedVersion,
+      ],
+    );
+    if (result.rowCount !== 1) return null;
+    return this.findItemById(input.id);
+  }
+
   async updateItemStatus(
     input: UpdateInventoryItemStatusRecord,
   ): Promise<InventoryItemRecord | null> {

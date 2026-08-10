@@ -12,6 +12,7 @@ import type {
   InsertedTmcTransferRequestItemRecord,
   DecideTmcTransferRequestItemRecord,
   CloseTmcTransferRequestRecord,
+  CancelTmcTransferRequestRecord,
   TmcOperationRepositories,
   TmcTransferCandidateRecord,
   TmcTransferRequestRecord,
@@ -28,15 +29,19 @@ const ACTOR = {
   role: "employee" as const,
 };
 const RECIPIENT_ID = "22222222-2222-4222-8222-222222222222";
+const SNAPSHOT_OWNER_ID = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-08-09T12:00:00.000Z");
 const IDEMPOTENCY_KEY = "tmc-create-000001";
 
 test("participants and admin can read a request while BOLA is hidden as not found", async () => {
   const harness = createHarness();
-  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  harness.repository.aggregate = requestRecord([
+    candidate(uuid(1), { responsibleUser: user({ id: SNAPSHOT_OWNER_ID }) }),
+  ]);
   for (const actor of [
     ACTOR,
     { userId: RECIPIENT_ID, role: "employee" as const },
+    { userId: SNAPSHOT_OWNER_ID, role: "employee" as const },
     { userId: uuid(70), role: "admin" as const },
   ]) {
     assert.equal((await harness.service.getById(harness.repository.aggregate.id, actor)).id, harness.repository.aggregate.id);
@@ -53,24 +58,148 @@ test("participants and admin can read a request while BOLA is hidden as not foun
   assert.equal(harness.repository.findByIdCalls, calls);
 });
 
-test("request-scoped photo access requires a participant and item membership", async () => {
+test("snapshot-only readers cannot see sibling items owned by other users", async () => {
+  const firstOwner = user({
+    id: SNAPSHOT_OWNER_ID,
+    fullName: "First Owner",
+    email: "first-owner@example.test",
+  });
+  const secondOwner = user({
+    id: uuid(72),
+    fullName: "Second Owner Secret",
+    email: "second-owner-secret@example.test",
+  });
+  const firstItem = candidate(uuid(1), { responsibleUser: firstOwner });
+  const secondItem = candidate(uuid(2), {
+    name: "Foreign sibling secret",
+    inventoryNumber: "FOREIGN-SECRET-2",
+    responsibleUser: secondOwner,
+  });
   const harness = createHarness();
-  const itemId = uuid(1);
-  harness.repository.aggregate = requestRecord([candidate(itemId)]);
-  harness.repository.photo = { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+  harness.repository.aggregate = requestRecord([firstItem, secondItem]);
+
+  const scoped = await harness.service.getById(
+    harness.repository.aggregate.id,
+    { userId: firstOwner.id, role: "employee" },
+  );
+
+  assert.deepEqual(scoped.items.map((item) => item.item.id), [firstItem.itemId]);
+  assert.deepEqual(scoped.summary, {
+    total: 1,
+    pending: 1,
+    accepted: 0,
+    rejected: 0,
+    cancelled: 0,
+    invalidated: 0,
+  });
+  const serialized = JSON.stringify(scoped);
+  for (const foreignValue of [
+    secondItem.itemId,
+    secondItem.name,
+    secondItem.inventoryNumber,
+    secondOwner.id,
+    secondOwner.fullName,
+    secondOwner.email,
+  ]) {
+    assert.equal(serialized.includes(foreignValue), false, foreignValue);
+  }
+
   for (const actor of [
     ACTOR,
     { userId: RECIPIENT_ID, role: "employee" as const },
     { userId: uuid(70), role: "admin" as const },
   ]) {
+    const complete = await harness.service.getById(
+      harness.repository.aggregate.id,
+      actor,
+    );
+    assert.deepEqual(
+      complete.items.map((item) => item.item.id),
+      [firstItem.itemId, secondItem.itemId],
+    );
+  }
+});
+
+test("snapshot-only readers cannot infer sibling outcomes from the parent status", async () => {
+  const firstOwner = user({ id: SNAPSHOT_OWNER_ID });
+  const secondOwner = user({ id: uuid(72) });
+  const firstItem = candidate(uuid(1), { responsibleUser: firstOwner });
+  const secondItem = candidate(uuid(2), { responsibleUser: secondOwner });
+
+  for (const scenario of [
+    {
+      siblingResult: "accepted" as const,
+      parent: {
+        status: "accepted" as const,
+        closedAt: NOW,
+        closedBy: operationUser(RECIPIENT_ID),
+      },
+    },
+    {
+      siblingResult: "pending" as const,
+      parent: {
+        status: "pending" as const,
+        closedAt: null,
+        closedBy: null,
+      },
+    },
+  ]) {
+    const harness = createHarness();
+    harness.repository.aggregate = requestRecord([firstItem, secondItem], {
+      ...scenario.parent,
+      items: [
+        requestItem(firstItem, "rejected"),
+        requestItem(secondItem, scenario.siblingResult),
+      ],
+    });
+
+    const scoped = await harness.service.getById(
+      harness.repository.aggregate.id,
+      { userId: firstOwner.id, role: "employee" },
+    );
+    assert.equal(scoped.status, "rejected");
+    assert.equal(scoped.summary.rejected, 1);
+    assert.deepEqual(
+      scoped.items.map((item) => item.item.id),
+      [firstItem.itemId],
+    );
+
+    for (const actor of [
+      ACTOR,
+      { userId: RECIPIENT_ID, role: "employee" as const },
+      { userId: uuid(70), role: "admin" as const },
+    ]) {
+      const complete = await harness.service.getById(
+        harness.repository.aggregate.id,
+        actor,
+      );
+      assert.equal(complete.status, scenario.parent.status);
+      assert.equal(complete.items.length, 2);
+    }
+  }
+});
+
+test("request-scoped photo access requires a participant and item membership", async () => {
+  const harness = createHarness();
+  const itemId = uuid(1);
+  harness.repository.aggregate = requestRecord([
+    candidate(itemId, { responsibleUser: user({ id: SNAPSHOT_OWNER_ID }) }),
+  ]);
+  harness.repository.photo = { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+  for (const actor of [
+    ACTOR,
+    { userId: RECIPIENT_ID, role: "employee" as const },
+    { userId: SNAPSHOT_OWNER_ID, role: "employee" as const },
+    { userId: uuid(70), role: "admin" as const },
+  ]) {
     assert.deepEqual(await harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, actor), harness.repository.photo);
   }
-  assert.equal(harness.repository.photoCalls.length, 3);
+  assert.equal(harness.repository.photoCalls.length, 4);
   await assert.rejects(
     harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, { userId: uuid(71), role: "employee" }),
     (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
   );
-  assert.equal(harness.repository.photoCalls.length, 3);
+  assert.equal(harness.repository.photoCalls.length, 4);
   harness.repository.photo = null;
   await assert.rejects(
     harness.service.getItemPhoto(harness.repository.aggregate.id, uuid(99), ACTOR),
@@ -82,6 +211,107 @@ test("request-scoped photo access requires a participant and item membership", a
     (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
   );
   assert.equal(harness.repository.findByIdCalls, calls);
+});
+
+test("creation writes immutable request/item audit and schedules direct plus overdue notifications atomically", async () => {
+  const itemId = uuid(1);
+  const harness = createHarness({ candidates: [candidate(itemId)] });
+  await harness.service.create({ recipientId: RECIPIENT_ID, itemIds: [itemId] }, ACTOR);
+
+  assert.equal(harness.unitOfWork.stageFour.audits.length, 2);
+  const [requestAudit, itemAudit] = harness.unitOfWork.stageFour.audits as Array<{
+    afterValues: Record<string, unknown>;
+  }>;
+  assert.equal(requestAudit?.afterValues.comment, null);
+  assert.deepEqual(itemAudit?.afterValues, {
+    requestId: "90000000-0000-4000-8000-000000000001",
+    requestItemId: "90000000-0000-4000-8000-000000000002",
+    recipientId: RECIPIENT_ID,
+  });
+  assert.deepEqual(
+    harness.unitOfWork.stageFour.notifications.map((entry) => (entry as { type: string }).type),
+    ["tmc_transfer.requested", "tmc_transfer.overdue"],
+  );
+});
+
+test("initiator can cancel a pending request while unrelated users receive hidden not-found", async () => {
+  const other = user({ id: uuid(73) });
+  const harness = createHarness({ actors: [other] });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+
+  await assert.rejects(
+    harness.service.cancel(harness.repository.aggregate.id, { requestVersion: 1 }, { userId: other.id, role: "employee" }),
+    (error: unknown) => error instanceof ApplicationError && error.kind === "not_found",
+  );
+  const cancelled = await harness.service.cancel(
+    harness.repository.aggregate.id,
+    { requestVersion: 1 },
+    ACTOR,
+  );
+  assert.equal(cancelled.status, "cancelled");
+  assert.ok(cancelled.items.every((item) => item.result === "cancelled"));
+  assert.equal(harness.unitOfWork.stageFour.audits.length, 2);
+  assert.equal((harness.unitOfWork.stageFour.notifications[0] as { type: string }).type, "tmc_transfer.cancelled");
+});
+
+test("cancellation replays idempotently without duplicate audit or notifications", async () => {
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  const first = await harness.service.cancelIdempotent(
+    harness.repository.aggregate.id, { requestVersion: 1 }, ACTOR, "tmc-cancel-000001",
+  );
+  const replay = await harness.service.cancelIdempotent(
+    harness.repository.aggregate.id, { requestVersion: 1 }, ACTOR, "tmc-cancel-000001",
+  );
+  assert.equal(first.kind, "completed");
+  assert.equal(replay.kind, "replayed");
+  assert.deepEqual(replay.body, first.body);
+  assert.equal(harness.unitOfWork.stageFour.notifications.length, 1);
+  assert.equal(harness.unitOfWork.stageFour.audits.length, 2);
+});
+
+test("administrator cancellation of another user's request requires a reason", async () => {
+  const administrator = user({ id: uuid(74), role: "admin" });
+  const harness = createHarness({ actors: [administrator] });
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  await assert.rejects(
+    harness.service.cancel(harness.repository.aggregate.id, { requestVersion: 1 }, { userId: administrator.id, role: "admin" }),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "administrative_reason_required",
+  );
+  const cancelled = await harness.service.cancel(
+    harness.repository.aggregate.id,
+    { requestVersion: 1, administrativeReason: "Emergency handover" },
+    { userId: administrator.id, role: "admin" },
+  );
+  assert.equal(cancelled.administrativeReason, "Emergency handover");
+  const audits = harness.unitOfWork.stageFour.audits as Array<{
+    afterValues: Record<string, unknown>;
+  }>;
+  assert.equal(audits[0]?.afterValues.administrativeReason, "Emergency handover");
+  assert.equal(audits[1]?.afterValues.requestId, harness.repository.aggregate.id);
+  assert.equal(audits[1]?.afterValues.requestItemId, harness.repository.aggregate.items[0]?.id);
+  assert.deepEqual(
+    (harness.unitOfWork.stageFour.notifications as Array<{ recipientId?: string }>).map((entry) => entry.recipientId).sort(),
+    [ACTOR.userId, RECIPIENT_ID].sort(),
+  );
+});
+
+test("cancellation audits only positions that actually transition from pending", async () => {
+  const first = candidate(uuid(1));
+  const second = candidate(uuid(2));
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([first, second], {
+    items: [requestItem(first, "pending"), requestItem(second, "rejected")],
+  });
+
+  await harness.service.cancel(harness.repository.aggregate.id, { requestVersion: 1 }, ACTOR);
+
+  const itemAudits = (harness.unitOfWork.stageFour.audits as Array<{
+    action: string;
+    afterValues: Record<string, unknown>;
+  }>).filter((entry) => entry.action === "tmc_transfer.item_cancelled");
+  assert.equal(itemAudits.length, 1);
+  assert.equal(itemAudits[0]?.afterValues.requestItemId, harness.repository.aggregate.items[0]?.id);
 });
 
 test("recipient accepts selected pending items and rejects every unchecked item atomically", async () => {
@@ -848,7 +1078,7 @@ test("creates one parent, snapshots included items, and hydrates persisted DTO",
   );
 });
 
-test("derives terminal state, complete summary, and overdue at the exact deadline", async () => {
+test("derives terminal state and complete summary without marking a closed request overdue", async () => {
   const results = ["pending", "accepted", "rejected", "cancelled", "invalidated"] as const;
   const candidates = results.map((_, index) => candidate(uuid(index + 1)));
   const harness = createHarness({ candidates, now: new Date("2026-08-10T12:00:00.000Z") });
@@ -866,7 +1096,7 @@ test("derives terminal state, complete summary, and overdue at the exact deadlin
   );
 
   assert.equal(result.request?.status, "accepted");
-  assert.equal(result.request?.overdue, true);
+  assert.equal(result.request?.overdue, false);
   assert.deepEqual(result.request?.summary, {
     total: 5,
     pending: 1,
@@ -877,6 +1107,25 @@ test("derives terminal state, complete summary, and overdue at the exact deadlin
   });
   assert.equal(result.request?.items[1]?.decidedAt, NOW.toISOString());
   assert.equal(result.request?.items[4]?.invalidReason, "responsibility_changed");
+});
+
+test("marks a pending request overdue at the exact deadline", async () => {
+  const item = candidate(uuid(1));
+  const harness = createHarness({
+    candidates: [item],
+    now: new Date("2026-08-10T12:00:00.000Z"),
+  });
+  harness.repository.aggregate = requestRecord([item], {
+    expiresAt: new Date("2026-08-10T12:00:00.000Z"),
+  });
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds: [item.itemId] },
+    ACTOR,
+  );
+
+  assert.equal(result.request?.status, "pending");
+  assert.equal(result.request?.overdue, true);
 });
 
 test("computes overdue using the time after the persisted aggregate is read", async () => {
@@ -1008,11 +1257,23 @@ class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
   transactions = 0;
   readonly idempotency = new MemoryIdempotencyRepository();
   private depth = 0;
+  readonly stageFour = {
+    audits: [] as unknown[],
+    notifications: [] as unknown[],
+    async listHistory() { return []; },
+    async listLocationHistory() { return []; },
+    async appendAudit(input: unknown) { this.audits.push(input); },
+    async createNotification(input: unknown) { this.notifications.push(input); },
+    async listNotifications() { return []; },
+    async countUnreadNotifications() { return 0; },
+    async markNotificationRead() { return false; },
+  };
   constructor(private readonly repository: TmcTransferRequestRepository) {}
   read<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
     return work({
       idempotency: this.idempotency,
       transferRequests: this.repository,
+      stageFour: this.stageFour,
     });
   }
   async transaction<Result>(work: (repositories: TmcOperationRepositories) => Promise<Result>) {
@@ -1030,6 +1291,7 @@ class MemoryUnitOfWork implements UnitOfWork<TmcOperationRepositories> {
       return await work({
         idempotency: this.idempotency,
         transferRequests: this.repository,
+        stageFour: this.stageFour,
       });
     } catch (error) {
       memory.insertedRequests.length = requestCount;
@@ -1137,7 +1399,7 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
     this.requestedCandidateIds.push([...itemIds]);
     return this.candidates;
   }
-  async findById() {
+  async findById(_id?: string) {
     this.calls.push("findById");
     this.findByIdCalls += 1;
     const aggregate = this.aggregate !== undefined ? this.aggregate : (
@@ -1192,6 +1454,23 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
       status: input.status,
       closedAt: input.closedAt,
       closedBy: operationUser(input.closedBy),
+      isAdministrativeDecision: input.isAdministrativeDecision,
+      administrativeReason: input.administrativeReason,
+      version: this.aggregate.version + 1,
+    });
+    return true;
+  }
+  async cancelRequest(input: CancelTmcTransferRequestRecord) {
+    if (!this.aggregate || this.aggregate.version !== input.expectedVersion || this.aggregate.status !== "pending") return false;
+    for (const item of this.aggregate.items) {
+      if (item.result === "pending") Object.assign(item, {
+        result: "cancelled", decidedAt: input.cancelledAt,
+        decidedBy: operationUser(input.cancelledBy), version: item.version + 1,
+      });
+    }
+    Object.assign(this.aggregate, {
+      status: "cancelled", closedAt: input.cancelledAt,
+      closedBy: operationUser(input.cancelledBy),
       isAdministrativeDecision: input.isAdministrativeDecision,
       administrativeReason: input.administrativeReason,
       version: this.aggregate.version + 1,

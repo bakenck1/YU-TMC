@@ -8,6 +8,7 @@ import { useAuth } from "./AuthProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import type { AuthRole } from "@/lib/security/authorization";
 import type { AppLanguage } from "@/lib/app-settings";
+import TmcNotifications from "@/components/TmcNotifications";
 
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
@@ -17,6 +18,7 @@ const SECTION_TITLES: Record<string, TranslationKey> = {
   "/tmc/receive": "tmc.operation.receive",
   "/tmc/issue": "tmc.operation.issue",
   "/tmc/transfer": "tmc.operation.transfer",
+  "/tmc/history": "tmc.history.title",
   "/inventory": "nav.objects",
   "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
@@ -71,6 +73,7 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
       </div>
 
       <div className="flex items-center gap-3">
+        {user ? <TmcNotifications compact /> : null}
         <label className="relative flex items-center">
           <span className="sr-only">{t("auth.language")}</span>
           <Languages className="pointer-events-none absolute left-2.5 h-4 w-4 text-zinc-400" />

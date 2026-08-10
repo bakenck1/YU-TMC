@@ -9,9 +9,12 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     category: item.itemType as InventoryItem["category"],
     brand: item.brand ?? undefined,
     model: item.model ?? undefined,
+    buildingId: item.room.buildingId,
     building: item.room.buildingName,
+    roomId: item.room.id,
     room: item.room.designation,
     location: `${item.room.buildingName} / ${item.room.designation}`,
+    responsibleId: item.responsible?.id,
     responsible: item.responsible?.name ?? "",
     status: item.status,
     photoColor: "#0ea5e9",
@@ -26,6 +29,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || item.name,
     quantity: item.quantity,
     price: item.unitPrice,
+    version: item.version,
   };
 }
 

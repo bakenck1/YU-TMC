@@ -506,6 +506,86 @@ test("closeRequest uses parent CAS and requires no pending children", async () =
   assert.match(source.calls[0]!.text, /not exists[\s\S]+result = 'pending'/i);
 });
 
+test("stage-four history keeps participant scope and every filter parameterized", async () => {
+  const source = new QueryQueue([{ rows: [] }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;
+  await repository.listHistory({
+    actorId: uuid(1), includeAll: false, status: "pending",
+    createdFrom: new Date("2026-08-01T00:00:00Z"),
+    createdTo: new Date("2026-08-10T00:00:00Z"),
+    buildingId: uuid(2), roomId: uuid(3), itemId: uuid(4),
+    overdue: true, now: new Date("2026-08-10T12:00:00Z"), limit: 50,
+    requestCursorCreatedAt: new Date("2026-08-09T12:00:00Z"), requestCursorId: uuid(8),
+  });
+  assert.match(source.calls[0]!.text, /initiator_id = \$1\s+or request\.recipient_id = \$1/i);
+  assert.match(source.calls[0]!.text, /current_responsible_id_at_request = \$1/i);
+  assert.match(
+    source.calls[0]!.text,
+    /request_item\.current_responsible_id_at_request = \$1/i,
+    "object filters must be tied to the same request item the snapshot participant may read",
+  );
+  assert.match(source.calls[0]!.text, /case[\s\S]+status_item\.current_responsible_id_at_request = \$1[\s\S]+status_item\.result = 'pending'/i);
+  assert.match(source.calls[0]!.text, /exists[\s\S]+request_item\.item_id = \$\d+[\s\S]+item\.room_id = \$\d+[\s\S]+room\.building_id = \$\d+/i);
+  assert.match(source.calls[0]!.text, /\(request\.created_at, request\.id\) < \(\$\d+, \$\d+\)/i);
+  assert.equal(source.calls[0]!.text.includes(uuid(2)), false);
+  assert.ok(source.calls[0]!.values?.includes(uuid(2)));
+});
+
+test("location history is scoped to responsibility at event time and preserves old/new values", async () => {
+  const occurredAt = new Date("2026-08-10T12:00:00Z");
+  const source = new QueryQueue([{ rows: [{
+    id: uuid(9), item_id: uuid(4), item_name: "Laptop", inventory_number: "INV-1",
+    actor_id: uuid(8), actor_name: "Admin", before_room_id: uuid(2),
+    before_location: "A / 101", after_room_id: uuid(3), after_location: "B / 202",
+    comment: "move", occurred_at: occurredAt,
+  }] }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;
+  const records = await repository.listLocationHistory({
+    actorId: uuid(1), includeAll: false, createdFrom: new Date("2026-08-01T00:00:00Z"),
+    roomId: uuid(2), buildingId: uuid(5), itemId: uuid(4), now: occurredAt, limit: 50,
+  });
+  assert.match(source.calls[0]!.text, /responsible_user_id = \$1[\s\S]+started_at <= audit\.occurred_at/i);
+  assert.match(source.calls[0]!.text, /before_values->>'roomId'[\s\S]+after_values->>'roomId'/i);
+  assert.equal(source.calls[0]!.text.includes(uuid(5)), false);
+  assert.deepEqual(records[0], {
+    id: uuid(9), itemId: uuid(4), itemName: "Laptop", inventoryNumber: "INV-1",
+    actorId: uuid(8), actorName: "Admin", beforeRoomId: uuid(2), beforeLocation: "A / 101",
+    afterRoomId: uuid(3), afterLocation: "B / 202", comment: "move", occurredAt,
+  });
+});
+
+test("stage-four direct notifications allocate a mailbox sequence before event and delivery", async () => {
+  const source = new QueryQueue([
+    { rows: [{ sequence: "7" }] }, { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 }, { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;
+  await repository.createNotification({
+    id: uuid(1), domainEventId: uuid(2), type: "tmc_transfer.requested",
+    actorId: uuid(3), requestId: uuid(4), itemId: null, requestRevision: 1,
+    recipientId: uuid(5), audience: "direct_user", safePayload: { itemCount: 1 },
+    occurredAt: new Date("2026-08-10T12:00:00Z"),
+  });
+  assert.equal(source.calls.length, 5);
+  assert.match(source.calls[0]!.text, /on conflict \(user_id\) where kind = 'direct_user'/i);
+  assert.match(source.calls[1]!.text, /subject_kind[\s\S]+'tmc_transfer_request'/i);
+  assert.deepEqual(source.calls[3]!.values?.slice(0, 3), [uuid(1), uuid(5), "7"]);
+  assert.match(source.calls[4]!.text, /tmc_web_push_outbox/i);
+});
+
+test("cancelRequest changes only pending children, uses parent CAS, and fences overdue push", async () => {
+  const source = new QueryQueue([{ rows: [], rowCount: 2 }, { rows: [], rowCount: 1 }, { rows: [], rowCount: 1 }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+  assert.equal(await repository.cancelRequest({
+    requestId: uuid(1), expectedVersion: 4, cancelledBy: uuid(2),
+    cancelledAt: new Date(), isAdministrativeDecision: false, administrativeReason: null,
+  }), true);
+  assert.match(source.calls[0]!.text, /result = 'cancelled'[\s\S]+result = 'pending'/i);
+  assert.match(source.calls[2]!.text, /tmc_transfer\.overdue[\s\S]+processed_at/i);
+  assert.match(source.calls[1]!.text, /version = \$2 and status = 'pending'/i);
+});
+
 function candidateRow(overrides: Record<string, unknown> = {}) {
   return {
     item_id: "11111111-1111-4111-8111-111111111111",

@@ -86,7 +86,7 @@ test("rejects non-item, unavailable, and unresolved QR responses explicitly", ()
   );
 });
 
-test("TMC operation shell uses QR-only scanning and sends each confirmed operation to its bounded API", () => {
+test("TMC operation shell uses barcode-only scanning and sends each confirmed operation to its bounded API", () => {
   const shell = readFileSync("components/TmcOperationShell.tsx", "utf8");
   const flow = readFileSync("components/TmcItemQrFlow.tsx", "utf8");
   const scanner = readFileSync("components/InventoryItemCodeScanner.tsx", "utf8");
@@ -94,15 +94,15 @@ test("TMC operation shell uses QR-only scanning and sends each confirmed operati
 
   assert.match(shell, /<TmcItemQrFlow operation=\{operation\}/);
   assert.match(flow, /InventoryItemCodeScanner/);
-  assert.match(flow, /mode="qr-only"/);
+  assert.doesNotMatch(flow, /mode="qr-only"|<QrCode/);
   assert.match(flow, /TmcItemQrResolverController/);
   assert.match(flow, /useEffect\(\(\) =>\s*installTmcQrResolverController/);
-  assert.match(resolver, /\/api\/inventory\/qr\/resolve\?value=\$\{encodeURIComponent\(normalized\)\}&kind=qr&target=item/);
+  assert.match(resolver, /\/api\/inventory\/qr\/resolve\?value=\$\{encodeURIComponent\(normalized\)\}&kind=barcode&target=item/);
   assert.match(resolver, /credentials: "same-origin"/);
   assert.match(resolver, /cache: "no-store"/);
   assert.match(resolver, /classifyTmcQrResolution/);
-  assert.match(scanner, /mode\?: "default" \| "qr-only"/);
-  assert.match(scanner, /qrOnly \? "tmc\.qr\.scannerHint" : "scanner\.itemHint"/);
+  assert.doesNotMatch(scanner, /qr-only|format === "qr_code"|<QrCode/);
+  assert.match(scanner, /format: "code_39"/);
   assert.match(scanner, /event\.key === "Escape"/);
   assert.match(scanner, /event\.key !== "Tab"/);
   assert.match(scanner, /max-h-\[100dvh\]/);
@@ -127,7 +127,7 @@ test("QR resolver coalesces duplicate scans and publishes one selected item", as
   const first = controller.resolve("  YUQ1:first  ");
   await controller.resolve("YUQ1:duplicate");
   assert.equal(requests.length, 1);
-  assert.match(requests[0].url, /value=YUQ1%3Afirst&kind=qr&target=item$/);
+  assert.match(requests[0].url, /value=YUQ1%3Afirst&kind=barcode&target=item$/);
 
   requests[0].resolve(okResponse(ACTIVE_ITEM));
   await first;
@@ -232,26 +232,26 @@ test("Strict Mode effect replay replaces a disposed QR resolver", async () => {
   secondCleanup();
 });
 
-test("QR flow copy is complete in RU, KK and EN", () => {
+test("barcode flow copy is complete in RU, KK and EN", () => {
   const expected = {
-    "tmc.qr.scan": ["Сканировать QR", "QR сканерлеу", "Scan QR"],
+    "tmc.qr.scan": ["Сканировать штрих-код", "Штрих-кодты сканерлеу", "Scan barcode"],
     "tmc.qr.scannerHint": [
-      "Наведите камеру на QR-код ТМЦ или введите код вручную.",
-      "Камераны ТМҚ QR-кодына бағыттаңыз немесе кодты қолмен енгізіңіз.",
-      "Point the camera at the item QR code or enter it manually.",
+      "Наведите камеру на штрих-код ТМЦ или введите его вручную.",
+      "Камераны ТМҚ штрих-кодына бағыттаңыз немесе оны қолмен енгізіңіз.",
+      "Point the camera at the inventory barcode or enter it manually.",
     ],
     "tmc.qr.scanAgain": ["Сканировать снова", "Қайта сканерлеу", "Scan again"],
     "tmc.qr.remove": ["Убрать ТМЦ", "ТМҚ-ны алып тастау", "Remove item"],
-    "tmc.qr.resolving": ["Проверяем QR…", "QR тексерілуде…", "Checking QR…"],
+    "tmc.qr.resolving": ["Проверяем штрих-код…", "Штрих-код тексерілуде…", "Checking barcode…"],
     "tmc.qr.invalidCode": [
-      "QR-код не зарегистрирован или больше не действует.",
-      "QR-код тіркелмеген немесе енді жарамсыз.",
-      "This QR code is not registered or is no longer valid.",
+      "Штрих-код не зарегистрирован или больше не действует.",
+      "Штрих-код тіркелмеген немесе енді жарамсыз.",
+      "This barcode is not registered or is no longer valid.",
     ],
     "tmc.qr.notItem": [
-      "Этот QR-код не относится к ТМЦ.",
-      "Бұл QR-код ТМҚ-ға тиесілі емес.",
-      "This QR code does not belong to an inventory item.",
+      "Этот штрих-код не относится к ТМЦ.",
+      "Бұл штрих-код ТМҚ-ға тиесілі емес.",
+      "This barcode does not belong to an inventory item.",
     ],
     "tmc.qr.itemUnavailable": [
       "Этот ТМЦ сейчас недоступен для операции.",
@@ -259,9 +259,9 @@ test("QR flow copy is complete in RU, KK and EN", () => {
       "This inventory item is currently unavailable for the operation.",
     ],
     "tmc.qr.requestFailed": [
-      "Не удалось проверить QR. Повторите попытку.",
-      "QR тексеру мүмкін болмады. Қайталап көріңіз.",
-      "Could not check the QR code. Try again.",
+      "Не удалось проверить штрих-код. Повторите попытку.",
+      "Штрих-кодты тексеру мүмкін болмады. Қайталап көріңіз.",
+      "Could not check the barcode. Try again.",
     ],
     "tmc.qr.noResponsible": [
       "Не закреплён",

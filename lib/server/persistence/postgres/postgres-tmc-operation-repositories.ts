@@ -4,6 +4,9 @@ import type { QueryResultRow } from "pg";
 
 import type {
   CloseTmcTransferRequestRecord,
+  CancelTmcTransferRequestRecord,
+  AppendTmcAuditRecord,
+  CreateTmcNotificationRecord,
   DecideTmcTransferRequestItemRecord,
   InsertedTmcTransferRequestItemRecord,
   InsertTmcTransferRequestItemRecord,
@@ -15,6 +18,10 @@ import type {
   TmcTransferRequestItemRecord,
   TmcTransferRequestRecord,
   TmcTransferRequestRepository,
+  TmcStageFourRepository,
+  TmcTransferHistoryQuery,
+  TmcNotificationRecord,
+  TmcLocationHistoryRecord,
   TmcTransferUserRecord,
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
@@ -30,6 +37,13 @@ const RESPONSIBILITY_PERIODS = '"yu_inventory"."responsibility_periods"';
 const LEGACY_TRANSFERS = '"yu_inventory"."transfers"';
 const REQUESTS = '"yu_inventory"."tmc_transfer_requests"';
 const REQUEST_ITEMS = '"yu_inventory"."tmc_transfer_request_items"';
+const AUDIT_RECORDS = '"yu_inventory"."audit_records"';
+const NOTIFICATION_MAILBOXES = '"yu_inventory"."notification_mailboxes"';
+const NOTIFICATION_EVENTS = '"yu_inventory"."notification_events"';
+const TMC_NOTIFICATIONS = '"yu_inventory"."tmc_operation_notifications"';
+const NOTIFICATION_DELIVERIES = '"yu_inventory"."notification_deliveries"';
+const NOTIFICATION_RECEIPTS = '"yu_inventory"."notification_receipts"';
+const WEB_PUSH_OUTBOX = '"yu_inventory"."tmc_web_push_outbox"';
 
 interface CandidateRow extends QueryResultRow {
   item_id: string;
@@ -157,6 +171,7 @@ export function createPostgresTmcOperationRepositories(
   return {
     idempotency: new PostgresIdempotencyRequestRepository(source),
     transferRequests: new PostgresTmcTransferRequestRepository(source),
+    stageFour: new PostgresTmcStageFourRepository(source),
   };
 }
 
@@ -375,6 +390,47 @@ class PostgresTmcTransferRequestRepository
     return (result.rowCount ?? 0) === 1;
   }
 
+  async cancelRequest(input: CancelTmcTransferRequestRecord): Promise<boolean> {
+    await this.source.query(
+      `update ${REQUEST_ITEMS}
+          set result = 'cancelled', invalid_reason = null,
+              decided_at = $2, decided_by = $3, version = version + 1
+        where request_id = $1 and result = 'pending'`,
+      [input.requestId, input.cancelledAt, input.cancelledBy],
+    );
+    const result = await this.source.query(
+      `update ${REQUESTS}
+          set status = 'cancelled', closed_at = $3, closed_by = $4,
+              is_administrative_decision = $5,
+              administrative_reason = $6, version = version + 1
+        where id = $1 and version = $2 and status = 'pending'`,
+      [
+        input.requestId,
+        input.expectedVersion,
+        input.cancelledAt,
+        input.cancelledBy,
+        input.isAdministrativeDecision,
+        input.administrativeReason,
+      ],
+    );
+    const cancelled = (result.rowCount ?? 0) === 1;
+    if (cancelled) {
+      await this.source.query(
+        `update ${WEB_PUSH_OUTBOX} outbox
+            set processed_at = $2, last_error_code = 'event_no_longer_deliverable',
+                locked_by = null, locked_until = null
+           from ${NOTIFICATION_EVENTS} event
+           join ${TMC_NOTIFICATIONS} notification on notification.notification_event_id = event.id
+          where outbox.notification_event_id = event.id
+            and notification.request_id = $1
+            and event.type = 'tmc_transfer.overdue'
+            and outbox.processed_at is null`,
+        [input.requestId, input.cancelledAt],
+      );
+    }
+    return cancelled;
+  }
+
   async insertRequest(input: InsertTmcTransferRequestRecord): Promise<void> {
     await this.source.query(
       `insert into ${REQUESTS}
@@ -493,6 +549,344 @@ class PostgresTmcTransferRequestRepository
     }
   }
 
+}
+
+class PostgresTmcStageFourRepository implements TmcStageFourRepository {
+  constructor(private readonly source: PostgresRepositorySource) {}
+
+  async listHistory(input: TmcTransferHistoryQuery) {
+    const values: unknown[] = [];
+    const bind = (value: unknown) => {
+      values.push(value);
+      return `$${values.length}`;
+    };
+    const actor = input.includeAll ? null : bind(input.actorId);
+    const effectiveStatus = input.includeAll
+      ? "request.status"
+      : `(case
+          when request.initiator_id = ${actor}
+            or request.recipient_id = ${actor}
+            then request.status
+          when exists (
+            select 1 from ${REQUEST_ITEMS} status_item
+             where status_item.request_id = request.id
+               and status_item.current_responsible_id_at_request = ${actor}
+               and status_item.result = 'pending'
+          ) then 'pending'
+          when exists (
+            select 1 from ${REQUEST_ITEMS} status_item
+             where status_item.request_id = request.id
+               and status_item.current_responsible_id_at_request = ${actor}
+               and status_item.result = 'accepted'
+          ) then 'accepted'
+          when not exists (
+            select 1 from ${REQUEST_ITEMS} status_item
+             where status_item.request_id = request.id
+               and status_item.current_responsible_id_at_request = ${actor}
+               and status_item.result <> 'cancelled'
+          ) then 'cancelled'
+          else 'rejected'
+        end)`;
+    const predicates = [
+      input.includeAll
+        ? "true"
+        : `(request.initiator_id = ${actor}
+            or request.recipient_id = ${actor}
+            or exists (
+              select 1 from ${REQUEST_ITEMS} participant_item
+              where participant_item.request_id = request.id
+                and participant_item.current_responsible_id_at_request = ${actor}
+            ))`,
+    ];
+    if (input.status) predicates.push(`${effectiveStatus} = ${bind(input.status)}`);
+    if (input.createdFrom) predicates.push(`request.created_at >= ${bind(input.createdFrom)}`);
+    if (input.createdTo) predicates.push(`request.created_at <= ${bind(input.createdTo)}`);
+    if (input.initiatorId) predicates.push(`request.initiator_id = ${bind(input.initiatorId)}`);
+    if (input.recipientId) predicates.push(`request.recipient_id = ${bind(input.recipientId)}`);
+    const itemPredicates: string[] = [];
+    if (input.itemId) itemPredicates.push(`request_item.item_id = ${bind(input.itemId)}`);
+    if (input.roomId) itemPredicates.push(`item.room_id = ${bind(input.roomId)}`);
+    if (input.buildingId) itemPredicates.push(`room.building_id = ${bind(input.buildingId)}`);
+    if (itemPredicates.length > 0) {
+      if (actor) {
+        itemPredicates.push(`(
+          request.initiator_id = ${actor}
+          or request.recipient_id = ${actor}
+          or request_item.current_responsible_id_at_request = ${actor}
+        )`);
+      }
+      predicates.push(`exists (
+        select 1 from ${REQUEST_ITEMS} request_item
+        join ${ITEMS} item on item.id = request_item.item_id
+        join ${ROOMS} room on room.id = item.room_id
+        where request_item.request_id = request.id and ${itemPredicates.join(" and ")}
+      )`);
+    }
+    if (input.overdue !== undefined) {
+      const overdue = `(${effectiveStatus} = 'pending' and request.expires_at <= ${bind(input.now)})`;
+      predicates.push(input.overdue ? overdue : `not ${overdue}`);
+    }
+    if (input.requestCursorCreatedAt && input.requestCursorId) {
+      const at = bind(input.requestCursorCreatedAt);
+      const id = bind(input.requestCursorId);
+      predicates.push(`(request.created_at, request.id) < (${at}, ${id})`);
+    }
+    const limit = bind(input.limit);
+    const result = await this.source.query<{ id: string } & QueryResultRow>(
+      `select request.id from ${REQUESTS} request
+        where ${predicates.join(" and ")}
+        order by request.created_at desc, request.id desc
+        limit ${limit}`,
+      values,
+    );
+    const requests = new PostgresTmcTransferRequestRepository(this.source);
+    const records: TmcTransferRequestRecord[] = [];
+    for (const row of result.rows) {
+      const record = await requests.findById(row.id);
+      if (record) records.push(record);
+    }
+    return records;
+  }
+
+  async listLocationHistory(input: TmcTransferHistoryQuery): Promise<TmcLocationHistoryRecord[]> {
+    if (input.status || input.initiatorId || input.recipientId || input.overdue !== undefined) {
+      return [];
+    }
+    const values: unknown[] = [];
+    const bind = (value: unknown) => {
+      values.push(value);
+      return `$${values.length}`;
+    };
+    const predicates = [
+      `audit.subject_kind = 'item'`,
+      `audit.action = 'item.location_changed'`,
+      input.includeAll
+        ? "true"
+        : `exists (
+            select 1 from ${RESPONSIBILITY_PERIODS} participant_period
+             where participant_period.item_id = audit.subject_id
+               and participant_period.responsible_user_id = ${bind(input.actorId)}
+               and participant_period.started_at <= audit.occurred_at
+               and (participant_period.ended_at is null or participant_period.ended_at >= audit.occurred_at)
+          )`,
+    ];
+    if (input.createdFrom) predicates.push(`audit.occurred_at >= ${bind(input.createdFrom)}`);
+    if (input.createdTo) predicates.push(`audit.occurred_at <= ${bind(input.createdTo)}`);
+    if (input.itemId) predicates.push(`audit.subject_id = ${bind(input.itemId)}`);
+    if (input.roomId) {
+      const room = bind(input.roomId);
+      predicates.push(`(audit.before_values->>'roomId' = ${room}::text or audit.after_values->>'roomId' = ${room}::text)`);
+    }
+    if (input.buildingId) {
+      const building = bind(input.buildingId);
+      predicates.push(`exists (
+        select 1 from ${ROOMS} history_room
+         where history_room.building_id = ${building}
+           and history_room.id::text in (audit.before_values->>'roomId', audit.after_values->>'roomId')
+      )`);
+    }
+    if (input.locationCursorOccurredAt && input.locationCursorId) {
+      const at = bind(input.locationCursorOccurredAt);
+      const id = bind(input.locationCursorId);
+      predicates.push(`(audit.occurred_at, audit.id) < (${at}, ${id})`);
+    }
+    const limit = bind(input.limit);
+    const result = await this.source.query<{
+      id: string; item_id: string; item_name: string; inventory_number: string;
+      actor_id: string | null; actor_name: string | null;
+      before_room_id: string; before_location: string;
+      after_room_id: string; after_location: string; comment: string | null;
+      occurred_at: Date;
+    } & QueryResultRow>(
+      `select audit.id, audit.subject_id as item_id, item.name as item_name,
+              item.inventory_number, audit.actor_id, actor.full_name as actor_name,
+              audit.before_values->>'roomId' as before_room_id,
+              audit.before_values->>'location' as before_location,
+              audit.after_values->>'roomId' as after_room_id,
+              audit.after_values->>'location' as after_location,
+              audit.after_values->>'comment' as comment, audit.occurred_at
+         from ${AUDIT_RECORDS} audit
+         join ${ITEMS} item on item.id = audit.subject_id
+         left join ${USERS} actor on actor.id = audit.actor_id
+        where ${predicates.join(" and ")}
+        order by audit.occurred_at desc, audit.id desc
+        limit ${limit}`,
+      values,
+    );
+    return result.rows.map((row) => ({
+      id: row.id, itemId: row.item_id, itemName: row.item_name,
+      inventoryNumber: row.inventory_number, actorId: row.actor_id,
+      actorName: row.actor_name, beforeRoomId: row.before_room_id,
+      beforeLocation: row.before_location, afterRoomId: row.after_room_id,
+      afterLocation: row.after_location, comment: row.comment,
+      occurredAt: row.occurred_at,
+    }));
+  }
+
+  async appendAudit(input: AppendTmcAuditRecord): Promise<void> {
+    await this.source.query(
+      `insert into ${AUDIT_RECORDS}
+         (id, domain_event_id, actor_id, actor_role_snapshot, subject_kind,
+          subject_id, subject_revision, action, before_values, after_values,
+          occurred_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [input.id, input.domainEventId, input.actorId, input.actorRole,
+       input.subjectKind, input.subjectId, input.subjectRevision, input.action,
+       input.beforeValues, input.afterValues, input.occurredAt],
+    );
+  }
+
+  async createNotification(input: CreateTmcNotificationRecord): Promise<void> {
+    const mailboxId = input.domainEventId;
+    const mailbox = input.audience === "direct_user"
+      ? await this.source.query<{ sequence: string } & QueryResultRow>(
+          `insert into ${NOTIFICATION_MAILBOXES} (id, kind, user_id, next_sequence)
+           values ($1, 'direct_user', $2, 2)
+           on conflict (user_id) where kind = 'direct_user'
+           do update set next_sequence = ${NOTIFICATION_MAILBOXES}.next_sequence + 1
+           returning (next_sequence - 1)::text as sequence`,
+          [mailboxId, input.recipientId],
+        )
+      : await this.source.query<{ sequence: string } & QueryResultRow>(
+          `insert into ${NOTIFICATION_MAILBOXES} (id, kind, user_id, next_sequence)
+           values ($1, 'admin_queue', null, 2)
+           on conflict (kind) where kind = 'admin_queue'
+           do update set next_sequence = ${NOTIFICATION_MAILBOXES}.next_sequence + 1
+           returning (next_sequence - 1)::text as sequence`,
+          [mailboxId],
+        );
+    const sequence = mailbox.rows[0]?.sequence;
+    if (!sequence) throw new Error("tmc_notification_mailbox_sequence_missing");
+    await this.source.query(
+      `insert into ${NOTIFICATION_EVENTS}
+         (id, domain_event_id, type, actor_id, subject_kind, subject_id,
+          subject_revision, audience_kind, safe_payload, occurred_at,
+          admin_queue_sequence)
+       values ($1,$2,$3,$4,'tmc_transfer_request',$5,$6,$7,$8,$9,$10)`,
+      [input.id, input.domainEventId, input.type, input.actorId, input.requestId,
+       input.requestRevision, input.audience, input.safePayload, input.occurredAt,
+       input.audience === "admin_queue" ? sequence : null],
+    );
+    await this.source.query(
+      `insert into ${TMC_NOTIFICATIONS}
+         (notification_event_id, request_id, item_id, created_at)
+       values ($1,$2,$3,$4)`,
+      [input.id, input.requestId, input.itemId, input.occurredAt],
+    );
+    if (input.audience === "direct_user") {
+      if (!input.recipientId) throw new Error("tmc_notification_recipient_missing");
+      await this.source.query(
+        `insert into ${NOTIFICATION_DELIVERIES}
+           (event_id, recipient_id, mailbox_sequence, created_at)
+         values ($1,$2,$3,$4)`,
+        [input.id, input.recipientId, sequence, input.occurredAt],
+      );
+    }
+    await this.source.query(
+      `insert into ${WEB_PUSH_OUTBOX}
+         (notification_event_id, available_at, created_at)
+       values ($1,$2,$3)
+       on conflict (notification_event_id) do nothing`,
+      [input.id, input.occurredAt, input.occurredAt],
+    );
+  }
+
+  async listNotifications(input: { actorId: string; includeAdminQueue: boolean; now: Date; limit: number }) {
+    const result = await this.source.query<NotificationRow>(notificationFeedSql(""), [
+      input.actorId, input.includeAdminQueue, input.now, input.limit,
+    ]);
+    return result.rows.map(mapNotification);
+  }
+
+  async countUnreadNotifications(input: { actorId: string; includeAdminQueue: boolean; now: Date }) {
+    const result = await this.source.query<{ count: string } & QueryResultRow>(
+      `select count(*)::text as count from (${notificationFeedSql("and feed.read_at is null", false)}) unread`,
+      [input.actorId, input.includeAdminQueue, input.now],
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  async markNotificationRead(input: { notificationId: string; actorId: string; includeAdminQueue: boolean; readAt: Date }) {
+    const direct = await this.source.query(
+      `update ${NOTIFICATION_DELIVERIES} delivery
+          set read_at = coalesce(delivery.read_at, $3)
+         from ${NOTIFICATION_EVENTS} event
+         join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+         join ${REQUESTS} request on request.id = tmc.request_id
+        where delivery.event_id = $1 and delivery.recipient_id = $2
+          and event.id = delivery.event_id and event.occurred_at <= $3
+          and (event.type <> 'tmc_transfer.overdue'
+               or (request.status = 'pending' and request.expires_at <= $3))`,
+      [input.notificationId, input.actorId, input.readAt],
+    );
+    if ((direct.rowCount ?? 0) > 0) return true;
+    if (!input.includeAdminQueue) return false;
+    const admin = await this.source.query(
+      `insert into ${NOTIFICATION_RECEIPTS} (event_id, user_id, read_at)
+       select event.id, $2, $3 from ${NOTIFICATION_EVENTS} event
+       join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+       join ${REQUESTS} request on request.id = tmc.request_id
+       where event.id = $1 and event.audience_kind = 'admin_queue'
+         and event.occurred_at <= $3
+         and (event.type <> 'tmc_transfer.overdue'
+              or (request.status = 'pending' and request.expires_at <= $3))
+       on conflict (event_id, user_id) do update
+         set read_at = ${NOTIFICATION_RECEIPTS}.read_at
+       returning event_id`,
+      [input.notificationId, input.actorId, input.readAt],
+    );
+    return (admin.rowCount ?? 0) > 0;
+  }
+}
+
+interface NotificationRow extends QueryResultRow {
+  id: string;
+  type: TmcNotificationRecord["type"];
+  request_id: string;
+  item_id: string | null;
+  safe_payload: Record<string, string | number | boolean | null>;
+  occurred_at: Date;
+  read_at: Date | null;
+}
+
+function notificationFeedSql(extraPredicate: string, includeLimit = true) {
+  return `select feed.* from (
+    select event.id, event.type, tmc.request_id, tmc.item_id,
+           event.safe_payload, event.occurred_at, delivery.read_at
+      from ${NOTIFICATION_EVENTS} event
+      join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+      join ${NOTIFICATION_DELIVERIES} delivery on delivery.event_id = event.id
+      join ${REQUESTS} request on request.id = tmc.request_id
+     where delivery.recipient_id = $1 and event.occurred_at <= $3
+       and (event.type <> 'tmc_transfer.overdue'
+            or (request.status = 'pending' and request.expires_at <= $3))
+    union all
+    select event.id, event.type, tmc.request_id, tmc.item_id,
+           event.safe_payload, event.occurred_at, receipt.read_at
+      from ${NOTIFICATION_EVENTS} event
+      join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+      join ${REQUESTS} request on request.id = tmc.request_id
+      left join ${NOTIFICATION_RECEIPTS} receipt
+        on receipt.event_id = event.id and receipt.user_id = $1
+     where $2::boolean and event.audience_kind = 'admin_queue'
+       and event.occurred_at <= $3
+       and (event.type <> 'tmc_transfer.overdue'
+            or (request.status = 'pending' and request.expires_at <= $3))
+  ) feed where true ${extraPredicate}
+  order by feed.occurred_at desc, feed.id desc
+  ${includeLimit ? "limit $4" : ""}`;
+}
+
+function mapNotification(row: NotificationRow): TmcNotificationRecord {
+  return {
+    id: row.id,
+    type: row.type,
+    requestId: row.request_id,
+    itemId: row.item_id,
+    safePayload: row.safe_payload,
+    occurredAt: new Date(row.occurred_at),
+    readAt: optionalDate(row.read_at),
+  };
 }
 
 function atomicInsertProblem(

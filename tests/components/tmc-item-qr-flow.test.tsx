@@ -33,7 +33,7 @@ describe("TmcItemQrFlow", () => {
     expect(screen.getByRole("status").textContent).toContain("tmc.qr.resolving");
     await screen.findByRole("heading", { name: "Laptop" });
     expect(fetch).toHaveBeenCalledWith(
-      "/api/inventory/qr/resolve?value=qr-1&kind=qr&target=item",
+      "/api/inventory/qr/resolve?value=qr-1&kind=barcode&target=item",
       expect.objectContaining({ credentials: "same-origin", cache: "no-store" }),
     );
     expect(screen.getByTestId("recipient-picker")).not.toBeNull();
@@ -53,6 +53,21 @@ describe("TmcItemQrFlow", () => {
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "tmc.qr.scanAgain" }));
     expect(screen.getByTestId("scanner")).not.toBeNull();
+  });
+
+  it("shows the user's own-item list immediately after the issue scanner is closed", async () => {
+    render(
+      <TmcItemQrFlow
+        operation={TMC_OPERATION_BY_ID.issue}
+        fallback={<div>owned-items-list</div>}
+      />,
+    );
+    expect(screen.queryByText("owned-items-list")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "close scanner" }));
+
+    expect(screen.getByText("owned-items-list")).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "tmc.qr.scan" })));
   });
 
   it("submits a free-item acceptance or a one-item transfer request only after the selected item is confirmed", async () => {

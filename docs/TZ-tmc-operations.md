@@ -346,22 +346,31 @@ TDD обязателен для:
 
 ### Этап 3 — компьютерный сценарий
 
-- верхняя панель выбранных строк;
-- массовое перемещение ответственности;
-- admin-only изменение локации;
-- обработка проблемных позиций;
-- адаптивная таблица и модальные формы.
+- [x] верхняя панель выбранных строк;
+- [x] массовое перемещение ответственности;
+- [x] admin-only изменение локации;
+- [x] обработка проблемных позиций;
+- [x] адаптивная таблица и модальные формы.
 
 ### Этап 4 — история, уведомления и качество
 
-- фильтры истории;
-- unread badge;
-- просроченные заявки;
-- аудит;
-- локализация RU/KZ/EN;
-- security tests;
-- PostgreSQL integration tests;
-- ручная проверка Android/iOS и desktop.
+- [x] фильтры истории;
+- [x] unread badge;
+- [x] просроченные заявки без мутаций в GET;
+- [x] append-only аудит заявки и каждой позиции;
+- [x] локализация RU/KZ/EN;
+- [x] security tests: BOLA/BFLA, CSRF boundary, parameter pollution, replay, лимиты;
+- [x] PostgreSQL integration tests: миграции, triggers, транзакции, CAS, mailbox/read receipt;
+- [ ] ручная проверка на физических Android/iOS и desktop-браузерах перед production rollout.
+
+Production-ворота и результаты security review зафиксированы в
+[`security-audit-2026-08-10.md`](./security-audit-2026-08-10.md). До закрытия P0
+из аудита выпуск остаётся NO-GO.
+
+TDD этапа 4 выполнен отдельными циклами Red → Green → Refactor для истории,
+уведомлений и отмены. Локальный Windows PostgreSQL runner изолирует discovery от
+служебных worktree и запускает native binaries из ASCII-only временного пути,
+чтобы кириллический путь репозитория не повреждал UTF-8 bootstrap.
 
 ## 11. Definition of Done
 

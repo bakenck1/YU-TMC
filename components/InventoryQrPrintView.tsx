@@ -4,16 +4,21 @@ import { Download, Printer } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import { translateCampusBuilding } from "@/lib/i18n";
+import type {
+  InventoryQrPrintItem,
+  InventoryQrPrintKind,
+} from "@/lib/inventory-qr-print";
 
 export default function InventoryQrPrintView({
   item,
   kind,
+  canShowQr,
 }: {
-  item: InventoryItemDto;
-  kind: "barcode" | "qr";
+  item: InventoryQrPrintItem;
+  kind: InventoryQrPrintKind;
+  canShowQr: boolean;
 }) {
   const { language, t } = useAppSettings();
   const codeUrl = `/api/inventory/items/${item.id}/qr?kind=${kind}&format=svg`;
@@ -34,12 +39,14 @@ export default function InventoryQrPrintView({
         >
           <Download className="h-4 w-4" /> {t("itemDetails.download")} {isBarcode ? "SVG" : "PNG"}
         </a>
-        <Link
-          href={`/items/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm"
-        >
-          {isBarcode ? t("print.showQr") : t("print.showBarcode")}
-        </Link>
+        {!isBarcode || canShowQr ? (
+          <Link
+            href={`/items/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
+            className="rounded-lg border border-black/10 px-4 py-2 text-sm"
+          >
+            {isBarcode ? t("print.showQr") : t("print.showBarcode")}
+          </Link>
+        ) : null}
         <Link
           href={`/items/${item.id}`}
           className="rounded-lg border border-black/10 px-4 py-2 text-sm"
@@ -84,7 +91,7 @@ export default function InventoryQrPrintView({
             </div>
           </dl>
           <p className="mt-5 break-all font-mono text-[10px] text-zinc-500">
-            {isBarcode ? item.inventoryNumber : item.qrCode}
+            {item.printableValue}
           </p>
         </div>
       </section>

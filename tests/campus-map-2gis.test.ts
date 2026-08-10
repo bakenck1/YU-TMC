@@ -92,6 +92,7 @@ test("keeps KGISE on the map as a named non-interactive landmark and removes it 
   assert.match(manager, /CAMPUS_INVENTORY_BUILDING_PRESETS\.map/);
   for (const path of [
     "../app/(protected)/inventory/page.tsx",
+    "../app/inventory/rooms/qr-print/page.tsx",
     "../app/(protected)/items/page.tsx",
     "../app/(protected)/items/[id]/page.tsx",
     "../app/(protected)/inventory/inspections/page.tsx",
@@ -109,7 +110,7 @@ test("keeps KGISE on the map as a named non-interactive landmark and removes it 
   );
 });
 
-test("renders one basketball and one football decorative field in the marked column", () => {
+test("renders one basketball and two football decorative fields in the marked column", () => {
   const source = readFileSync(
     new URL("../components/CampusMap.tsx", import.meta.url),
     "utf8",
@@ -117,16 +118,19 @@ test("renders one basketball and one football decorative field in the marked col
 
   assert.match(source, /const DECORATIVE_FIELDS: DecorativeField\[\] = \[/);
   assert.equal((source.match(/id: "basketball-[12]"/g) ?? []).length, 1);
-  assert.equal((source.match(/id: "football-[12]"/g) ?? []).length, 1);
+  assert.equal((source.match(/id: "football-[12]"/g) ?? []).length, 2);
   assert.match(source, /data-testid=\{`decorative-\$\{field\.id\}`\}/);
-  for (const id of ["basketball-1", "football-1"]) {
+  for (const id of ["basketball-1", "football-1", "football-2"]) {
     assert.match(source, new RegExp(`id: "${id}"`));
   }
-  assert.doesNotMatch(source, /id: "(?:basketball|football)-2"/);
-  assert.equal((source.match(/width: 150, height: 88/g) ?? []).length, 2);
+  assert.doesNotMatch(source, /id: "basketball-2"/);
+  assert.equal((source.match(/width: 150, height: 88/g) ?? []).length, 3);
+  assert.match(source, /id: "basketball-1"[\s\S]*?top: 255, width: 150, height: 88/);
+  assert.match(source, /id: "football-2"[\s\S]*?top: 349, width: 150, height: 88/);
+  assert.match(source, /id: "football-1"[\s\S]*?top: 443, width: 150, height: 88/);
   assert.match(source, /pointerEvents: "none"/);
   assert.match(source, /left: "67%"[\s\S]*?top: 255/);
-  assert.match(source, /left: "67%"[\s\S]*?top: 395/);
+  assert.match(source, /left: "67%"[\s\S]*?top: 443/);
   assert.ok(source.indexOf("DECORATIVE_FIELDS.map") < source.indexOf("BUILDINGS.map"));
   const fieldsBlock = source.slice(source.indexOf("const DECORATIVE_FIELDS"), source.indexOf("{BUILDINGS.map"));
   assert.doesNotMatch(fieldsBlock, /zIndex:\s*[1-9]/);

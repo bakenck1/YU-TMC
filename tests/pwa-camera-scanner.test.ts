@@ -7,6 +7,7 @@ import {
   startBarcodeScanner,
   type BarcodeDecoderStarter,
 } from "../lib/browser-barcode-scanner";
+import { translate } from "../lib/i18n";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -59,13 +60,14 @@ test("registers a network-only service worker because offline mode is out of sco
   assert.match(layout, /export const viewport: Viewport/);
 });
 
-test("uses ZXing camera decoding for Code 39 by default and optional QR", async () => {
-  const [scanner, inspections, itemScanner, roomScanner, packageJson] =
+test("uses Code 39 for every item scanner and reserves QR for rooms", async () => {
+  const [scanner, inspections, itemScanner, roomScanner, transfers, packageJson] =
     await Promise.all([
       source("lib/browser-barcode-scanner.ts"),
       source("components/InventoryInspectionsManager.tsx"),
       source("components/InventoryItemCodeScanner.tsx"),
       source("components/InventoryRoomQrScanner.tsx"),
+      source("components/InventoryTransfersManager.tsx"),
       source("package.json"),
     ]);
 
@@ -73,11 +75,18 @@ test("uses ZXing camera decoding for Code 39 by default and optional QR", async 
   assert.match(scanner, /BarcodeFormat\.CODE_39/);
   assert.match(scanner, /BarcodeFormat\.QR_CODE/);
   assert.match(scanner, /facingMode: \{ ideal: facingMode \}/);
-  assert.match(inspections, /useState<"code_39" \| "qr_code">\(\s*"code_39"/);
+  assert.match(inspections, /format: "code_39"/);
+  assert.match(inspections, /&kind=barcode/);
+  assert.doesNotMatch(inspections, /format: "qr_code"|<QrCode/);
   assert.match(inspections, /startBarcodeScanner\(\{/);
   assert.match(itemScanner, /startBarcodeScanner\(\{/);
+  assert.match(itemScanner, /format: "code_39"/);
+  assert.doesNotMatch(itemScanner, /format: "qr_code"|<QrCode|qr-only/);
   assert.match(roomScanner, /startBarcodeScanner\(\{/);
-  assert.match(roomScanner, /&target=room/);
+  assert.match(roomScanner, /format: "qr_code"/);
+  assert.match(roomScanner, /&kind=qr&target=room/);
+  assert.match(transfers, /&kind=barcode/);
+  assert.doesNotMatch(transfers, /kind=auto|kind=qr|<QrCode/);
   assert.match(
     roomScanner,
     /function stopCamera\(\)[\s\S]*?setCameraState\("idle"\)/,
@@ -87,6 +96,15 @@ test("uses ZXing camera decoding for Code 39 by default and optional QR", async 
   ).dependencies;
   assert.equal(dependencies?.["@zxing/browser"], "^0.2.1");
   assert.equal(dependencies?.["@zxing/library"], "^0.23.0");
+});
+
+test("labels the inventory scanner as barcode scanning in every language", () => {
+  assert.equal(translate("ru", "createItem.scan"), "Сканировать штрих-код");
+  assert.equal(translate("ru", "scanner.itemTitle"), "Сканировать штрих-код");
+  assert.equal(translate("kk", "createItem.scan"), "Штрих-кодты сканерлеу");
+  assert.equal(translate("kk", "scanner.itemTitle"), "Штрих-кодты сканерлеу");
+  assert.equal(translate("en", "createItem.scan"), "Scan barcode");
+  assert.equal(translate("en", "scanner.itemTitle"), "Scan barcode");
 });
 
 test("camera decoding is one-shot and cleanup is idempotent", async () => {

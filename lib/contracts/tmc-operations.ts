@@ -153,6 +153,68 @@ export interface TmcTransferItemDecision {
   decision: "accept" | "reject";
 }
 
+export interface CancelTmcTransferRequestInput {
+  requestVersion: number;
+  administrativeReason?: string | null;
+}
+
+export interface TmcTransferHistoryFilters {
+  status?: TmcTransferRequestStatus;
+  createdFrom?: string;
+  createdTo?: string;
+  initiatorId?: string;
+  recipientId?: string;
+  buildingId?: string;
+  roomId?: string;
+  itemId?: string;
+  overdue?: boolean;
+  limit?: number;
+  requestCursor?: string;
+  locationCursor?: string;
+}
+
+export interface TmcTransferHistoryDto {
+  requests: TmcTransferRequestDto[];
+  locationChanges: TmcLocationHistoryDto[];
+  nextRequestCursor: string | null;
+  nextLocationCursor: string | null;
+}
+
+export interface TmcLocationHistoryDto {
+  id: string;
+  itemId: string;
+  itemName: string;
+  inventoryNumber: string;
+  actorId: string | null;
+  actorName: string | null;
+  beforeRoomId: string;
+  beforeLocation: string;
+  afterRoomId: string;
+  afterLocation: string;
+  comment: string | null;
+  occurredAt: string;
+}
+
+export interface TmcNotificationDto {
+  id: string;
+  type:
+    | "tmc_transfer.requested"
+    | "tmc_transfer.completed"
+    | "tmc_transfer.cancelled"
+    | "tmc_transfer.problem"
+    | "tmc_transfer.overdue";
+  requestId: string;
+  itemId: string | null;
+  safePayload: Record<string, string | number | boolean | null>;
+  occurredAt: string;
+  readAt: string | null;
+}
+
+export interface TmcNotificationFeedDto {
+  notifications: TmcNotificationDto[];
+  unreadCount: number;
+}
+
 export interface TmcOperationItemReference {
   itemId: string;
   itemVersion: number;

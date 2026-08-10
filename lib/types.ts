@@ -15,9 +15,12 @@ export interface InventoryItem {
   category: ItemCategory;
   brand?: string;
   model?: string;
+  buildingId?: string;
   building?: string;
+  roomId?: string;
   room?: string;
   location: string;
+  responsibleId?: string;
   responsible: string;
   status: ItemStatus;
   photoColor: string;
@@ -33,6 +36,7 @@ export interface InventoryItem {
   price?: number;
   displayStatus?: string;
   photo?: string;
+  version?: number;
 }
 
 export interface Room {

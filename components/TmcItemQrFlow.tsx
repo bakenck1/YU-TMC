@@ -1,7 +1,7 @@
 "use client";
 
-import { MapPin, QrCode, RotateCcw, UserRound, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Barcode, MapPin, RotateCcw, UserRound, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
@@ -30,8 +30,10 @@ const ERROR_KEYS = {
 
 export default function TmcItemQrFlow({
   operation,
+  fallback,
 }: {
   operation: TmcOperationNavigation;
+  fallback?: ReactNode;
 }) {
   const { t } = useAppSettings();
   const [scannerOpen, setScannerOpen] = useState(true);
@@ -233,7 +235,7 @@ export default function TmcItemQrFlow({
       {item ? (
         <article className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4" aria-live="polite">
           <div className="flex items-start gap-3">
-            <QrCode className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
+            <Barcode className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-zinc-900">{item.title}</h3>
               {item.inventoryNumber ? <p className="mt-1 text-sm text-zinc-600">{item.inventoryNumber}</p> : null}
@@ -300,15 +302,17 @@ export default function TmcItemQrFlow({
       ) : null}
 
       {flowState.status === "idle" && !scannerOpen ? (
-        <button ref={scanButtonRef} type="button" onClick={() => setScannerOpen(true)} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark">
-          <QrCode className="h-4 w-4" aria-hidden="true" />
-          {t("tmc.qr.scan")}
-        </button>
+        <>
+          <button ref={scanButtonRef} type="button" onClick={() => setScannerOpen(true)} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark">
+            <Barcode className="h-4 w-4" aria-hidden="true" />
+            {t("tmc.qr.scan")}
+          </button>
+          {fallback}
+        </>
       ) : null}
 
       {scannerOpen ? (
         <InventoryItemCodeScanner
-          mode="qr-only"
           onClose={() => setScannerOpen(false)}
           onCodeSelected={(value) => void resolveCode(value)}
         />

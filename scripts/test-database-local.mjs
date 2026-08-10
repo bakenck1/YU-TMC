@@ -21,7 +21,18 @@ const runtime = "yu_inventory_test_runtime";
 const database = "yu_inventory_test";
 const migratorPassword = randomBytes(24).toString("hex");
 const runtimePassword = randomBytes(24).toString("hex");
-const binaryDirectory = path.dirname(initdb);
+const packagedNativeDirectory = path.dirname(path.dirname(initdb));
+const localNativeDirectory = path.join(work, "native");
+const copyResult = spawnSync("robocopy.exe", [
+  packagedNativeDirectory, localNativeDirectory, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP",
+], { stdio: "inherit", windowsHide: true });
+if (copyResult.error) throw copyResult.error;
+if ((copyResult.status ?? 16) > 7) {
+  throw new Error(`robocopy.exe exited with code ${copyResult.status ?? 16}`);
+}
+const binaryDirectory = path.join(localNativeDirectory, "bin");
+const localInitdb = path.join(binaryDirectory, path.basename(initdb));
+const localPgCtl = path.join(binaryDirectory, path.basename(pg_ctl));
 const processEnvironment = {
   ...process.env,
   LC_MESSAGES: "C",
@@ -32,7 +43,7 @@ let started = false;
 try {
   mkdirSync(data, { recursive: true });
   writeFileSync(passwordFile, `${migratorPassword}\n`, { mode: 0o600 });
-  run(initdb, [
+  run(localInitdb, [
     `--pgdata=${data}`,
     "--auth=scram-sha-256",
     `--username=${migrator}`,
@@ -41,7 +52,7 @@ try {
     "--locale=C",
   ]);
   rmSync(passwordFile, { force: true });
-  run(pg_ctl, ["-D", data, "-o", `-h 127.0.0.1 -p ${port}`, "-w", "start"]);
+  run(localPgCtl, ["-D", data, "-o", `-h 127.0.0.1 -p ${port}`, "-w", "start"]);
   started = true;
 
   const adminUrl = `postgresql://${migrator}:${migratorPassword}@127.0.0.1:${port}/postgres`;
@@ -79,18 +90,25 @@ try {
       path.join(root, "node_modules/vitest/vitest.mjs"),
       "run",
       databaseTest,
+      "--exclude",
+      "**/.claude/**",
+      "--exclude",
+      "**/.agents/**",
     ], testEnvironment);
   }
 } finally {
   if (started) {
-    run(pg_ctl, ["-D", data, "stop", "-m", "fast", "-w"], processEnvironment, false);
+    run(localPgCtl, ["-D", data, "stop", "-m", "fast", "-w"], processEnvironment, false);
   }
   rmSync(work, { recursive: true, force: true });
 }
 
 function run(command, args, environment = processEnvironment, fail = true) {
   const result = spawnSync(command, args, {
-    cwd: root,
+    // PostgreSQL's Windows launcher re-encodes its working directory while
+    // dropping privileges. Keep it on an ASCII-only temporary path so a
+    // Cyrillic repository directory cannot corrupt the UTF-8 bootstrap SQL.
+    cwd: command === process.execPath ? root : work,
     env: environment,
     stdio: "inherit",
     windowsHide: true,

@@ -14,6 +14,11 @@ are present, startup rejects configurations that resolve to the same host, port
 and database even if the usernames differ. Every target also has a stable,
 non-secret logical identity (`DATABASE_DEPLOYMENT_ID` or
 `TEST_DATABASE_DEPLOYMENT_ID`); test and non-test identities must differ.
+Application runtimes normally derive the database target from `NODE_ENV`. A
+standalone Next.js server always uses production optimizations, so a local
+container that connects to the development database must explicitly set
+`DATABASE_TARGET=development`; production deployments should leave it unset or
+set it to `production`.
 
 Migration commands always require an explicit target. Development may reuse
 its runtime role locally. Tests and production require

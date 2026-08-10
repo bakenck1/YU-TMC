@@ -112,6 +112,51 @@ describe("TmcTransferRequestCard", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("offers an explicit reject action and rejects every pending position", async () => {
+    render(<TmcTransferRequestCard request={request()} canDecide showOverdue={false} requiresAdministrativeReason={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.request.rejectAll" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const init = vi.mocked(fetch).mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(String(init.body)).decisions.map((decision: { decision: string }) => decision.decision)).toEqual(["reject", "reject"]);
+  });
+
+  it("uses the separate administrator cancellation policy for another initiator", async () => {
+    vi.stubGlobal("prompt", vi.fn(() => " Security override "));
+    render(<TmcTransferRequestCard
+      request={request()}
+      canDecide
+      canCancel
+      showOverdue={false}
+      requiresAdministrativeReason={false}
+      requiresCancellationReason
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.request.cancel" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/cancel");
+    expect(JSON.parse(String(init?.body))).toEqual({ requestVersion: 1, administrativeReason: " Security override " });
+  });
+
+  it("retains the cancellation idempotency key when the response is lost", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockRejectedValueOnce(new TypeError("network_lost"))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ request: acceptedRequest() }) }));
+    const randomUUID = vi.fn(() => "persistent-cancel");
+    vi.stubGlobal("crypto", { randomUUID });
+    render(<TmcTransferRequestCard request={request()} canDecide={false} canCancel showOverdue={false} requiresAdministrativeReason={false} />);
+    const cancel = screen.getByRole("button", { name: "tmc.request.cancel" });
+    fireEvent.click(cancel);
+    await screen.findByRole("alert");
+    fireEvent.click(cancel);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const firstHeaders = (vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).headers;
+    const secondHeaders = (vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit).headers;
+    expect(firstHeaders).toMatchObject({ "idempotency-key": "tmc-cancel:persistent-cancel" });
+    expect(secondHeaders).toEqual(firstHeaders);
+    expect(randomUUID).toHaveBeenCalledTimes(1);
+  });
+
   it("submits only pending rows and retains the logical idempotency attempt after an uncertain server failure", async () => {
     const mixed = request();
     mixed.items[1] = terminalItem(

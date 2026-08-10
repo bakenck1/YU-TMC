@@ -87,6 +87,9 @@ export function databaseTargetFromNodeEnv(
 export function applicationDatabaseTarget(
   env: Environment = process.env,
 ): DatabaseTarget {
+  const configuredTarget = env.DATABASE_TARGET?.trim();
+  if (configuredTarget) return parseDatabaseTarget(configuredTarget);
+
   const nodeTarget = databaseTargetFromNodeEnv(env.NODE_ENV);
   if (
     nodeTarget === "production" &&

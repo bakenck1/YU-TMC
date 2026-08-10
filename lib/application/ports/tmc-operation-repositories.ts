@@ -6,6 +6,7 @@ import type {
 import type { TmcOperationProblemCode } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 import type { IdempotencyRequestRepository } from "@/lib/application/ports/inventory-concurrency-repositories";
+import type { NotificationEventType } from "@/lib/contracts/inventory-domain";
 
 export interface TmcOperationUserRecord {
   id: string;
@@ -142,6 +143,112 @@ export interface CloseTmcTransferRequestRecord {
   administrativeReason: string | null;
 }
 
+export interface CancelTmcTransferRequestRecord {
+  requestId: string;
+  expectedVersion: number;
+  cancelledBy: string;
+  cancelledAt: Date;
+  isAdministrativeDecision: boolean;
+  administrativeReason: string | null;
+}
+
+export interface TmcTransferHistoryQuery {
+  actorId: string;
+  includeAll: boolean;
+  status?: TmcTransferRequestStatus;
+  createdFrom?: Date;
+  createdTo?: Date;
+  initiatorId?: string;
+  recipientId?: string;
+  buildingId?: string;
+  roomId?: string;
+  itemId?: string;
+  overdue?: boolean;
+  now: Date;
+  limit: number;
+  requestCursorCreatedAt?: Date;
+  requestCursorId?: string;
+  locationCursorOccurredAt?: Date;
+  locationCursorId?: string;
+}
+
+export interface TmcLocationHistoryRecord {
+  id: string;
+  itemId: string;
+  itemName: string;
+  inventoryNumber: string;
+  actorId: string | null;
+  actorName: string | null;
+  beforeRoomId: string;
+  beforeLocation: string;
+  afterRoomId: string;
+  afterLocation: string;
+  comment: string | null;
+  occurredAt: Date;
+}
+
+export interface AppendTmcAuditRecord {
+  id: string;
+  domainEventId: string;
+  actorId: string;
+  actorRole: UserRole;
+  subjectKind: "tmc_transfer_request" | "item";
+  subjectId: string;
+  subjectRevision: number;
+  action: string;
+  beforeValues: Record<string, unknown> | null;
+  afterValues: Record<string, unknown> | null;
+  occurredAt: Date;
+}
+
+export interface CreateTmcNotificationRecord {
+  id: string;
+  domainEventId: string;
+  type: Extract<NotificationEventType, `tmc_transfer.${string}`>;
+  actorId: string | null;
+  requestId: string;
+  itemId: string | null;
+  requestRevision: number;
+  recipientId?: string;
+  audience: "direct_user" | "admin_queue";
+  safePayload: Record<string, string | number | boolean | null>;
+  occurredAt: Date;
+}
+
+export interface TmcNotificationRecord {
+  id: string;
+  type: Extract<NotificationEventType, `tmc_transfer.${string}`>;
+  requestId: string;
+  itemId: string | null;
+  safePayload: Record<string, string | number | boolean | null>;
+  occurredAt: Date;
+  readAt: Date | null;
+}
+
+export interface TmcStageFourRepository {
+  listHistory(input: TmcTransferHistoryQuery): Promise<TmcTransferRequestRecord[]>;
+  listLocationHistory(input: TmcTransferHistoryQuery): Promise<TmcLocationHistoryRecord[]>;
+  appendAudit(input: AppendTmcAuditRecord): Promise<void>;
+  createNotification(input: CreateTmcNotificationRecord): Promise<void>;
+  listNotifications(input: {
+    actorId: string;
+    includeAdminQueue: boolean;
+    now: Date;
+    limit: number;
+  }): Promise<TmcNotificationRecord[]>;
+  countUnreadNotifications(input: {
+    actorId: string;
+    includeAdminQueue: boolean;
+    now: Date;
+  }): Promise<number>;
+  markNotificationRead(input: {
+    notificationId: string;
+    actorId: string;
+    includeAdminQueue: boolean;
+    readAt: Date;
+  }): Promise<boolean>;
+}
+
 export type TmcOperationRepositoryConflictProblem = Extract<
   TmcOperationProblemCode,
   | "item_not_found"
@@ -180,6 +287,7 @@ export interface TmcTransferRequestRepository {
     input: DecideTmcTransferRequestItemRecord,
   ): Promise<"accepted" | "rejected" | "invalidated">;
   closeRequest(input: CloseTmcTransferRequestRecord): Promise<boolean>;
+  cancelRequest(input: CancelTmcTransferRequestRecord): Promise<boolean>;
   insertRequest(input: InsertTmcTransferRequestRecord): Promise<void>;
   insertRequestItem(
     input: InsertTmcTransferRequestItemRecord,
@@ -189,4 +297,5 @@ export interface TmcTransferRequestRepository {
 export interface TmcOperationRepositories {
   idempotency: IdempotencyRequestRepository;
   transferRequests: TmcTransferRequestRepository;
+  stageFour: TmcStageFourRepository;
 }

@@ -60,7 +60,7 @@ export class TmcItemQrResolverController {
 
     try {
       const response = await this.options.fetcher(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}&kind=qr&target=item`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}&kind=barcode&target=item`,
         {
           credentials: "same-origin",
           cache: "no-store",

@@ -5,6 +5,11 @@ export const TMC_ENTRY_POINT = {
   labelKey: "tmc.entryPoint",
 } as const satisfies { href: string; labelKey: TranslationKey };
 
+export const TMC_HISTORY = {
+  href: "/tmc/history",
+  labelKey: "tmc.history.title",
+} as const satisfies { href: string; labelKey: TranslationKey };
+
 export const TMC_OPERATION_BY_ID = {
   receive: {
     id: "receive",

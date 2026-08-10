@@ -51,6 +51,9 @@ export function permissionForPath(pathname: string): AppPermission | null {
 
 export function canAccessPath(role: unknown, pathname: string) {
   const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
+  if (matchesRoute(pathOnly, "/tmc/transfer")) {
+    return role === "admin" && hasPermission(role, "inventory.tmc.transfer_request.create");
+  }
   if (matchesRoute(pathOnly, "/inventory/inspections")) {
     // Inspections are an administrator-only workflow. In particular,
     // warehouse access is intentionally read-only for inventory and must not

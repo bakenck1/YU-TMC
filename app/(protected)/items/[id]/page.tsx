@@ -5,6 +5,7 @@ import ProblemReportButton from "@/components/ProblemReportButton";
 import { getApplicationServices } from "@/lib/server/application";
 import { hasPermission } from "@/lib/security/permissions";
 import { isInventoryBuildingName } from "@/lib/campus-directory";
+import { readHiddenPageResource } from "@/lib/server/security/hidden-page-resource";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 
 export default async function ItemPage({
@@ -21,7 +22,10 @@ export default async function ItemPage({
       role: user.role,
     };
     const services = getApplicationServices();
-    const item = await services.items.findItem(id, actor);
+    const item = await readHiddenPageResource(
+      () => services.items.findItem(id, actor),
+      notFound,
+    );
     if (!isInventoryBuildingName(item.room.buildingName)) notFound();
     const canManageProtected = hasPermission(
       user.role,
@@ -32,11 +36,15 @@ export default async function ItemPage({
       "inventory.item.manage_components",
     );
     const canComment = hasPermission(user.role, "inventory.item.comment");
-    const [components, operations, comments] = await Promise.all([
-      services.items.listComponents(id, actor),
-      services.items.listOperations(id, actor),
-      services.items.listComments(id, actor),
-    ]);
+    const [components, operations, comments] = await readHiddenPageResource(
+      () =>
+        Promise.all([
+          services.items.listComponents(id, actor),
+          services.items.listOperations(id, actor),
+          services.items.listComments(id, actor),
+        ]),
+      notFound,
+    );
     const buildings = canManageProtected
       ? (await services.locations.listBuildings(actor)).filter((building) =>
           isInventoryBuildingName(building.name),

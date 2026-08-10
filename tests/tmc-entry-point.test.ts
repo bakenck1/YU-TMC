@@ -43,30 +43,32 @@ test("TMC entry point has a dedicated route and localized label", () => {
   }
 });
 
-test("Dashboard renders exactly one dedicated TMC entry without changing global navigation", () => {
+test("global navigation exposes the TMC entry without duplicating it on Dashboard", () => {
   const dashboard = readFileSync("components/Dashboard.tsx", "utf8");
   const sidebar = readFileSync("components/Sidebar.tsx", "utf8");
   const mobile = readFileSync("components/MobileBottomNavigation.tsx", "utf8");
 
-  assert.match(dashboard, /href=\{TMC_ENTRY_POINT\.href\}/);
-  assert.match(dashboard, /t\(TMC_ENTRY_POINT\.labelKey\)/);
-  assert.equal(dashboard.match(/href=\{TMC_ENTRY_POINT\.href\}/g)?.length, 1);
+  assert.doesNotMatch(dashboard, /TMC_ENTRY_POINT/);
+  assert.doesNotMatch(dashboard, /href=\{TMC_ENTRY_POINT\.href\}/);
   assert.doesNotMatch(dashboard, /href=["']\/transfers["']/);
-  assert.doesNotMatch(sidebar, /["']\/tmc["']/);
+  assert.match(sidebar, /href: "\/tmc", labelKey: "tmc\.entryPoint"/);
   assert.doesNotMatch(mobile, /["']\/tmc["']/);
+  assert.doesNotMatch(sidebar, /href: "\/transfers", labelKey: "nav\.scanItem"/);
 });
 
-test("TMC entry route is protected and delegates localized presentation to its client shell", () => {
+test("TMC entry route loads participant-scoped requests and the user's own items", () => {
   const page = readFileSync("app/(protected)/tmc/page.tsx", "utf8");
   const landing = readFileSync("components/TmcLanding.tsx", "utf8");
   const header = readFileSync("components/Header.tsx", "utf8");
 
   assert.match(page, /requireAuthorizedPage\(TMC_ENTRY_POINT\.href\)/);
-  assert.match(page, /<TmcLanding/);
+  assert.match(page, /listHistory\(/);
+  assert.match(page, /recipientId: user\.userId/);
+  assert.match(page, /responsibleId === user\.userId/);
+  assert.match(page, /<TmcLanding[\s\S]*incomingRequests=/);
   assert.match(landing, /t\(TMC_ENTRY_POINT\.labelKey\)/);
   assert.match(header, /"\/tmc": "tmc\.entryPoint"/);
-  assert.doesNotMatch(landing, /QR|scanner/i);
-  assert.doesNotMatch(landing, /<button/);
+  assert.match(header, /<TmcNotifications/);
 });
 
 test("TMC landing exposes exactly the three specified operations", () => {
@@ -94,20 +96,21 @@ test("TMC landing exposes exactly the three specified operations", () => {
     assert.deepEqual(labels, expected[operation.id]);
     assert.doesNotMatch(labels[2], /[А-Яа-яЁё]/u);
     for (const role of ["employee", "warehouse", "admin"] as const) {
-      assert.equal(canAccessPath(role, operation.href), true);
+      assert.equal(
+        canAccessPath(role, operation.href),
+        operation.id === "transfer" ? role === "admin" : true,
+      );
     }
   }
 });
 
-test("TMC operation links have real protected, localized shell routes", () => {
+test("TMC operation routes remain available as protected deep links", () => {
   const landing = readFileSync("components/TmcLanding.tsx", "utf8");
   const shell = readFileSync("components/TmcOperationShell.tsx", "utf8");
   const header = readFileSync("components/Header.tsx", "utf8");
 
-  assert.match(landing, /TMC_OPERATIONS\.map\(\(operation\) =>/);
-  assert.match(landing, /href=\{operation\.href\}/);
-  assert.match(landing, /t\(operation\.labelKey\)/);
-  assert.doesNotMatch(landing, /<button|<form|fetch\(|QR|scanner|picker/i);
+  assert.match(landing, /role="tablist"/);
+  assert.match(landing, /TmcOperationShell/);
   assert.match(shell, /<TmcItemQrFlow operation=\{operation\}/);
   assert.doesNotMatch(shell, /<form|fetch\(|picker/i);
 

@@ -23,6 +23,9 @@ import {
   type InventoryColumnKey,
 } from "@/lib/inventory-columns";
 import InventoryExportButton from "@/components/InventoryExportButton";
+import TmcBulkActions from "@/components/TmcBulkActions";
+import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
+import type { UserRole } from "@/lib/contracts/users";
 
 function loadSearchHistory(storageKey: string) {
   try {
@@ -250,6 +253,7 @@ export default function ItemsTable({
   columnSettingsScope,
   excelDataset,
   headerActions,
+  bulkActions,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
@@ -258,6 +262,13 @@ export default function ItemsTable({
   columnSettingsScope?: string;
   excelDataset?: "items" | "decommissioned";
   headerActions?: React.ReactNode;
+  bulkActions?: {
+    actorUserId: string;
+    actorRole: UserRole;
+    buildings: BuildingDto[];
+    rooms: RoomDto[];
+    variant?: "transfer" | "issue";
+  };
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -354,6 +365,7 @@ export default function ItemsTable({
   const allVisibleSelected =
     pageItems.length > 0 && pageItems.every((item) => selected.has(item.id));
   const someVisibleSelected = pageItems.some((item) => selected.has(item.id));
+  const selectedItems = items.filter((item) => selected.has(item.id));
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -443,6 +455,18 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
+      {bulkActions && selectedItems.length > 0 ? (
+        <TmcBulkActions
+          items={selectedItems}
+          actorUserId={bulkActions.actorUserId}
+          actorRole={bulkActions.actorRole}
+          buildings={bulkActions.buildings}
+          rooms={bulkActions.rooms}
+          variant={bulkActions.variant}
+          onComplete={() => router.refresh()}
+          onClear={() => setSelected(new Set())}
+        />
+      ) : null}
       {excelDataset || headerActions ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
           {excelDataset ? (

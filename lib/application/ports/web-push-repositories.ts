@@ -48,4 +48,23 @@ export interface WebPushSubscriptionRepository {
 
 export interface WebPushRepositories {
   webPushSubscriptions: WebPushSubscriptionRepository;
+  tmcPushOutbox?: TmcPushOutboxRepository;
+}
+
+export interface TmcPushOutboxEventRecord {
+  eventId: string;
+  type: "tmc_transfer.requested" | "tmc_transfer.completed" | "tmc_transfer.cancelled" | "tmc_transfer.problem" | "tmc_transfer.overdue";
+  requestId: string;
+  safePayload: Record<string, string | number | boolean | null>;
+  recipientIds: string[];
+  attempt: number;
+}
+
+export interface TmcPushOutboxRepository {
+  claim(input: { workerId: string; now: Date; lockedUntil: Date; limit: number }): Promise<TmcPushOutboxEventRecord[]>;
+  complete(input: { eventId: string; workerId: string; completedAt: Date }): Promise<void>;
+  retry(input: { eventId: string; workerId: string; availableAt: Date; errorCode: string; deadLetter: boolean }): Promise<void>;
+  reserveDelivery(input: { eventId: string; subscriptionId: string; subscriptionUpdatedAt: Date; workerId: string; now: Date; lockedUntil: Date }): Promise<"reserved" | "delivered" | "busy" | "cancelled">;
+  completeDelivery(input: { eventId: string; subscriptionId: string; workerId: string; completedAt: Date }): Promise<void>;
+  failDelivery(input: { eventId: string; subscriptionId: string; workerId: string; errorCode: string }): Promise<void>;
 }

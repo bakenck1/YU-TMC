@@ -6,7 +6,6 @@ import { MapPin, Package, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
-import type { TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
 import { parseTmcTransferRequest } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
 import {
@@ -15,20 +14,21 @@ import {
   shouldRetainTmcDecisionAttempt,
   toggleTmcRequestSelection,
 } from "@/lib/tmc-transfer-request-card";
+import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";
 
 const STATUS_KEYS = {
   pending: "tmc.request.status.pending",
   accepted: "tmc.request.status.accepted",
   rejected: "tmc.request.status.rejected",
   cancelled: "tmc.request.status.cancelled",
-} as const satisfies Record<TmcTransferRequestDto["status"], TranslationKey>;
+} as const satisfies Record<TmcTransferRequestCardView["status"], TranslationKey>;
 
 const STATUS_STYLES = {
   pending: "bg-amber-50 text-amber-900",
   accepted: "bg-emerald-50 text-emerald-800",
   rejected: "bg-red-50 text-red-800",
   cancelled: "bg-zinc-100 text-zinc-700",
-} as const satisfies Record<TmcTransferRequestDto["status"], string>;
+} as const satisfies Record<TmcTransferRequestCardView["status"], string>;
 
 const ITEM_RESULT_KEYS = {
   pending: "tmc.request.item.pending",
@@ -36,18 +36,22 @@ const ITEM_RESULT_KEYS = {
   rejected: "tmc.request.item.rejected",
   cancelled: "tmc.request.item.cancelled",
   invalidated: "tmc.request.item.invalidated",
-} as const satisfies Record<TmcTransferRequestDto["items"][number]["result"], TranslationKey>;
+} as const satisfies Record<TmcTransferRequestCardView["items"][number]["result"], TranslationKey>;
 
 export default function TmcTransferRequestCard({
   request,
   canDecide,
+  canCancel = false,
   showOverdue,
   requiresAdministrativeReason,
+  requiresCancellationReason = false,
 }: {
-  request: TmcTransferRequestDto;
+  request: TmcTransferRequestCardView;
   canDecide: boolean;
+  canCancel?: boolean;
   showOverdue: boolean;
   requiresAdministrativeReason: boolean;
+  requiresCancellationReason?: boolean;
 }) {
   const { t, language } = useAppSettings();
   const router = useRouter();
@@ -65,6 +69,7 @@ export default function TmcTransferRequestCard({
   const inFlight = useRef(false);
   const abortController = useRef<AbortController | null>(null);
   const logicalAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const cancellationAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const administrativeReasonRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => () => {
     submissionSequence.current += 1;
@@ -79,8 +84,51 @@ export default function TmcTransferRequestCard({
   }).format(new Date(request.createdAt));
   const pendingItems = request.items.filter((item) => item.result === "pending");
 
-  async function submitDecision(mode: "all" | "selected") {
+  async function cancelRequest() {
+    if (inFlight.current) return;
+    const reason = requiresCancellationReason
+      ? window.prompt(t("tmc.request.administrativeReason"))
+      : null;
+    if (requiresCancellationReason && !reason?.trim()) return;
+    if (!window.confirm(t("tmc.request.cancelConfirm"))) return;
+    const payload = {
+      requestVersion: request.version,
+      ...(reason ? { administrativeReason: reason } : {}),
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (!cancellationAttempt.current || cancellationAttempt.current.fingerprint !== fingerprint) {
+      cancellationAttempt.current = {
+        fingerprint,
+        key: `tmc-cancel:${crypto.randomUUID()}`,
+      };
+    }
+    inFlight.current = true;
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/inventory/transfer-requests/${request.id}/cancel`, {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: { "content-type": "application/json", "idempotency-key": cancellationAttempt.current.key },
+        body: fingerprint,
+      });
+      if (!response.ok) {
+        if (response.status < 500 && response.status !== 409 && response.status !== 429) {
+          cancellationAttempt.current = null;
+        }
+        throw new Error("cancel_failed");
+      }
+      cancellationAttempt.current = null;
+      router.refresh();
+    } catch {
+      setFeedback({ kind: "error", message: "tmc.request.cancelError" });
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function submitDecision(mode: "all" | "selected" | "reject") {
     if (inFlight.current || pendingItems.length === 0) return;
+    if (mode === "reject" && !window.confirm(t("tmc.request.rejectAllConfirm"))) return;
     if (
       mode === "selected" &&
       selection.size === 0 &&
@@ -176,6 +224,7 @@ export default function TmcTransferRequestCard({
           </div>
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLES[request.status]}`}>{t(STATUS_KEYS[request.status])}</span>
         </div>
+        {canCancel && request.status === "pending" ? <button type="button" disabled={submitting} onClick={() => void cancelRequest()} className="mt-4 min-h-11 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.cancel")}</button> : null}
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
           <Meta label={t("tmc.request.initiator")} value={`${request.initiator.fullName} · ${request.initiator.email}`} />
           <Meta label={t("tmc.request.recipient")} value={`${request.recipient.fullName} · ${request.recipient.email}`} />
@@ -255,9 +304,10 @@ export default function TmcTransferRequestCard({
               {feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired" ? <span id="tmc-administrative-reason-error" role="alert" className="mt-1 block font-normal text-red-700">{t(feedback.message)}</span> : null}
             </label>
           ) : null}
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">{t("tmc.request.acceptAll")}</button>
             <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-11 rounded-xl border border-emerald-700 bg-white px-4 text-sm font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("reject")} className="min-h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.rejectAll")}</button>
           </div>
         </div>
       ) : null}

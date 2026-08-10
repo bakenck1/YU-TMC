@@ -16,6 +16,7 @@ import {
   employeeItemTabAfterKey,
 } from "@/lib/employee-items-tabs";
 import type { InventoryItem } from "@/lib/types";
+import type { UserRole } from "@/lib/contracts/users";
 
 const EMPLOYEE_TAB_LABELS = {
   active: "status.active",
@@ -139,10 +140,14 @@ export default function EmployeeItemsTabs({
   items,
   searchHistoryScope,
   columnSettingsScope,
+  actorUserId,
+  actorRole,
 }: {
   items: InventoryItem[];
   searchHistoryScope: string;
   columnSettingsScope: string;
+  actorUserId: string;
+  actorRole: UserRole;
 }) {
   const { t } = useAppSettings();
   const [activeStatus, setActiveStatus] = useState<ItemStatus>("active");
@@ -166,6 +171,12 @@ export default function EmployeeItemsTabs({
             items={visibleItems}
             searchHistoryScope={searchHistoryScope}
             columnSettingsScope={columnSettingsScope}
+            bulkActions={{
+              actorUserId,
+              actorRole,
+              buildings: [],
+              rooms: [],
+            }}
           />
         )}
       />

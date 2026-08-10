@@ -4,6 +4,11 @@ node_modules
 **/.data/**
 .env*
 **/.env*
+**/*secret*
+**/*credential*
+!lib/security/credentials.ts
+!lib/security/secret-configuration.ts
+!lib/server/persistence/legacy/legacy-credential-source.ts
 !.env.example
 .git
 .github
@@ -13,8 +18,6 @@ node_modules
 /_migration/
 /errors/
 /errors-test/
-**/*secret*
-**/*credential*
 **/*.dump
 **/*.bak
 **/PG_VERSION

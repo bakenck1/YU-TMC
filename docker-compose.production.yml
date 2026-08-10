@@ -50,3 +50,32 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
+  tmc-push-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+      target: worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?runtime database URL is required}
+      DATABASE_DEPLOYMENT_ID: ${DATABASE_DEPLOYMENT_ID:?deployment ID is required}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
+      DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:?VAPID public key is required}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:?VAPID private key is required}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:?VAPID subject is required}
+      TMC_PUSH_WORKER_INTERVAL_MS: ${TMC_PUSH_WORKER_INTERVAL_MS:-30000}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 35s
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

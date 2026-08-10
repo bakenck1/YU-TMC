@@ -1,6 +1,7 @@
 import type {
   WebPushRepositories,
   WebPushSubscriptionRecord,
+  TmcPushOutboxEventRecord,
 } from "@/lib/application/ports/web-push-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
@@ -281,6 +282,144 @@ export class WebPushService {
     }
   }
 
+  async processTmcPushOutbox(limit = 25): Promise<{ claimed: number; completed: number; retried: number; deadLettered: number }> {
+    if (!this.configuration) return { claimed: 0, completed: 0, retried: 0, deadLettered: 0 };
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new ApplicationError("validation", "invalid_push_outbox_limit");
+    }
+    const workerId = this.ids.create();
+    const now = this.clock.now();
+    const events = await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+      if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+      return tmcPushOutbox.claim({
+        workerId,
+        now,
+        lockedUntil: new Date(now.getTime() + 5 * 60_000),
+        limit,
+      });
+    });
+    let completed = 0;
+    let retried = 0;
+    let deadLettered = 0;
+    for (const event of events) {
+      let failed = false;
+      for (const recipientId of [...new Set(event.recipientIds)]) {
+        let subscriptions: WebPushSubscriptionRecord[];
+        try {
+          subscriptions = await this.unitOfWork.read(({ webPushSubscriptions }) =>
+            webPushSubscriptions.listByUser(recipientId));
+        } catch {
+          failed = true;
+          continue;
+        }
+        for (const subscription of subscriptions) {
+          const deliveryNow = this.clock.now();
+          const reservation = await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+            if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+            return tmcPushOutbox.reserveDelivery({
+              eventId: event.eventId,
+              subscriptionId: subscription.id,
+              subscriptionUpdatedAt: subscription.updatedAt,
+              workerId,
+              now: deliveryNow,
+              lockedUntil: new Date(deliveryNow.getTime() + 5 * 60_000),
+            });
+          });
+          if (reservation === "delivered") continue;
+          if (reservation === "busy") { failed = true; continue; }
+          if (reservation === "cancelled") continue;
+          if (subscription.expirationTime && subscription.expirationTime <= now) {
+            await this.removeStaleTmcSubscription(subscription, event);
+            await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+              if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+              return tmcPushOutbox.completeDelivery({ eventId: event.eventId, subscriptionId: subscription.id, workerId, completedAt: this.clock.now() });
+            });
+            continue;
+          }
+          const outcome = await this.deliverTmcEventWithRetry(subscription, event);
+          if (outcome === "stale") await this.removeStaleTmcSubscription(subscription, event);
+          if (outcome === "failed") {
+            failed = true;
+            await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+              if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+              return tmcPushOutbox.failDelivery({ eventId: event.eventId, subscriptionId: subscription.id, workerId, errorCode: "push_delivery_failed" });
+            });
+          } else {
+            await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+              if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+              return tmcPushOutbox.completeDelivery({ eventId: event.eventId, subscriptionId: subscription.id, workerId, completedAt: this.clock.now() });
+            });
+          }
+        }
+      }
+      if (!failed) {
+        await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+          if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+          return tmcPushOutbox.complete({ eventId: event.eventId, workerId, completedAt: this.clock.now() });
+        });
+        completed += 1;
+        continue;
+      }
+      const deadLetter = event.attempt >= 10;
+      const retryAt = new Date(this.clock.now().getTime() + Math.min(3_600_000, 30_000 * 2 ** Math.min(event.attempt, 7)));
+      await this.unitOfWork.transaction(({ tmcPushOutbox }) => {
+        if (!tmcPushOutbox) throw new Error("tmc_push_outbox_repository_missing");
+        return tmcPushOutbox.retry({
+          eventId: event.eventId, workerId, availableAt: retryAt,
+          errorCode: "push_delivery_incomplete", deadLetter,
+        });
+      });
+      if (deadLetter) deadLettered += 1;
+      else retried += 1;
+    }
+    return { claimed: events.length, completed, retried, deadLettered };
+  }
+
+  private async removeStaleTmcSubscription(subscription: WebPushSubscriptionRecord, event: TmcPushOutboxEventRecord) {
+    try {
+      await this.unitOfWork.transaction(({ webPushSubscriptions }) =>
+        webPushSubscriptions.deleteIfUnchanged(subscription));
+    } catch (error) {
+      this.logger.error("push_tmc_outbox_cleanup_failed", {
+        eventId: event.eventId,
+        subscriptionId: subscription.id,
+        statusCode: pushStatusCode(error),
+      });
+    }
+  }
+
+  private async deliverTmcEventWithRetry(
+    subscription: WebPushSubscriptionRecord,
+    event: TmcPushOutboxEventRecord,
+  ): Promise<"delivered" | "stale" | "failed"> {
+    const maxAttempts = Math.max(1, this.retryPolicy.maxAttempts);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.sender.send(
+          subscription,
+          tmcOutboxPayload(event, subscription.language),
+          this.configuration!,
+          event.eventId.replaceAll("-", "").slice(0, 32),
+        );
+        return "delivered";
+      } catch (error) {
+        if (isExpiredPushSubscription(error)) return "stale";
+        if (!isRetryablePushFailure(error) || attempt === maxAttempts) {
+          this.logger.error("push_tmc_outbox_delivery_failed", {
+            eventId: event.eventId,
+            requestId: event.requestId,
+            subscriptionId: subscription.id,
+            statusCode: pushStatusCode(error),
+            attempts: attempt,
+          });
+          return "failed";
+        }
+        await this.retryPolicy.wait(attempt);
+      }
+    }
+    return "failed";
+  }
+
   private async deliverTmcWithRetry(
     subscription: WebPushSubscriptionRecord,
     input: TmcTransferRequestPush,
@@ -457,6 +596,34 @@ function tmcTransferRequestPayload(
     badge: "/icons/icon-192.png",
     tag: `tmc-transfer-${input.requestId}`,
     url: `/tmc/transfer-requests/${encodeURIComponent(input.requestId)}`,
+  });
+}
+
+const TMC_OUTBOX_BODY_KEYS = {
+  "tmc_transfer.requested": "tmc.notifications.requested",
+  "tmc_transfer.completed": "tmc.notifications.completed",
+  "tmc_transfer.cancelled": "tmc.notifications.cancelled",
+  "tmc_transfer.problem": "tmc.notifications.problem",
+  "tmc_transfer.overdue": "tmc.notifications.overdue",
+} as const;
+
+function tmcOutboxPayload(event: TmcPushOutboxEventRecord, languageInput: unknown) {
+  const language = isAppLanguage(languageInput) ? languageInput : "ru";
+  const completedSummary = event.type === "tmc_transfer.completed" &&
+    typeof event.safePayload.accepted === "number" &&
+    typeof event.safePayload.itemCount === "number"
+    ? translate(language, "tmc.request.result", {
+        accepted: event.safePayload.accepted,
+        total: event.safePayload.itemCount,
+      })
+    : null;
+  return JSON.stringify({
+    title: translate(language, "push.tmcTransferTitle"),
+    body: completedSummary ?? translate(language, TMC_OUTBOX_BODY_KEYS[event.type]),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `tmc-event-${event.eventId}`,
+    url: `/tmc/transfer-requests/${encodeURIComponent(event.requestId)}`,
   });
 }
 

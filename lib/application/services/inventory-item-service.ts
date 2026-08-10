@@ -9,6 +9,11 @@ import type {
   UpdateInventoryItemProtectedInput,
 } from "@/lib/contracts/inventory-items";
 import type {
+  BulkChangeTmcLocationInput,
+  TmcBulkOperationResultDto,
+  TmcOperationItemOutcomeDto,
+} from "@/lib/contracts/tmc-operations";
+import type {
   AppendItemAuditRecord,
   InventoryItemAuditRecord,
   InventoryItemCommentRecord,
@@ -548,6 +553,79 @@ export class InventoryItemService {
     });
   }
 
+  async bulkChangeLocation(
+    input: BulkChangeTmcLocationInput,
+    actor: AuthorizationActor,
+  ): Promise<TmcBulkOperationResultDto> {
+    requirePermission(actor, "inventory.item.bulk_manage");
+    const normalized = normalizeBulkLocationInput(input);
+    const occurredAt = this.clock.now();
+
+    return this.unitOfWork.transaction(async ({ items }) => {
+      if (!(await items.roomExists(normalized.roomId))) {
+        throw new ApplicationError("not_found", "room_not_found");
+      }
+
+      const outcomes: TmcOperationItemOutcomeDto[] = [];
+      for (const reference of normalized.items) {
+        const current = await items.findItemById(reference.itemId);
+        if (!current) {
+          outcomes.push(problemOutcome(reference.itemId, "item_not_found"));
+          continue;
+        }
+        if (current.status !== "active" || current.archivedAt) {
+          outcomes.push(problemOutcome(reference.itemId, "item_inactive"));
+          continue;
+        }
+        if (current.version !== reference.itemVersion) {
+          outcomes.push(problemOutcome(reference.itemId, "version_conflict"));
+          continue;
+        }
+        const updated = await items.updateItemLocation({
+          id: reference.itemId,
+          roomId: normalized.roomId,
+          actorId: actor.userId,
+          expectedVersion: reference.itemVersion,
+          occurredAt,
+        });
+        if (!updated) {
+          outcomes.push(problemOutcome(reference.itemId, "version_conflict"));
+          continue;
+        }
+        await items.appendAudit(createAudit({
+          id: this.ids.create(),
+          actor,
+          subjectId: reference.itemId,
+          subjectRevision: updated.version,
+          action: "item.location_changed",
+          beforeValues: {
+            roomId: current.roomId,
+            location: `${current.buildingName} / ${current.roomDesignation}`,
+          },
+          afterValues: {
+            roomId: updated.roomId,
+            location: `${updated.buildingName} / ${updated.roomDesignation}`,
+            ...(normalized.comment ? { comment: normalized.comment } : {}),
+          },
+          occurredAt,
+        }));
+        outcomes.push({
+          itemId: reference.itemId,
+          outcome: "success",
+          itemVersion: updated.version,
+        });
+      }
+
+      const succeeded = outcomes.filter((item) => item.outcome === "success").length;
+      return {
+        total: outcomes.length,
+        succeeded,
+        problems: outcomes.length - succeeded,
+        items: outcomes,
+      };
+    }, { isolation: "serializable", maxAttempts: 3 });
+  }
+
   async updateContent(
     id: string,
     input: UpdateInventoryItemContentInput,
@@ -1024,6 +1102,40 @@ function normalizeOptionalText(value: unknown, max: number, code: string) {
   if (value === undefined) return undefined;
   if (value === null) return null;
   return normalizeText(value, max, code);
+}
+
+function normalizeBulkLocationInput(input: BulkChangeTmcLocationInput) {
+  if (
+    !input ||
+    !Array.isArray(input.items) ||
+    input.items.length < 1 ||
+    input.items.length > 50
+  ) {
+    throw new ApplicationError("validation", "invalid_bulk_operation_size");
+  }
+  const roomId = normalizeItemId(input.roomId);
+  const itemReferences = input.items.map((reference) => {
+    const itemId = normalizeItemId(reference.itemId);
+    if (!Number.isInteger(reference.itemVersion) || reference.itemVersion < 1) {
+      throw new ApplicationError("validation", "invalid_version");
+    }
+    return { itemId, itemVersion: reference.itemVersion };
+  });
+  if (new Set(itemReferences.map((item) => item.itemId)).size !== itemReferences.length) {
+    throw new ApplicationError("validation", "duplicate_item");
+  }
+  let comment: string | null = null;
+  if (input.comment !== undefined && input.comment !== null && input.comment !== "") {
+    comment = normalizeText(input.comment, 1_000, "invalid_comment");
+  }
+  return { roomId, items: itemReferences, comment };
+}
+
+function problemOutcome(
+  itemId: string,
+  problem: "item_not_found" | "item_inactive" | "version_conflict",
+): TmcOperationItemOutcomeDto {
+  return { itemId, outcome: "problem", problem };
 }
 
 function normalizeOptionalPositiveInteger(value: unknown) {

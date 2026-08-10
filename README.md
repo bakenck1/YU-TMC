@@ -69,15 +69,21 @@ deployment rules are documented in [docs/database.md](docs/database.md).
 
 ### Запуск в Docker для телефона
 
-Docker Desktop запускает приложение и PostgreSQL одной командой:
+Docker Desktop запускает приложение, PostgreSQL, миграции, HTTPS-прокси и
+worker уведомлений одной командой:
 
 ```powershell
-docker compose -f docker-compose.mobile.yml up --build -d
+npm run docker:mobile:up
 ```
 
-Откройте `http://<IP-адрес-компьютера>:3000` на телефоне, подключённом к той
-же Wi‑Fi сети. Узнать адрес компьютера можно командой `ipconfig` (строка
-`IPv4 Address`). Логи и остановка:
+Команда использует временный ASCII-диск для сборки: это обязательно, когда
+путь проекта содержит кириллицу и Docker Buildx не может создать build-session.
+
+В текущей мобильной конфигурации откройте `https://172.20.10.2/login` на
+телефоне, подключённом к той же сети. Локальный сертификат Caddy доступен по
+адресу `http://172.20.10.2/yu-inventory-local-ca.crt`. Если IP компьютера
+изменился, синхронно обновите его в `docker-compose.mobile.yml` и
+`Caddyfile.mobile`. Логи и остановка:
 
 ```powershell
 docker compose -f docker-compose.mobile.yml logs -f app
