@@ -98,6 +98,9 @@ services:
       WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
       WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
       WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-}
+      YU_API_BASE_URL: ${YU_API_DOCKER_BASE_URL:-http://host.docker.internal}
+      YU_API_TOKEN: ${YU_API_TOKEN:-}
+      YU_API_TIMEOUT_MS: ${YU_API_TIMEOUT_MS:-5000}
     volumes:
       - ./.data:/app/.data
     ports:
@@ -149,7 +152,6 @@ services:
       app:
         condition: service_started
     ports:
-      - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile.mobile:/etc/caddy/Caddyfile:ro

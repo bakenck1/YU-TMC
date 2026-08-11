@@ -42,6 +42,11 @@ yarn-error.log*
 # production error reports may contain sensitive log context
 /errors/
 
+# Local checkout of the legacy Django YU API. It has its own Git repository and
+# contains a private .env, virtual environment, database files, logs and data
+# exports. YU-TMC integrates with the running service over HTTP instead.
+/project/
+
 # vercel
 .vercel
 

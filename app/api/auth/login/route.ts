@@ -25,12 +25,17 @@ import {
   assertLoginJsonRequest,
   readLoginJsonRequest,
 } from "@/lib/security/login-request";
+import { createYuApiClient } from "@/lib/server/integrations/yu-api-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function validEmail(email: string) {
-  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+function validIdentifier(identifier: string) {
+  return (
+    identifier.length >= 1 &&
+    identifier.length <= 254 &&
+    !/\s/.test(identifier)
+  );
 }
 
 export async function POST(request: Request) {
@@ -84,10 +89,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const email = normalizeEmail(credentials.email);
+  const identifier = normalizeEmail(credentials.email);
   const password = credentials.password;
   const rememberMe = credentials.rememberMe === true;
-  if (!validEmail(email) || password.length < 1 || password.length > 1024) {
+  if (!validIdentifier(identifier) || password.length < 1 || password.length > 1024) {
     return Response.json(
       { error: "invalid_credentials" },
       { status: 401, headers: rateLimitHeaders(apiLimit) },
@@ -111,7 +116,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const emailLimit = await consumeLoginEmailLimit(email);
+  const emailLimit = await consumeLoginEmailLimit(identifier);
   if (!emailLimit.allowed) {
     return rateLimitedResponse(emailLimit, "too_many_login_attempts");
   }
@@ -121,7 +126,7 @@ export async function POST(request: Request) {
   >;
   try {
     authentication = await getApplicationServices().users.authenticate(
-      email,
+      identifier,
       password,
     );
   } catch {
@@ -132,10 +137,28 @@ export async function POST(request: Request) {
   }
 
   if (authentication.status === "invalid") {
-    return Response.json(
-      { error: "invalid_credentials" },
-      { status: 401, headers: rateLimitHeaders(apiLimit) },
-    );
+    try {
+      const identity = await createYuApiClient().authenticateLegacyCredentials(
+        identifier,
+        password,
+      );
+      if (identity) {
+        authentication = await getApplicationServices().users.resolveYuApiIdentity(
+          identity.email,
+        );
+      }
+    } catch {
+      return Response.json(
+        { error: "authentication_not_configured" },
+        { status: 503, headers: rateLimitHeaders(apiLimit) },
+      );
+    }
+    if (authentication.status === "invalid") {
+      return Response.json(
+        { error: "invalid_credentials" },
+        { status: 401, headers: rateLimitHeaders(apiLimit) },
+      );
+    }
   }
 
   if (authentication.status === "blocked") {
@@ -145,7 +168,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await clearFailedLogins(email);
+  await clearFailedLogins(identifier);
   const user = authentication.user;
   const ttlSeconds = rememberMe
     ? REMEMBERED_SESSION_TTL_SECONDS

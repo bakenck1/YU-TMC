@@ -18,6 +18,7 @@ node_modules
 /_migration/
 /errors/
 /errors-test/
+/project/
 **/*.dump
 **/*.bak
 **/PG_VERSION

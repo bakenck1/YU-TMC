@@ -22,7 +22,11 @@ if ($LASTEXITCODE -ne 0) {
 try {
   Push-Location -LiteralPath "$driveName\"
   try {
-    $arguments = @("compose", "-f", "docker-compose.mobile.yml", "up")
+    $arguments = @("compose")
+    if (Test-Path -LiteralPath ".env.local") {
+      $arguments += @("--env-file", ".env.local")
+    }
+    $arguments += @("-f", "docker-compose.mobile.yml", "up")
     if (-not $NoBuild) {
       $arguments += "--build"
     }
@@ -62,4 +66,4 @@ if (-not $ready) {
 
 Write-Host "YU Inventory is ready:"
 Write-Host "  Application: https://172.20.10.2/login"
-Write-Host "  Local health check: http://127.0.0.1:3000/login"
+Write-Host "  Local health check only: http://127.0.0.1:3000/login"

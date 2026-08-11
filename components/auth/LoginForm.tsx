@@ -31,8 +31,6 @@ interface FieldErrors {
   password?: string;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export default function LoginForm({
   returnTo,
   registrationAvailable = false,
@@ -55,14 +53,11 @@ export default function LoginForm({
     const errors: FieldErrors = {};
     const normalizedEmail = email.trim();
     if (!normalizedEmail) errors.email = t("auth.emailRequired");
-    else if (!EMAIL_PATTERN.test(normalizedEmail)) {
+    else if (normalizedEmail.length > 254 || /\s/.test(normalizedEmail)) {
       errors.email = t("auth.emailInvalid");
     }
 
     if (!password) errors.password = t("auth.passwordRequired");
-    else if (password.length < 8) {
-      errors.password = t("auth.passwordTooShort");
-    }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -185,12 +180,12 @@ export default function LoginForm({
 
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-zinc-800">
-            {t("auth.email")}
+            {t("auth.loginIdentifier")}
           </span>
           <span className="relative block">
             <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
@@ -199,11 +194,10 @@ export default function LoginForm({
                 }
               }}
               autoComplete="username"
-              inputMode="email"
               disabled={loading}
               aria-invalid={Boolean(fieldErrors.email)}
               aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
-              placeholder={t("auth.emailPlaceholder")}
+              placeholder={t("auth.loginIdentifierPlaceholder")}
               className={`h-13 w-full rounded-2xl border bg-white pl-12 pr-4 text-[15px] text-zinc-900 outline-none transition placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-50 ${
                 fieldErrors.email
                   ? "border-red-400 focus:ring-4 focus:ring-red-100"
