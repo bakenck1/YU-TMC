@@ -57,16 +57,51 @@ describe("TMC stage four UI", () => {
     expect(screen.getByRole("link", { name: "tmc.history.loadOlderLocations" }).getAttribute("href")).toContain("locationCursor=next");
   });
 
-  it("shows unread count, marks the notification read, then opens its request", async () => {
+  it("shows unread count and exposes each notification as a request link with persisted read state", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadCount: 1, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null }] }) } as Response)
       .mockResolvedValueOnce({ ok: true, status: 204 } as Response);
     render(<TmcNotifications />);
     await waitFor(() => expect(screen.getByLabelText("tmc.notifications.unread").textContent).toBe("1"));
     fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
-    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.requested" }));
+    const notification = screen.getByRole("link", { name: /tmc.notifications.requested/ });
+    expect(notification.getAttribute("href")).toBe(`/tmc/transfer-requests/${REQUEST.id}`);
+    notification.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(notification);
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(
+      "/api/inventory/notifications/99999999-9999-4999-8999-999999999999/read",
+      { method: "POST", credentials: "same-origin", cache: "no-store" },
+    ));
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/tmc/transfer-requests/${REQUEST.id}`));
-    expect(fetch).toHaveBeenLastCalledWith("/api/inventory/notifications/99999999-9999-4999-8999-999999999999/read", { method: "POST" });
+  });
+
+  it("labels notifications already persisted as read", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: "2026-08-10T01:00:00.000Z" }] }) } as Response);
+    render(<TmcNotifications />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.title" }));
+    expect(screen.getByText("tmc.notifications.read")).not.toBeNull();
+  });
+
+  it("still opens the request if persisting the read receipt fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadCount: 1, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null }] }) } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+    render(<TmcNotifications />);
+    await waitFor(() => expect(screen.getByLabelText("tmc.notifications.unread")).not.toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
+    const notification = screen.getByRole("link", { name: /tmc.notifications.requested/ });
+    notification.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(notification);
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/tmc/transfer-requests/${REQUEST.id}`));
+  });
+
+  it("renders a large compact bell touch target", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [] }) } as Response);
+    render(<TmcNotifications compact />);
+    const bell = screen.getByRole("button", { name: "tmc.notifications.title" });
+    expect(bell.className).toContain("min-h-11");
+    expect(bell.className).toContain("min-w-11");
   });
 
   it("polls for newly arrived requests while the recipient stays on the same page", async () => {

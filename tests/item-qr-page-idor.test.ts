@@ -35,16 +35,13 @@ test("item QR page hides foreign and missing IDs behind the same 404", async () 
   });
 });
 
-test("item QR page rejects malformed and operationally hidden object IDs", () => {
+test("item QR page rejects malformed or unauthorized IDs without hiding readable legacy-building items", () => {
   assert.match(pageSource, /if \(!isUuid\(id\)\) notFound\(\);/);
   assert.match(
     pageSource,
     /await readHiddenPageResource\(\s*\(\) => [\s\S]*?items\.findItem\(id, actor\),\s*notFound,\s*\)/,
   );
-  assert.match(
-    pageSource,
-    /if \(!isInventoryBuildingName\(item\.room\.buildingName\)\) notFound\(\);/,
-  );
+  assert.doesNotMatch(pageSource, /isInventoryBuildingName/);
 });
 
 test("item QR page authorizes privileged QR mode before looking up the item", () => {

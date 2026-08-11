@@ -1269,9 +1269,8 @@ export const tmcTransferRequestItemsTable = inventorySchema.table(
         onDelete: "restrict",
         onUpdate: "restrict",
       }),
-    responsibilityPeriodIdAtRequest: uuid().notNull(),
+    responsibilityPeriodIdAtRequest: uuid(),
     currentResponsibleIdAtRequest: uuid()
-      .notNull()
       .references(() => usersTable.id, {
         onDelete: "restrict",
         onUpdate: "restrict",
@@ -1304,6 +1303,10 @@ export const tmcTransferRequestItemsTable = inventorySchema.table(
     })
       .onDelete("restrict")
       .onUpdate("restrict"),
+    check(
+      "tmc_transfer_request_items_responsibility_snapshot_check",
+      sql`(${table.responsibilityPeriodIdAtRequest} IS NULL) = (${table.currentResponsibleIdAtRequest} IS NULL)`,
+    ),
     check(
       "tmc_transfer_request_items_state_check",
       sql`(

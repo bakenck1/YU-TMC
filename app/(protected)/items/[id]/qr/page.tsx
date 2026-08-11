@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import InventoryQrPrintView from "@/components/InventoryQrPrintView";
-import { isInventoryBuildingName } from "@/lib/campus-directory";
 import { isUuid } from "@/lib/domain/identifiers";
 import { toInventoryQrPrintItem } from "@/lib/inventory-qr-print";
 import { hasPermission } from "@/lib/security/permissions";
@@ -32,7 +31,6 @@ export default async function ItemQrPrintPage({
     () => getApplicationServices().items.findItem(id, actor),
     notFound,
   );
-  if (!isInventoryBuildingName(item.room.buildingName)) notFound();
   if (kind === "qr" && !item.qrCode) notFound();
   return (
     <InventoryQrPrintView

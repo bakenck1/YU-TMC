@@ -121,6 +121,30 @@ describe("TmcTransferRequestCard", () => {
     expect(JSON.parse(String(init.body)).decisions.map((decision: { decision: string }) => decision.decision)).toEqual(["reject", "reject"]);
   });
 
+  it("uses large touch targets and clear success and rejection colors", () => {
+    render(<TmcTransferRequestCard request={acceptedRequest()} canDecide={false} showOverdue={false} requiresAdministrativeReason={false} />);
+
+    const accepted = screen.getByText("tmc.request.item.accepted");
+    const rejected = screen.getByText("tmc.request.item.rejected");
+    expect(accepted.className).toContain("bg-emerald-100");
+    expect(accepted.className).toContain("text-emerald-800");
+    expect(rejected.className).toContain("bg-red-100");
+    expect(rejected.className).toContain("text-red-800");
+
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox.className).toContain("h-6");
+      expect(checkbox.closest("label")?.className).toContain("min-h-12");
+    }
+  });
+
+  it("renders decision actions as large mobile-friendly buttons", () => {
+    render(<TmcTransferRequestCard request={request()} canDecide showOverdue={false} requiresAdministrativeReason={false} />);
+
+    for (const name of ["tmc.request.acceptAll", "tmc.request.acceptSelected", "tmc.request.rejectAll"]) {
+      expect(screen.getByRole("button", { name }).className).toContain("min-h-14");
+    }
+  });
+
   it("uses the separate administrator cancellation policy for another initiator", async () => {
     vi.stubGlobal("prompt", vi.fn(() => " Security override "));
     render(<TmcTransferRequestCard

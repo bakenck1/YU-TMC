@@ -1,0 +1,2 @@
+ALTER TABLE "yu_inventory"."tmc_transfer_request_items" ALTER COLUMN "responsibility_period_id_at_request" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "yu_inventory"."tmc_transfer_request_items" ALTER COLUMN "current_responsible_id_at_request" DROP NOT NULL;

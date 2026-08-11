@@ -110,9 +110,9 @@ declare const item: TmcTransferRequestItemDto;
 declare const legacyStatus: TransferStatus;
 
 const requestStatus: TmcTransferRequestStatus = request.status;
-const capturedResponsibleId: string = item.currentResponsibleIdAtRequest;
-const capturedResponsibleName: string =
-  item.responsibleUserProfile.fullName;
+const capturedResponsibleId: string | null = item.currentResponsibleIdAtRequest;
+const capturedResponsibleName: string | null =
+  item.responsibleUserProfile?.fullName ?? null;
 
 const partialCreateResult = {
   request,

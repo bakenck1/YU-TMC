@@ -134,6 +134,20 @@
       "when": 1786363200000,
       "tag": "20260810140000_tmc_stage_four",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786424060223,
+      "tag": "20260811045420_mysterious_wind_dancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786424367465,
+      "tag": "20260811045927_mean_wonder_man",
+      "breakpoints": true
     }
   ]
 }

@@ -622,7 +622,7 @@ export default function ItemsTable({
         <table className="min-w-[1380px] w-full text-left text-sm">
           <thead>
             <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-zinc-400">
-              <th className="w-14 px-4 py-4 text-center"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-4 w-4 accent-emerald-500" /></th>
+              <th className="w-16 px-2 py-2 text-center"><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></th>
               {visibleColumns.photo ? <th className="px-3 py-4 font-medium">{t("items.photo")}</th> : null}
               {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th> : null}
               {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
@@ -646,7 +646,7 @@ export default function ItemsTable({
                   onClick={() => router.push(`/items/${item.id}`)}
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
-                  <td className="px-4 py-4 text-center" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-4 w-4 accent-emerald-500" /></td>
+                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><Thumb color={item.photoColor} photo={item.photo} /></td> : null}
                   {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{item.qrCode ?? item.inventoryNumber}</td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4"><p className="font-medium text-zinc-800">{dataLabel(item.itemType ?? details.type)}</p><p className="mt-1 text-zinc-500">{t("common.electronics")}</p></td> : null}
@@ -682,7 +682,9 @@ export default function ItemsTable({
           return (
             <article key={item.id} onClick={() => router.push(`/items/${item.id}`)} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
-                <input type="checkbox" checked={selected.has(item.id)} onClick={(event) => event.stopPropagation()} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="mt-1 h-4 w-4 accent-emerald-500" />
+                <label onClick={(event) => event.stopPropagation()} className="-ml-2 -mt-2 inline-flex min-h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl active:bg-zinc-100">
+                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600" />
+                </label>
                 {visibleColumns.photo ? <Thumb color={item.photoColor} photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">
                   {visibleColumns.brandModel ? <p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></p> : null}

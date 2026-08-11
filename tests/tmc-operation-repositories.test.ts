@@ -323,7 +323,7 @@ test("insertRequestItem maps a failed atomic item-version check", async () => {
   );
   assert.equal(source.calls.length, 1);
   assert.match(source.calls[0]!.text, /with locked_item[\s\S]+insert/i);
-  assert.match(source.calls[0]!.text, /for no key update/i);
+  assert.match(source.calls[0]!.text, /for update/i);
   assert.match(source.calls[0]!.text, /item\.version\s*=\s*\$4/i);
   assert.match(source.calls[0]!.text, /period\.ended_at\s+is\s+null/i);
 });
@@ -365,6 +365,43 @@ test("insertRequestItem maps only known constraints to item problem codes", asyn
   );
 });
 
+test("insertRequestItem atomically snapshots an unassigned active item", async () => {
+  const input = {
+    ...insertItemInput(),
+    responsibilityPeriodIdAtRequest: null,
+    currentResponsibleIdAtRequest: null,
+  };
+  const source = new QueryQueue([{
+    rows: [{
+      id: input.id,
+      request_id: input.requestId,
+      item_id: input.itemId,
+      responsibility_period_id_at_request: null,
+      current_responsible_id_at_request: null,
+      result: "pending",
+      invalid_reason: null,
+      created_at: input.createdAt,
+      decided_at: null,
+      decided_by: null,
+      version: 1,
+      item_exists: true,
+      item_status: "active",
+      archived_at: null,
+      item_version: input.expectedItemVersion,
+      expected_period_open: true,
+    }],
+  }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+
+  const inserted = await repository.insertRequestItem(input);
+
+  assert.equal(inserted.responsibilityPeriodIdAtRequest, null);
+  assert.equal(inserted.currentResponsibleIdAtRequest, null);
+  assert.equal(source.calls[0]?.values?.[4], null);
+  assert.equal(source.calls[0]?.values?.[5], null);
+  assert.match(source.calls[0]!.text, /period\.id is null/i);
+});
+
 test("findById maps the aggregate and preserves captured responsibility", async () => {
   const createdAt = new Date("2026-08-09T11:00:00.000Z");
   const source = new QueryQueue([
@@ -382,7 +419,7 @@ test("findById maps the aggregate and preserves captured responsibility", async 
   assert.equal(result.createdAt.toISOString(), createdAt.toISOString());
   assert.equal(result.items[0]?.currentResponsibleIdAtRequest,
     "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
-  assert.equal(result.items[0]?.responsibleUserProfile.fullName,
+  assert.equal(result.items[0]?.responsibleUserProfile?.fullName,
     "Captured Owner");
   assert.equal(result.items[0]?.item.unitPrice, 125000.5);
   assert.equal(result.items[0]?.item.quantity, 2);
@@ -458,7 +495,7 @@ test("decideItem atomically hands responsibility over only for a valid accept", 
   const source = new QueryQueue([
     { rows: [{ version: 1, result: "pending" }] },
     { rows: [{ status: "active", archived_at: null }] },
-    { rows: [{ item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
+    { rows: [{ id: uuid(12), item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -476,11 +513,35 @@ test("decideItem atomically hands responsibility over only for a valid accept", 
   assert.match(source.calls[5]!.text, /result = \$2[\s\S]+version = version \+ 1/i);
 });
 
+test("decideItem assigns an item that was still unassigned when accepted", async () => {
+  const source = new QueryQueue([
+    { rows: [{ version: 1, result: "pending" }] },
+    { rows: [{ status: "active", archived_at: null }] },
+    { rows: [] },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+
+  const result = await repository.decideItem({
+    requestId: uuid(10), requestItemId: uuid(11), itemId: uuid(1),
+    responsibilityPeriodIdAtRequest: null, currentResponsibleIdAtRequest: null,
+    expectedVersion: 1, decision: "accept", recipientId: uuid(3), decidedBy: uuid(3),
+    decidedAt: new Date("2026-08-10T12:00:00.000Z"), newResponsibilityPeriodId: uuid(13),
+  });
+
+  assert.equal(result, "accepted");
+  assert.equal(source.calls.length, 5);
+  assert.doesNotMatch(source.calls.map((call) => call.text).join("\n"), /tmc_transfer_accepted/i);
+  assert.match(source.calls[3]!.text, /insert into[\s\S]+responsibility_periods/i);
+  assert.match(source.calls[4]!.text, /result = \$2[\s\S]+version = version \+ 1/i);
+});
+
 test("decideItem invalidates stale inventory without creating responsibility", async () => {
   const source = new QueryQueue([
     { rows: [{ version: 1, result: "pending" }] },
     { rows: [{ status: "decommissioned", archived_at: new Date() }] },
-    { rows: [{ item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
+    { rows: [{ id: uuid(12), item_id: uuid(1), responsible_user_id: uuid(2), ended_at: null }] },
     { rows: [], rowCount: 1 },
   ]);
   const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;

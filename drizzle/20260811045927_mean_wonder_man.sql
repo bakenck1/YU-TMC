@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."tmc_transfer_request_items" ADD CONSTRAINT "tmc_transfer_request_items_responsibility_snapshot_check" CHECK (("yu_inventory"."tmc_transfer_request_items"."responsibility_period_id_at_request" IS NULL) = ("yu_inventory"."tmc_transfer_request_items"."current_responsible_id_at_request" IS NULL));

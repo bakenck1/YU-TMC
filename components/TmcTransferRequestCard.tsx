@@ -38,6 +38,14 @@ const ITEM_RESULT_KEYS = {
   invalidated: "tmc.request.item.invalidated",
 } as const satisfies Record<TmcTransferRequestCardView["items"][number]["result"], TranslationKey>;
 
+const ITEM_RESULT_STYLES = {
+  pending: "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200",
+  accepted: "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200",
+  rejected: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
+  cancelled: "bg-zinc-100 text-zinc-700 ring-1 ring-inset ring-zinc-200",
+  invalidated: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
+} as const satisfies Record<TmcTransferRequestCardView["items"][number]["result"], string>;
+
 export default function TmcTransferRequestCard({
   request,
   canDecide,
@@ -247,7 +255,7 @@ export default function TmcTransferRequestCard({
           return (
             <article key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
               <div className="flex items-start gap-3">
-                <label htmlFor={checkboxId} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg">
+                <label htmlFor={checkboxId} className="flex min-h-12 min-w-12 items-center justify-center rounded-xl hover:bg-zinc-50">
                   <input
                     id={checkboxId}
                     type="checkbox"
@@ -255,7 +263,7 @@ export default function TmcTransferRequestCard({
                     disabled={!selectable}
                     aria-label={`${t("tmc.request.selectItem")} ${item.item.name}`}
                     onChange={() => setSelection((current) => toggleTmcRequestSelection(current, item, canDecide))}
-                    className="h-5 w-5 accent-emerald-700"
+                    className="h-6 w-6 cursor-pointer accent-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
                 <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
@@ -267,10 +275,10 @@ export default function TmcTransferRequestCard({
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="break-words font-semibold text-zinc-900">{index + 1}. {item.item.name}</h2>
-                  <p className="mt-1 text-xs font-semibold text-zinc-600">{t(ITEM_RESULT_KEYS[item.result])}</p>
+                  <p className={`mt-1 inline-flex min-h-8 items-center rounded-full px-3 py-1 text-sm font-semibold ${ITEM_RESULT_STYLES[item.result]}`}>{t(ITEM_RESULT_KEYS[item.result])}</p>
                   <p className="mt-1 break-all text-sm text-zinc-500">{item.item.inventoryNumber}</p>
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{item.item.location.buildingName} · {item.item.location.roomDesignation}</p>
-                  <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><UserRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words">{t("tmc.request.currentResponsible")}: {item.responsibleUserProfile.fullName}</span></p>
+                  <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><UserRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words">{t("tmc.request.currentResponsible")}: {item.responsibleUserProfile?.fullName ?? t("common.notAssigned")}</span></p>
                 </div>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 text-sm sm:grid-cols-3">
@@ -305,9 +313,9 @@ export default function TmcTransferRequestCard({
             </label>
           ) : null}
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">{t("tmc.request.acceptAll")}</button>
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-11 rounded-xl border border-emerald-700 bg-white px-4 text-sm font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button>
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("reject")} className="min-h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.rejectAll")}</button>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-14 rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white disabled:opacity-50">{t("tmc.request.acceptAll")}</button>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-14 rounded-xl border border-emerald-700 bg-white px-5 text-base font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("reject")} className="min-h-14 rounded-xl border border-red-300 bg-red-50 px-5 text-base font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.rejectAll")}</button>
           </div>
         </div>
       ) : null}

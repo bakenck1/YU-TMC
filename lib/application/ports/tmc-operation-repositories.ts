@@ -59,9 +59,9 @@ export interface TmcTransferRequestItemRecord {
   requestId: string;
   itemId: string;
   item: TmcTransferItemCardRecord;
-  responsibilityPeriodIdAtRequest: string;
-  currentResponsibleIdAtRequest: string;
-  responsibleUserProfile: TmcOperationUserRecord;
+  responsibilityPeriodIdAtRequest: string | null;
+  currentResponsibleIdAtRequest: string | null;
+  responsibleUserProfile: TmcOperationUserRecord | null;
   result: TmcTransferItemResult;
   invalidReason: string | null;
   createdAt: Date;
@@ -100,8 +100,8 @@ export interface InsertTmcTransferRequestItemRecord {
   requestId: string;
   itemId: string;
   expectedItemVersion: number;
-  responsibilityPeriodIdAtRequest: string;
-  currentResponsibleIdAtRequest: string;
+  responsibilityPeriodIdAtRequest: string | null;
+  currentResponsibleIdAtRequest: string | null;
   createdAt: Date;
 }
 
@@ -109,8 +109,8 @@ export interface InsertedTmcTransferRequestItemRecord {
   id: string;
   requestId: string;
   itemId: string;
-  responsibilityPeriodIdAtRequest: string;
-  currentResponsibleIdAtRequest: string;
+  responsibilityPeriodIdAtRequest: string | null;
+  currentResponsibleIdAtRequest: string | null;
   result: TmcTransferItemResult;
   invalidReason: string | null;
   createdAt: Date;
@@ -123,8 +123,8 @@ export interface DecideTmcTransferRequestItemRecord {
   requestId: string;
   requestItemId: string;
   itemId: string;
-  responsibilityPeriodIdAtRequest: string;
-  currentResponsibleIdAtRequest: string;
+  responsibilityPeriodIdAtRequest: string | null;
+  currentResponsibleIdAtRequest: string | null;
   expectedVersion: number;
   decision: "accept" | "reject";
   recipientId: string;

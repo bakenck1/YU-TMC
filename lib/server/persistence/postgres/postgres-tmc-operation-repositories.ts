@@ -106,11 +106,11 @@ interface RequestItemRow extends QueryResultRow {
   request_item_id: string | null;
   request_id: string;
   item_id: string;
-  responsibility_period_id_at_request: string;
-  current_responsible_id_at_request: string;
-  current_responsible_full_name: string;
-  current_responsible_email: string;
-  current_responsible_role: TmcOperationUserRecord["role"];
+  responsibility_period_id_at_request: string | null;
+  current_responsible_id_at_request: string | null;
+  current_responsible_full_name: string | null;
+  current_responsible_email: string | null;
+  current_responsible_role: TmcOperationUserRecord["role"] | null;
   result: TmcTransferRequestItemRecord["result"];
   invalid_reason: string | null;
   request_item_created_at: Date;
@@ -136,8 +136,8 @@ interface InsertedRequestItemRow extends QueryResultRow {
   id: string;
   request_id: string;
   item_id: string;
-  responsibility_period_id_at_request: string;
-  current_responsible_id_at_request: string;
+  responsibility_period_id_at_request: string | null;
+  current_responsible_id_at_request: string | null;
   result: InsertedTmcTransferRequestItemRecord["result"];
   invalid_reason: string | null;
   created_at: Date;
@@ -283,23 +283,27 @@ class PostgresTmcTransferRequestRepository
       [input.itemId],
     );
     const periodResult = await this.source.query<{
+      id: string;
       item_id: string;
       responsible_user_id: string;
       ended_at: Date | null;
     } & QueryResultRow>(
-      `select item_id, responsible_user_id, ended_at
+      `select id, item_id, responsible_user_id, ended_at
          from ${RESPONSIBILITY_PERIODS}
-        where id = $1
+        where item_id = $1 and ended_at is null
         for update`,
-      [input.responsibilityPeriodIdAtRequest],
+      [input.itemId],
     );
     const item = itemResult.rows[0];
     const period = periodResult.rows[0];
     const itemActive = item?.status === "active" && item.archived_at === null;
-    const responsibilityCurrent =
-      period?.item_id === input.itemId &&
-      period.responsible_user_id === input.currentResponsibleIdAtRequest &&
-      period.ended_at === null;
+    const responsibilityCurrent = input.responsibilityPeriodIdAtRequest === null
+      && input.currentResponsibleIdAtRequest === null
+        ? period === undefined
+        : period?.id === input.responsibilityPeriodIdAtRequest &&
+          period.item_id === input.itemId &&
+          period.responsible_user_id === input.currentResponsibleIdAtRequest &&
+          period.ended_at === null;
     const result = !itemActive || !responsibilityCurrent
       ? "invalidated" as const
       : input.decision === "accept"
@@ -311,17 +315,19 @@ class PostgresTmcTransferRequestRepository
         ? "responsibility_changed"
         : null;
     if (result === "accepted") {
-      const closed = await this.source.query(
-        `update ${RESPONSIBILITY_PERIODS}
-            set ended_at = $2, ended_by = $3,
-                end_reason = 'tmc_transfer_accepted'
-          where id = $1 and ended_at is null`,
-        [input.responsibilityPeriodIdAtRequest, input.decidedAt, input.decidedBy],
-      );
-      if ((closed.rowCount ?? 0) !== 1) {
-        throw new TmcOperationRepositoryConflictError("responsibility_changed", {
-          reason: "responsibility_period_close_conflict",
-        });
+      if (input.responsibilityPeriodIdAtRequest) {
+        const closed = await this.source.query(
+          `update ${RESPONSIBILITY_PERIODS}
+              set ended_at = $2, ended_by = $3,
+                  end_reason = 'tmc_transfer_accepted'
+            where id = $1 and ended_at is null`,
+          [input.responsibilityPeriodIdAtRequest, input.decidedAt, input.decidedBy],
+        );
+        if ((closed.rowCount ?? 0) !== 1) {
+          throw new TmcOperationRepositoryConflictError("responsibility_changed", {
+            reason: "responsibility_period_close_conflict",
+          });
+        }
       }
       await this.source.query(
         `insert into ${RESPONSIBILITY_PERIODS}
@@ -456,23 +462,29 @@ class PostgresTmcTransferRequestRepository
            select item.id, item.version, item.status, item.archived_at
              from ${ITEMS} item
             where item.id = $3
-            for no key update
+            for update
          ), locked_period as materialized (
            select period.id, period.item_id, period.responsible_user_id,
                   period.ended_at
              from ${RESPONSIBILITY_PERIODS} period
-            where period.id = $5
-            for no key update
+            where period.item_id = $3
+              and period.ended_at is null
+            for update
          ), validation as (
            select item.id is not null as item_exists,
                   item.status as item_status, item.archived_at,
                   item.version as item_version,
-                  coalesce(
-                    period.item_id = $3
-                    and period.responsible_user_id = $6
-                    and period.ended_at is null,
-                    false
-                  ) as expected_period_open
+                  case
+                    when $5::uuid is null and $6::uuid is null
+                      then period.id is null
+                    else coalesce(
+                      period.id = $5
+                      and period.item_id = $3
+                      and period.responsible_user_id = $6
+                      and period.ended_at is null,
+                      false
+                    )
+                  end as expected_period_open
              from (values (1)) probe(marker)
              left join locked_item item on true
              left join locked_period period on true
@@ -480,15 +492,20 @@ class PostgresTmcTransferRequestRepository
            insert into ${REQUEST_ITEMS}
              (id, request_id, item_id, responsibility_period_id_at_request,
               current_responsible_id_at_request, created_at)
-           select $1, $2, item.id, period.id, period.responsible_user_id, $7
+           select $1, $2, item.id, $5, $6, $7
              from locked_item item
-             join locked_period period
-               on period.item_id = item.id
-              and period.responsible_user_id = $6
-              and period.ended_at is null
+             left join locked_period period on true
             where item.version = $4
               and item.status = 'active'
               and item.archived_at is null
+              and (
+                ($5::uuid is null and $6::uuid is null and period.id is null)
+                or (
+                  period.id = $5
+                  and period.responsible_user_id = $6
+                  and period.ended_at is null
+                )
+              )
            returning id, request_id, item_id,
              responsibility_period_id_at_request,
              current_responsible_id_at_request, result, invalid_reason,
@@ -529,12 +546,10 @@ class PostgresTmcTransferRequestRepository
         id: row.id,
         request_id: required(row.request_id),
         item_id: required(row.item_id),
-        responsibility_period_id_at_request: required(
+        responsibility_period_id_at_request:
           row.responsibility_period_id_at_request,
-        ),
-        current_responsible_id_at_request: required(
+        current_responsible_id_at_request:
           row.current_responsible_id_at_request,
-        ),
         result: required(row.result),
         invalid_reason: row.invalid_reason,
         created_at: required(row.created_at),
@@ -1105,12 +1120,14 @@ function mapRequestItem(row: RequestItemRow): TmcTransferRequestItemRecord {
       row.responsibility_period_id_at_request,
     currentResponsibleIdAtRequest:
       row.current_responsible_id_at_request,
-    responsibleUserProfile: mapUser(
-      row.current_responsible_id_at_request,
-      row.current_responsible_full_name,
-      row.current_responsible_email,
-      row.current_responsible_role,
-    ),
+    responsibleUserProfile: row.current_responsible_id_at_request
+      ? mapUser(
+          row.current_responsible_id_at_request,
+          required(row.current_responsible_full_name),
+          required(row.current_responsible_email),
+          required(row.current_responsible_role),
+        )
+      : null,
     result: row.result,
     invalidReason: row.invalid_reason,
     createdAt: new Date(row.request_item_created_at),

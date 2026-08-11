@@ -337,6 +337,31 @@ test("recipient accepts selected pending items and rejects every unchecked item 
   assert.deepEqual(harness.repository.decisionCalls.map((call) => call.decision), ["accept", "accept", "reject"]);
 });
 
+test("recipient can accept an administrator request for an initially unassigned item", async () => {
+  const item = candidate(uuid(1));
+  const harness = createHarness();
+  const aggregate = requestRecord([item]);
+  Object.assign(aggregate.items[0]!, {
+    responsibilityPeriodIdAtRequest: null,
+    currentResponsibleIdAtRequest: null,
+    responsibleUserProfile: null,
+  });
+  harness.repository.aggregate = aggregate;
+
+  const result = await harness.service.decide(
+    aggregate.id,
+    {
+      requestVersion: 1,
+      decisions: [{ itemId: item.itemId, itemVersion: 1, decision: "accept" }],
+    },
+    { userId: RECIPIENT_ID, role: "employee" },
+  );
+
+  assert.equal(result.items[0]?.result, "accepted");
+  assert.equal(harness.repository.decisionCalls[0]?.responsibilityPeriodIdAtRequest, null);
+  assert.equal(harness.repository.decisionCalls[0]?.currentResponsibleIdAtRequest, null);
+});
+
 test("decision requires exact pending coverage and an admin override reason", async () => {
   const harness = createHarness({ actors: [user({ id: uuid(70), role: "admin" })] });
   harness.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
@@ -833,6 +858,37 @@ test("allows an administrator to group items from different owners", async () =>
     [uuid(75), uuid(76)],
   );
   assert.equal(harness.repository.insertedRequests[0]?.initiatorId, admin.userId);
+});
+
+test("allows an administrator to request assignment of an unassigned active item", async () => {
+  const admin = { userId: uuid(70), role: "admin" as const };
+  const itemId = uuid(1);
+  const unassigned = candidate(itemId, {
+    responsibilityPeriodId: null,
+    responsibleUser: null,
+  });
+  const harness = createHarness({
+    actors: [user({ id: admin.userId, role: admin.role })],
+    candidates: [unassigned],
+  });
+  const aggregate = requestRecord([candidate(itemId)]);
+  Object.assign(aggregate.items[0]!, {
+    responsibilityPeriodIdAtRequest: null,
+    currentResponsibleIdAtRequest: null,
+    responsibleUserProfile: null,
+  });
+  harness.repository.aggregate = aggregate;
+
+  const result = await harness.service.create(
+    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+    admin,
+  );
+
+  assert.equal(result.included, 1);
+  assert.equal(result.request?.items[0]?.currentResponsibleIdAtRequest, null);
+  assert.equal(result.request?.items[0]?.responsibleUserProfile, null);
+  assert.equal(harness.repository.insertedItems[0]?.responsibilityPeriodIdAtRequest, null);
+  assert.equal(harness.repository.insertedItems[0]?.currentResponsibleIdAtRequest, null);
 });
 
 test("does not let an administrator transfer an item to its current owner", async () => {

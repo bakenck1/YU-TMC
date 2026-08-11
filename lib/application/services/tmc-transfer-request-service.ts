@@ -632,9 +632,9 @@ export class TmcTransferRequestService {
                 itemId: item.itemId,
                 expectedItemVersion: item.candidate.itemVersion,
                 responsibilityPeriodIdAtRequest:
-                  item.candidate.responsibilityPeriodId!,
+                  item.candidate.responsibilityPeriodId,
                 currentResponsibleIdAtRequest:
-                  item.candidate.responsibleUser!.id,
+                  item.candidate.responsibleUser?.id ?? null,
                 createdAt,
               }),
           );
@@ -859,7 +859,9 @@ export class TmcTransferRequestService {
     const owners = new Map<string, number>();
     for (const item of after.items) {
       if (item.result !== "accepted") continue;
-      owners.set(item.currentResponsibleIdAtRequest, (owners.get(item.currentResponsibleIdAtRequest) ?? 0) + 1);
+      const ownerId = item.currentResponsibleIdAtRequest;
+      if (!ownerId) continue;
+      owners.set(ownerId, (owners.get(ownerId) ?? 0) + 1);
     }
     for (const [ownerId, accepted] of owners) {
       if (ownerId === after.initiator.id) continue;
@@ -1270,10 +1272,13 @@ function classifyItems(
     if (candidate.itemStatus !== "active" || candidate.archivedAt) {
       return problem(itemId, "item_inactive");
     }
-    if (!candidate.responsibilityPeriodId || !candidate.responsibleUser) {
+    if (
+      (!candidate.responsibilityPeriodId || !candidate.responsibleUser) &&
+      actor.role !== "admin"
+    ) {
       return problem(itemId, "item_unassigned");
     }
-    if (candidate.responsibleUser.id === recipientId) {
+    if (candidate.responsibleUser?.id === recipientId) {
       return problem(itemId, "already_responsible");
     }
     if (candidate.hasActiveTransfer) {
@@ -1391,7 +1396,9 @@ function toRequestItemDto(
     },
     responsibilityPeriodIdAtRequest: record.responsibilityPeriodIdAtRequest,
     currentResponsibleIdAtRequest: record.currentResponsibleIdAtRequest,
-    responsibleUserProfile: toUserDto(record.responsibleUserProfile),
+    responsibleUserProfile: record.responsibleUserProfile
+      ? toUserDto(record.responsibleUserProfile)
+      : null,
     createdAt: record.createdAt.toISOString(),
     version: record.version,
   };

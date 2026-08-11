@@ -77,10 +77,10 @@ export interface TmcTransferRequestItemBaseDto {
   id: string;
   requestId: string;
   item: TmcTransferItemCardDto;
-  responsibilityPeriodIdAtRequest: string;
-  currentResponsibleIdAtRequest: string;
+  responsibilityPeriodIdAtRequest: string | null;
+  currentResponsibleIdAtRequest: string | null;
   /** Current profile of the user captured by currentResponsibleIdAtRequest. */
-  responsibleUserProfile: TmcOperationUserDto;
+  responsibleUserProfile: TmcOperationUserDto | null;
   createdAt: string;
   version: number;
 }
@@ -307,9 +307,9 @@ const requestItemSchema = z.object({
   id: uuidSchema,
   requestId: uuidSchema,
   item: itemCardSchema,
-  responsibilityPeriodIdAtRequest: uuidSchema,
-  currentResponsibleIdAtRequest: uuidSchema,
-  responsibleUserProfile: operationUserSchema,
+  responsibilityPeriodIdAtRequest: uuidSchema.nullable(),
+  currentResponsibleIdAtRequest: uuidSchema.nullable(),
+  responsibleUserProfile: operationUserSchema.nullable(),
   result: z.enum(TMC_TRANSFER_ITEM_RESULTS),
   invalidReason: z.string().nullable(),
   createdAt: timestampSchema,
@@ -317,6 +317,20 @@ const requestItemSchema = z.object({
   decidedBy: operationUserSchema.nullable(),
   version: z.number().int().positive(),
 }).strict().superRefine((item, context) => {
+  const hasNoResponsibleSnapshot =
+    item.responsibilityPeriodIdAtRequest === null &&
+    item.currentResponsibleIdAtRequest === null &&
+    item.responsibleUserProfile === null;
+  const hasCompleteResponsibleSnapshot =
+    item.responsibilityPeriodIdAtRequest !== null &&
+    item.currentResponsibleIdAtRequest !== null &&
+    item.responsibleUserProfile !== null;
+  if (!hasNoResponsibleSnapshot && !hasCompleteResponsibleSnapshot) {
+    context.addIssue({
+      code: "custom",
+      message: "Incomplete responsibility snapshot.",
+    });
+  }
   if (item.result === "pending") {
     if (item.invalidReason || item.decidedAt || item.decidedBy) {
       context.addIssue({ code: "custom", message: "Invalid pending item state." });

@@ -427,6 +427,78 @@ describe("PostgreSQL TMC operation repositories", () => {
     expect(await repositories.stageFour.listHistory({ ...query, actorId: randomUUID(), includeAll: true, status: "accepted", itemId: itemBId })).toHaveLength(1);
   });
 
+  it("assigns an active item with no responsible user after recipient acceptance", async () => {
+    const adminId = randomUUID();
+    const recipientId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    const itemId = randomUUID();
+    const requestId = randomUUID();
+    const requestItemId = randomUUID();
+    const createdAt = new Date("2026-08-11T05:00:00.000Z");
+    await seedUsers(adminId, recipientId);
+    await database.query(
+      `update "yu_inventory"."users" set role = 'admin' where id = $1`,
+      [adminId],
+    );
+    await seedLocation(buildingId, roomId, adminId);
+    await database.query(
+      `insert into "yu_inventory"."items"
+         (id, name, quantity, unit_price, room_id, inventory_number_kind,
+          inventory_number, inventory_number_key, created_by, updated_by)
+       values ($1, 'Unassigned active item', 1, 100, $2, 'official', $3, $4, $5, $5)`,
+      [itemId, roomId, `UNASSIGNED-${itemId}`, `unassigned-${itemId}`, adminId],
+    );
+    const requests = createPostgresTmcOperationRepositories(database).transferRequests;
+    await requests.insertRequest({
+      id: requestId,
+      initiatorId: adminId,
+      recipientId,
+      comment: null,
+      createdAt,
+      expiresAt: new Date(createdAt.getTime() + 86_400_000),
+    });
+
+    const inserted = await requests.insertRequestItem({
+      id: requestItemId,
+      requestId,
+      itemId,
+      expectedItemVersion: 1,
+      responsibilityPeriodIdAtRequest: null,
+      currentResponsibleIdAtRequest: null,
+      createdAt,
+    });
+    expect(inserted).toMatchObject({
+      responsibilityPeriodIdAtRequest: null,
+      currentResponsibleIdAtRequest: null,
+      result: "pending",
+    });
+    expect((await requests.findById(requestId))?.items[0]).toMatchObject({
+      responsibleUserProfile: null,
+    });
+
+    expect(await requests.decideItem({
+      requestId,
+      requestItemId,
+      itemId,
+      responsibilityPeriodIdAtRequest: null,
+      currentResponsibleIdAtRequest: null,
+      expectedVersion: 1,
+      decision: "accept",
+      recipientId,
+      decidedBy: recipientId,
+      decidedAt: new Date(createdAt.getTime() + 1_000),
+      newResponsibilityPeriodId: randomUUID(),
+    })).toBe("accepted");
+    const current = await database.query<{ responsible_user_id: string }>(
+      `select responsible_user_id
+         from "yu_inventory"."responsibility_periods"
+        where item_id = $1 and ended_at is null`,
+      [itemId],
+    );
+    expect(current.rows).toEqual([{ responsible_user_id: recipientId }]);
+  });
+
   it("suppresses closed overdue notifications from feed, unread count, and push outbox", async () => {
     const initiatorId = randomUUID();
     const recipientId = randomUUID();
@@ -524,8 +596,8 @@ async function seedItemAndResponsibility(input: {
   );
   await database.query(
     `insert into "yu_inventory"."responsibility_periods"
-       (id, item_id, responsible_user_id, source, started_by)
-     values ($1, $2, $3, 'transfer', $3)`,
+       (id, item_id, responsible_user_id, source, started_at, started_by)
+     values ($1, $2, $3, 'transfer', '2026-08-01T00:00:00Z', $3)`,
     [input.periodId, input.itemId, input.responsibleId],
   );
 }

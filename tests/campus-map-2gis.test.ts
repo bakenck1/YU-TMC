@@ -94,7 +94,6 @@ test("keeps KGISE on the map as a named non-interactive landmark and removes it 
     "../app/(protected)/inventory/page.tsx",
     "../app/inventory/rooms/qr-print/page.tsx",
     "../app/(protected)/items/page.tsx",
-    "../app/(protected)/items/[id]/page.tsx",
     "../app/(protected)/inventory/inspections/page.tsx",
     "../app/api/inventory/excel/route.ts",
   ]) {
@@ -104,10 +103,11 @@ test("keeps KGISE on the map as a named non-interactive landmark and removes it 
     new URL("../app/(protected)/items/[id]/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(
+  assert.doesNotMatch(
     itemDetailPage,
     /if \(!isInventoryBuildingName\(item\.room\.buildingName\)\) notFound\(\);/,
   );
+  assert.match(itemDetailPage, /services\.items\.findItem\(id, actor\)/);
 });
 
 test("renders one basketball and two football decorative fields in the marked column", () => {

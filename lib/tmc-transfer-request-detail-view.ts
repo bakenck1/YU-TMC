@@ -18,7 +18,7 @@ export interface TmcTransferRequestCardItemView {
       roomDesignation: string;
     };
   };
-  responsibleUserProfile: { fullName: string };
+  responsibleUserProfile: { fullName: string } | null;
   result: TmcTransferItemResult;
   version: number;
 }
@@ -77,9 +77,9 @@ export function toTmcTransferRequestCardView(
           roomDesignation: entry.item.location.roomDesignation,
         },
       },
-      responsibleUserProfile: {
-        fullName: entry.responsibleUserProfile.fullName,
-      },
+      responsibleUserProfile: entry.responsibleUserProfile
+        ? { fullName: entry.responsibleUserProfile.fullName }
+        : null,
       result: entry.result,
       version: entry.version,
     })),

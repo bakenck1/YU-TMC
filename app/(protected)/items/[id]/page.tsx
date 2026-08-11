@@ -5,6 +5,7 @@ import ProblemReportButton from "@/components/ProblemReportButton";
 import { getApplicationServices } from "@/lib/server/application";
 import { hasPermission } from "@/lib/security/permissions";
 import { isInventoryBuildingName } from "@/lib/campus-directory";
+import { isUuid } from "@/lib/domain/identifiers";
 import { readHiddenPageResource } from "@/lib/server/security/hidden-page-resource";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 
@@ -16,7 +17,7 @@ export default async function ItemPage({
   const { id } = await params;
   const user = await requireAuthorizedPage(`/items/${id}`);
 
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+  if (isUuid(id)) {
     const actor = {
       userId: user.userId,
       role: user.role,
@@ -26,7 +27,6 @@ export default async function ItemPage({
       () => services.items.findItem(id, actor),
       notFound,
     );
-    if (!isInventoryBuildingName(item.room.buildingName)) notFound();
     const canManageProtected = hasPermission(
       user.role,
       "inventory.item.manage_protected_fields",
