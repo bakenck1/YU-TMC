@@ -109,22 +109,6 @@ export class UserService {
     };
   }
 
-  async resolveYuApiIdentity(emailInput: string): Promise<AuthenticationResult> {
-    const email = normalizeUserEmail(emailInput);
-    const user = email
-      ? await this.unitOfWork.read(({ users }) =>
-          users.findByNormalizedEmail(email),
-        )
-      : null;
-    if (!user || user.deletedAt) return { status: "invalid" };
-    if (!user.active) return { status: "blocked" };
-    return {
-      status: "authenticated",
-      user: authenticatedAccount(user),
-      sessionVersion: user.version,
-    };
-  }
-
   async authenticateGoogleIdentity(
     input: { subject: string; email: string; name?: string | null },
   ): Promise<AuthenticationResult> {

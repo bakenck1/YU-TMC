@@ -15,7 +15,6 @@
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
     "docker:mobile:up": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-mobile-docker.ps1",
     "worker:tmc-push": "node --conditions=react-server --import tsx scripts/process-tmc-push-outbox.ts",
-    "integration:yu-api:provision": "node scripts/provision-yu-api-integration.mjs",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db/migrate.ts",

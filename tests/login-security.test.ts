@@ -44,7 +44,7 @@ test("login validates and bounds JSON before parsing credentials", () => {
 test("durable email throttling runs before expensive password verification", () => {
   const source = readFileSync("app/api/auth/login/route.ts", "utf8");
   const authentication = source.indexOf("users.authenticate(");
-  const emailLimit = source.indexOf("consumeLoginEmailLimit(identifier)");
+  const emailLimit = source.indexOf("consumeLoginEmailLimit(email)");
 
   assert.ok(emailLimit >= 0 && emailLimit < authentication);
 });

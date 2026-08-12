@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Ban,
@@ -134,13 +134,6 @@ interface UserFormValues {
   initialPassword: string;
 }
 
-interface YuApiPersonnelOption {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string | null;
-}
-
 function UserFormModal({
   user,
   roleOptions,
@@ -156,16 +149,6 @@ function UserFormModal({
 }) {
   const { t } = useAppSettings();
   const [saving, setSaving] = useState(false);
-  const [directoryQuery, setDirectoryQuery] = useState("");
-  const [directoryStatus, setDirectoryStatus] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
-  const [connectionStatus, setConnectionStatus] = useState<
-    "checking" | "connected" | "unavailable"
-  >("checking");
-  const [directoryResults, setDirectoryResults] = useState<
-    YuApiPersonnelOption[]
-  >([]);
   const [values, setValues] = useState<UserFormValues>({
     code: user?.code ?? suggestedCode,
     fullName: user?.fullName ?? "",
@@ -177,62 +160,6 @@ function UserFormModal({
     sendInvitation: false,
     initialPassword: "",
   });
-
-  useEffect(() => {
-    if (user) return;
-    const controller = new AbortController();
-    void fetch("/api/integrations/yu-api/status", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((response) => {
-        setConnectionStatus(response.ok ? "connected" : "unavailable");
-      })
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setConnectionStatus("unavailable");
-        }
-      });
-    return () => controller.abort();
-  }, [user]);
-
-  async function searchYuApiDirectory() {
-    const query = directoryQuery.trim();
-    if (Array.from(query).length < 2) return;
-    setDirectoryStatus("loading");
-    setDirectoryResults([]);
-    try {
-      const response = await fetch(
-        `/api/integrations/yu-api/personnel?q=${encodeURIComponent(query)}`,
-        { cache: "no-store" },
-      );
-      if (!response.ok) {
-        setDirectoryStatus("error");
-        return;
-      }
-      const payload = (await response.json()) as {
-        personnel?: YuApiPersonnelOption[];
-      };
-      setDirectoryResults(Array.isArray(payload.personnel) ? payload.personnel : []);
-      setDirectoryStatus("ready");
-    } catch {
-      setDirectoryStatus("error");
-    }
-  }
-
-  function selectYuApiPerson(person: YuApiPersonnelOption) {
-    setValues((current) => ({
-      ...current,
-      fullName: person.fullName,
-      email: person.email,
-      phone: person.phone ?? "",
-      emailVerified: true,
-      active: true,
-    }));
-    setDirectoryQuery(person.fullName);
-    setDirectoryResults([]);
-    setDirectoryStatus("idle");
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -274,108 +201,6 @@ function UserFormModal({
         </header>
 
         <form onSubmit={submit} className="space-y-6 p-5 sm:p-6">
-          {!user && (
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-emerald-900">
-                  {t("users.yuApiDirectory")}
-                </h3>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${
-                    connectionStatus === "connected"
-                      ? "bg-emerald-100 text-emerald-800 ring-emerald-600/20"
-                      : connectionStatus === "checking"
-                        ? "bg-white text-zinc-500 ring-zinc-200"
-                        : "bg-amber-100 text-amber-800 ring-amber-600/20"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      connectionStatus === "connected"
-                        ? "bg-emerald-500"
-                        : connectionStatus === "checking"
-                          ? "animate-pulse bg-zinc-400"
-                          : "bg-amber-500"
-                    }`}
-                  />
-                  {t(
-                    connectionStatus === "connected"
-                      ? "users.yuApiConnected"
-                      : connectionStatus === "checking"
-                        ? "users.yuApiChecking"
-                        : "users.yuApiNotConnected",
-                  )}
-                </span>
-              </div>
-              <p className="mt-1 text-xs leading-5 text-emerald-800/70">
-                {t("users.yuApiDirectoryHint")}
-              </p>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  value={directoryQuery}
-                  onChange={(event) => setDirectoryQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void searchYuApiDirectory();
-                    }
-                  }}
-                  placeholder={t("users.yuApiSearchPlaceholder")}
-                  className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-white px-3.5 py-2.5 text-sm text-zinc-800 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10"
-                />
-                <button
-                  type="button"
-                  onClick={() => void searchYuApiDirectory()}
-                  disabled={
-                    connectionStatus !== "connected" ||
-                    directoryStatus === "loading" ||
-                    Array.from(directoryQuery.trim()).length < 2
-                  }
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                  {directoryStatus === "loading"
-                    ? t("common.loading")
-                    : t("common.search")}
-                </button>
-              </div>
-              {directoryStatus === "error" && (
-                <p className="mt-3 text-sm text-red-700">
-                  {t("users.yuApiUnavailable")}
-                </p>
-              )}
-              {directoryStatus === "ready" && directoryResults.length === 0 && (
-                <p className="mt-3 text-sm text-zinc-500">
-                  {t("users.yuApiNoResults")}
-                </p>
-              )}
-              {directoryResults.length > 0 && (
-                <div className="mt-3 grid gap-2">
-                  {directoryResults.map((person) => (
-                    <button
-                      key={person.id}
-                      type="button"
-                      onClick={() => selectYuApiPerson(person)}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-white px-3 py-2.5 text-left hover:border-emerald-300"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-zinc-800">
-                          {person.fullName}
-                        </span>
-                        <span className="block truncate text-xs text-zinc-500">
-                          {person.email}
-                          {person.phone ? ` · ${person.phone}` : ""}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-xs font-semibold text-emerald-700">
-                        {t("users.yuApiUsePerson")}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium text-zinc-700">
               {t("users.fullName")}
