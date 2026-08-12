@@ -29,7 +29,7 @@ test("warehouse sidebar exposes analytics and decommissioned items", () => {
 
 test("logout control calls the authenticated logout flow", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) =>
-    readFile(new URL("../components/Sidebar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/SidebarContent.tsx", import.meta.url), "utf8"),
   );
 
   assert.match(source, /await logout\(\)/);

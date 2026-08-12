@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowRightLeft, MapPin, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import TmcUserPicker from "@/components/TmcUserPicker";
+import TmcOperationResults from "@/components/TmcOperationResults";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import type {
   CreateTmcTransferRequestResultDto,
@@ -15,7 +15,6 @@ import type {
   TmcTransferRequestCreationItemOutcomeDto,
 } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
-import type { TranslationKey } from "@/lib/i18n";
 import type { InventoryItem } from "@/lib/types";
 
 type Mode = "transfer" | "location";
@@ -217,7 +216,7 @@ export default function TmcBulkActions({
                   <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5" />
                 </label>
               </div>
-            ) : <OperationResults items={operationItems} outcomes={outcomes} requestId={requestId} />}
+            ) : <TmcOperationResults items={operationItems} outcomes={outcomes} requestId={requestId} />}
 
             {error ? <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -231,28 +230,6 @@ export default function TmcBulkActions({
   );
 }
 
-function OperationResults({ items, outcomes, requestId }: { items: InventoryItem[]; outcomes: Outcome[]; requestId: string | null }) {
-  const { t } = useAppSettings();
-  const itemById = new Map(items.map((item) => [item.id, item]));
-  return (
-    <div className="mt-5 rounded-2xl border border-black/5 p-4">
-      <h3 className="font-semibold text-zinc-900">{t("tmc.bulk.results")}</h3>
-      <ul className="mt-3 space-y-2 text-sm">
-        {outcomes.map((outcome) => (
-          <li key={outcome.itemId} className="flex justify-between gap-4">
-            <span>{itemById.get(outcome.itemId)?.name ?? outcome.itemId}</span>
-            <span className={outcome.outcome === "problem" ? "text-rose-700" : "text-emerald-700"}>
-              {outcome.outcome === "problem" ? t(`tmc.problem.${outcome.problem}` as TranslationKey) : t("tmc.bulk.success")}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {requestId ? <Link href={`/tmc/transfer-requests/${requestId}`} className="mt-4 inline-flex font-semibold text-emerald-700 hover:underline">{t("tmc.bulk.openRequest")}</Link> : null}
-    </div>
-  );
-}
-
 function createIdempotencyKey() {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  return uuid ? `tmc-desktop-${uuid}` : `tmc-desktop-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `tmc-desktop-${crypto.randomUUID()}`;
 }

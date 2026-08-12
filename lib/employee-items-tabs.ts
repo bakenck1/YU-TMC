@@ -37,3 +37,10 @@ export function employeeItemTabAfterKey(
       return null;
   }
 }
+
+export function employeeItemsForStatus<TItem extends { status: ItemStatus }>(
+  items: readonly TItem[],
+  status: ItemStatus,
+): TItem[] {
+  return items.filter((item) => item.status === status);
+}

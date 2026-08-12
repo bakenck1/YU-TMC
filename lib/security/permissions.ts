@@ -64,9 +64,9 @@ const ALL_ROLES: readonly UserRole[] = USER_ROLES;
 const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
 const ADMIN_ONLY: readonly UserRole[] = ["admin"];
 const ADMIN_EMPLOYEE: readonly UserRole[] = ["admin", "employee"];
-// Warehouse users have a read-only inventory role and must not participate in
-// inspections. Employee inspection permissions remain available for the
-// existing assigned-session workflow.
+// Warehouse users may create basic inventory records, but have no broader
+// mutation or inspection permissions. Employee inspection permissions remain
+// available for the existing assigned-session workflow.
 const TECHNICIAN_ONLY: readonly UserRole[] = [];
 const ASSIGNABLE_TECHNICIANS: readonly UserRole[] = ["employee"];
 const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
@@ -87,7 +87,7 @@ export const PERMISSION_ROLES = {
   "inventory.room.manage": ADMIN_ONLY,
   "inventory.item.read_all": ADMIN_WAREHOUSE,
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
-  "inventory.item.create": ADMIN_ONLY,
+  "inventory.item.create": ADMIN_WAREHOUSE,
   "inventory.item.edit_content": ADMIN_ONLY,
   "inventory.item.send_to_service": ADMIN_EMPLOYEE,
   "inventory.item.resolve_maintenance": ADMIN_ONLY,

@@ -382,9 +382,12 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.create");
-    const values = normalizeCreateInput(input);
-    const photo = input.photo
-      ? await normalizeCameraPhoto({ version: 1, ...input.photo })
+    const authorizedInput = actor.role === "warehouse"
+      ? normalizeWarehouseCreateInput(input)
+      : input;
+    const values = normalizeCreateInput(authorizedInput);
+    const photo = authorizedInput.photo
+      ? await normalizeCameraPhoto({ version: 1, ...authorizedInput.photo })
       : null;
     const occurredAt = this.clock.now();
     const itemId = this.ids.create();
@@ -1066,6 +1069,33 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     unitPrice: content.unitPrice ?? 0,
     roomId,
     inventoryNumber,
+  };
+}
+
+function normalizeWarehouseCreateInput(
+  input: CreateInventoryItemInput,
+): CreateInventoryItemInput {
+  const hasProtectedValues =
+    (input.itemType !== undefined && input.itemType !== null) ||
+    (input.brand !== undefined && input.brand !== null) ||
+    (input.model !== undefined && input.model !== null) ||
+    (input.quantity !== undefined && input.quantity !== null && input.quantity !== 1) ||
+    (input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== 0) ||
+    (input.barcode !== undefined && input.barcode !== null) ||
+    (input.inventoryNumber !== undefined && input.inventoryNumber !== null);
+  if (hasProtectedValues) throw forbidden();
+  return {
+    name: input.name,
+    description: input.description,
+    roomId: input.roomId,
+    photo: input.photo,
+    itemType: null,
+    brand: null,
+    model: null,
+    quantity: 1,
+    unitPrice: 0,
+    barcode: null,
+    inventoryNumber: null,
   };
 }
 

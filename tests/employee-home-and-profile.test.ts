@@ -15,8 +15,16 @@ test("the employee home keeps the assigned-item map without embedding the transf
 
 test("every authenticated role has a profile route and a profile navigation entry", () => {
   const page = readFileSync("app/(protected)/profile/page.tsx", "utf8");
-  const profile = readFileSync("components/UserProfileCard.tsx", "utf8");
-  const sidebar = readFileSync("components/Sidebar.tsx", "utf8");
+  const profile = [
+    "components/UserProfileCard.tsx",
+    "components/UserProfileHeader.tsx",
+    "components/UserProfileRoleCard.tsx",
+    "components/UserEmailVerificationCard.tsx",
+    "lib/user-profile-presentation.ts",
+  ].map((path) => readFileSync(path, "utf8")).join("\n");
+  const sidebar = ["components/Sidebar.tsx", "components/SidebarContent.tsx"]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
   const authorization = readFileSync("lib/security/authorization.ts", "utf8");
 
   assert.match(page, /requireAuthorizedPage\("\/profile"\)/);
@@ -24,8 +32,8 @@ test("every authenticated role has a profile route and a profile navigation entr
   assert.match(profile, /Профиль/);
   assert.match(profile, /email/);
   assert.match(profile, /role/);
-  assert.match(profile, /profileInitials/);
-  assert.match(profile, /ROLE_PRESENTATION/);
+  assert.match(profile, /getProfileInitials/);
+  assert.match(profile, /USER_PROFILE_ROLE_COPY/);
   assert.match(profile, /bg-gradient-to-br/);
   assert.match(profile, /Email подтверждён/);
   assert.match(sidebar, /\/profile/);

@@ -96,6 +96,53 @@ describe("TMC stage four UI", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/tmc/transfer-requests/${REQUEST.id}`));
   });
 
+  it("guards a notification from duplicate read requests and navigation", async () => {
+    let resolveRead!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadCount: 1, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null }] }) } as Response)
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveRead = resolve; }));
+    render(<TmcNotifications />);
+    await waitFor(() => expect(screen.getByLabelText("tmc.notifications.unread")).not.toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
+    const notification = screen.getByRole("link", { name: /tmc.notifications.requested/ });
+    notification.addEventListener("click", (event) => event.preventDefault());
+
+    fireEvent.click(notification);
+    fireEvent.click(notification);
+
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) =>
+      String(url).endsWith("/read"),
+    )).toHaveLength(1);
+    expect(push).not.toHaveBeenCalled();
+
+    resolveRead({ ok: true, status: 204 } as Response);
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith(`/tmc/transfer-requests/${REQUEST.id}`);
+  });
+
+  it("aborts notification polling when the component unmounts", async () => {
+    let pollingSignal: AbortSignal | undefined;
+    vi.mocked(fetch).mockImplementationOnce((_url, init) => {
+      pollingSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    });
+    const view = render(<TmcNotifications />);
+    await waitFor(() => expect(pollingSignal).toBeInstanceOf(AbortSignal));
+
+    view.unmount();
+
+    expect(pollingSignal?.aborted).toBe(true);
+  });
+
+  it("uses outcome-aware labels for completed notifications", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.completed", requestId: REQUEST.id, itemId: null, safePayload: { status: "accepted", isAdministrativeDecision: false }, occurredAt: REQUEST.createdAt, readAt: "2026-08-10T01:00:00.000Z" }] }) } as Response);
+    render(<TmcNotifications />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.title" }));
+
+    expect(screen.getByText("tmc.notifications.accepted")).not.toBeNull();
+  });
+
   it("renders a large compact bell touch target", async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [] }) } as Response);
     render(<TmcNotifications compact />);

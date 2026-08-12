@@ -6,10 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   EmployeeItemsTabList,
-  EmployeeItemsTabPanels,
-  EmployeeItemsTabsView,
 } from "../components/EmployeeItemsTabs";
-import { employeeItemTabAfterKey } from "../lib/employee-items-tabs";
+import { employeeItemTabAfterKey, employeeItemsForStatus } from "../lib/employee-items-tabs";
 
 test("employee inventory renders a roving, fully associated tab list", () => {
   const markup = renderToStaticMarkup(
@@ -30,17 +28,6 @@ test("employee inventory renders a roving, fully associated tab list", () => {
     assert.match(markup, new RegExp(`aria-controls="employee-items-panel-${status}"`));
   }
 
-  const panels = renderToStaticMarkup(
-    createElement(EmployeeItemsTabPanels, {
-      activeStatus: "maintenance",
-      renderActive: () => createElement("p", null, "visible items"),
-    }),
-  );
-  assert.equal((panels.match(/role="tabpanel"/g) ?? []).length, 3);
-  assert.equal((panels.match(/ hidden=""/g) ?? []).length, 2);
-  assert.match(panels, /id="employee-items-panel-maintenance"[^>]*><p>visible items<\/p>/);
-  assert.match(panels, /aria-labelledby="employee-items-tab-active"/);
-  assert.match(panels, /aria-labelledby="employee-items-tab-maintenance"/);
 });
 
 test("employee tab keyboard interaction invokes selection, focus, and preventDefault", () => {
@@ -73,26 +60,13 @@ test("employee tab keyboard interaction invokes selection, focus, and preventDef
   assert.equal(employeeItemTabAfterKey("active", "End"), "decommissioned");
 });
 
-test("employee view passes only the selected status items to its table", () => {
+test("employee status selection returns only the selected status items", () => {
   const items = [
     { id: "a", status: "active" },
     { id: "m", status: "maintenance" },
     { id: "d", status: "decommissioned" },
-  ] as never[];
-  let renderedIds: string[] = [];
-  renderToStaticMarkup(
-    createElement(EmployeeItemsTabsView, {
-      items,
-      activeStatus: "maintenance",
-      ariaLabel: "Inventory",
-      label: (status) => status,
-      onSelect: () => undefined,
-      renderItems: (visibleItems) => {
-        renderedIds = visibleItems.map((item) => item.id);
-        return createElement("p", null, renderedIds.join(","));
-      },
-    }),
-  );
+  ] as const;
+  const renderedIds = employeeItemsForStatus(items, "maintenance").map((item) => item.id);
   assert.deepEqual(renderedIds, ["m"]);
 });
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import AuthPageFrame from "@/components/auth/AuthPageFrame";
-import LoginForm from "@/components/auth/LoginForm";
+import AuthPageFrame from "@/components/AuthPageFrame";
+import LoginForm from "@/components/LoginForm";
 import { isSafeReturnPath } from "@/lib/security/authorization";
 import { defaultPathForRole } from "@/lib/security/authorization";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";

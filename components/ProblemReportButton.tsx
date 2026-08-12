@@ -12,11 +12,11 @@ type Photo = { imageDataUrl: string; width: number; height: number };
 export default function ProblemReportButton({
   items,
   initialItemId,
-  className = "",
+  fullWidth = false,
 }: {
   items: Array<Pick<RoomWorkspaceItemDto, "id" | "name" | "inventoryNumber">>;
   initialItemId?: string;
-  className?: string;
+  fullWidth?: boolean;
 }) {
   const { t } = useAppSettings();
   const [open, setOpen] = useState(false);
@@ -70,7 +70,7 @@ export default function ProblemReportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-base font-semibold text-white shadow-sm hover:bg-amber-600 ${className}`}
+        className={`min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-base font-semibold text-white shadow-sm hover:bg-amber-600 ${fullWidth ? "flex w-full" : "inline-flex"}`}
       >
         <TriangleAlert className="h-5 w-5" /> {t("request.report")}
       </button>

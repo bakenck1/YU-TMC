@@ -59,7 +59,7 @@ test("desktop navigation exposes requests to every product role", async () => {
 });
 
 test("room QR scanning and downloads are discoverable outside the mobile menu", () => {
-  const sidebar = read("components/Sidebar.tsx");
+  const sidebar = read("components/SidebarContent.tsx");
   const buildings = read("components/InventoryBuildingsManager.tsx");
 
   assert.match(sidebar, /href: "\/scan", labelKey: "nav\.scanQr"/);

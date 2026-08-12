@@ -38,6 +38,7 @@ import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog"
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
+import InventoryOverviewRow from "@/components/InventoryOverviewRow";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 
 export default function InventoryItemDetails({
@@ -1000,14 +1001,14 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
-            <OverviewRow label={t("items.type")} value={item.itemType} />
-            <OverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
-            <OverviewRow label={t("items.location")} value={item.room.designation} />
-            <OverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
-            <OverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
-            <OverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
-            <OverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
-            <OverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
+            <InventoryOverviewRow label={t("items.type")} value={item.itemType} />
+            <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
+            <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
+            <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
+            <InventoryOverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
+            <InventoryOverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
+            <InventoryOverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
+            <InventoryOverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
           </dl>
         </section>
 
@@ -1150,15 +1151,6 @@ export default function InventoryItemDetails({
         </div>
       </div>
 
-    </div>
-  );
-}
-
-function OverviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-h-9 items-center justify-between gap-4 py-2">
-      <dt className="font-medium text-zinc-700">{label}</dt>
-      <dd className="text-right text-zinc-600">{value}</dd>
     </div>
   );
 }

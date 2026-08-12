@@ -2,9 +2,9 @@
 
 import { Barcode, QrCode, ScanLine, X } from "lucide-react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
+import InventoryCodeKindSwitch, { type InventoryCodeKind } from "./InventoryCodeKindSwitch";
 
 type QrDialogKind = "generate" | "scan" | "purpose";
-type CodeKind = "barcode" | "qr";
 
 export default function InventoryItemQrDialogs({
   kind,
@@ -14,10 +14,10 @@ export default function InventoryItemQrDialogs({
   onPrint,
 }: {
   kind: QrDialogKind | null;
-  codeKind: CodeKind;
-  onCodeKindChange(value: CodeKind): void;
+  codeKind: InventoryCodeKind;
+  onCodeKindChange(value: InventoryCodeKind): void;
   onClose(): void;
-  onPrint(kind: CodeKind): void;
+  onPrint(kind: InventoryCodeKind): void;
 }) {
   const { t } = useAppSettings();
   if (!kind) return null;
@@ -45,7 +45,7 @@ export default function InventoryItemQrDialogs({
         {kind === "generate" ? (
           <div className="mt-6 space-y-4 text-sm text-zinc-600">
             <p>{t("code.printHint")}</p>
-            <CodeKindSwitch value={codeKind} onChange={onCodeKindChange} />
+            <InventoryCodeKindSwitch value={codeKind} onChange={onCodeKindChange} />
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 font-medium text-zinc-600">{t("common.cancel")}</button>
               <button type="button" onClick={() => onPrint(codeKind)} className="rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-white hover:bg-emerald-600">{t("code.openForPrint")}</button>
@@ -53,7 +53,7 @@ export default function InventoryItemQrDialogs({
           </div>
         ) : kind === "scan" ? (
           <div className="mt-6 space-y-4">
-            <CodeKindSwitch value={codeKind} onChange={onCodeKindChange} />
+            <InventoryCodeKindSwitch value={codeKind} onChange={onCodeKindChange} />
             <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-zinc-600">
               <li>{t("code.scanStep1")}</li>
               <li>{t("code.scanStep2")}</li>
@@ -71,26 +71,6 @@ export default function InventoryItemQrDialogs({
           <div className="mt-6 flex justify-end"><button type="button" onClick={onClose} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white">{t("code.understood")}</button></div>
         ) : null}
       </section>
-    </div>
-  );
-}
-
-function CodeKindSwitch({
-  value,
-  onChange,
-}: {
-  value: CodeKind;
-  onChange(value: CodeKind): void;
-}) {
-  const { t } = useAppSettings();
-  return (
-    <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1" aria-label={t("code.format")}>
-      <button type="button" onClick={() => onChange("barcode")} aria-pressed={value === "barcode"} className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 font-semibold ${value === "barcode" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}>
-        <Barcode className="h-4 w-4" /> {t("itemDetails.barcode")}
-      </button>
-      <button type="button" onClick={() => onChange("qr")} aria-pressed={value === "qr"} className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 font-semibold ${value === "qr" ? "bg-white text-emerald-700 shadow-sm" : "text-zinc-500"}`}>
-        <QrCode className="h-4 w-4" /> QR
-      </button>
     </div>
   );
 }

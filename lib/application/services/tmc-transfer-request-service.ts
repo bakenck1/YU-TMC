@@ -782,6 +782,38 @@ export class TmcTransferRequestService {
       safePayload: { itemCount: request.items.length, status: request.status },
       occurredAt: request.createdAt,
     });
+    // Notify each distinct current responsible person whose items are included.
+    // Skip the initiator (they already know) and the recipient (notified above).
+    const ownerIds = new Set(
+      request.items
+        .map((item) => item.currentResponsibleIdAtRequest)
+        .filter(
+          (id): id is string =>
+            id !== null &&
+            id !== actor.userId &&
+            id !== request.recipient.id,
+        ),
+    );
+    for (const ownerId of ownerIds) {
+      await stageFour.createNotification({
+        id: this.ids.create(),
+        domainEventId,
+        type: "tmc_transfer.requested",
+        actorId: actor.userId,
+        requestId: request.id,
+        itemId: null,
+        requestRevision: request.version,
+        recipientId: ownerId,
+        audience: "direct_user",
+        safePayload: {
+          itemCount: request.items.filter(
+            (item) => item.currentResponsibleIdAtRequest === ownerId,
+          ).length,
+          status: request.status,
+        },
+        occurredAt: request.createdAt,
+      });
+    }
     await stageFour.createNotification({
       id: this.ids.create(),
       domainEventId: this.ids.create(),
@@ -830,8 +862,9 @@ export class TmcTransferRequestService {
         administrativeReason: after.administrativeReason,
       }, occurredAt,
     });
+    const previousDecisionById = new Map(before.items.map((i) => [i.id, i]));
     for (const item of after.items) {
-      const previous = before.items.find((candidate) => candidate.id === item.id);
+      const previous = previousDecisionById.get(item.id);
       if (!previous || previous.result === item.result) continue;
       await stageFour.appendAudit({
         id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
@@ -857,24 +890,40 @@ export class TmcTransferRequestService {
       actorId: actor.id, requestId: after.id, itemId: null,
       requestRevision: after.version, recipientId: after.initiator.id,
       audience: "direct_user",
-      safePayload: { status: after.status, accepted: after.items.filter((item) => item.result === "accepted").length, itemCount: after.items.length },
+      safePayload: {
+        status: after.status,
+        isAdministrativeDecision: after.isAdministrativeDecision,
+        accepted: after.items.filter((item) => item.result === "accepted").length,
+        itemCount: after.items.length,
+      },
       occurredAt,
     });
-    const owners = new Map<string, number>();
+    // Notify owners of accepted items that their items moved to the recipient.
+    // Also notify owners of rejected items so they know the items stayed with them.
+    const ownersByOutcome = new Map<string, { accepted: number; rejected: number }>();
     for (const item of after.items) {
-      if (item.result !== "accepted") continue;
+      if (item.result !== "accepted" && item.result !== "rejected") continue;
       const ownerId = item.currentResponsibleIdAtRequest;
       if (!ownerId) continue;
-      owners.set(ownerId, (owners.get(ownerId) ?? 0) + 1);
+      const entry = ownersByOutcome.get(ownerId) ?? { accepted: 0, rejected: 0 };
+      if (item.result === "accepted") entry.accepted += 1;
+      else entry.rejected += 1;
+      ownersByOutcome.set(ownerId, entry);
     }
-    for (const [ownerId, accepted] of owners) {
+    for (const [ownerId, counts] of ownersByOutcome) {
       if (ownerId === after.initiator.id) continue;
       await stageFour.createNotification({
         id: this.ids.create(), domainEventId: this.ids.create(), type: "tmc_transfer.completed",
         actorId: actor.id, requestId: after.id, itemId: null,
         requestRevision: after.version, recipientId: ownerId,
         audience: "direct_user",
-        safePayload: { status: after.status, accepted, itemCount: after.items.length }, occurredAt,
+        safePayload: {
+          status: after.status,
+          isAdministrativeDecision: after.isAdministrativeDecision,
+          accepted: counts.accepted,
+          itemCount: counts.accepted + counts.rejected,
+        },
+        occurredAt,
       });
     }
     const invalidated = after.items.filter((item) => item.result === "invalidated").length;
@@ -908,8 +957,9 @@ export class TmcTransferRequestService {
         administrativeReason: after.administrativeReason,
       }, occurredAt,
     });
+    const previousCancellationById = new Map(before.items.map((i) => [i.id, i]));
     for (const item of after.items) {
-      const previous = before.items.find((candidate) => candidate.id === item.id);
+      const previous = previousCancellationById.get(item.id);
       if (!previous || previous.result === item.result) continue;
       await stageFour.appendAudit({
         id: this.ids.create(), domainEventId, actorId: actor.id, actorRole: actor.role,
@@ -933,7 +983,12 @@ export class TmcTransferRequestService {
       actorId: actor.id, requestId: after.id, itemId: null,
       requestRevision: after.version, recipientId: after.recipient.id,
       audience: "direct_user",
-      safePayload: { status: after.status, itemCount: after.items.length }, occurredAt,
+      safePayload: {
+        status: after.status,
+        isAdministrativeDecision: after.isAdministrativeDecision,
+        itemCount: after.items.length,
+      },
+      occurredAt,
     });
     if (actor.id !== after.initiator.id && after.initiator.id !== after.recipient.id) {
       await stageFour.createNotification({
@@ -941,7 +996,12 @@ export class TmcTransferRequestService {
         actorId: actor.id, requestId: after.id, itemId: null,
         requestRevision: after.version, recipientId: after.initiator.id,
         audience: "direct_user",
-        safePayload: { status: after.status, itemCount: after.items.length }, occurredAt,
+        safePayload: {
+          status: after.status,
+          isAdministrativeDecision: after.isAdministrativeDecision,
+          itemCount: after.items.length,
+        },
+        occurredAt,
       });
     }
   }
@@ -1029,6 +1089,21 @@ function toParticipantRequestDto(
       items: [...participantItems],
     }, now);
   }
+  // When all participant items are cancelled, they have no decidedAt —
+  // the cancellation was driven by the request itself, so we use the
+  // request-level closedAt/closedBy from the main record.
+  if (status === "cancelled") {
+    return toRequestDto({
+      ...request,
+      status,
+      closedAt: request.closedAt,
+      closedBy: request.closedBy,
+      isAdministrativeDecision: false,
+      administrativeReason: null,
+      items: [...participantItems],
+    }, now);
+  }
+  // For accepted/rejected, items have decidedAt set — use the most recent one.
   const finalItem = [...participantItems]
     .sort((left, right) =>
       (right.decidedAt?.getTime() ?? 0) - (left.decidedAt?.getTime() ?? 0))[0];
@@ -1046,6 +1121,21 @@ function toParticipantRequestDto(
   }, now);
 }
 
+/**
+ * Computes a request status from the perspective of a *participant* (i.e. a
+ * user who is the responsible owner of one or more items in the request, but
+ * is neither the initiator nor the recipient).
+ *
+ * Semantics:
+ *  - "pending"   — at least one of the participant's items is still pending.
+ *  - "accepted"  — none pending, but at least one item was accepted
+ *                  ("at least one position of theirs was accepted").
+ *  - "cancelled" — every item was cancelled (request was cancelled before decision).
+ *  - "rejected"  — none of the above (all items rejected/invalidated).
+ *
+ * NOTE: Do NOT use this function for initiator/recipient views; those use the
+ * canonical request-level status from the repository.
+ */
 function requestStatusForItems(
   items: readonly TmcTransferRequestItemRecord[],
 ): TmcTransferRequestRecord["status"] {
@@ -1173,22 +1263,27 @@ export function normalizeTmcIdempotencyKey(value: unknown) {
   return value;
 }
 
-async function hashCreateRequest(
-  input: ReturnType<typeof normalizeCreateInput>,
-) {
-  const payload = new TextEncoder().encode(
-    JSON.stringify({ operation: CREATE_OPERATION, ...input }),
+/** Computes a hex-encoded SHA-256 digest of the JSON representation of `data`. */
+async function sha256Hex(data: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(data)),
   );
-  const digest = await crypto.subtle.digest("SHA-256", payload);
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
 
+async function hashCreateRequest(
+  input: ReturnType<typeof normalizeCreateInput>,
+) {
+  return sha256Hex({ operation: CREATE_OPERATION, ...input });
+}
+
 async function hashDecisionRequest(
   input: ReturnType<typeof normalizeDecisionInput>,
 ) {
-  const payload = new TextEncoder().encode(JSON.stringify({
+  return sha256Hex({
     operation: DECIDE_OPERATION,
     requestId: input.requestId,
     requestVersion: input.requestVersion,
@@ -1199,17 +1294,13 @@ async function hashDecisionRequest(
       typeof input.administrativeReason === "string"
         ? input.administrativeReason.normalize("NFKC").trim()
         : null,
-  }));
-  const digest = await crypto.subtle.digest("SHA-256", payload);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  });
 }
 
 async function hashCancellationRequest(
   input: ReturnType<typeof normalizeCancellationInput>,
 ) {
-  const payload = new TextEncoder().encode(JSON.stringify({
+  return sha256Hex({
     operation: CANCEL_OPERATION,
     requestId: input.requestId,
     requestVersion: input.requestVersion,
@@ -1217,11 +1308,7 @@ async function hashCancellationRequest(
       typeof input.administrativeReason === "string"
         ? input.administrativeReason.normalize("NFKC").trim()
         : null,
-  }));
-  const digest = await crypto.subtle.digest("SHA-256", payload);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  });
 }
 
 function readStoredCreateResult(response: {
@@ -1428,6 +1515,18 @@ function toRequestItemDto(
       invalidReason: null,
       decidedAt: null,
       decidedBy: null,
+    };
+  }
+  // Cancelled items may have decidedAt/decidedBy as null — the cancellation was
+  // driven by the request record, not a per-item decision. Emit them directly.
+  if (record.result === "cancelled") {
+    if (record.invalidReason) throw incompleteProjection();
+    return {
+      ...base,
+      result: "cancelled",
+      invalidReason: null,
+      decidedAt: record.decidedAt ? record.decidedAt.toISOString() : null,
+      decidedBy: record.decidedBy ? toUserDto(record.decidedBy) : null,
     };
   }
   if (!record.decidedAt || !record.decidedBy) throw incompleteProjection();

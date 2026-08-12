@@ -90,7 +90,7 @@ test("language remains device-local and its controls are available in required o
   const [provider, header, authFrame, settingsForm] = await Promise.all([
     readFile(new URL("components/AppSettingsProvider.tsx", ROOT), "utf8"),
     readFile(new URL("components/Header.tsx", ROOT), "utf8"),
-    readFile(new URL("components/auth/AuthPageFrame.tsx", ROOT), "utf8"),
+    readFile(new URL("components/AuthPageFrame.tsx", ROOT), "utf8"),
     readFile(new URL("components/SettingsForm.tsx", ROOT), "utf8"),
   ]);
 

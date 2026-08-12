@@ -3,18 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
+import CampusItemCard from "./CampusItemCard";
+import CampusItemStatusBadge from "./CampusItemStatusBadge";
 import {
   translateCampusBuilding,
   translateCampusBuildingDescription,
-  type TranslationKey,
 } from "@/lib/i18n";
-import {
-  buildQrMatrix,
-  QR_SIZE,
-  statusMeta,
-  type CampusItem,
-  type CampusStatus,
-} from "@/lib/campus";
 import type { CampusMapData } from "@/lib/campus-map-data";
 
 function css(text: string): React.CSSProperties {
@@ -30,14 +24,6 @@ function css(text: string): React.CSSProperties {
   }
   return style as React.CSSProperties;
 }
-
-const STATUS_KEYS: Record<CampusStatus, { list: TranslationKey; card: TranslationKey }> = {
-  ok: { list: "map.status.ok", card: "map.statusCard.ok" },
-  check: { list: "map.status.check", card: "map.statusCard.check" },
-  service: { list: "map.status.service", card: "map.statusCard.service" },
-  writeoff: { list: "map.status.writeoff", card: "map.statusCard.writeoff" },
-};
-
 const DECOR: string[] = [
   "position:absolute;left:0;top:0;width:100%;height:10px;background:#cde49e;",
   "position:absolute;left:0;top:10px;width:100%;height:22px;background:#e6e4db;",
@@ -295,7 +281,7 @@ const DECORATIVE_FIELDS: DecorativeField[] = [
 type View = "loading" | "building" | "floor" | "item";
 
 export default function CampusMap({ data }: { data: CampusMapData }) {
-  const { dataLabel, language, t } = useAppSettings();
+  const { language, t } = useAppSettings();
   const buildingLabel = useCallback(
     (name: string) => translateCampusBuilding(language, name),
     [language],
@@ -692,7 +678,6 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                   <div style={css("font-size:13px;font-weight:800;letter-spacing:.02em;margin:26px 0 12px;color:#3c463f;")}>{t("map.keyItems")}</div>
                   <div style={css("display:flex;flex-direction:column;gap:8px;")}>
                     {keyItems.map((it) => {
-                      const st = statusMeta(it.status);
                       return (
                         <div
                           key={it.id}
@@ -703,10 +688,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                             <div style={css("font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{it.name}</div>
                             <div style={css("font-size:11.5px;color:#8a948e;margin-top:2px;")}>{t("itemDetails.room")} {it.code}</div>
                           </div>
-                          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, padding: "4px 9px", borderRadius: "20px", color: st.color, background: st.bg }}>
-                            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: st.color }} />
-                            {t(STATUS_KEYS[it.status].list)}
-                          </div>
+                          <CampusItemStatusBadge status={it.status} />
                         </div>
                       );
                     })}
@@ -732,7 +714,6 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                           <div style={css("margin-left:auto;font-size:12px;color:#8a948e;font-weight:600;")}>{t("map.roomUnits", { count: r.items.length })}</div>
                         </div>
                         {r.items.map((it) => {
-                          const st = statusMeta(it.status);
                           return (
                             <div
                               key={it.id}
@@ -743,10 +724,7 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                                 <div style={css("font-weight:600;font-size:13.5px;")}>{it.name}</div>
                                 <div style={css("font-size:11.5px;color:#8a948e;margin-top:2px;font-variant-numeric:tabular-nums;")}>{it.invNo} · {t("map.lastInv", { date: it.lastInv })}</div>
                               </div>
-                              <div style={{ flex: "none", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 700, padding: "4px 9px", borderRadius: "20px", color: st.color, background: st.bg }}>
-                                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: st.color }} />
-                                {t(STATUS_KEYS[it.status].list)}
-                              </div>
+                              <CampusItemStatusBadge status={it.status} />
                               <div style={css("color:#c8d0ca;font-size:16px;")}>›</div>
                             </div>
                           );
@@ -762,82 +740,12 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
 
               {/* ITEM */}
               {view === "item" && item ? (
-                <ItemCard item={item} buildingName={buildingLabel(building?.name ?? "")} t={t} category={dataLabel(item.category)} responsible={dataLabel(item.responsible)} />
+                <CampusItemCard item={item} buildingName={buildingLabel(building?.name ?? "")} />
               ) : null}
             </div>
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ItemCard({
-  item,
-  buildingName,
-  t,
-  category,
-  responsible,
-}: {
-  item: CampusItem;
-  buildingName: string;
-  t: ReturnType<typeof useAppSettings>["t"];
-  category: string;
-  responsible: string;
-}) {
-  const st = statusMeta(item.status);
-  const qr = useMemo(() => buildQrMatrix(item.id), [item.id]);
-  return (
-    <div style={{ ...css("padding:22px 24px 40px;"), animation: "campusFadeUp .3s ease" }}>
-      <div style={css("height:200px;border-radius:16px;background:repeating-linear-gradient(135deg,#eef1ef,#eef1ef 12px,#e3e9e5 12px,#e3e9e5 24px);display:flex;align-items:center;justify-content:center;border:1px solid #e6ebe7;")}>
-        <span style={css("font-family:monospace;font-size:12px;color:#8a948e;letter-spacing:.08em;")}>{t("map.photo")}</span>
-      </div>
-
-      <div style={css("display:flex;align-items:flex-start;gap:14px;margin-top:18px;")}>
-        <div style={css("flex:1;")}>
-          <div style={css("font-size:12px;font-weight:700;color:#002060;letter-spacing:.05em;text-transform:uppercase;")}>{category}</div>
-          <div style={css("font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:4px;line-height:1.2;")}>{item.name}</div>
-          <div style={css("font-size:13px;color:#6b7671;margin-top:6px;font-variant-numeric:tabular-nums;font-weight:600;")}>{t("map.invNo", { no: item.invNo })}</div>
-        </div>
-        <div style={css("flex:none;text-align:center;")}>
-          <div style={css("width:96px;height:96px;border-radius:12px;border:1px solid #e6ebe7;padding:7px;background:#fff;")}>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${QR_SIZE},1fr)`, gridTemplateRows: `repeat(${QR_SIZE},1fr)`, width: "100%", height: "100%" }}>
-              {qr.map((on, i) => (
-                <div key={i} style={{ background: on ? "#12261c" : "transparent" }} />
-              ))}
-            </div>
-          </div>
-          <div style={css("font-size:10px;color:#98a29c;margin-top:5px;font-weight:600;letter-spacing:.04em;")}>{t("map.scan")}</div>
-        </div>
-      </div>
-
-      <div style={{ display: "inline-flex", alignItems: "center", gap: "7px", marginTop: "16px", fontSize: "12.5px", fontWeight: 700, padding: "7px 13px", borderRadius: "22px", color: st.color, background: st.bg }}>
-        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: st.color }} />
-        {t(STATUS_KEYS[item.status].card)}
-      </div>
-
-      <div style={css("display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;")}>
-        <div style={css("background:#fff;border:1px solid #eaefec;border-radius:13px;padding:14px;")}>
-          <div style={css("font-size:11px;color:#8a948e;font-weight:700;letter-spacing:.03em;text-transform:uppercase;")}>{t("map.location")}</div>
-          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{buildingName}, {t("map.roomShort")} {item.code}</div>
-        </div>
-        <div style={css("background:#fff;border:1px solid #eaefec;border-radius:13px;padding:14px;")}>
-          <div style={css("font-size:11px;color:#8a948e;font-weight:700;letter-spacing:.03em;text-transform:uppercase;")}>{t("map.responsible")}</div>
-          <div style={css("font-size:14px;font-weight:700;margin-top:5px;")}>{responsible}</div>
-        </div>
-      </div>
-
-      <div style={css("font-size:13px;font-weight:800;margin:26px 0 4px;color:#3c463f;")}>{t("map.history")}</div>
-      <div style={css("position:relative;padding-left:6px;margin-top:14px;")}>
-        {item.history.map((h, i) => (
-          <div key={i} style={css("position:relative;padding-left:26px;padding-bottom:20px;border-left:2px solid #e7ece8;margin-left:6px;")}>
-            <div style={{ ...css("position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;border:2px solid #fbfcfb;"), background: h.dot }} />
-            <div style={css("font-weight:700;font-size:13.5px;")}>{h.action}</div>
-            <div style={css("font-size:12px;color:#6b7671;margin-top:3px;line-height:1.5;")}>{h.detail}</div>
-            <div style={css("font-size:11.5px;color:#98a29c;margin-top:3px;font-variant-numeric:tabular-nums;")}>{h.date} · {h.who}</div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

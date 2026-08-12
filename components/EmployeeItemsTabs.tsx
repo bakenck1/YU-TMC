@@ -3,7 +3,6 @@
 import {
   useState,
   type KeyboardEvent,
-  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { ArrowRightLeft } from "lucide-react";
@@ -14,6 +13,7 @@ import type { ItemStatus } from "@/lib/contracts/inventory-domain";
 import {
   EMPLOYEE_ITEM_STATUSES,
   employeeItemTabAfterKey,
+  employeeItemsForStatus,
 } from "@/lib/employee-items-tabs";
 import type { InventoryItem } from "@/lib/types";
 import type { UserRole } from "@/lib/contracts/users";
@@ -78,10 +78,18 @@ export function EmployeeItemsTabList({
 
 export function EmployeeItemsTabPanels({
   activeStatus,
-  renderActive,
+  items,
+  searchHistoryScope,
+  columnSettingsScope,
+  actorUserId,
+  actorRole,
 }: {
   activeStatus: ItemStatus;
-  renderActive: (status: ItemStatus) => ReactNode;
+  items: InventoryItem[];
+  searchHistoryScope: string;
+  columnSettingsScope: string;
+  actorUserId: string;
+  actorRole: UserRole;
 }) {
   return EMPLOYEE_ITEM_STATUSES.map((status) => {
     const selected = status === activeStatus;
@@ -94,7 +102,15 @@ export function EmployeeItemsTabPanels({
         hidden={!selected}
         tabIndex={0}
       >
-        {selected ? renderActive(status) : null}
+        {selected ? (
+          <ItemsTable
+            key={status}
+            items={employeeItemsForStatus(items, status)}
+            searchHistoryScope={searchHistoryScope}
+            columnSettingsScope={columnSettingsScope}
+            bulkActions={{ actorUserId, actorRole, buildings: [], rooms: [] }}
+          />
+        ) : null}
       </div>
     );
   });
@@ -107,7 +123,10 @@ export function EmployeeItemsTabsView({
   label,
   onSelect,
   focusTab,
-  renderItems,
+  searchHistoryScope,
+  columnSettingsScope,
+  actorUserId,
+  actorRole,
 }: {
   items: InventoryItem[];
   activeStatus: ItemStatus;
@@ -115,7 +134,10 @@ export function EmployeeItemsTabsView({
   label: (status: ItemStatus) => string;
   onSelect: (status: ItemStatus) => void;
   focusTab?: (status: ItemStatus) => void;
-  renderItems: (items: InventoryItem[]) => ReactNode;
+  searchHistoryScope: string;
+  columnSettingsScope: string;
+  actorUserId: string;
+  actorRole: UserRole;
 }) {
   return (
     <>
@@ -128,9 +150,11 @@ export function EmployeeItemsTabsView({
       />
       <EmployeeItemsTabPanels
         activeStatus={activeStatus}
-        renderActive={(status) =>
-          renderItems(items.filter((item) => item.status === status))
-        }
+        items={items}
+        searchHistoryScope={searchHistoryScope}
+        columnSettingsScope={columnSettingsScope}
+        actorUserId={actorUserId}
+        actorRole={actorRole}
       />
     </>
   );
@@ -165,20 +189,10 @@ export default function EmployeeItemsTabs({
         ariaLabel={t("nav.items")}
         label={(status) => t(EMPLOYEE_TAB_LABELS[status])}
         onSelect={setActiveStatus}
-        renderItems={(visibleItems) => (
-          <ItemsTable
-            key={activeStatus}
-            items={visibleItems}
-            searchHistoryScope={searchHistoryScope}
-            columnSettingsScope={columnSettingsScope}
-            bulkActions={{
-              actorUserId,
-              actorRole,
-              buildings: [],
-              rooms: [],
-            }}
-          />
-        )}
+        searchHistoryScope={searchHistoryScope}
+        columnSettingsScope={columnSettingsScope}
+        actorUserId={actorUserId}
+        actorRole={actorRole}
       />
     </section>
   );

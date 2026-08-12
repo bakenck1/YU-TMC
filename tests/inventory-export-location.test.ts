@@ -25,11 +25,11 @@ test("inventory export is adjacent to the add action and hidden from employees",
   assert.match(itemsPage, /const canExport = hasPermission\(user\.role, "inventory\.report\.export"\)/);
   assert.match(
     itemsPage,
-    /excelDataset=\{canExport \? "items" : undefined\}[\s\S]*headerActions=\{[\s\S]*canCreate \? \([\s\S]*<InventoryItemCreateForm/,
+    /excelDataset=\{canExport \? "items" : undefined\}[\s\S]*itemCreation=\{canCreate \? \{[\s\S]*rooms,[\s\S]*buildings,[\s\S]*mode:/,
   );
   assert.match(
     itemsTable,
-    /<InventoryExportButton[\s\S]*itemIds=\{filtered\.map\(\(item\) => item\.id\)\}[\s\S]*columns=\{visibleColumns\}[\s\S]*\{headerActions\}/,
+    /<InventoryExportButton[\s\S]*itemIds=\{filtered\.map\(\(item\) => item\.id\)\}[\s\S]*columns=\{visibleColumns\}[\s\S]*<InventoryItemCreateForm/,
   );
 });
 

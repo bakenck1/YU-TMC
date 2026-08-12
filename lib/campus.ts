@@ -3,12 +3,14 @@
 
 export type CampusStatus = "ok" | "check" | "service" | "writeoff";
 
+export type CampusHistoryTone = "neutral" | "info" | "danger" | "warning" | "success";
+
 export interface CampusHistoryEntry {
   date: string;
   action: string;
   detail: string;
   who: string;
-  dot: string;
+  tone: CampusHistoryTone;
 }
 
 export interface CampusItem {
@@ -154,12 +156,12 @@ function build() {
           const id = m.id + "-" + code + "-" + ii;
 
           const history: CampusHistoryEntry[] = [
-            { date: fdate(r, 2021, 2022), action: "Поступление и постановка на учёт", detail: "Склад ТМЦ → " + m.name + ", каб. " + code, who: pick(r, RESP), dot: "#9aa8a0" },
-            { date: fdate(r, 2023, 2024), action: "Перемещение", detail: m.name + ", каб. " + String(n) + "01 → каб. " + code, who: resp, dot: "#2f74c9" },
+            { date: fdate(r, 2021, 2022), action: "Поступление и постановка на учёт", detail: "Склад ТМЦ → " + m.name + ", каб. " + code, who: pick(r, RESP), tone: "neutral" },
+            { date: fdate(r, 2023, 2024), action: "Перемещение", detail: m.name + ", каб. " + String(n) + "01 → каб. " + code, who: resp, tone: "info" },
           ];
-          if (status === "service") history.push({ date: lastInv, action: "Передано на обслуживание", detail: "Каб. " + code + " → Сервисный центр", who: resp, dot: "#2f74c9" });
-          else if (status === "writeoff") history.push({ date: lastInv, action: "Списание", detail: "Оформлен акт списания", who: resp, dot: "#b0483a" });
-          else history.push({ date: lastInv, action: "Плановая инвентаризация", detail: status === "check" ? "Выявлено несоответствие — требует проверки" : "Наличие подтверждено", who: resp, dot: status === "check" ? "#c98a2b" : "#1a8a52" });
+          if (status === "service") history.push({ date: lastInv, action: "Передано на обслуживание", detail: "Каб. " + code + " → Сервисный центр", who: resp, tone: "info" });
+          else if (status === "writeoff") history.push({ date: lastInv, action: "Списание", detail: "Оформлен акт списания", who: resp, tone: "danger" });
+          else history.push({ date: lastInv, action: "Плановая инвентаризация", detail: status === "check" ? "Выявлено несоответствие — требует проверки" : "Наличие подтверждено", who: resp, tone: status === "check" ? "warning" : "success" });
 
           const item: CampusItem = { id, name, category: POOL[c].label, invNo, status, lastInv, responsible: resp, history, room: roomName, code, floorN: n, buildingId: m.id };
           items.push(item);

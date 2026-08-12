@@ -8,6 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import { parseTmcTransferRequest } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
+import TmcRequestItemResultBadge from "./TmcRequestItemResultBadge";
+import TmcRequestMeta from "./TmcRequestMeta";
+import TmcRequestStatusBadge from "./TmcRequestStatusBadge";
 import {
   buildTmcRequestDecisions,
   createTmcRequestSelection,
@@ -15,36 +18,6 @@ import {
   toggleTmcRequestSelection,
 } from "@/lib/tmc-transfer-request-card";
 import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";
-
-const STATUS_KEYS = {
-  pending: "tmc.request.status.pending",
-  accepted: "tmc.request.status.accepted",
-  rejected: "tmc.request.status.rejected",
-  cancelled: "tmc.request.status.cancelled",
-} as const satisfies Record<TmcTransferRequestCardView["status"], TranslationKey>;
-
-const STATUS_STYLES = {
-  pending: "bg-amber-50 text-amber-900",
-  accepted: "bg-emerald-50 text-emerald-800",
-  rejected: "bg-red-50 text-red-800",
-  cancelled: "bg-zinc-100 text-zinc-700",
-} as const satisfies Record<TmcTransferRequestCardView["status"], string>;
-
-const ITEM_RESULT_KEYS = {
-  pending: "tmc.request.item.pending",
-  accepted: "tmc.request.item.accepted",
-  rejected: "tmc.request.item.rejected",
-  cancelled: "tmc.request.item.cancelled",
-  invalidated: "tmc.request.item.invalidated",
-} as const satisfies Record<TmcTransferRequestCardView["items"][number]["result"], TranslationKey>;
-
-const ITEM_RESULT_STYLES = {
-  pending: "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200",
-  accepted: "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200",
-  rejected: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
-  cancelled: "bg-zinc-100 text-zinc-700 ring-1 ring-inset ring-zinc-200",
-  invalidated: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
-} as const satisfies Record<TmcTransferRequestCardView["items"][number]["result"], string>;
 
 export default function TmcTransferRequestCard({
   request,
@@ -230,14 +203,14 @@ export default function TmcTransferRequestCard({
             <h1 id="tmc-request-title" className="text-2xl font-semibold text-zinc-900">{t("tmc.request.title")}</h1>
             <p className="mt-1 break-all text-xs text-zinc-500">{request.id}</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLES[request.status]}`}>{t(STATUS_KEYS[request.status])}</span>
+          <TmcRequestStatusBadge status={request.status} />
         </div>
         {canCancel && request.status === "pending" ? <button type="button" disabled={submitting} onClick={() => void cancelRequest()} className="mt-4 min-h-11 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.cancel")}</button> : null}
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-          <Meta label={t("tmc.request.initiator")} value={`${request.initiator.fullName} · ${request.initiator.email}`} />
-          <Meta label={t("tmc.request.recipient")} value={`${request.recipient.fullName} · ${request.recipient.email}`} />
+          <TmcRequestMeta label={t("tmc.request.initiator")} value={`${request.initiator.fullName} · ${request.initiator.email}`} />
+          <TmcRequestMeta label={t("tmc.request.recipient")} value={`${request.recipient.fullName} · ${request.recipient.email}`} />
           <div><dt className="font-medium text-zinc-500">{t("tmc.request.createdAt")}</dt><dd className="mt-1 text-zinc-900"><time dateTime={request.createdAt}>{createdAt}</time></dd></div>
-          <Meta label={t("tmc.request.summary")} value={`${request.summary.pending} / ${request.summary.total}`} />
+          <TmcRequestMeta label={t("tmc.request.summary")} value={`${request.summary.pending} / ${request.summary.total}`} />
         </dl>
         {showOverdue && request.overdue ? <p role="status" className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">{t("tmc.request.overdue")}</p> : null}
         {request.status === "accepted" || request.status === "rejected" ? <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">{t("tmc.request.result").replace("{accepted}", String(request.summary.accepted)).replace("{total}", String(request.summary.total))}</p> : null}
@@ -275,16 +248,16 @@ export default function TmcTransferRequestCard({
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="break-words font-semibold text-zinc-900">{index + 1}. {item.item.name}</h2>
-                  <p className={`mt-1 inline-flex min-h-8 items-center rounded-full px-3 py-1 text-sm font-semibold ${ITEM_RESULT_STYLES[item.result]}`}>{t(ITEM_RESULT_KEYS[item.result])}</p>
+                  <TmcRequestItemResultBadge result={item.result} />
                   <p className="mt-1 break-all text-sm text-zinc-500">{item.item.inventoryNumber}</p>
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{item.item.location.buildingName} · {item.item.location.roomDesignation}</p>
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><UserRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words">{t("tmc.request.currentResponsible")}: {item.responsibleUserProfile?.fullName ?? t("common.notAssigned")}</span></p>
                 </div>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 text-sm sm:grid-cols-3">
-                <Meta label={t("tmc.request.quantity")} value={String(item.item.quantity)} />
-                <Meta label={t("tmc.request.unitPrice")} value={money.format(item.item.unitPrice)} />
-                <Meta label={t("tmc.request.totalPrice")} value={money.format(item.item.quantity * item.item.unitPrice)} />
+                <TmcRequestMeta label={t("tmc.request.quantity")} value={String(item.item.quantity)} />
+                <TmcRequestMeta label={t("tmc.request.unitPrice")} value={money.format(item.item.unitPrice)} />
+                <TmcRequestMeta label={t("tmc.request.totalPrice")} value={money.format(item.item.quantity * item.item.unitPrice)} />
               </dl>
             </article>
           );
@@ -326,8 +299,4 @@ export default function TmcTransferRequestCard({
       ) : null}
     </section>
   );
-}
-
-function Meta({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0"><dt className="font-medium text-zinc-500">{label}</dt><dd className="mt-1 break-words text-zinc-900">{value}</dd></div>;
 }

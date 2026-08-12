@@ -6,6 +6,7 @@ import { Cable, CircleUserRound, DoorOpen, ImageIcon, Layers3, Package } from "l
 import type { RoomWorkspaceDto } from "@/lib/contracts/room-workspace";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import ProblemReportButton from "@/components/ProblemReportButton";
+import RoomMetric from "./RoomMetric";
 
 export default function RoomWorkspaceView({
   room,
@@ -46,9 +47,9 @@ export default function RoomWorkspaceView({
       ) : (
         <>
           <section className="grid grid-cols-3 gap-3">
-            <Metric icon={Package} label={t("room.itemCount")} value={room.itemCount ?? 0} />
-            <Metric icon={Cable} label={t("room.connected")} value={room.connectedCount ?? 0} />
-            <Metric icon={Cable} label={t("room.disconnected")} value={room.disconnectedCount ?? 0} />
+            <RoomMetric icon={Package} label={t("room.itemCount")} value={room.itemCount ?? 0} />
+            <RoomMetric icon={Cable} label={t("room.connected")} value={room.connectedCount ?? 0} />
+            <RoomMetric icon={Cable} label={t("room.disconnected")} value={room.disconnectedCount ?? 0} />
           </section>
           {room.items.length ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -73,13 +74,9 @@ export default function RoomWorkspaceView({
               ))}
             </div>
           ) : <p className="rounded-2xl bg-white p-6 text-center text-zinc-500">{t("room.empty")}</p>}
-          <ProblemReportButton items={room.items} className="w-full" />
+          <ProblemReportButton items={room.items} fullWidth />
         </>
       )}
     </main>
   );
-}
-
-function Metric({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: number }) {
-  return <div className="min-w-0 rounded-2xl border border-black/5 bg-white p-3 text-center shadow-sm sm:p-4"><Icon className="mx-auto h-5 w-5 text-emerald-600" /><p className="mt-2 text-xl font-bold text-zinc-900">{value}</p><p className="mt-1 truncate text-xs text-zinc-500 sm:text-sm">{label}</p></div>;
 }

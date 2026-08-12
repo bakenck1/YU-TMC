@@ -39,7 +39,10 @@ test("accept-all ignores checkboxes while selected explicitly rejects unchecked 
 });
 
 test("group request card exposes all required read-only metadata accessibly", () => {
-  const source = readFileSync("components/TmcTransferRequestCard.tsx", "utf8");
+  const source = [
+    "components/TmcTransferRequestCard.tsx",
+    "components/TmcRequestItemResultBadge.tsx",
+  ].map((path) => readFileSync(path, "utf8")).join("\n");
   const page = readFileSync("app/(protected)/tmc/transfer-requests/[id]/page.tsx", "utf8");
   assert.match(source, /type="checkbox"/);
   assert.match(source, /item\.responsibleUserProfile/);

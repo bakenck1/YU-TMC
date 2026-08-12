@@ -23,8 +23,8 @@ const LANGUAGE_OPTIONS: Array<{
   short: string;
   labelKey: "settings.kazakh" | "settings.russian" | "settings.english";
 }> = [
-  { value: "ru", short: "РУС", labelKey: "settings.russian" },
-  { value: "kk", short: "ҚАЗ", labelKey: "settings.kazakh" },
+  { value: "ru", short: "Р РЈРЎ", labelKey: "settings.russian" },
+  { value: "kk", short: "ТљРђР—", labelKey: "settings.kazakh" },
   { value: "en", short: "ENG", labelKey: "settings.english" },
 ];
 
@@ -79,12 +79,12 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
               >
                 {LANGUAGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.short} · {t(option.labelKey)}
+                    {option.short} В· {t(option.labelKey)}
                   </option>
                 ))}
               </select>
               <span className="pointer-events-none absolute right-3 text-[10px] text-zinc-400">
-                ▾
+                в–ѕ
               </span>
             </label>
           </div>
@@ -94,7 +94,7 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
           </div>
 
           <p className="text-center text-xs leading-5 text-zinc-400">
-            © {new Date().getFullYear()} {settings.organizationName}
+            В© {new Date().getFullYear()} {settings.organizationName}
           </p>
         </section>
 
@@ -196,3 +196,5 @@ export default function AuthPageFrame({ children }: { children: ReactNode }) {
     </main>
   );
 }
+
+

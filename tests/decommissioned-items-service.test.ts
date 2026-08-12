@@ -328,7 +328,7 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   assert.match(componentSource, /h-\[208px\] w-full max-w-\[208px\]/);
   assert.match(componentSource, /sm:grid-cols-\[minmax\(0,1fr\)_190px\]/);
   assert.match(componentSource, /kind=qr&format=svg/);
-  assert.match(componentSource, /<OverviewRow label=\{t\("items\.type"\)\}/);
+  assert.match(componentSource, /<InventoryOverviewRow label=\{t\("items\.type"\)\}/);
   assert.doesNotMatch(componentSource, /id="item-information"/);
   assert.ok(
     componentSource.lastIndexOf("<InventoryItemComposition") <

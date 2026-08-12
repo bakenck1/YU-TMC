@@ -85,10 +85,10 @@ test("keeps KGISE on the map as a named non-interactive landmark and removes it 
   assert.match(source, /pointerEvents: isInteractive \? "auto" : "none"/);
   assert.match(source, /onClick=\{isInteractive \? \(\) => openBuilding\(b\.id\) : undefined\}/);
 
-  const manager = readFileSync(
-    new URL("../components/InventoryBuildingsManager.tsx", import.meta.url),
-    "utf8",
-  );
+  const manager = [
+    "../components/InventoryBuildingsManager.tsx",
+    "../components/InventoryBuildingFormModal.tsx",
+  ].map((relativePath) => readFileSync(new URL(relativePath, import.meta.url), "utf8")).join("\n");
   assert.match(manager, /CAMPUS_INVENTORY_BUILDING_PRESETS\.map/);
   for (const path of [
     "../app/(protected)/inventory/page.tsx",

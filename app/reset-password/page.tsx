@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import AuthPageFrame from "@/components/auth/AuthPageFrame";
-import ResetPasswordForm from "@/components/auth/ResetPasswordForm";
+import AuthPageFrame from "@/components/AuthPageFrame";
+import ResetPasswordForm from "@/components/ResetPasswordForm";
 
 export const metadata: Metadata = {
   title: "Новый пароль | YU Inventory",

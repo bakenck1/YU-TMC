@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("uses the YU Inventory logo in the authentication header", () => {
   const source = readFileSync(
-    new URL("../components/auth/AuthPageFrame.tsx", import.meta.url),
+    new URL("../components/AuthPageFrame.tsx", import.meta.url),
     "utf8",
   );
 
@@ -13,6 +13,5 @@ test("uses the YU Inventory logo in the authentication header", () => {
   assert.match(source, /alt="YU Inventory"/);
   assert.doesNotMatch(source, />\s*YU\s*</);
 });
-
 
 

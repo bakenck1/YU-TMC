@@ -23,7 +23,8 @@ test("manual barcode input is sent to the item creation API", async () => {
     new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
 
   assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: barcode \|\| null/);
+  assert.match(form, /barcode: restricted \? null : \(barcode \|\| null\)/);
+  assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);
   assert.match(form, /!barcode\.trim\(\)/);

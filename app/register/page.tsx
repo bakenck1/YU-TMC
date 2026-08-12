@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import AuthPageFrame from "@/components/auth/AuthPageFrame";
-import RegisterForm from "@/components/auth/RegisterForm";
+import AuthPageFrame from "@/components/AuthPageFrame";
+import RegisterForm from "@/components/RegisterForm";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";
 import { defaultPathForRole } from "@/lib/security/authorization";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";

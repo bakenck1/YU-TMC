@@ -1,10 +1,11 @@
 "use client";
 
-import { Barcode, Check, RefreshCw, ScanLine, X } from "lucide-react";
+import { Barcode, RefreshCw, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
+import InventoryTransferList from "@/components/InventoryTransferList";
 import type { TransferDto } from "@/lib/contracts/inventory-responsibility";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
 import { employeeScanAction } from "@/lib/employee-asset-workflow";
@@ -220,19 +221,26 @@ export default function InventoryTransfersManager() {
         </section>
       ) : null}
 
-      <TransferList title="Входящие запросы" transfers={incoming} loading={loading} empty="Новых запросов нет." renderActions={(transfer) => transfer.status === "pending_current_owner" ? <><button type="button" disabled={busy} onClick={() => void decide(transfer, "confirm")} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"><Check className="h-4 w-4" /> Подтвердить</button><input aria-label="Причина отклонения" value={rejectComments[transfer.id] ?? ""} onChange={(event) => setRejectComments((value) => ({ ...value, [transfer.id]: event.target.value }))} placeholder="Причина отклонения" className="min-w-48 rounded-lg border border-zinc-200 px-3 py-2 text-sm" /><button type="button" disabled={busy} onClick={() => void decide(transfer, "reject")} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"><X className="h-4 w-4" /> Отклонить</button></> : null} />
-      <TransferList title="Мои запросы" transfers={outgoing} loading={loading} empty="Вы ещё не запрашивали передачу." renderActions={(transfer) => transfer.status === "pending_current_owner" ? <button type="button" disabled={busy} onClick={() => void cancel(transfer)} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-semibold text-zinc-700">Отменить запрос</button> : null} />
+      <InventoryTransferList
+        kind="incoming"
+        transfers={incoming}
+        loading={loading}
+        busy={busy}
+        rejectComments={rejectComments}
+        onRejectCommentChange={(transferId, value) => setRejectComments((comments) => ({ ...comments, [transferId]: value }))}
+        onConfirm={(transfer) => void decide(transfer, "confirm")}
+        onReject={(transfer) => void decide(transfer, "reject")}
+      />
+      <InventoryTransferList
+        kind="outgoing"
+        transfers={outgoing}
+        loading={loading}
+        busy={busy}
+        onCancel={(transfer) => void cancel(transfer)}
+      />
 
       <button type="button" onClick={() => void loadTransfers()} disabled={loading} className="inline-flex items-center gap-2 text-sm font-medium text-zinc-500"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Обновить</button>
       {scannerOpen ? <InventoryItemCodeScanner onClose={() => setScannerOpen(false)} onCodeSelected={(value) => void resolveCode(value)} /> : null}
     </div>
   );
-}
-
-function TransferList({ title, transfers, loading, empty, renderActions }: { title: string; transfers: TransferDto[]; loading: boolean; empty: string; renderActions(transfer: TransferDto): React.ReactNode }) {
-  return <section><h2 className="mb-3 text-lg font-semibold text-zinc-900">{title}</h2><div className="space-y-3">{loading ? <p className="rounded-2xl border border-zinc-200 bg-white p-5 text-sm text-zinc-500">Загрузка…</p> : transfers.length === 0 ? <p className="rounded-2xl border border-dashed border-zinc-200 bg-white p-5 text-sm text-zinc-500">{empty}</p> : transfers.map((transfer) => <article key={transfer.id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-semibold text-zinc-900">{transfer.itemName ?? "ТМЦ"} <span className="font-normal text-zinc-500">{transfer.itemInventoryNumber ? `(${transfer.itemInventoryNumber})` : `(${transfer.itemId})`}</span></p><p className="mt-1 text-sm text-zinc-500">Запросил: {transfer.requestedByName} · {new Date(transfer.requestedAt).toLocaleString("ru-RU")}</p><p className="mt-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">{statusLabel(transfer.status)}</p>{transfer.decisionComment ? <p className="mt-2 text-sm text-red-700">Причина: {transfer.decisionComment}</p> : null}</div><div className="flex flex-wrap gap-2">{renderActions(transfer)}</div></div></article>)}</div></section>;
-}
-
-function statusLabel(status: TransferDto["status"]) {
-  return ({ pending_current_owner: "Ожидает решения", confirmed: "Подтверждено", rejected: "Отклонено", cancelled: "Отменено", overridden: "Изменено администратором" })[status];
 }

@@ -92,7 +92,7 @@ test("TMC operation shell uses barcode-only scanning and sends each confirmed op
   const scanner = readFileSync("components/InventoryItemCodeScanner.tsx", "utf8");
   const resolver = readFileSync("lib/tmc-qr-resolver.ts", "utf8");
 
-  assert.match(shell, /<TmcItemQrFlow operation=\{operation\}/);
+  assert.match(shell, /<TmcItemQrFlow[\s\S]*operation=\{operation\}/);
   assert.match(flow, /InventoryItemCodeScanner/);
   assert.doesNotMatch(flow, /mode="qr-only"|<QrCode/);
   assert.match(flow, /TmcItemQrResolverController/);

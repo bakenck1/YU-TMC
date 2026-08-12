@@ -36,13 +36,16 @@ test("search history preserves the newest-to-oldest stored order", () => {
 });
 
 test("search history menu retains keyboard focus and supports Escape", async () => {
-  const source = await readFile(new URL("../components/ItemsTable.tsx", import.meta.url), "utf8");
+  const source = await Promise.all([
+    "../components/ItemsTable.tsx",
+    "../components/InventoryFilterInput.tsx",
+  ].map((relativePath) => readFile(new URL(relativePath, import.meta.url), "utf8"))).then((sources) => sources.join("\n"));
   assert.match(source, /currentTarget\.contains\(event\.relatedTarget\)/);
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /event\.key === "Enter"/);
   assert.match(source, /visibleSearchHistory/);
   assert.match(source, /entry\.toLocaleLowerCase\(\)\.includes\(normalizedQuery\)/);
-  assert.match(source, /function FilterInput/);
+  assert.match(source, /function InventoryFilterInput/);
   assert.match(source, /item-filter-history:v1/);
   assert.match(source, /historyStorageKey=\{filterHistoryStorageKey/);
   assert.match(source, /onClick=\{\(\) => setSearchFocused\(true\)\}/);

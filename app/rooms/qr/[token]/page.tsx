@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import RoomWorkspaceView from "@/components/RoomWorkspaceView";
+import PublicRoomWorkspaceScreen from "@/components/PublicRoomWorkspaceScreen";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { getApplicationServices } from "@/lib/server/application";
@@ -39,8 +39,6 @@ export default async function PublicRoomQrPage({
     throw error;
   }
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6">
-      <RoomWorkspaceView room={room} authenticated={Boolean(user)} returnTo={returnTo} />
-    </div>
+    <PublicRoomWorkspaceScreen room={room} authenticated={Boolean(user)} returnTo={returnTo} />
   );
 }

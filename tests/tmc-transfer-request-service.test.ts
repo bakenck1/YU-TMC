@@ -179,6 +179,52 @@ test("snapshot-only readers cannot infer sibling outcomes from the parent status
   }
 });
 
+test("participant-scoped view of a cancelled request resolves without throwing (regression for incompleteProjection on cancelled items)", async () => {
+  // Regression: when a request is cancelled, pending items move to "cancelled"
+  // without a decidedAt timestamp in the real database. The old code attempted
+  // to read decidedAt from the item and threw incompleteProjection(). The fix
+  // uses request.closedAt/closedBy from the parent record instead.
+  const participant = user({ id: SNAPSHOT_OWNER_ID });
+  const participantItem = candidate(uuid(1), { responsibleUser: participant });
+  const sibling = candidate(uuid(2), { responsibleUser: user({ id: uuid(72) }) });
+
+  const cancelledAt = new Date("2026-08-10T08:00:00.000Z");
+  const cancelledBy = operationUser(ACTOR.userId);
+
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([participantItem, sibling], {
+    status: "cancelled",
+    closedAt: cancelledAt,
+    closedBy: cancelledBy,
+    items: [
+      // decidedAt is null on cancelled items — the real cancelRequest leaves it null
+      // for items that were still pending at cancellation time.
+      { ...requestItem(participantItem, "cancelled"), decidedAt: null, decidedBy: null },
+      { ...requestItem(sibling, "cancelled"), decidedAt: null, decidedBy: null },
+    ],
+  });
+
+  // Participant view must resolve without throwing.
+  const scoped = await harness.service.getById(
+    harness.repository.aggregate.id,
+    { userId: participant.id, role: "employee" },
+  );
+
+  assert.equal(scoped.status, "cancelled");
+  assert.equal(scoped.closedAt, cancelledAt.toISOString());
+  assert.equal(scoped.closedBy?.id, cancelledBy.id);
+  // Participant only sees their own item.
+  assert.deepEqual(scoped.items.map((item) => item.item.id), [participantItem.itemId]);
+  assert.deepEqual(scoped.summary, {
+    total: 1,
+    pending: 0,
+    accepted: 0,
+    rejected: 0,
+    cancelled: 1,
+    invalidated: 0,
+  });
+});
+
 test("request-scoped photo access requires a participant and item membership", async () => {
   const harness = createHarness();
   const itemId = uuid(1);

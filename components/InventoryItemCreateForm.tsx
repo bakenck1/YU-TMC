@@ -14,6 +14,7 @@ export default function InventoryItemCreateForm({
   initialRoomId,
   openInitially = false,
   hideTrigger = false,
+  restricted = false,
   onCreated,
   onDismiss,
 }: {
@@ -22,6 +23,8 @@ export default function InventoryItemCreateForm({
   initialRoomId?: string;
   openInitially?: boolean;
   hideTrigger?: boolean;
+  /** When true (warehouse role) — only name, description, room and photo are shown. */
+  restricted?: boolean;
   onCreated?: () => void;
   onDismiss?: () => void;
 }) {
@@ -63,13 +66,13 @@ export default function InventoryItemCreateForm({
         body: JSON.stringify({
           name,
           description: description || null,
-          itemType,
-          brand: brand || null,
-          model: model || null,
-          quantity: Number(quantity),
-          unitPrice: unitPrice === "" ? 0 : Number(unitPrice),
+          itemType: restricted ? null : (itemType || null),
+          brand: restricted ? null : (brand || null),
+          model: restricted ? null : (model || null),
+          quantity: restricted ? 1 : Number(quantity),
+          unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
-          barcode: barcode || null,
+          barcode: restricted ? null : (barcode || null),
           photo,
         }),
       });
@@ -96,14 +99,16 @@ export default function InventoryItemCreateForm({
             ? "itemDetails.errorRoomNotFound"
             : code === "forbidden"
               ? "itemDetails.errorForbidden"
-              : code === "invalid_barcode" ||
-                  code === "invalid_request" ||
-                  code === "ambiguous_item_code" ||
-                  code === "barcode_belongs_to_existing_item"
-                ? "itemDetails.errorInvalidFields"
-                : code === "items_unavailable" || code === "internal_error"
-                  ? "itemDetails.errorUnavailable"
-                  : "itemDetails.error";
+              : code === "version_conflict"
+                ? "itemDetails.errorConflict"
+                : code === "invalid_barcode" ||
+                    code === "invalid_request" ||
+                    code === "ambiguous_item_code" ||
+                    code === "barcode_belongs_to_existing_item"
+                  ? "itemDetails.errorInvalidFields"
+                  : code === "items_unavailable" || code === "internal_error"
+                    ? "itemDetails.errorUnavailable"
+                    : "itemDetails.error";
       setError(t(messageKey));
     } finally {
       setSaving(false);
@@ -126,16 +131,20 @@ export default function InventoryItemCreateForm({
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
+              {!restricted && (
+                <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
+              )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")}</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              </div>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              {!restricted && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                </div>
+              )}
               {showBuildingSelector ? (
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("analytics.buildingFilter")}</span>
@@ -153,9 +162,11 @@ export default function InventoryItemCreateForm({
                 </label>
               ) : null}
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
+              {!restricted && (
+                <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
+              )}
               <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4">
-                <p className="text-base font-medium text-zinc-800">{t("items.photo")} <span className="text-red-600">({t("createItem.required")})</span></p>
+                <p className="text-base font-medium text-zinc-800">{t("items.photo")} {!restricted && <span className="text-red-600">({t("createItem.required")})</span>}</p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => setCameraOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800"><Camera className="h-4 w-4" />{t("camera.open")}</button>
                   <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 text-center text-sm font-semibold text-emerald-800">{t("service.attachPhoto")}<input type="file" accept="image/jpeg" className="sr-only" onChange={(event) => void readJpeg(event.target.files?.[0]).then(setPhoto).catch(() => setError(t("common.error")))} /></label>
@@ -165,8 +176,9 @@ export default function InventoryItemCreateForm({
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !itemType.trim() || !roomId || !barcode.trim() || !photo} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !roomId || (!restricted && (!itemType.trim() || !barcode.trim() || !photo))} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
+
             {codeScannerOpen ? (
               <InventoryItemCodeScanner
                 onClose={() => setCodeScannerOpen(false)}

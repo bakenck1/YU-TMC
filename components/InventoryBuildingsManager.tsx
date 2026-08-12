@@ -1,36 +1,30 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState } from "react";
 import {
   Building2,
   DoorOpen,
   Download,
-  LoaderCircle,
   MapPin,
   Plus,
   QrCode,
   ScanLine,
   Trash2,
-  X,
 } from "lucide-react";
 
 import type {
   BuildingDto,
   RoomDto,
 } from "@/lib/contracts/inventory-locations";
-import type { UserDto, UserRole } from "@/lib/contracts/users";
-import {
-  CAMPUS_INVENTORY_BUILDING_PRESETS,
-  findCampusBuildingPreset,
-} from "@/lib/campus-directory";
+import type { UserRole } from "@/lib/contracts/users";
+import { findCampusBuildingPreset } from "@/lib/campus-directory";
 import { hasPermission } from "@/lib/security/permissions";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
-
-const INPUT_CLASS =
-  "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10";
+import InventoryBuildingFormModal from "./InventoryBuildingFormModal";
+import InventoryRoomFormModal from "./InventoryRoomFormModal";
 
 export default function InventoryBuildingsManager({
   actorRole,
@@ -374,7 +368,7 @@ export default function InventoryBuildingsManager({
       )}
 
       {editing ? (
-        <BuildingFormModal
+        <InventoryBuildingFormModal
           building={editing === "create" ? null : editing}
           existingBuildingNames={buildings.map((building) => building.name)}
           onClose={() => setEditing(null)}
@@ -382,7 +376,7 @@ export default function InventoryBuildingsManager({
         />
       ) : null}
       {roomEditor ? (
-        <RoomFormModal
+        <InventoryRoomFormModal
           building={roomEditor.building}
           room={roomEditor.room}
           onClose={() => setRoomEditor(null)}
@@ -452,342 +446,4 @@ async function readArchiveError(
     return t("building.conflictError");
   }
   return t("building.saveError");
-}
-
-function RoomFormModal({
-  building,
-  room,
-  onClose,
-  onSave,
-}: {
-  building: BuildingDto;
-  room: RoomDto | null;
-  onClose: () => void;
-  onSave: (room: RoomDto) => void;
-}) {
-  const { t } = useAppSettings();
-  const [designation, setDesignation] = useState(room?.designation ?? "");
-  const floorCount = findCampusBuildingPreset(building.name)?.floorCount ?? 1;
-  const [floorNumber, setFloorNumber] = useState(String(room?.floorNumber ?? 1));
-  const [responsibleId, setResponsibleId] = useState(room?.primaryResponsible?.id ?? "");
-  const [employees, setEmployees] = useState<UserDto[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/users", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((body: { users?: UserDto[] } | null) => {
-        if (active) setEmployees((body?.users ?? []).filter((user) => user.role === "employee" && user.active));
-      });
-    return () => { active = false; };
-  }, []);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const floor = Number(floorNumber);
-    if (
-      saving ||
-      !designation.trim() ||
-      !responsibleId ||
-      !Number.isInteger(floor) ||
-      floor < 1 ||
-      floor > floorCount
-    ) {
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        room
-          ? `/api/inventory/rooms/${encodeURIComponent(room.id)}`
-          : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`,
-        {
-          method: room ? "PATCH" : "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            designation: designation.trim(),
-            floorNumber: floor,
-            floorLabel: null,
-            primaryResponsibleId: responsibleId,
-            ...(room ? { version: room.version } : {}),
-          }),
-        },
-      );
-      const body: unknown = await response.json().catch(() => null);
-      if (
-        !response.ok ||
-        !body ||
-        typeof body !== "object" ||
-        !("room" in body)
-      ) {
-        setError(t("inventory.saveFailed"));
-        return;
-      }
-      onSave((body as { room: RoomDto }).room);
-    } catch {
-      setError(t("inventory.saveFailed"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="room-form-title"
-    >
-      <form
-        onSubmit={submit}
-        className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl sm:p-6"
-      >
-        <div className="flex items-center justify-between">
-          <h2 id="room-form-title" className="text-lg font-semibold text-zinc-900">
-            {room ? t("inventory.editRoom") : t("inventory.createRoom")}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            aria-label={t("common.close")}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="text-sm font-medium text-zinc-700">
-            {t("inventory.roomDesignation")}
-            <input
-              value={designation}
-              onChange={(event) => setDesignation(event.target.value)}
-              maxLength={80}
-              required
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
-            {t("room.responsible")}
-            <select value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)} className={INPUT_CLASS}>
-              <option value="">{t("common.notAssigned")}</option>
-              {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}
-            </select>
-          </label>
-          <label className="text-sm font-medium text-zinc-700">
-            {t("inventory.floor")}
-            <select
-              value={floorNumber}
-              onChange={(event) => setFloorNumber(event.target.value)}
-              required
-              className={INPUT_CLASS}
-            >
-              {Array.from({ length: floorCount }, (_, index) => index + 1).map(
-                (floor) => (
-                  <option key={floor} value={floor}>
-                    {floor} {t("inventory.floorShort")}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-        </div>
-        {error ? (
-          <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            type="submit"
-            disabled={saving || !designation.trim() || !responsibleId}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            {saving ? t("inventory.saving") : t("common.save")}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function BuildingFormModal({
-  building,
-  existingBuildingNames,
-  onClose,
-  onSave,
-}: {
-  building: BuildingDto | null;
-  existingBuildingNames: string[];
-  onClose: () => void;
-  onSave: (building: BuildingDto) => void;
-}) {
-  const { language, t } = useAppSettings();
-  const [presetId, setPresetId] = useState(
-    findCampusBuildingPreset(building?.name ?? "")?.id ?? "",
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const selectedPreset = CAMPUS_INVENTORY_BUILDING_PRESETS.find(
-    (preset) => preset.id === presetId,
-  );
-  const existingNames = new Set(existingBuildingNames);
-  const existingPresetIds = new Set(
-    existingBuildingNames
-      .map((name) => findCampusBuildingPreset(name)?.id)
-      .filter((id): id is string => Boolean(id)),
-  );
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving || !selectedPreset) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        building
-          ? `/api/inventory/buildings/${encodeURIComponent(building.id)}`
-          : "/api/inventory/buildings",
-        {
-          method: building ? "PATCH" : "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedPreset.name,
-            address: selectedPreset.address,
-            ...(building ? { version: building.version } : {}),
-          }),
-        },
-      );
-      const body: unknown = await response.json().catch(() => null);
-      if (
-        !response.ok ||
-        !body ||
-        typeof body !== "object" ||
-        !("building" in body)
-      ) {
-        setError(t("inventory.saveFailed"));
-        return;
-      }
-      onSave((body as { building: BuildingDto }).building);
-    } catch {
-      setError(t("inventory.saveFailed"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="building-form-title"
-    >
-      <form
-        onSubmit={submit}
-        className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl sm:p-6"
-      >
-        <div className="flex items-center justify-between">
-          <h2
-            id="building-form-title"
-            className="text-lg font-semibold text-zinc-900"
-          >
-            {t(
-              building
-                ? "inventory.editBuilding"
-                : "inventory.createBuilding",
-            )}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            aria-label={t("common.close")}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="mt-5 space-y-4">
-          <label className="block text-sm font-medium text-zinc-700">
-            {t("building.select")}
-            <select
-              value={presetId}
-              onChange={(event) => setPresetId(event.target.value)}
-              required
-              autoFocus
-              className={INPUT_CLASS}
-              disabled={Boolean(building)}
-            >
-              <option value="">{t("building.selectFromList")}</option>
-              {CAMPUS_INVENTORY_BUILDING_PRESETS.map((preset) => (
-                <option
-                  key={preset.id}
-                  value={preset.id}
-                  disabled={
-                    !building &&
-                    (existingNames.has(preset.name) ||
-                      existingPresetIds.has(preset.id))
-                  }
-                >
-                  {t("building.presetSummary", {
-                    name: translateCampusBuilding(language, preset.name),
-                    address: preset.address,
-                    count: preset.floorCount,
-                  })}
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedPreset ? (
-            <dl className="rounded-2xl bg-emerald-50 p-4 text-sm text-zinc-700">
-              <div className="flex justify-between gap-4"><dt className="text-zinc-500">{t("inventory.buildingName")}</dt><dd className="text-right font-semibold">{translateCampusBuilding(language, selectedPreset.name)}</dd></div>
-              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">{t("inventory.buildingAddress")}</dt><dd className="text-right font-semibold">{selectedPreset.address}</dd></div>
-              <div className="mt-2 flex justify-between gap-4"><dt className="text-zinc-500">{t("building.floors")}</dt><dd className="font-semibold">{selectedPreset.floorCount}</dd></div>
-            </dl>
-          ) : null}
-        </div>
-
-        {error ? (
-          <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            type="submit"
-            disabled={saving || !selectedPreset}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            {saving ? t("inventory.saving") : t("common.save")}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
 }

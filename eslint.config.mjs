@@ -99,6 +99,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "storybook-static/**",
     ".claude/worktrees/**",
     "next-env.d.ts",
   ]),

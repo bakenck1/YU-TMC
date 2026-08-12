@@ -1,8 +1,8 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
-import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
+import Wrapper from "@/components/Wrapper";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
 import { getApplicationServices } from "@/lib/server/application";
@@ -33,7 +33,7 @@ export default async function ItemsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <Wrapper direction="column" gap="md">
       <InventorySummaryAccordions items={items} />
       {user.role === "employee" ? (
         <EmployeeItemsTabs
@@ -55,13 +55,13 @@ export default async function ItemsPage() {
             buildings,
             rooms,
           }}
-          headerActions={
-            canCreate ? (
-              <InventoryItemCreateForm rooms={rooms} buildings={buildings} />
-            ) : null
-          }
+          itemCreation={canCreate ? {
+            rooms,
+            buildings,
+            mode: user.role === "warehouse" ? "restricted" : "full",
+          } : undefined}
         />
       )}
-    </div>
+    </Wrapper>
   );
 }

@@ -61,10 +61,19 @@ export type TmcTransferRequestItemState =
       decidedBy: null;
     }
   | {
-      result: Exclude<TmcTransferItemResult, "pending" | "invalidated">;
+      result: "accepted" | "rejected";
       invalidReason: null;
       decidedAt: string;
       decidedBy: TmcOperationUserDto;
+    }
+  | {
+      // When a request is cancelled while items are still pending, the database
+      // does not set decidedAt/decidedBy on the item rows — the decision was
+      // at the request level. Both fields may therefore be null.
+      result: "cancelled";
+      invalidReason: null;
+      decidedAt: string | null;
+      decidedBy: TmcOperationUserDto | null;
     }
   | {
       result: "invalidated";
@@ -334,6 +343,14 @@ const requestItemSchema = z.object({
   if (item.result === "pending") {
     if (item.invalidReason || item.decidedAt || item.decidedBy) {
       context.addIssue({ code: "custom", message: "Invalid pending item state." });
+    }
+    return;
+  }
+  // Cancelled items: decidedAt/decidedBy may be null when the request was
+  // cancelled before individual item decisions were recorded.
+  if (item.result === "cancelled") {
+    if (item.invalidReason !== null) {
+      context.addIssue({ code: "custom", message: "Cancelled item must not have invalidReason." });
     }
     return;
   }

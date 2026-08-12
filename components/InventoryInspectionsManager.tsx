@@ -30,6 +30,8 @@ import {
 import PushNotificationControl from "@/components/PushNotificationControl";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
+import InspectionProgress from "./InspectionProgress";
+import ReportMetric from "./ReportMetric";
 
 interface InspectionTechnician {
   id: string;
@@ -84,6 +86,14 @@ export default function InventoryInspectionsManager({
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerSessionRef = useRef<BarcodeScannerSession | null>(null);
   const cameraRequestRef = useRef(0);
+
+  // Authorship guard: derive whether the currently active inspection is owned
+  // by the current user. Admins can always edit but receive a visual indicator.
+  const activeInspection = inspections.find((i) => i.id === selectedInspection);
+  const isActiveInspectionAuthor =
+    !activeInspection || activeInspection.technicianId === currentUserId;
+  const canEditActiveInspection =
+    actorRole === "admin" || isActiveInspectionAuthor;
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -371,6 +381,14 @@ export default function InventoryInspectionsManager({
             <WifiOff className="h-4 w-4" /> {t("inspections.offline")}
           </p>
         ) : null}
+        {/* Sequential flow: scanning is only possible after selecting a room */}
+        {selectedInspection && !selectedInspectionRoom && (
+          inspections.find((i) => i.id === selectedInspection)?.rooms.length
+        ) ? (
+          <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {t("inspections.selectRoomFirst")}
+          </p>
+        ) : null}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <input
             value={qrValue}
@@ -379,21 +397,22 @@ export default function InventoryInspectionsManager({
               if (event.key === "Enter") void resolveQr();
             }}
             placeholder={t("inspections.codePlaceholder")}
-            className="min-w-0 flex-1 rounded-xl border border-black/10 px-3 py-2.5 font-mono text-sm outline-none focus:border-emerald-500"
+            disabled={!selectedInspectionRoom || !canEditActiveInspection}
+            className="min-w-0 flex-1 rounded-xl border border-black/10 px-3 py-2.5 font-mono text-sm outline-none focus:border-emerald-500 disabled:bg-zinc-50 disabled:text-zinc-400"
           />
           <button
             type="button"
             onClick={() => void resolveQr()}
-            disabled={busy || !online || !qrValue.trim()}
-            className="rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            disabled={busy || !online || !qrValue.trim() || !selectedInspectionRoom || !canEditActiveInspection}
+            className="min-h-12 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {t("inspections.resolve")}
           </button>
           <button
             type="button"
             onClick={() => void startCamera()}
-            disabled={busy || !online}
-            className="flex items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium text-zinc-700 disabled:opacity-50"
+            disabled={busy || !online || !selectedInspectionRoom || !canEditActiveInspection}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium text-zinc-700 disabled:opacity-50"
           >
             <Camera className="h-4 w-4" /> {t("inspections.camera")}
           </button>
@@ -474,20 +493,25 @@ export default function InventoryInspectionsManager({
                       <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                         {t("inspections.selectDraftRoom")}
                       </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                      {RESULT_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => void recordResult(option.value)}
-                          disabled={busy}
-                          className="rounded-lg border border-black/10 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-50"
-                        >
-                          {t(option.labelKey)}
-                        </button>
-                      ))}
-                    </div>
+                    ) : !canEditActiveInspection ? (
+                      <p role="status" className="rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-500">
+                        {t("inspections.readOnly")}
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {RESULT_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => void recordResult(option.value)}
+                            disabled={busy}
+                            className="min-h-12 rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-50"
+                          >
+                            {t(option.labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -606,31 +630,44 @@ export default function InventoryInspectionsManager({
                 {selectedInspection === inspection.id &&
                 inspection.status === "draft" &&
                 rooms.length > 0 ? (
-                  <div className="mt-4 flex gap-2">
-                    <select
-                      value={selectedCatalogRoom}
-                      onChange={(event) =>
-                        setSelectedCatalogRoom(event.target.value)
-                      }
-                      className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm"
-                    >
-                      {rooms.map((room) => (
-                        <option key={room.id} value={room.id}>
-                          {room.designation} ·{" "}
-                          {t("inspections.floor", {
-                            floor: room.floorNumber,
-                          })}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => void addRoom()}
-                      disabled={busy}
-                      className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
-                    >
-                      {t("inspections.add")}
-                    </button>
+                  <div className="mt-4">
+                    {actorRole === "admin" && inspection.technicianId !== currentUserId ? (
+                      <p className="mb-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                        {t("inspections.adminEdit")}
+                      </p>
+                    ) : inspection.technicianId !== currentUserId ? (
+                      <p className="mb-2 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">
+                        {t("inspections.readOnly")}
+                      </p>
+                    ) : null}
+                    {(actorRole === "admin" || inspection.technicianId === currentUserId) ? (
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedCatalogRoom}
+                          onChange={(event) =>
+                            setSelectedCatalogRoom(event.target.value)
+                          }
+                          className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm"
+                        >
+                          {rooms.map((room) => (
+                            <option key={room.id} value={room.id}>
+                              {room.designation} ·{" "}
+                              {t("inspections.floor", {
+                                floor: room.floorNumber,
+                              })}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void addRoom()}
+                          disabled={busy}
+                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
+                        >
+                          {t("inspections.add")}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -640,33 +677,6 @@ export default function InventoryInspectionsManager({
       )}
     </div>
   );
-}
-
-function InspectionProgress({ inspection }: { inspection: InspectionDto }) {
-  const { t } = useAppSettings();
-  const { checked: completed, total, percent } = inspection.progress;
-  return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between text-xs text-zinc-500">
-        <span>{t("inspections.progress")}</span>
-        <span>{t("inspections.progressItems", { completed, total })} · {percent}%</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label={t("inspections.progress")}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
-      >
-        <div className="h-full rounded-full bg-emerald-500 transition-[width]" style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function ReportMetric({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-lg bg-slate-50 px-3 py-2"><p className="text-zinc-400">{label}</p><p className="mt-1 font-semibold text-zinc-800">{value}</p></div>;
 }
 
 const RESULT_OPTIONS: Array<{

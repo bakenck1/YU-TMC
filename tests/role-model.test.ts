@@ -21,19 +21,19 @@ test("exposes exactly the three product roles", () => {
   assert.equal(translate("en", "auth.roleWarehouse"), "Warehouse keeper");
 });
 
-test("warehouse can read analytics, decommissioned items, and export without inventory mutation rights", () => {
+test("warehouse can create restricted items and read inventory without broader mutation rights", () => {
   const allowed = [
     "legacy.locations.read",
     "legacy.analytics.read",
     "inventory.workspace.read",
     "inventory.item.read_all",
+    "inventory.item.create",
     "inventory.qr.resolve_full",
     "inventory.report.export",
   ] as const;
   const denied = [
     "inventory.building.create",
     "inventory.room.create",
-    "inventory.item.create",
     "inventory.item.edit_content",
     "inventory.item.send_to_service",
     "inventory.item.resolve_maintenance",

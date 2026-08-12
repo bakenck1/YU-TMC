@@ -143,7 +143,10 @@ test("transfers page is employee-only and exposes the complete QR workflow", asy
   assert.equal(canAccessPath("employee", "/transfers"), true);
   assert.equal(canAccessPath("admin", "/transfers"), false);
   assert.equal(canAccessPath("warehouse", "/transfers"), false);
-  const source = await readFile("components/InventoryTransfersManager.tsx", "utf8");
+  const source = await Promise.all([
+    "components/InventoryTransfersManager.tsx",
+    "components/InventoryTransferList.tsx",
+  ].map((path) => readFile(path, "utf8"))).then((sources) => sources.join("\n"));
   assert.match(source, /\/api\/inventory\/qr\/resolve/);
   assert.match(source, /Запросить передачу/);
   assert.match(source, /\/decision/);

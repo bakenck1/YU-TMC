@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { InventoryItemRepositories, InventoryItemRepository } from "../lib/application/ports/inventory-item-repositories";
+import type {
+  InsertInventoryItemRecord,
+  InventoryItemRecord,
+  InventoryItemRepositories,
+  InventoryItemRepository,
+} from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 import { legacyItemDetailVisibility } from "../lib/item-detail-visibility";
 import { canAccessPath } from "../lib/security/authorization";
 import { hasPermission } from "../lib/security/permissions";
 
-function createItemService() {
+function createItemService(items: InventoryItemRepository = {} as InventoryItemRepository) {
   const repositories = {
-    items: {} as InventoryItemRepository,
+    items,
   } satisfies InventoryItemRepositories;
   const unitOfWork: UnitOfWork<InventoryItemRepositories> = {
     read: async (work) => work(repositories),
@@ -25,7 +30,66 @@ function createItemService() {
   );
 }
 
-test("warehouse is read-only and cannot access inspection workflows", () => {
+test("warehouse creation is server-limited to basic item fields", async () => {
+  let inserted: InsertInventoryItemRecord | null = null;
+  const items = {
+    roomExists: async () => true,
+    insertItem: async (input: InsertInventoryItemRecord) => {
+      inserted = input;
+      return {
+        ...input,
+        roomDesignation: "101",
+        floorNumber: 1,
+        buildingId: "22222222-2222-4222-8222-222222222222",
+        buildingName: "Main",
+        status: "active",
+        qrCode: null,
+        responsibleId: null,
+        responsibleName: null,
+        photoUrl: null,
+        version: 1,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+        archivedAt: null,
+      } satisfies InventoryItemRecord;
+    },
+    insertItemQr: async () => undefined,
+    appendAudit: async () => undefined,
+  } as unknown as InventoryItemRepository;
+  const service = createItemService(items);
+  const actor = { userId: "warehouse-1", role: "warehouse" as const };
+  const basicInput = {
+    name: "New item",
+    description: "Recorded during intake",
+    roomId: "11111111-1111-4111-8111-111111111111",
+    itemType: null,
+    brand: null,
+    model: null,
+    quantity: 1,
+    unitPrice: 0,
+    barcode: null,
+  };
+
+  await service.createItem(basicInput, actor);
+
+  assert.equal(inserted?.name, basicInput.name);
+  assert.equal(inserted?.description, basicInput.description);
+  assert.equal(inserted?.quantity, 1);
+  assert.equal(inserted?.unitPrice, 0);
+  assert.equal(inserted?.brand, null);
+  assert.equal(inserted?.model, null);
+
+  await assert.rejects(
+    service.createItem({ ...basicInput, unitPrice: 100 }, actor),
+    /forbidden/,
+  );
+  await assert.rejects(
+    service.createItem({ ...basicInput, barcode: "INV-100" }, actor),
+    /forbidden/,
+  );
+});
+
+test("warehouse can create restricted items but cannot access other mutations or inspections", () => {
   const warehouse = "warehouse" as const;
 
   assert.equal(hasPermission(warehouse, "inventory.item.read_all"), true);
@@ -34,7 +98,7 @@ test("warehouse is read-only and cannot access inspection workflows", () => {
   assert.equal(canAccessPath(warehouse, "/items"), true);
   assert.equal(canAccessPath(warehouse, "/items/decommissioned"), true);
   assert.equal(canAccessPath(warehouse, "/analytics"), true);
-  assert.equal(hasPermission(warehouse, "inventory.item.create"), false);
+  assert.equal(hasPermission(warehouse, "inventory.item.create"), true);
   assert.equal(hasPermission(warehouse, "inventory.item.edit_content"), false);
   assert.equal(
     hasPermission(warehouse, "inventory.item.manage_protected_fields"),
@@ -54,11 +118,10 @@ test("warehouse is read-only and cannot access inspection workflows", () => {
   assert.equal(canAccessPath(warehouse, "/settings"), false);
 });
 
-test("warehouse item mutations are rejected by the service before repository access", async () => {
+test("warehouse item mutations other than creation are rejected before repository access", async () => {
   const service = createItemService();
   const actor = { userId: "warehouse-1", role: "warehouse" as const };
   const forbiddenMutations = [
-    service.createItem({} as never, actor),
     service.importItems([] as never, actor),
     service.updateContent("item-1", {} as never, actor),
     service.updatePhoto("item-1", {} as never, actor),

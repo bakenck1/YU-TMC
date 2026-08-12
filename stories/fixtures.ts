@@ -1,0 +1,40 @@
+import type { AppUser } from "@/lib/types";
+
+export const USERS: AppUser[] = [
+  {
+    id: "user-admin",
+    code: "USR-001",
+    fullName: "Demo User 1",
+    email: "admin@example.test",
+    phone: "+0 000 000 00 01",
+    role: "admin",
+    active: true,
+    emailVerified: true,
+    addedAt: "2026-08-01T09:00:00.000Z",
+    version: 1,
+  },
+  {
+    id: "user-warehouse",
+    code: "USR-002",
+    fullName: "Demo User 3",
+    email: "warehouse@example.test",
+    phone: "+0 000 000 00 02",
+    role: "warehouse",
+    active: true,
+    emailVerified: false,
+    addedAt: "2026-08-04T10:30:00.000Z",
+    version: 1,
+  },
+  {
+    id: "user-employee",
+    code: "USR-003",
+    fullName: "Demo User 2",
+    email: "user@example.test",
+    phone: "+0 000 000 00 03",
+    role: "employee",
+    active: false,
+    emailVerified: true,
+    addedAt: "2026-08-08T13:15:00.000Z",
+    version: 2,
+  },
+];

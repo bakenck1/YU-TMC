@@ -20,6 +20,9 @@ vi.mock("@/components/TmcUserPicker", () => ({
     </button>
   ),
 }));
+vi.mock("@/components/ItemsTable", () => ({
+  default: () => <div>owned-items-list</div>,
+}));
 
 describe("TmcItemQrFlow", () => {
   beforeEach(() => {
@@ -59,7 +62,9 @@ describe("TmcItemQrFlow", () => {
     render(
       <TmcItemQrFlow
         operation={TMC_OPERATION_BY_ID.issue}
-        fallback={<div>owned-items-list</div>}
+        issueItems={[]}
+        actorUserId="11111111-1111-4111-8111-111111111111"
+        actorRole="employee"
       />,
     );
     expect(screen.queryByText("owned-items-list")).toBeNull();
@@ -154,7 +159,9 @@ describe("TmcItemQrFlow", () => {
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
     expect(screen.queryByRole("button", { name: "tmc.operation.acceptItem" })).toBeNull();
-    expect(screen.getByRole("alert").textContent).toContain("tmc.operation.receiveUnavailable");
+    expect(screen.getByText("tmc.operation.occupiedHint")).not.toBeNull();
+    expect(screen.queryByText("Other owner")).toBeNull();
+    expect((screen.getByRole("button", { name: "tmc.operation.requestTransfer" }) as HTMLButtonElement).disabled).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

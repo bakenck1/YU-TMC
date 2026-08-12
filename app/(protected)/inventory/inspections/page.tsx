@@ -1,5 +1,6 @@
 import InventoryInspectionsManager from "@/components/InventoryInspectionsManager";
 import MaintenanceItemsPanel from "@/components/MaintenanceItemsPanel";
+import Wrapper from "@/components/Wrapper";
 import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -53,7 +54,7 @@ export default async function InventoryInspectionsPage({
         ? [{ id: user.userId, fullName: user.name, role: user.role }]
         : [];
   return (
-    <div className="space-y-5">
+    <Wrapper direction="column" gap="lg">
       <MaintenanceItemsPanel initialItems={inventoryItems.filter((item) => item.status === "maintenance")} canManage={user.role === "admin"} />
       <InventoryInspectionsManager
       actorRole={user.role}
@@ -69,6 +70,6 @@ export default async function InventoryInspectionsPage({
       technicians={assignableUsers}
       canExport={user.role === "admin"}
       />
-    </div>
+    </Wrapper>
   );
 }

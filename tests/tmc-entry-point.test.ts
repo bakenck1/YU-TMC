@@ -45,7 +45,7 @@ test("TMC entry point has a dedicated route and localized label", () => {
 
 test("global navigation exposes the TMC entry without duplicating it on Dashboard", () => {
   const dashboard = readFileSync("components/Dashboard.tsx", "utf8");
-  const sidebar = readFileSync("components/Sidebar.tsx", "utf8");
+  const sidebar = readFileSync("components/SidebarContent.tsx", "utf8");
   const mobile = readFileSync("components/MobileBottomNavigation.tsx", "utf8");
 
   assert.doesNotMatch(dashboard, /TMC_ENTRY_POINT/);
@@ -111,7 +111,7 @@ test("TMC operation routes remain available as protected deep links", () => {
 
   assert.match(landing, /role="tablist"/);
   assert.match(landing, /TmcOperationShell/);
-  assert.match(shell, /<TmcItemQrFlow operation=\{operation\}/);
+  assert.match(shell, /<TmcItemQrFlow[\s\S]*operation=\{operation\}/);
   assert.doesNotMatch(shell, /<form|fetch\(|picker/i);
 
   for (const operation of TMC_OPERATIONS) {

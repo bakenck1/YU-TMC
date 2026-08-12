@@ -1,491 +1,33 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  Ban,
-  Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
-  CircleCheck,
-  MoreHorizontal,
-  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
-  Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import type { AppUser, UserRole } from "@/lib/types";
 import type { UserDto } from "@/lib/contracts/users";
-import { canManageUser } from "@/lib/security/permissions";
-import { useAppSettings } from "./AppSettingsProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import { canManageUser } from "@/lib/security/permissions";
+import { formatUserDate, getUserInitials, USER_ROLE_LABEL_KEYS } from "@/lib/user-presentation";
+import { useAppSettings } from "./AppSettingsProvider";
+import SortableTableHeader from "./SortableTableHeader";
+import UserDeleteConfirmationDialog from "./UserDeleteConfirmationDialog";
+import UserDetailsModal from "./UserDetailsModal";
+import UserFormModal, { type UserFormValues } from "./UserFormModal";
+import UserRoleBadge from "./UserRoleBadge";
+import UserVerificationBadge from "./UserVerificationBadge";
 
 type SortKey = "fullName" | "email" | "role" | "addedAt";
 type SortDirection = "asc" | "desc";
 type EmailFilter = "all" | "verified" | "unverified";
 
 const ROLE_OPTIONS: UserRole[] = ["admin", "warehouse", "employee"];
-
-const ROLE_STYLES: Record<UserRole, string> = {
-  admin: "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-  warehouse: "bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-600/20",
-  employee: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
-};
-
-const INPUT_CLASS =
-  "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10";
-
-function formatDate(iso: string, locale: string) {
-  return new Date(iso).toLocaleDateString(locale, {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-const ROLE_LABEL_KEYS: Record<UserRole, TranslationKey> = {
-  admin: "users.admin",
-  warehouse: "users.warehouse",
-  employee: "users.employee",
-};
-
-function getInitials(fullName: string) {
-  return fullName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
-function RoleBadge({ role }: { role: UserRole }) {
-  const { t } = useAppSettings();
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${ROLE_STYLES[role]}`}>
-      {t(ROLE_LABEL_KEYS[role])}
-    </span>
-  );
-}
-
-function VerificationBadge({ verified }: { verified: boolean }) {
-  const { t } = useAppSettings();
-  return (
-    <span
-      className={`mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-        verified ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-      }`}
-    >
-      {verified && <Check className="h-3 w-3" strokeWidth={2.5} />}
-      {verified ? t("users.verified") : t("users.unverified")}
-    </span>
-  );
-}
-
-function SortHeader({
-  label,
-  sortKey,
-  activeKey,
-  direction,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  activeKey: SortKey;
-  direction: SortDirection;
-  onSort: (key: SortKey) => void;
-}) {
-  const active = activeKey === sortKey;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(sortKey)}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap transition ${
-        active ? "text-zinc-700" : "text-zinc-400 hover:text-zinc-600"
-      }`}
-    >
-      {label}
-      {active ? (
-        direction === "asc" ? (
-          <ChevronUp className="h-3.5 w-3.5 text-emerald-600" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-emerald-600" />
-        )
-      ) : (
-        <span className="h-3.5 w-3.5" />
-      )}
-    </button>
-  );
-}
-
-interface UserFormValues {
-  code: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  role: UserRole;
-  emailVerified: boolean;
-  active: boolean;
-  sendInvitation: boolean;
-  initialPassword: string;
-}
-
-function UserFormModal({
-  user,
-  roleOptions,
-  suggestedCode,
-  onClose,
-  onSave,
-}: {
-  user: AppUser | null;
-  roleOptions: readonly UserRole[];
-  suggestedCode: string;
-  onClose: () => void;
-  onSave: (values: UserFormValues) => Promise<void>;
-}) {
-  const { t } = useAppSettings();
-  const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState<UserFormValues>({
-    code: user?.code ?? suggestedCode,
-    fullName: user?.fullName ?? "",
-    email: user?.email ?? "",
-    phone: user?.phone === "—" ? "" : (user?.phone ?? ""),
-    role: user?.role ?? "employee",
-    emailVerified: user?.emailVerified ?? false,
-    active: user?.active ?? false,
-    sendInvitation: false,
-    initialPassword: "",
-  });
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      await onSave({
-        ...values,
-        code: values.code.trim(),
-        fullName: values.fullName.trim(),
-        email: values.email.trim(),
-        phone: values.phone.trim() || "—",
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-form-title"
-        className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-black/5 bg-white shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white px-5 py-4 sm:px-6">
-          <div>
-            <h2 id="user-form-title" className="text-lg font-semibold text-zinc-900">
-              {user ? t("users.editTitle") : t("users.createTitle")}
-            </h2>
-            <p className="mt-0.5 text-sm text-zinc-400">
-              {user ? t("users.editSubtitle") : t("users.createSubtitle")}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label={t("common.close")}>
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        <form onSubmit={submit} className="space-y-6 p-5 sm:p-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium text-zinc-700">
-              {t("users.fullName")}
-              <input
-                required
-                value={values.fullName}
-                onChange={(event) => setValues((current) => ({ ...current, fullName: event.target.value }))}
-                placeholder={t("users.fullNamePlaceholder")}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="text-sm font-medium text-zinc-700">
-              {t("users.code")}
-              <input
-                required
-                value={values.code}
-                readOnly
-                placeholder={t("users.codePlaceholder")}
-                className={`${INPUT_CLASS} bg-zinc-50 text-zinc-500`}
-              />
-            </label>
-            <label className="text-sm font-medium text-zinc-700">
-              Email
-              <input
-                required
-                type="email"
-                value={values.email}
-                onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))}
-                readOnly={user !== null}
-                placeholder="name@example.com"
-                className={`${INPUT_CLASS} ${user ? "bg-zinc-50 text-zinc-500" : ""}`}
-              />
-            </label>
-            <label className="text-sm font-medium text-zinc-700">
-              {t("users.phone")}
-              <input
-                type="tel"
-                value={values.phone}
-                onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))}
-                placeholder={t("users.phonePlaceholder")}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
-              {t("users.role")}
-              <select
-                value={values.role}
-                onChange={(event) => setValues((current) => ({ ...current, role: event.target.value as UserRole }))}
-                className={INPUT_CLASS}
-              >
-                {roleOptions.map((role) => (
-                  <option key={role} value={role}>
-                    {t(ROLE_LABEL_KEYS[role])}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
-              {t(user ? "users.newTemporaryPassword" : "users.temporaryPassword")}
-              <input
-                type="password"
-                minLength={12}
-                maxLength={128}
-                value={values.initialPassword}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    initialPassword: event.target.value,
-                  }))
-                }
-                placeholder={t("users.passwordPlaceholder")}
-                className={INPUT_CLASS}
-              />
-              <span className="mt-1.5 block text-xs font-normal text-zinc-400">
-                {user
-                  ? t("users.keepPasswordHint")
-                  : t("users.passwordSsoHint")}
-              </span>
-            </label>
-          </div>
-
-          <div className="grid gap-3 rounded-2xl bg-zinc-50 p-4 sm:grid-cols-2">
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-transparent p-2 hover:border-zinc-200 hover:bg-white">
-              <input
-                type="checkbox"
-                checked={values.active}
-                onChange={(event) => setValues((current) => ({ ...current, active: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
-              />
-              <span>
-                <span className="block text-sm font-medium text-zinc-700">{t("users.isActive")}</span>
-                <span className="mt-0.5 block text-xs text-zinc-400">{t("users.isActiveHint")}</span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-transparent p-2 hover:border-zinc-200 hover:bg-white">
-              <input
-                type="checkbox"
-                checked={values.emailVerified}
-                onChange={(event) => setValues((current) => ({ ...current, emailVerified: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
-              />
-              <span>
-                <span className="block text-sm font-medium text-zinc-700">{t("users.emailVerified")}</span>
-                <span className="mt-0.5 block text-xs text-zinc-400">{t("users.emailVerifiedHint")}</span>
-              </span>
-            </label>
-            {!user && (
-              <p className="text-xs leading-5 text-zinc-500 sm:col-span-2">
-                {t("users.ssoProvisioningHint")}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col-reverse gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
-              {t("common.cancel")}
-            </button>
-            <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">
-              {user ? t("users.saveChanges") : t("users.create")}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function UserDetailsModal({
-  user,
-  canMutate,
-  onClose,
-  onEdit,
-  onToggleActive,
-  onDelete,
-}: {
-  user: AppUser;
-  canMutate: boolean;
-  onClose: () => void;
-  onEdit: () => void;
-  onToggleActive: () => void;
-  onDelete: () => void;
-}) {
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const { locale, t } = useAppSettings();
-
-  const details = [
-    [t("users.code"), user.code],
-    [t("users.fullName"), user.fullName],
-    ["Email", user.email],
-    [t("users.phone"), user.phone],
-    [t("users.addedAt"), formatDate(user.addedAt, locale)],
-  ];
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-details-title"
-        className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-black/5 bg-white shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-zinc-100 p-5 sm:p-6">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
-              {getInitials(user.fullName)}
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id="user-details-title" className="truncate text-xl font-semibold text-zinc-900">
-                  {user.fullName}
-                </h2>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${user.active ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-500"}`}>
-                  {user.active ? t("status.active") : t("users.deactivated")}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-zinc-400">{user.code}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label={t("common.close")}>
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        <div className="space-y-6 p-5 sm:p-6">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {details.map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-zinc-100 bg-zinc-50/70 px-4 py-3">
-                <p className="text-xs text-zinc-400">{label}</p>
-                <p className="mt-1 break-words text-sm font-medium text-zinc-800">{value}</p>
-                {label === "Email" && <VerificationBadge verified={user.emailVerified} />}
-              </div>
-            ))}
-            <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 px-4 py-3">
-              <p className="text-xs text-zinc-400">{t("users.role")}</p>
-              <div className="mt-2">
-                <RoleBadge role={user.role} />
-              </div>
-            </div>
-          </div>
-
-          {canMutate && (
-            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
-                <Pencil className="h-4 w-4" />
-                {t("users.edit")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActionsOpen((open) => !open)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-                {t("users.moreActions")}
-              </button>
-            </div>
-          )}
-
-          {canMutate && actionsOpen && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-900">{t("users.attentionActions")}</p>
-                  <p className="mt-1 text-xs leading-5 text-amber-800/70">{t("users.attentionHint")}</p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <button type="button" onClick={onToggleActive} className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-100">
-                  {user.active ? <Ban className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
-                  {user.active ? t("users.deactivate") : t("users.activate")}
-                </button>
-                <button type="button" onClick={onDelete} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50">
-                  <Trash2 className="h-4 w-4" />
-                  {t("users.delete")}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function DeleteConfirmation({
-  user,
-  onCancel,
-  onConfirm,
-}: {
-  user: AppUser;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useAppSettings();
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={onCancel}>
-      <section
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="delete-user-title"
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-100 text-red-600">
-          <Trash2 className="h-5 w-5" />
-        </div>
-        <h2 id="delete-user-title" className="mt-4 text-lg font-semibold text-zinc-900">
-          {t("users.deleteQuestion")}
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-zinc-500">
-          {t("users.deleteText", { name: user.fullName })}
-        </p>
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" onClick={onCancel} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
-            {t("common.cancel")}
-          </button>
-          <button type="button" onClick={onConfirm} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700">
-            {t("users.confirmDelete")}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 export default function UsersManager({
   initialUsers,
@@ -528,7 +70,7 @@ export default function UsersManager({
 
     return records
       .filter((user) => {
-        const searchable = [user.code, user.fullName, user.email, user.role, t(ROLE_LABEL_KEYS[user.role]), user.phone]
+        const searchable = [user.code, user.fullName, user.email, user.role, t(USER_ROLE_LABEL_KEYS[user.role]), user.phone]
           .join(" ")
           .toLocaleLowerCase("ru-RU");
         const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
@@ -759,7 +301,7 @@ export default function UsersManager({
                 <option value="all">{t("users.allRoles")}</option>
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role} value={role}>
-                    {t(ROLE_LABEL_KEYS[role])}
+                    {t(USER_ROLE_LABEL_KEYS[role])}
                   </option>
                 ))}
               </select>
@@ -794,7 +336,7 @@ export default function UsersManager({
                 }}
                 className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
               >
-                {t("users.roleFilter", { role: t(ROLE_LABEL_KEYS[roleFilter]) })}
+                {t("users.roleFilter", { role: t(USER_ROLE_LABEL_KEYS[roleFilter]) })}
                 <X className="h-3 w-3" />
               </button>
             )}
@@ -833,17 +375,17 @@ export default function UsersManager({
               <tr className="border-b border-zinc-100 bg-zinc-50/50 text-xs uppercase tracking-wide">
                 <th className="px-4 py-4 font-medium text-zinc-400">{t("users.columnCode")}</th>
                 <th className="px-4 py-4 font-medium">
-                  <SortHeader label={t("users.fullName")} sortKey="fullName" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                  <SortableTableHeader label={t("users.fullName")} sortKey="fullName" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
                 <th className="px-4 py-4 font-medium">
-                  <SortHeader label="Email" sortKey="email" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                  <SortableTableHeader label="Email" sortKey="email" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
                 <th className="px-4 py-4 font-medium">
-                  <SortHeader label={t("users.role")} sortKey="role" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                  <SortableTableHeader label={t("users.role")} sortKey="role" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
                 <th className="px-4 py-4 font-medium text-zinc-400">{t("users.phone")}</th>
                 <th className="px-4 py-4 font-medium">
-                  <SortHeader label={t("users.addedAt")} sortKey="addedAt" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                  <SortableTableHeader label={t("users.addedAt")} sortKey="addedAt" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
               </tr>
             </thead>
@@ -860,7 +402,7 @@ export default function UsersManager({
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">
-                        {getInitials(user.fullName)}
+                        {getUserInitials(user.fullName)}
                       </span>
                       <div className="min-w-0">
                         <p className="truncate font-medium text-zinc-800 hover:text-emerald-700">{user.fullName}</p>
@@ -872,13 +414,13 @@ export default function UsersManager({
                   </td>
                   <td className="px-4 py-3.5">
                     <p className="truncate text-zinc-600">{user.email}</p>
-                    <VerificationBadge verified={user.emailVerified} />
+                    <UserVerificationBadge verified={user.emailVerified} />
                   </td>
                   <td className="px-4 py-3.5">
-                    <RoleBadge role={user.role} />
+                    <UserRoleBadge role={user.role} />
                   </td>
                   <td className="px-4 py-3.5 text-zinc-500">{user.phone}</td>
-                  <td className="px-4 py-3.5 text-zinc-500">{formatDate(user.addedAt, locale)}</td>
+                  <td className="px-4 py-3.5 text-zinc-500">{formatUserDate(user.addedAt, locale)}</td>
                 </tr>
               ))}
               {visibleUsers.length === 0 && (
@@ -964,11 +506,10 @@ export default function UsersManager({
         />
       )}
 
-      {deleteUser && <DeleteConfirmation user={deleteUser} onCancel={() => setDeleteId(null)} onConfirm={deleteRecord} />}
+      {deleteUser && <UserDeleteConfirmationDialog user={deleteUser} onCancel={() => setDeleteId(null)} onConfirm={deleteRecord} />}
     </div>
   );
 }
-
 function normalizeUser(user: UserDto): AppUser {
   return {
     ...user,

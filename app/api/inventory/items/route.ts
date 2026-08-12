@@ -29,11 +29,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
+    const actor = authorizationActor(user);
     assertPhotoJsonRequest(request);
-    const input = parseCreate(await readPhotoJsonRequest(request));
+    const input = parseCreate(
+      await readPhotoJsonRequest(request),
+      actor.role === "warehouse",
+    );
     const item = await getApplicationServices().items.createItem(
       input,
-      authorizationActor(user),
+      actor,
     );
     return Response.json({ item }, { status: 201 });
   } catch (error) {
@@ -41,15 +45,17 @@ export async function POST(request: Request) {
   }
 }
 
-function parseCreate(value: unknown): CreateInventoryItemInput {
+function parseCreate(
+  value: unknown,
+  restricted: boolean,
+): CreateInventoryItemInput {
   if (!value || typeof value !== "object") throw invalidRequest();
   const body = value as Record<string, unknown>;
   if (
     typeof body.name !== "string" ||
     typeof body.roomId !== "string" ||
-    typeof body.barcode !== "string" ||
-    !body.photo ||
-    typeof body.photo !== "object" ||
+    (!restricted && typeof body.barcode !== "string") ||
+    (!restricted && (!body.photo || typeof body.photo !== "object")) ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -67,12 +73,14 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
   ) {
     throw invalidRequest();
   }
-  const photo = body.photo as Record<string, unknown>;
-  if (
+  const photo = body.photo === undefined || body.photo === null
+    ? null
+    : body.photo as Record<string, unknown>;
+  if (photo && (
     typeof photo.imageDataUrl !== "string" ||
     !Number.isInteger(photo.width) ||
     !Number.isInteger(photo.height)
-  ) throw invalidRequest();
+  )) throw invalidRequest();
   return {
     name: body.name,
     roomId: body.roomId,
@@ -82,13 +90,13 @@ function parseCreate(value: unknown): CreateInventoryItemInput {
     model: body.model as string | null | undefined,
     quantity: body.quantity as number | null | undefined,
     unitPrice: body.unitPrice as number | null | undefined,
-    barcode: body.barcode,
+    barcode: body.barcode as string | null | undefined,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
-    photo: {
-      imageDataUrl: photo.imageDataUrl,
+    photo: photo ? {
+      imageDataUrl: photo.imageDataUrl as string,
       width: photo.width as number,
       height: photo.height as number,
-    },
+    } : undefined,
   };
 }
 

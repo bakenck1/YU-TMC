@@ -1,10 +1,11 @@
 "use client";
 
 import { Barcode, MapPin, RotateCcw, UserRound, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
+import ItemsTable from "@/components/ItemsTable";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import {
   parseCreateTmcTransferRequestResult,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
 import type { TmcOperationNavigation } from "@/lib/tmc-navigation";
+import type { UserRole } from "@/lib/contracts/users";
+import type { InventoryItem } from "@/lib/types";
 import {
   TmcItemQrResolverController,
   installTmcQrResolverController,
@@ -30,10 +33,14 @@ const ERROR_KEYS = {
 
 export default function TmcItemQrFlow({
   operation,
-  fallback,
+  issueItems = [],
+  actorUserId,
+  actorRole,
 }: {
   operation: TmcOperationNavigation;
-  fallback?: ReactNode;
+  issueItems?: InventoryItem[];
+  actorUserId?: string;
+  actorRole?: UserRole;
 }) {
   const { t } = useAppSettings();
   const [scannerOpen, setScannerOpen] = useState(true);
@@ -101,6 +108,75 @@ export default function TmcItemQrFlow({
     setSubmission({ status: "idle" });
   }
 
+  /** Shared helper: POST /api/inventory/transfer-requests and handle idempotency. */
+  async function doCreateRequest(
+    recipientId: string,
+    itemId: string,
+    commentText: string,
+    sequence: number,
+    controller: AbortController,
+  ) {
+    const payload = {
+      recipientId,
+      itemIds: [itemId],
+      ...(commentText.trim() ? { comment: commentText } : {}),
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (
+      !createAttempt.current ||
+      createAttempt.current.fingerprint !== fingerprint
+    ) {
+      createAttempt.current = {
+        fingerprint,
+        key: `tmc-create:${crypto.randomUUID()}`,
+      };
+    }
+    const response = await fetch("/api/inventory/transfer-requests", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": createAttempt.current.key,
+      },
+      body: fingerprint,
+      signal: controller.signal,
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) {
+      const errorCode =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { error?: unknown }).error
+          : null;
+      if (
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 429 &&
+        errorCode !== "idempotency_request_in_progress"
+      ) {
+        createAttempt.current = null;
+      }
+      throw new Error("tmc_transfer_request_failed");
+    }
+    const result = parseCreateTmcTransferRequestResult(
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as { result?: unknown }).result
+        : null,
+    );
+    const requestId = result.request?.id;
+    const included = result.items.some(
+      (outcome) => outcome.outcome === "included" && outcome.itemId === itemId,
+    );
+    if (!requestId || !included) {
+      createAttempt.current = null;
+      throw new Error("tmc_transfer_request_rejected");
+    }
+    if (sequence === submissionSequence.current) {
+      createAttempt.current = null;
+      setSubmission({ status: "success", requestId });
+    }
+  }
+
   async function submitOperation() {
     const item = flowState.status === "selected" ? flowState.item : null;
     if (!item || submissionInFlight.current) return;
@@ -125,65 +201,44 @@ export default function TmcItemQrFlow({
           },
         );
         if (!response.ok) throw new Error("tmc_receive_failed");
-        if (sequence === submissionSequence.current) setSubmission({ status: "success" });
+        if (sequence === submissionSequence.current)
+          setSubmission({ status: "success" });
         return;
       }
-
-      const payload = {
-        recipientId: recipient!.id,
-        itemIds: [item.id],
-        ...(comment.trim() ? { comment } : {}),
-      };
-      const fingerprint = JSON.stringify(payload);
-      if (!createAttempt.current || createAttempt.current.fingerprint !== fingerprint) {
-        createAttempt.current = {
-          fingerprint,
-          key: `tmc-create:${crypto.randomUUID()}`,
-        };
+      await doCreateRequest(recipient!.id, item.id, comment, sequence, controller);
+    } catch (error) {
+      if (
+        sequence === submissionSequence.current &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setSubmission({ status: "error" });
       }
-      const response = await fetch("/api/inventory/transfer-requests", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": createAttempt.current.key,
-        },
-        body: fingerprint,
-        signal: controller.signal,
-      });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        const errorCode = body && typeof body === "object" && !Array.isArray(body)
-          ? (body as { error?: unknown }).error
-          : null;
-        if (
-          response.status >= 400 &&
-          response.status < 500 &&
-          response.status !== 429 &&
-          errorCode !== "idempotency_request_in_progress"
-        ) {
-          createAttempt.current = null;
-        }
-        throw new Error("tmc_transfer_request_failed");
-      }
-      const result = parseCreateTmcTransferRequestResult(
-        body && typeof body === "object" && !Array.isArray(body)
-          ? (body as { result?: unknown }).result
-          : null,
-      );
-      const requestId = result.request?.id;
-      const included = result.items.some(
-        (outcome) => outcome.outcome === "included" && outcome.itemId === item.id,
-      );
-      if (!requestId || !included) {
-        createAttempt.current = null;
-        throw new Error("tmc_transfer_request_rejected");
-      }
+    } finally {
       if (sequence === submissionSequence.current) {
-        createAttempt.current = null;
-        setSubmission({ status: "success", requestId });
+        submissionAbortController.current = null;
+        submissionInFlight.current = false;
       }
+    }
+  }
+
+  /**
+   * Task 3C: when scanning an occupied item in receive mode, create a transfer
+   * request with the current user (actorUserId) as the recipient. The current
+   * owner's name is intentionally hidden in the UI — only basic item data is shown.
+   */
+  async function requestTransferToSelf() {
+    const item = flowState.status === "selected" ? flowState.item : null;
+    if (!item || !actorUserId || submissionInFlight.current) return;
+
+    submissionInFlight.current = true;
+    const sequence = ++submissionSequence.current;
+    const controller = new AbortController();
+    submissionAbortController.current?.abort();
+    submissionAbortController.current = controller;
+    setSubmission({ status: "submitting" });
+
+    try {
+      await doCreateRequest(actorUserId, item.id, "", sequence, controller);
     } catch (error) {
       if (
         sequence === submissionSequence.current &&
@@ -205,6 +260,7 @@ export default function TmcItemQrFlow({
     : "";
   const receiveAlreadyAssigned =
     operation.id === "receive" && item?.isCurrentUserResponsible === true;
+  // Item is occupied by someone else in receive mode — show "Request Transfer" instead.
   const receiveUnavailable =
     operation.id === "receive" &&
     !receiveAlreadyAssigned &&
@@ -240,7 +296,13 @@ export default function TmcItemQrFlow({
               <h3 className="font-semibold text-zinc-900">{item.title}</h3>
               {item.inventoryNumber ? <p className="mt-1 text-sm text-zinc-600">{item.inventoryNumber}</p> : null}
               {location ? <p className="mt-3 flex items-center gap-2 text-sm text-zinc-700"><MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />{location}</p> : null}
-              <p className="mt-2 flex items-center gap-2 text-sm text-zinc-700"><UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />{item.responsibleName || t("tmc.qr.noResponsible")}</p>
+              {/* Task 3C: hide the owner's name when the item is occupied in receive mode */}
+              {!receiveUnavailable ? (
+                <p className="mt-2 flex items-center gap-2 text-sm text-zinc-700">
+                  <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {item.responsibleName || t("tmc.qr.noResponsible")}
+                </p>
+              ) : null}
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -254,6 +316,26 @@ export default function TmcItemQrFlow({
             </button>
           </div>
         </article>
+      ) : null}
+
+      {/* Task 3C: occupied item panel — show "Request Transfer" instead of the standard flow */}
+      {item && receiveUnavailable && submission.status !== "success" ? (
+        <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <p className="text-sm text-zinc-600">{t("tmc.operation.occupiedHint")}</p>
+          {submission.status === "error" ? (
+            <p role="alert" className="mt-3 text-sm text-red-700">{t("tmc.operation.error")}</p>
+          ) : null}
+          <button
+            type="button"
+            disabled={submission.status === "submitting" || !actorUserId}
+            onClick={() => void requestTransferToSelf()}
+            className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {submission.status === "submitting"
+              ? t("tmc.operation.submitting")
+              : t("tmc.operation.requestTransfer")}
+          </button>
+        </div>
       ) : null}
 
       {item && operation.id !== "receive" ? (
@@ -295,9 +377,7 @@ export default function TmcItemQrFlow({
         ) : (
           <p role="status" className="mt-5 rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">{t("tmc.operation.receiveSuccess")}</p>
         )
-      ) : receiveUnavailable ? (
-        <p role="alert" className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{t("tmc.operation.receiveUnavailable")}</p>
-      ) : submission.status === "error" ? (
+      ) : submission.status === "error" && !receiveUnavailable ? (
         <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">{t("tmc.operation.error")}</p>
       ) : null}
 
@@ -307,7 +387,22 @@ export default function TmcItemQrFlow({
             <Barcode className="h-4 w-4" aria-hidden="true" />
             {t("tmc.qr.scan")}
           </button>
-          {fallback}
+          {operation.id === "issue" && actorUserId && actorRole ? (
+            <div className="mt-6 border-t border-zinc-100 pt-6">
+              <ItemsTable
+                items={issueItems}
+                searchHistoryScope={`tmc-issue:${actorUserId}`}
+                columnSettingsScope={`tmc-issue:${actorUserId}`}
+                bulkActions={{
+                  actorUserId,
+                  actorRole,
+                  buildings: [],
+                  rooms: [],
+                  variant: "issue",
+                }}
+              />
+            </div>
+          ) : null}
         </>
       ) : null}
 
