@@ -42,17 +42,21 @@ test("detail endpoint preserves hidden not-found with no-store", async () => {
 
 test("photo endpoint returns exact JPEG bytes and authenticated actor", async () => {
   const calls: unknown[] = [];
+  const backing = new Uint8Array([9, 1, 2, 3, 8]);
   const handler = createTmcTransferRequestPhotoGetHandler({
     async authenticate() { return { userId: "actor", role: "employee" }; },
     async getItemPhoto(requestId, itemId, actor) {
       calls.push({ requestId, itemId, actor });
-      return { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+      return { bytes: backing.subarray(1, 4), mimeType: "image/jpeg" };
     },
   });
-  const response = await handler(new Request("https://example.test/photo"), "request", "item");
+  const response = await handler(new Request("https://example.test/photo", {
+    headers: { range: "bytes=1-1" },
+  }), "request", "item");
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/jpeg");
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("content-range"), null);
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([1, 2, 3]));
   assert.deepEqual(calls, [{ requestId: "request", itemId: "item", actor: { userId: "actor", role: "employee" } }]);
 });

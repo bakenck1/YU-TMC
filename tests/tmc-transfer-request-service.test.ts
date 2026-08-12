@@ -182,6 +182,10 @@ test("snapshot-only readers cannot infer sibling outcomes from the parent status
 test("request-scoped photo access requires a participant and item membership", async () => {
   const harness = createHarness();
   const itemId = uuid(1);
+  const hiddenNotFound = (error: unknown) =>
+    error instanceof ApplicationError &&
+    error.kind === "not_found" &&
+    error.publicCode === "request_not_found";
   harness.repository.aggregate = requestRecord([
     candidate(itemId, { responsibleUser: user({ id: SNAPSHOT_OWNER_ID }) }),
   ]);
@@ -197,20 +201,70 @@ test("request-scoped photo access requires a participant and item membership", a
   assert.equal(harness.repository.photoCalls.length, 4);
   await assert.rejects(
     harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, { userId: uuid(71), role: "employee" }),
-    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
+    hiddenNotFound,
+  );
+  assert.equal(harness.repository.photoCalls.length, 4);
+  await assert.rejects(
+    harness.service.getItemPhoto(harness.repository.aggregate.id, uuid(99), ACTOR),
+    hiddenNotFound,
   );
   assert.equal(harness.repository.photoCalls.length, 4);
   harness.repository.photo = null;
   await assert.rejects(
-    harness.service.getItemPhoto(harness.repository.aggregate.id, uuid(99), ACTOR),
-    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
+    harness.service.getItemPhoto(harness.repository.aggregate.id, itemId, ACTOR),
+    hiddenNotFound,
   );
   const calls = harness.repository.findByIdCalls;
-  await assert.rejects(
-    harness.service.getItemPhoto("invalid", itemId, ACTOR),
-    (error: unknown) => error instanceof ApplicationError && error.publicCode === "request_not_found",
-  );
+  for (const [requestId, requestedItemId] of [
+    ["invalid", itemId],
+    [harness.repository.aggregate.id, "invalid"],
+  ]) {
+    await assert.rejects(
+      harness.service.getItemPhoto(requestId, requestedItemId, ACTOR),
+      hiddenNotFound,
+    );
+  }
   assert.equal(harness.repository.findByIdCalls, calls);
+});
+
+test("snapshot-only request participants cannot fetch a sibling owner's photo", async () => {
+  const harness = createHarness();
+  const ownedItemId = uuid(1);
+  const siblingItemId = uuid(2);
+  harness.repository.aggregate = requestRecord([
+    candidate(ownedItemId, {
+      responsibleUser: user({ id: SNAPSHOT_OWNER_ID }),
+    }),
+    candidate(siblingItemId, {
+      responsibleUser: user({ id: uuid(72) }),
+    }),
+  ]);
+  harness.repository.photo = {
+    bytes: new Uint8Array([1, 2, 3]),
+    mimeType: "image/jpeg",
+  };
+
+  await assert.doesNotReject(
+    harness.service.getItemPhoto(
+      harness.repository.aggregate.id,
+      ownedItemId,
+      { userId: SNAPSHOT_OWNER_ID, role: "employee" },
+    ),
+  );
+  await assert.rejects(
+    harness.service.getItemPhoto(
+      harness.repository.aggregate.id,
+      siblingItemId,
+      { userId: SNAPSHOT_OWNER_ID, role: "employee" },
+    ),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.kind === "not_found" &&
+      error.publicCode === "request_not_found",
+  );
+  assert.deepEqual(harness.repository.photoCalls, [
+    [harness.repository.aggregate.id, ownedItemId],
+  ]);
 });
 
 test("creation writes immutable request/item audit and schedules direct plus overdue notifications atomically", async () => {

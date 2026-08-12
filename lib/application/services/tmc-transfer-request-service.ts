@@ -220,15 +220,19 @@ export class TmcTransferRequestService {
     return this.unitOfWork.read(async ({ transferRequests }) => {
       const request = await transferRequests.findById(requestId.toLowerCase());
       const actorId = actor.userId.toLowerCase();
+      const requestItem = request?.items.find(
+        (item) => item.itemId === itemId.toLowerCase(),
+      );
       if (
         !request ||
-        !canReadRequest(request, actorId, actor.role)
+        !requestItem ||
+        !canReadRequestItem(request, requestItem, actorId, actor.role)
       ) {
         throw requestNotFound();
       }
       const photo = await transferRequests.findItemPhoto(
         request.id,
-        itemId.toLowerCase(),
+        requestItem.itemId,
       );
       if (!photo) throw requestNotFound();
       return photo;
@@ -964,6 +968,18 @@ function canReadRequest(
     request.initiator.id === actorId ||
     request.recipient.id === actorId ||
     request.items.some((item) => item.currentResponsibleIdAtRequest === actorId);
+}
+
+function canReadRequestItem(
+  request: TmcTransferRequestRecord,
+  item: TmcTransferRequestItemRecord,
+  actorId: string,
+  role: AuthorizationActor["role"],
+) {
+  return role === "admin" ||
+    request.initiator.id === actorId ||
+    request.recipient.id === actorId ||
+    item.currentResponsibleIdAtRequest === actorId;
 }
 
 function toReaderScopedRequestDto(
