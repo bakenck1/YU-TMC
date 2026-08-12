@@ -509,7 +509,7 @@ test("decideItem atomically hands responsibility over only for a valid accept", 
   }), "accepted");
   assert.equal(source.calls.length, 6);
   assert.match(source.calls[3]!.text, /tmc_transfer_accepted/i);
-  assert.match(source.calls[4]!.text, /'transfer'/i);
+  assert.equal(source.calls[4]!.values?.[5], "transfer");
   assert.match(source.calls[5]!.text, /result = \$2[\s\S]+version = version \+ 1/i);
 });
 

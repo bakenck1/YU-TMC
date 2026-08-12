@@ -131,6 +131,7 @@ export interface DecideTmcTransferRequestItemRecord {
   decidedBy: string;
   decidedAt: Date;
   newResponsibilityPeriodId: string;
+  responsibilitySource?: "transfer" | "admin_override";
 }
 
 export interface CloseTmcTransferRequestRecord {

@@ -316,18 +316,6 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
-      {bulkActions && selectedItems.length > 0 ? (
-        <TmcBulkActions
-          items={selectedItems}
-          actorUserId={bulkActions.actorUserId}
-          actorRole={bulkActions.actorRole}
-          buildings={bulkActions.buildings}
-          rooms={bulkActions.rooms}
-          variant={bulkActions.variant}
-          onComplete={() => router.refresh()}
-          onClear={() => setSelected(new Set())}
-        />
-      ) : null}
       {excelDataset || itemCreation ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
           {excelDataset ? (
@@ -480,8 +468,22 @@ export default function ItemsTable({
       </div>
       ) : null}
 
-      <div className="flex items-center justify-between text-sm text-zinc-400">
-        <p>{t("items.found", { count: filtered.length })}</p>
+      <div className={`flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400 ${bulkActions && selectedItems.length > 0 ? "sticky top-2 z-30 rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 shadow-lg backdrop-blur" : ""}`}>
+        <div className="flex flex-wrap items-center gap-3">
+          <p>{t("items.found", { count: filtered.length })}</p>
+          {bulkActions && selectedItems.length > 0 ? (
+            <TmcBulkActions
+              items={selectedItems}
+              actorUserId={bulkActions.actorUserId}
+              actorRole={bulkActions.actorRole}
+              buildings={bulkActions.buildings}
+              rooms={bulkActions.rooms}
+              variant={bulkActions.variant}
+              onComplete={() => router.refresh()}
+              onClear={() => setSelected(new Set())}
+            />
+          ) : null}
+        </div>
         {selected.size > 0 && <p>{t("items.selected", { count: selected.size })}</p>}
       </div>
 

@@ -332,13 +332,14 @@ class PostgresTmcTransferRequestRepository
       await this.source.query(
         `insert into ${RESPONSIBILITY_PERIODS}
            (id, item_id, responsible_user_id, source, started_at, started_by)
-         values ($1, $2, $3, 'transfer', $4, $5)`,
+         values ($1, $2, $3, $6, $4, $5)`,
         [
           input.newResponsibilityPeriodId,
           input.itemId,
           input.recipientId,
           input.decidedAt,
           input.decidedBy,
+          input.responsibilitySource ?? "transfer",
         ],
       );
     }

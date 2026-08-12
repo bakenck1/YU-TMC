@@ -298,6 +298,38 @@ describe("TMC transfer request transactions", () => {
       itemIds: [fixture.itemIds[2]!],
     }, { userId: adminId, role: "admin" });
     expect(adminResult).toMatchObject({ included: 1, problems: 0 });
+    expect(adminResult.request).toMatchObject({
+      status: "accepted",
+      isAdministrativeDecision: true,
+      summary: { accepted: 1, pending: 0 },
+    });
+
+    const administrativeAssignment = await database.query<{
+      responsible_user_id: string;
+      source: string;
+    }>(
+      `select responsible_user_id, source
+         from "yu_inventory"."responsibility_periods"
+        where item_id = $1 and ended_at is null`,
+      [fixture.itemIds[2]],
+    );
+    expect(administrativeAssignment.rows).toEqual([{
+      responsible_user_id: fixture.recipientIds[1],
+      source: "admin_override",
+    }]);
+    const recipientNotification = await database.query<{ count: number }>(
+      `select count(*)::int as count
+         from "yu_inventory"."notification_events" event
+         join "yu_inventory"."tmc_operation_notifications" notification
+           on notification.notification_event_id = event.id
+         join "yu_inventory"."notification_deliveries" delivery
+           on delivery.event_id = event.id
+        where notification.request_id = $1
+          and event.type = 'tmc_transfer.completed'
+          and delivery.recipient_id = $2`,
+      [adminResult.request!.id, fixture.recipientIds[1]],
+    );
+    expect(recipientNotification.rows[0]?.count).toBe(1);
 
     const snapshots = await database.query<{
       item_id: string;

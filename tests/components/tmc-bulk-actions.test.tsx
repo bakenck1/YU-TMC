@@ -44,21 +44,60 @@ const ITEM = {
 describe("TmcBulkActions", () => {
   beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
 
+  it("renders a bright actions tab and opens its menu below the sticky row", () => {
+    const onClear = vi.fn();
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002" };
+    render(<TmcBulkActions
+      items={[ITEM, second]}
+      actorUserId={ITEM.responsibleId}
+      actorRole="admin"
+      buildings={[]}
+      rooms={[]}
+      onComplete={vi.fn()}
+      onClear={onClear}
+    />);
+
+    const trigger = screen.getByRole("button", { name: "tmc.bulk.actions" });
+    expect(trigger.parentElement?.className).toContain("relative");
+    expect(trigger.className).toContain("min-h-12");
+    expect(trigger.className).toContain("bg-emerald-500");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: "tmc.bulk.changeLocation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "tmc.bulk.transfer" })).toBeNull();
+
+    fireEvent.click(trigger);
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menu").className).toContain("top-full");
+    expect(screen.getByText('items.selected:{"count":2}')).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "tmc.bulk.changeLocation" })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.clear" }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("creates one request for selected rows and displays per-row problems", async () => {
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002" };
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: async () => ({
         result: {
           request: null,
-          total: 1,
+          total: 2,
           included: 0,
-          problems: 1,
-          items: [{ itemId: ITEM.id, outcome: "problem", problem: "active_transfer_exists" }],
+          problems: 2,
+          items: [
+            { itemId: ITEM.id, outcome: "problem", problem: "active_transfer_exists" },
+            { itemId: second.id, outcome: "problem", problem: "active_transfer_exists" },
+          ],
         },
       }),
     } as Response);
     render(<TmcBulkActions
-      items={[ITEM]}
+      items={[ITEM, second]}
       actorUserId={ITEM.responsibleId}
       actorRole="employee"
       variant="issue"
@@ -67,7 +106,8 @@ describe("TmcBulkActions", () => {
       onComplete={vi.fn()}
     />);
 
-    fireEvent.click(screen.getByRole("button", { name: "tmc.operation.issue" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.operation.issue" }));
     fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
     fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitTransfer" }));
 
@@ -79,10 +119,10 @@ describe("TmcBulkActions", () => {
     const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       recipientId: "22222222-2222-4222-8222-222222222222",
-      itemIds: [ITEM.id],
+      itemIds: [ITEM.id, second.id],
       comment: null,
     });
-    expect(screen.getByText("tmc.problem.active_transfer_exists")).not.toBeNull();
+    expect(screen.getAllByText("tmc.problem.active_transfer_exists")).toHaveLength(2);
   });
 
   it("keeps responsibility transfer admin-only outside issue flow", () => {
@@ -105,7 +145,8 @@ describe("TmcBulkActions", () => {
       rooms={[]}
       onComplete={vi.fn()}
     />);
-    expect(screen.getByRole("button", { name: "tmc.operation.issue" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    expect(screen.getByRole("menuitem", { name: "tmc.operation.issue" })).not.toBeNull();
   });
 
   it("removes an item from the operation and submits only the remaining rows", async () => {
@@ -131,12 +172,13 @@ describe("TmcBulkActions", () => {
       onComplete={vi.fn()}
     />);
 
-    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.transfer" }));
-    expect(screen.getByText("tmc.bulk.transferExplanation")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" }));
+    expect(screen.getByText("tmc.bulk.assignmentExplanation")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: `tmc.bulk.removeItem:${JSON.stringify({ name: ITEM.name })}` }));
     expect(screen.queryByText(ITEM.name)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
-    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitTransfer" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitAssignment" }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
@@ -144,20 +186,24 @@ describe("TmcBulkActions", () => {
   });
 
   it("offers admin-only location change and submits item versions with a directory room", async () => {
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002", version: 7 };
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: async () => ({
         result: {
-          total: 1,
-          succeeded: 1,
+          total: 2,
+          succeeded: 2,
           problems: 0,
-          items: [{ itemId: ITEM.id, outcome: "success", itemVersion: 4 }],
+          items: [
+            { itemId: ITEM.id, outcome: "success", itemVersion: 4 },
+            { itemId: second.id, outcome: "success", itemVersion: 8 },
+          ],
         },
       }),
     } as Response);
     const onComplete = vi.fn();
     const { rerender } = render(<TmcBulkActions
-      items={[ITEM]}
+      items={[ITEM, second]}
       actorUserId={ITEM.responsibleId}
       actorRole="employee"
       buildings={[]}
@@ -167,7 +213,7 @@ describe("TmcBulkActions", () => {
     expect(screen.queryByRole("button", { name: "tmc.bulk.changeLocation" })).toBeNull();
 
     rerender(<TmcBulkActions
-      items={[ITEM]}
+      items={[ITEM, second]}
       actorUserId={ITEM.responsibleId}
       actorRole="admin"
       buildings={[{
@@ -196,7 +242,12 @@ describe("TmcBulkActions", () => {
       }]}
       onComplete={onComplete}
     />);
-    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.changeLocation" }));
+    expect(screen.queryByRole("button", { name: "tmc.bulk.changeLocation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "tmc.bulk.transfer" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    expect(screen.getByRole("menuitem", { name: "tmc.bulk.changeLocation" })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.changeLocation" }));
     fireEvent.change(screen.getByLabelText("tmc.bulk.building"), {
       target: { value: "55555555-5555-4555-8555-555555555555" },
     });
@@ -209,7 +260,10 @@ describe("TmcBulkActions", () => {
     const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       roomId: "66666666-6666-4666-8666-666666666666",
-      items: [{ itemId: ITEM.id, itemVersion: 3 }],
+      items: [
+        { itemId: ITEM.id, itemVersion: 3 },
+        { itemId: second.id, itemVersion: 7 },
+      ],
       comment: null,
     });
   });

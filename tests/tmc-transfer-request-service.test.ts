@@ -932,7 +932,7 @@ test("does not persist a parent for an all-foreign employee batch", async () => 
   assert.equal(harness.repository.insertedItems.length, 0);
 });
 
-test("allows an administrator to group items from different owners", async () => {
+test("an administrator immediately assigns grouped items and notifies the new responsible user", async () => {
   const admin = { userId: uuid(70), role: "admin" as const };
   const itemIds = [uuid(1), uuid(2)];
   const candidates = itemIds.map((itemId, index) =>
@@ -944,7 +944,9 @@ test("allows an administrator to group items from different owners", async () =>
     actors: [user({ id: admin.userId, role: admin.role })],
     candidates,
   });
-  harness.repository.aggregate = requestRecord(candidates);
+  harness.repository.aggregate = requestRecord(candidates, {
+    initiator: operationUser(admin.userId, "admin"),
+  });
 
   const result = await harness.service.create(
     { recipientId: RECIPIENT_ID, itemIds },
@@ -952,12 +954,46 @@ test("allows an administrator to group items from different owners", async () =>
   );
 
   assert.equal(result.included, 2);
+  assert.equal(result.request?.status, "accepted");
+  assert.deepEqual(result.request?.summary, {
+    total: 2,
+    pending: 0,
+    accepted: 2,
+    rejected: 0,
+    cancelled: 0,
+    invalidated: 0,
+  });
+  assert.deepEqual(
+    harness.repository.decisionCalls.map((call) => call.decision),
+    ["accept", "accept"],
+  );
+  assert.deepEqual(
+    harness.repository.decisionCalls.map((call) => call.responsibilitySource),
+    ["admin_override", "admin_override"],
+  );
   assert.deepEqual(
     harness.repository.insertedItems.map((item) =>
       item.currentResponsibleIdAtRequest),
     [uuid(75), uuid(76)],
   );
   assert.equal(harness.repository.insertedRequests[0]?.initiatorId, admin.userId);
+  assert.equal(
+    harness.unitOfWork.stageFour.notifications.some((entry) =>
+      (entry as { type: string; recipientId?: string }).type === "tmc_transfer.completed" &&
+      (entry as { recipientId?: string }).recipientId === RECIPIENT_ID),
+    true,
+  );
+  assert.equal(
+    harness.unitOfWork.stageFour.notifications.some((entry) =>
+      (entry as { recipientId?: string }).recipientId === admin.userId),
+    false,
+  );
+  assert.equal(
+    harness.unitOfWork.stageFour.notifications.some((entry) =>
+      (entry as { type: string }).type === "tmc_transfer.requested" ||
+      (entry as { type: string }).type === "tmc_transfer.overdue"),
+    false,
+  );
 });
 
 test("allows an administrator to request assignment of an unassigned active item", async () => {
@@ -972,6 +1008,7 @@ test("allows an administrator to request assignment of an unassigned active item
     candidates: [unassigned],
   });
   const aggregate = requestRecord([candidate(itemId)]);
+  aggregate.initiator = operationUser(admin.userId, "admin");
   Object.assign(aggregate.items[0]!, {
     responsibilityPeriodIdAtRequest: null,
     currentResponsibleIdAtRequest: null,
@@ -985,6 +1022,8 @@ test("allows an administrator to request assignment of an unassigned active item
   );
 
   assert.equal(result.included, 1);
+  assert.equal(result.request?.status, "accepted");
+  assert.equal(result.request?.items[0]?.result, "accepted");
   assert.equal(result.request?.items[0]?.currentResponsibleIdAtRequest, null);
   assert.equal(result.request?.items[0]?.responsibleUserProfile, null);
   assert.equal(harness.repository.insertedItems[0]?.responsibilityPeriodIdAtRequest, null);
@@ -1556,6 +1595,7 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
     return this.candidates;
   }
   async findById(_id?: string) {
+    void _id;
     this.calls.push("findById");
     this.findByIdCalls += 1;
     const aggregate = this.aggregate !== undefined ? this.aggregate : (
@@ -1651,6 +1691,13 @@ class MemoryRequestRepository implements TmcTransferRequestRepository {
       version: 1,
     };
     this.insertedItemResults.push(result);
+    const aggregateItem = this.aggregate?.items.find(
+      (item) => item.itemId === input.itemId,
+    );
+    if (aggregateItem) {
+      aggregateItem.id = input.id;
+      aggregateItem.requestId = input.requestId;
+    }
     return result;
   }
 }
@@ -1689,8 +1736,8 @@ function user(overrides: Partial<TmcTransferUserRecord> = {}): TmcTransferUserRe
   };
 }
 
-function operationUser(id: string) {
-  return { id, fullName: `User ${id}`, email: `${id}@example.com`, role: "employee" as const };
+function operationUser(id: string, role: TmcTransferUserRecord["role"] = "employee") {
+  return { id, fullName: `User ${id}`, email: `${id}@example.com`, role };
 }
 
 function requestRecord(

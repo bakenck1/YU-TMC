@@ -41,6 +41,8 @@ const CREATE_OPERATION = "tmc.transfer_request.create";
 const DECIDE_OPERATION = "tmc.transfer_request.decision";
 const CANCEL_OPERATION = "tmc.transfer_request.cancel";
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
+const ADMINISTRATIVE_ASSIGNMENT_REASON =
+  "Назначение ответственного администратором";
 
 export interface TmcTransferRequestServiceClock {
   now(): Date;
@@ -303,6 +305,7 @@ export class TmcTransferRequestService {
           decidedBy: actorId,
           decidedAt,
           newResponsibilityPeriodId: this.ids.create(),
+          responsibilitySource: "transfer",
         }));
       }
       const hasAccepted =
@@ -705,14 +708,57 @@ export class TmcTransferRequestService {
         };
       });
 
-      await this.recordCreationEffects(
-        stageFour,
-        persisted,
-        authorizedActor,
-        items.length - insertedByItemId.size,
-      );
+      let completed = persisted;
+      if (currentActor.role === "admin") {
+        let hasAccepted = false;
+        for (const item of [...persisted.items].sort((left, right) =>
+          left.itemId.localeCompare(right.itemId))) {
+          const result = await transferRequests.decideItem({
+            requestId: persisted.id,
+            requestItemId: item.id,
+            itemId: item.itemId,
+            responsibilityPeriodIdAtRequest: item.responsibilityPeriodIdAtRequest,
+            currentResponsibleIdAtRequest: item.currentResponsibleIdAtRequest,
+            expectedVersion: item.version,
+            decision: "accept",
+            recipientId: persisted.recipient.id,
+            decidedBy: currentActor.id,
+            decidedAt: createdAt,
+            newResponsibilityPeriodId: this.ids.create(),
+            responsibilitySource: "admin_override",
+          });
+          hasAccepted ||= result === "accepted";
+        }
+        const closed = await transferRequests.closeRequest({
+          requestId: persisted.id,
+          expectedVersion: persisted.version,
+          status: hasAccepted ? "accepted" : "rejected",
+          closedBy: currentActor.id,
+          closedAt: createdAt,
+          isAdministrativeDecision: true,
+          administrativeReason: ADMINISTRATIVE_ASSIGNMENT_REASON,
+        });
+        if (!closed) throw new ApplicationError("conflict", "version_conflict");
+        const updated = await transferRequests.findById(persisted.id);
+        if (!updated) throw incompleteProjection();
+        await this.recordDecisionEffects(
+          stageFour,
+          persisted,
+          updated,
+          currentActor,
+          createdAt,
+        );
+        completed = updated;
+      } else {
+        await this.recordCreationEffects(
+          stageFour,
+          persisted,
+          authorizedActor,
+          items.length - insertedByItemId.size,
+        );
+      }
       return {
-        request: toRequestDto(persisted, this.clock.now()),
+        request: toRequestDto(completed, this.clock.now()),
         total: items.length,
         included: insertedByItemId.size,
         problems: items.length - insertedByItemId.size,
@@ -885,19 +931,40 @@ export class TmcTransferRequestService {
         occurredAt,
       });
     }
-    await stageFour.createNotification({
-      id: this.ids.create(), domainEventId, type: "tmc_transfer.completed",
-      actorId: actor.id, requestId: after.id, itemId: null,
-      requestRevision: after.version, recipientId: after.initiator.id,
-      audience: "direct_user",
-      safePayload: {
-        status: after.status,
-        isAdministrativeDecision: after.isAdministrativeDecision,
-        accepted: after.items.filter((item) => item.result === "accepted").length,
-        itemCount: after.items.length,
-      },
-      occurredAt,
-    });
+    if (actor.id !== after.initiator.id) {
+      await stageFour.createNotification({
+        id: this.ids.create(), domainEventId, type: "tmc_transfer.completed",
+        actorId: actor.id, requestId: after.id, itemId: null,
+        requestRevision: after.version, recipientId: after.initiator.id,
+        audience: "direct_user",
+        safePayload: {
+          status: after.status,
+          isAdministrativeDecision: after.isAdministrativeDecision,
+          accepted: after.items.filter((item) => item.result === "accepted").length,
+          itemCount: after.items.length,
+        },
+        occurredAt,
+      });
+    }
+    if (
+      actor.id !== after.recipient.id &&
+      after.recipient.id !== after.initiator.id
+    ) {
+      await stageFour.createNotification({
+        id: this.ids.create(), domainEventId: this.ids.create(),
+        type: "tmc_transfer.completed", actorId: actor.id,
+        requestId: after.id, itemId: null,
+        requestRevision: after.version, recipientId: after.recipient.id,
+        audience: "direct_user",
+        safePayload: {
+          status: after.status,
+          isAdministrativeDecision: after.isAdministrativeDecision,
+          accepted: after.items.filter((item) => item.result === "accepted").length,
+          itemCount: after.items.length,
+        },
+        occurredAt,
+      });
+    }
     // Notify owners of accepted items that their items moved to the recipient.
     // Also notify owners of rejected items so they know the items stayed with them.
     const ownersByOutcome = new Map<string, { accepted: number; rejected: number }>();
