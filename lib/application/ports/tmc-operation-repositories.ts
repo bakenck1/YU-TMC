@@ -19,6 +19,7 @@ export interface TmcTransferUserRecord
   extends TmcOperationUserRecord {
   active: boolean;
   deletedAt: Date | null;
+  version: number;
 }
 
 export interface TmcTransferCandidateRecord {
@@ -199,6 +200,8 @@ export interface AppendTmcAuditRecord {
   action: string;
   beforeValues: Record<string, unknown> | null;
   afterValues: Record<string, unknown> | null;
+  reason?: string | null;
+  isAdministrativeException?: boolean;
   occurredAt: Date;
 }
 

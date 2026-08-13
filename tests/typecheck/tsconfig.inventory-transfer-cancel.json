@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [],
+  "files": [
+    "../../app/api/inventory/transfers/[id]/cancel/route.ts",
+    "../../lib/application/ports/inventory-responsibility-repositories.ts",
+    "../../lib/application/services/inventory-responsibility-service.ts",
+    "../../lib/server/http/inventory-transfer-cancel-handler.ts",
+    "../../lib/server/persistence/postgres/postgres-inventory-responsibility-repositories.ts",
+    "../inventory-transfer-cancel-bola.test.ts",
+    "../inventory-transfer-cancel-route.test.ts",
+    "../inventory-responsibility-repositories.test.ts"
+  ]
+}

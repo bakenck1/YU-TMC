@@ -70,7 +70,11 @@ test("UserService delegates to a bounded recipient directory that excludes delet
     { create: () => uuid(99) },
   );
 
-  assert.deepEqual(await service.searchTmcRecipients("ALI", ACTOR_ID), [
+  assert.deepEqual(await service.searchTmcRecipients("ALI", {
+    userId: ACTOR_ID,
+    role: "employee",
+    sessionVersion: 1,
+  }), [
     { id: uuid(2), fullName: "Active Ali", email: "active@example.com", role: "employee" },
   ]);
 });

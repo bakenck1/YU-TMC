@@ -14,6 +14,7 @@
     "../../lib/application/services/user-service.ts",
     "../../lib/server/http/tmc-recipient-candidates-handler.ts",
     "../../lib/tmc-recipient-search.ts",
+    "../tmc-recipient-candidates-authorization.test.ts",
     "../tmc-user-picker.test.ts",
     "../tmc-recipient-candidates-route.test.ts"
   ],

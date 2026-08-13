@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [],
+  "files": [
+    "../../app/api/inventory/transfers/[id]/override/route.ts",
+    "../../lib/application/ports/inventory-responsibility-repositories.ts",
+    "../../lib/application/services/inventory-responsibility-service.ts",
+    "../../lib/server/http/inventory-transfer-override-handler.ts",
+    "../../lib/server/persistence/postgres/postgres-inventory-responsibility-repositories.ts",
+    "../inventory-transfer-override-bola.test.ts",
+    "../inventory-transfer-override-route.test.ts",
+    "../inventory-responsibility-repositories.test.ts"
+  ]
+}

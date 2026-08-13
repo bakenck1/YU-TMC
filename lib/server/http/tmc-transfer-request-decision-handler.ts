@@ -15,11 +15,15 @@ const INPUT_FIELDS = new Set(["requestVersion", "decisions", "administrativeReas
 const DECISION_FIELDS = new Set(["itemId", "itemVersion", "decision"]);
 
 export function createTmcTransferRequestDecisionPostHandler(dependencies: {
-  authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
+  authenticate(request: Request): Promise<{
+    userId: string;
+    role: UserRole;
+    sessionVersion: number;
+  }>;
   decideIdempotent(
     requestId: string,
     input: DecideTmcTransferRequestInput,
-    actor: { userId: string; role: UserRole },
+    actor: { userId: string; role: UserRole; sessionVersion: number },
     idempotencyKey: string,
   ): Promise<Pick<IdempotentTmcTransferRequestDecision, "body" | "kind" | "status">>;
   onCompleted?(): void;

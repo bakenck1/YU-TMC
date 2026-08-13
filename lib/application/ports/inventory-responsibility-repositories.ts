@@ -9,6 +9,20 @@ export interface ItemResponsibilityState {
   itemStatus: "active" | "maintenance" | "decommissioned";
 }
 
+export interface InventoryResponsibilityAuthorizationUser {
+  id: string;
+  role: UserRole;
+  active: boolean;
+  deletedAt: Date | null;
+  version: number;
+}
+
+export interface ListTransfersForAuthorizedUser {
+  userId: string;
+  role: UserRole;
+  sessionVersion: number;
+}
+
 export interface TransferRecord {
   id: string;
   itemId: string;
@@ -67,6 +81,7 @@ export interface InsertTransferRecord {
 export interface DecideTransferRecord {
   id: string;
   version: number;
+  currentResponsibleIdAtRequest: string;
   status: "confirmed" | "rejected";
   closedBy: string;
   closedAt: Date;
@@ -76,14 +91,19 @@ export interface DecideTransferRecord {
 export interface CancelTransferRecord {
   id: string;
   version: number;
+  requestedBy: string;
   closedBy: string;
   closedAt: Date;
 }
 
 export interface OverrideTransferRecord {
   id: string;
+  expectedItemId: string;
+  expectedResponsibilityPeriodId: string;
+  expectedCurrentResponsibleId: string;
   version: number;
-  closedBy: string;
+  administratorId: string;
+  administratorSessionVersion: number;
   closedAt: Date;
   administrativeReason: string;
   overrideOutcome: "assigned" | "released";
@@ -96,18 +116,37 @@ export interface AppendResponsibilityAuditRecord {
   actorRole: UserRole;
   subjectKind: "responsibility" | "transfer";
   subjectId: string;
+  subjectRevision?: number;
   action: string;
   beforeValues: Record<string, unknown> | null;
   afterValues: Record<string, unknown> | null;
+  reason?: string | null;
+  isAdministrativeException?: boolean;
   occurredAt: Date;
 }
 
 export interface InventoryResponsibilityRepository {
   findItemState(itemId: string): Promise<ItemResponsibilityState | null>;
+  findItemStateForUpdate(itemId: string): Promise<ItemResponsibilityState | null>;
+  findAuthorizationUserForUpdate(
+    userId: string,
+  ): Promise<InventoryResponsibilityAuthorizationUser | null>;
   isUserActiveForUpdate(userId: string): Promise<boolean>;
   findPendingTransfer(itemId: string): Promise<TransferRecord | null>;
   findTransfer(id: string): Promise<TransferRecord | null>;
+  findTransferForDecision(
+    id: string,
+    currentResponsibleId: string,
+  ): Promise<TransferRecord | null>;
+  findTransferForCancellation(
+    id: string,
+    requestedBy: string,
+  ): Promise<TransferRecord | null>;
+  findTransferForOverride(id: string): Promise<TransferRecord | null>;
   listTransfersForUser(userId: string): Promise<TransferRecord[]>;
+  listTransfersForAuthorizedUser(
+    input: ListTransfersForAuthorizedUser,
+  ): Promise<TransferRecord[]>;
   listTimeline(itemId: string): Promise<ResponsibilityTimelineRecord[]>;
   insertResponsibility(input: InsertResponsibilityRecord): Promise<void>;
   closeResponsibility(input: CloseResponsibilityRecord): Promise<boolean>;

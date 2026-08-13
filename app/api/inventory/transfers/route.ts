@@ -2,6 +2,7 @@ import type { CreateTransferInput } from "@/lib/contracts/inventory-responsibili
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { createInventoryTransferListGetHandler } from "@/lib/server/http/inventory-transfer-list-handler";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import {
   authorizationActor,
@@ -11,16 +12,14 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const get = createInventoryTransferListGetHandler({
+  authenticate: requireCurrentUser,
+  listTransfers: (actor) =>
+    getApplicationServices().responsibility.listTransfers(actor),
+});
+
 export async function GET(request: Request) {
-  try {
-    const user = await requireCurrentUser(request);
-    const transfers = await getApplicationServices().responsibility.listTransfers(
-      authorizationActor(user),
-    );
-    return Response.json({ transfers });
-  } catch (error) {
-    return errorResponse(error);
-  }
+  return get(request);
 }
 
 export async function POST(request: Request) {

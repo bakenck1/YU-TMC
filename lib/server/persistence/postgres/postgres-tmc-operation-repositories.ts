@@ -66,6 +66,7 @@ interface CandidateRow extends QueryResultRow {
   responsible_role: TmcOperationUserRecord["role"] | null;
   responsible_is_active: boolean | null;
   responsible_deleted_at: Date | null;
+  responsible_version: number | string | null;
   has_active_transfer: boolean;
 }
 
@@ -76,6 +77,7 @@ interface TransferUserRow extends QueryResultRow {
   role: TmcOperationUserRecord["role"];
   is_active: boolean;
   deleted_at: Date | null;
+  version: number | string;
 }
 
 interface RequestRow extends QueryResultRow {
@@ -182,7 +184,7 @@ class PostgresTmcTransferRequestRepository
 
   async findUserById(id: string): Promise<TmcTransferUserRecord | null> {
     const result = await this.source.query<TransferUserRow>(
-      `select id, full_name, email, role, is_active, deleted_at
+      `select id, full_name, email, role, is_active, deleted_at, version
          from ${USERS}
         where id = $1
         for no key update`,
@@ -197,6 +199,7 @@ class PostgresTmcTransferRequestRepository
           role: row.role,
           active: row.is_active,
           deletedAt: optionalDate(row.deleted_at),
+          version: Number(row.version),
         }
       : null;
   }
@@ -329,19 +332,29 @@ class PostgresTmcTransferRequestRepository
           });
         }
       }
-      await this.source.query(
-        `insert into ${RESPONSIBILITY_PERIODS}
-           (id, item_id, responsible_user_id, source, started_at, started_by)
-         values ($1, $2, $3, $6, $4, $5)`,
-        [
-          input.newResponsibilityPeriodId,
-          input.itemId,
-          input.recipientId,
-          input.decidedAt,
-          input.decidedBy,
-          input.responsibilitySource ?? "transfer",
-        ],
-      );
+      try {
+        await this.source.query(
+          `insert into ${RESPONSIBILITY_PERIODS}
+             (id, item_id, responsible_user_id, source, started_at, started_by)
+           values ($1, $2, $3, $6, $4, $5)`,
+          [
+            input.newResponsibilityPeriodId,
+            input.itemId,
+            input.recipientId,
+            input.decidedAt,
+            input.decidedBy,
+            input.responsibilitySource ?? "transfer",
+          ],
+        );
+      } catch (error) {
+        if (constraintProblem(error) === "responsibility_changed") {
+          throw new TmcOperationRepositoryConflictError(
+            "responsibility_changed",
+            error,
+          );
+        }
+        throw error;
+      }
     }
     const updated = await this.source.query(
       `update ${REQUEST_ITEMS}
@@ -744,11 +757,12 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
       `insert into ${AUDIT_RECORDS}
          (id, domain_event_id, actor_id, actor_role_snapshot, subject_kind,
           subject_id, subject_revision, action, before_values, after_values,
-          occurred_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          reason, is_administrative_exception, occurred_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [input.id, input.domainEventId, input.actorId, input.actorRole,
        input.subjectKind, input.subjectId, input.subjectRevision, input.action,
-       input.beforeValues, input.afterValues, input.occurredAt],
+       input.beforeValues, input.afterValues, input.reason ?? null,
+       input.isAdministrativeException ?? false, input.occurredAt],
     );
   }
 
@@ -931,6 +945,7 @@ function candidateSelect() {
            responsible.role as responsible_role,
            responsible.is_active as responsible_is_active,
            responsible.deleted_at as responsible_deleted_at,
+           responsible.version as responsible_version,
            (legacy_transfer.id is not null or request_item.id is not null)
              as has_active_transfer
       from ${ITEMS} i
@@ -1055,6 +1070,7 @@ function mapCandidate(row: CandidateRow): TmcTransferCandidateRecord {
           role: required(row.responsible_role),
           active: required(row.responsible_is_active),
           deletedAt: optionalDate(row.responsible_deleted_at),
+          version: Number(required(row.responsible_version)),
         }
       : null,
     hasActiveTransfer: row.has_active_transfer,
@@ -1202,6 +1218,7 @@ function constraintProblem(error: unknown) {
     case "tmc_active_item_transfer_unique":
       return "active_transfer_exists" as const;
     case "tmc_transfer_request_items_period_snapshot_fk":
+    case "responsibility_periods_open_item_unique":
       return "responsibility_changed" as const;
     case "tmc_transfer_request_items_request_item_unique":
       return "duplicate_item" as const;

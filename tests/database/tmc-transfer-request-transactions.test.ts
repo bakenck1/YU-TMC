@@ -355,6 +355,498 @@ describe("TMC transfer request transactions", () => {
     ]));
   });
 
+  it("fences decision BOLA, revoked sessions, replays, and concurrent commits in PostgreSQL", async () => {
+    const fixture = await seedFixture(4);
+    const initiator = { userId: fixture.initiatorId, role: "employee" as const };
+    const requestA = (await createService().create({
+      recipientId: fixture.recipientIds[0]!,
+      itemIds: [fixture.itemIds[0]!],
+    }, initiator)).request!;
+    const requestB = (await createService().create({
+      recipientId: fixture.recipientIds[1]!,
+      itemIds: [fixture.itemIds[1]!],
+    }, initiator)).request!;
+
+    await expect(createService().decideIdempotent(
+      requestA.id,
+      {
+        requestVersion: requestA.version,
+        decisions: [{
+          itemId: requestA.items[0]!.item.id,
+          itemVersion: requestA.items[0]!.version,
+          decision: "accept",
+        }],
+      },
+      { userId: fixture.recipientIds[1]!, role: "employee", sessionVersion: 1 },
+      "tmc-db-outsider-001",
+    )).rejects.toMatchObject({ kind: "not_found", publicCode: "request_not_found" });
+
+    await expect(createService().decide(
+      requestA.id,
+      {
+        requestVersion: requestA.version,
+        decisions: [{
+          itemId: requestB.items[0]!.item.id,
+          itemVersion: requestB.items[0]!.version,
+          decision: "accept",
+        }],
+      },
+      { userId: fixture.recipientIds[0]!, role: "employee", sessionVersion: 1 },
+    )).rejects.toMatchObject({
+      kind: "validation",
+      publicCode: "decision_coverage_mismatch",
+    });
+    const untouched = await database.query<{ status: string; result: string }>(
+      `select request.status, request_item.result
+         from "yu_inventory"."tmc_transfer_requests" request
+         join "yu_inventory"."tmc_transfer_request_items" request_item
+           on request_item.request_id = request.id
+        where request.id = any($1::uuid[])
+        order by request.id`,
+      [[requestA.id, requestB.id]],
+    );
+    expect(untouched.rows).toEqual([
+      { status: "pending", result: "pending" },
+      { status: "pending", result: "pending" },
+    ]);
+
+    await database.query(
+      `update "yu_inventory"."users"
+          set version = version + 1, updated_at = now()
+        where id = $1`,
+      [fixture.recipientIds[0]],
+    );
+    const decisionA = {
+      requestVersion: requestA.version,
+      administrativeReason: "   ",
+      decisions: [{
+        itemId: requestA.items[0]!.item.id,
+        itemVersion: requestA.items[0]!.version,
+        decision: "accept" as const,
+      }],
+    };
+    await expect(createService().decideIdempotent(
+      requestA.id,
+      decisionA,
+      { userId: fixture.recipientIds[0]!, role: "employee", sessionVersion: 1 },
+      "tmc-db-session-fence-1",
+    )).rejects.toMatchObject({ kind: "not_found", publicCode: "request_not_found" });
+    const completed = await createService().decideIdempotent(
+      requestA.id,
+      decisionA,
+      { userId: fixture.recipientIds[0]!, role: "employee", sessionVersion: 2 },
+      "tmc-db-session-fence-1",
+    );
+    const replayed = await createService().decideIdempotent(
+      requestA.id,
+      {
+        requestVersion: requestA.version,
+        decisions: [{
+          decision: "accept",
+          itemVersion: requestA.items[0]!.version,
+          itemId: requestA.items[0]!.item.id,
+        }],
+      },
+      { userId: fixture.recipientIds[0]!, role: "employee", sessionVersion: 2 },
+      "tmc-db-session-fence-1",
+    );
+    expect(completed.kind).toBe("completed");
+    expect(replayed).toEqual({ ...completed, kind: "replayed" });
+
+    const adminRequest = (await createService().create({
+      recipientId: fixture.recipientIds[0]!,
+      itemIds: [fixture.itemIds[2]!],
+    }, initiator)).request!;
+    const adminId = randomUUID();
+    await database.query(
+      `insert into "yu_inventory"."users"
+         (id, code, email, full_name, role, created_at, updated_at)
+       values ($1, $2, $3, 'Decision Administrator', 'admin', now(), now())`,
+      [adminId, `DEC-ADMIN-${adminId.slice(0, 8)}`, `${adminId}@example.com`],
+    );
+    const adminDecision = await createService().decideIdempotent(
+      adminRequest.id,
+      {
+        requestVersion: adminRequest.version,
+        decisions: [{
+          itemId: adminRequest.items[0]!.item.id,
+          itemVersion: adminRequest.items[0]!.version,
+          decision: "accept",
+        }],
+        administrativeReason: "  Urgent compliance override  ",
+      },
+      { userId: adminId, role: "admin", sessionVersion: 1 },
+      "tmc-db-admin-decision-1",
+    );
+    expect(adminDecision.request).toMatchObject({
+      isAdministrativeDecision: true,
+      administrativeReason: "Urgent compliance override",
+    });
+    const adminResponsibility = await database.query<{ source: string }>(
+      `select source
+         from "yu_inventory"."responsibility_periods"
+        where item_id = $1 and ended_at is null`,
+      [fixture.itemIds[2]],
+    );
+    expect(adminResponsibility.rows).toEqual([{ source: "admin_override" }]);
+    const adminAudits = await database.query<{
+      reason: string | null;
+      is_administrative_exception: boolean;
+    }>(
+      `select reason, is_administrative_exception
+         from "yu_inventory"."audit_records"
+        where domain_event_id = (
+          select domain_event_id
+            from "yu_inventory"."audit_records"
+           where subject_kind = 'tmc_transfer_request'
+             and subject_id = $1
+             and action = 'tmc_transfer.completed'
+        )
+        order by subject_kind, subject_id`,
+      [adminRequest.id],
+    );
+    expect(adminAudits.rows).toHaveLength(2);
+    expect(adminAudits.rows.every((row) =>
+      row.reason === "Urgent compliance override" &&
+      row.is_administrative_exception)).toBe(true);
+
+    const raceRequest = (await createService().create({
+      recipientId: fixture.recipientIds[1]!,
+      itemIds: [fixture.itemIds[3]!],
+    }, initiator)).request!;
+    const raceInput = {
+      requestVersion: raceRequest.version,
+      decisions: [{
+        itemId: raceRequest.items[0]!.item.id,
+        itemVersion: raceRequest.items[0]!.version,
+        decision: "accept" as const,
+      }],
+    };
+    const raced = await Promise.allSettled([
+      createService().decideIdempotent(
+        raceRequest.id,
+        raceInput,
+        { userId: fixture.recipientIds[1]!, role: "employee", sessionVersion: 1 },
+        "tmc-db-decision-race-a",
+      ),
+      createService().decideIdempotent(
+        raceRequest.id,
+        raceInput,
+        { userId: fixture.recipientIds[1]!, role: "employee", sessionVersion: 1 },
+        "tmc-db-decision-race-b",
+      ),
+    ]);
+    expect(raced.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(raced.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    const raceAudits = await database.query<{ count: number }>(
+      `select count(*)::int as count
+         from "yu_inventory"."audit_records"
+        where subject_kind = 'tmc_transfer_request'
+          and subject_id = $1
+          and action = 'tmc_transfer.completed'`,
+      [raceRequest.id],
+    );
+    expect(raceAudits.rows[0]?.count).toBe(1);
+  });
+
+  it("fences cancellation BOLA, revoked sessions, parent scope, audit metadata, and overdue outbox in PostgreSQL", async () => {
+    const fixture = await seedFixture(2);
+    const initiator = {
+      userId: fixture.initiatorId,
+      role: "employee" as const,
+      sessionVersion: 1,
+    };
+    const requestA = (await createService().create({
+      recipientId: fixture.recipientIds[0]!,
+      itemIds: [fixture.itemIds[0]!],
+    }, initiator)).request!;
+    const requestB = (await createService().create({
+      recipientId: fixture.recipientIds[1]!,
+      itemIds: [fixture.itemIds[1]!],
+    }, initiator)).request!;
+
+    for (const [requestId, actor, key] of [
+      [randomUUID(), initiator, "tmc-db-cancel-missing-1"],
+      [
+        requestA.id,
+        {
+          userId: fixture.recipientIds[1]!,
+          role: "employee" as const,
+          sessionVersion: 1,
+        },
+        "tmc-db-cancel-outsider-1",
+      ],
+      [
+        requestA.id,
+        {
+          userId: fixture.recipientIds[0]!,
+          role: "employee" as const,
+          sessionVersion: 1,
+        },
+        "tmc-db-cancel-recipient-1",
+      ],
+    ] as const) {
+      await expect(createService().cancelIdempotent(
+        requestId,
+        { requestVersion: requestA.version },
+        actor,
+        key,
+      )).rejects.toMatchObject({
+        kind: "not_found",
+        publicCode: "request_not_found",
+      });
+    }
+
+    await database.query(
+      `update "yu_inventory"."users"
+          set version = version + 1, updated_at = now()
+        where id = $1`,
+      [fixture.initiatorId],
+    );
+    await expect(createService().cancelIdempotent(
+      requestA.id,
+      { requestVersion: requestA.version },
+      initiator,
+      "tmc-db-cancel-session-1",
+    )).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "request_not_found",
+    });
+
+    const currentInitiator = { ...initiator, sessionVersion: 2 };
+    const completed = await createService().cancelIdempotent(
+      requestA.id,
+      { requestVersion: requestA.version, administrativeReason: "   " },
+      currentInitiator,
+      "tmc-db-cancel-session-1",
+    );
+    const replayed = await createService().cancelIdempotent(
+      requestA.id,
+      { requestVersion: requestA.version },
+      currentInitiator,
+      "tmc-db-cancel-session-1",
+    );
+    expect(completed.kind).toBe("completed");
+    expect(replayed).toEqual({ ...completed, kind: "replayed" });
+
+    const parentScoped = await database.query<{
+      request_id: string;
+      request_status: string;
+      item_id: string;
+      item_result: string;
+    }>(
+      `select request.id as request_id, request.status as request_status,
+              request_item.item_id, request_item.result as item_result
+         from "yu_inventory"."tmc_transfer_requests" request
+         join "yu_inventory"."tmc_transfer_request_items" request_item
+           on request_item.request_id = request.id
+        where request.id = any($1::uuid[])
+        order by request.id`,
+      [[requestA.id, requestB.id]],
+    );
+    expect(parentScoped.rows).toEqual(expect.arrayContaining([
+      {
+        request_id: requestA.id,
+        request_status: "cancelled",
+        item_id: fixture.itemIds[0],
+        item_result: "cancelled",
+      },
+      {
+        request_id: requestB.id,
+        request_status: "pending",
+        item_id: fixture.itemIds[1],
+        item_result: "pending",
+      },
+    ]));
+
+    await database.query(
+      `update "yu_inventory"."users"
+          set version = version + 1, updated_at = now()
+        where id = $1`,
+      [fixture.initiatorId],
+    );
+    await expect(createService().cancelIdempotent(
+      requestA.id,
+      { requestVersion: requestA.version },
+      currentInitiator,
+      "tmc-db-cancel-session-1",
+    )).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "request_not_found",
+    });
+    const refreshedReplay = await createService().cancelIdempotent(
+      requestA.id,
+      { requestVersion: requestA.version },
+      { ...currentInitiator, sessionVersion: 3 },
+      "tmc-db-cancel-session-1",
+    );
+    expect(refreshedReplay).toEqual({ ...completed, kind: "replayed" });
+
+    const adminId = randomUUID();
+    await database.query(
+      `insert into "yu_inventory"."users"
+         (id, code, email, full_name, role, created_at, updated_at)
+       values ($1, $2, $3, 'Cancellation Administrator', 'admin', now(), now())`,
+      [adminId, `CANCEL-ADMIN-${adminId.slice(0, 8)}`, `${adminId}@example.com`],
+    );
+    const adminCancellation = await createService().cancelIdempotent(
+      requestB.id,
+      {
+        requestVersion: requestB.version,
+        administrativeReason: "  Emergency compliance cancellation  ",
+      },
+      { userId: adminId, role: "employee", sessionVersion: 1 },
+      "tmc-db-admin-cancel-1",
+    );
+    expect(adminCancellation.request).toMatchObject({
+      status: "cancelled",
+      isAdministrativeDecision: true,
+      administrativeReason: "Emergency compliance cancellation",
+    });
+    const adminAudits = await database.query<{
+      reason: string | null;
+      is_administrative_exception: boolean;
+    }>(
+      `select reason, is_administrative_exception
+         from "yu_inventory"."audit_records"
+        where domain_event_id = (
+          select domain_event_id
+            from "yu_inventory"."audit_records"
+           where subject_kind = 'tmc_transfer_request'
+             and subject_id = $1
+             and action = 'tmc_transfer.cancelled'
+        )
+        order by subject_kind, subject_id`,
+      [requestB.id],
+    );
+    expect(adminAudits.rows).toHaveLength(2);
+    expect(adminAudits.rows.every((row) =>
+      row.reason === "Emergency compliance cancellation" &&
+      row.is_administrative_exception)).toBe(true);
+
+    const overdueFence = await database.query<{
+      processed_at: Date | null;
+      last_error_code: string | null;
+    }>(
+      `select outbox.processed_at, outbox.last_error_code
+         from "yu_inventory"."tmc_web_push_outbox" outbox
+         join "yu_inventory"."notification_events" event
+           on event.id = outbox.notification_event_id
+        where event.subject_id = $1
+          and event.type = 'tmc_transfer.overdue'`,
+      [requestB.id],
+    );
+    expect(overdueFence.rows).toHaveLength(1);
+    expect(overdueFence.rows[0]?.processed_at).not.toBeNull();
+    expect(overdueFence.rows[0]?.last_error_code).toBe(
+      "event_no_longer_deliverable",
+    );
+
+    await database.query(
+      `update "yu_inventory"."users"
+          set role = 'employee', version = version + 1, updated_at = now()
+        where id = $1`,
+      [adminId],
+    );
+    await expect(createService().cancelIdempotent(
+      requestB.id,
+      {
+        requestVersion: requestB.version,
+        administrativeReason: "Emergency compliance cancellation",
+      },
+      { userId: adminId, role: "admin", sessionVersion: 2 },
+      "tmc-db-admin-cancel-1",
+    )).rejects.toMatchObject({
+      kind: "not_found",
+      publicCode: "request_not_found",
+    });
+  });
+
+  it("serializes cancellation against decisions and duplicate cancellations in PostgreSQL", async () => {
+    const fixture = await seedFixture(2);
+    const initiator = {
+      userId: fixture.initiatorId,
+      role: "employee" as const,
+      sessionVersion: 1,
+    };
+    const decisionRace = (await createService().create({
+      recipientId: fixture.recipientIds[0]!,
+      itemIds: [fixture.itemIds[0]!],
+    }, initiator)).request!;
+    const cancelInput = { requestVersion: decisionRace.version };
+    const decisionInput = {
+      requestVersion: decisionRace.version,
+      decisions: [{
+        itemId: decisionRace.items[0]!.item.id,
+        itemVersion: decisionRace.items[0]!.version,
+        decision: "accept" as const,
+      }],
+    };
+    const cancellationVsDecision = await Promise.allSettled([
+      createService().cancelIdempotent(
+        decisionRace.id,
+        cancelInput,
+        initiator,
+        "tmc-db-cancel-decision-a",
+      ),
+      createService().decideIdempotent(
+        decisionRace.id,
+        decisionInput,
+        {
+          userId: fixture.recipientIds[0]!,
+          role: "employee",
+          sessionVersion: 1,
+        },
+        "tmc-db-cancel-decision-b",
+      ),
+    ]);
+    expect(cancellationVsDecision.filter(({ status }) => status === "fulfilled"))
+      .toHaveLength(1);
+    expect(cancellationVsDecision.filter(({ status }) => status === "rejected"))
+      .toHaveLength(1);
+
+    const duplicateRace = (await createService().create({
+      recipientId: fixture.recipientIds[1]!,
+      itemIds: [fixture.itemIds[1]!],
+    }, initiator)).request!;
+    const duplicateCancellations = await Promise.allSettled([
+      createService().cancelIdempotent(
+        duplicateRace.id,
+        { requestVersion: duplicateRace.version },
+        initiator,
+        "tmc-db-cancel-race-a",
+      ),
+      createService().cancelIdempotent(
+        duplicateRace.id,
+        { requestVersion: duplicateRace.version },
+        initiator,
+        "tmc-db-cancel-race-b",
+      ),
+    ]);
+    expect(duplicateCancellations.filter(({ status }) => status === "fulfilled"))
+      .toHaveLength(1);
+    expect(duplicateCancellations.filter(({ status }) => status === "rejected"))
+      .toHaveLength(1);
+
+    const terminalAudits = await database.query<{
+      subject_id: string;
+      count: number;
+    }>(
+      `select subject_id, count(*)::int as count
+         from "yu_inventory"."audit_records"
+        where subject_kind = 'tmc_transfer_request'
+          and subject_id = any($1::uuid[])
+          and action in ('tmc_transfer.completed', 'tmc_transfer.cancelled')
+        group by subject_id
+        order by subject_id`,
+      [[decisionRace.id, duplicateRace.id]],
+    );
+    expect(terminalAudits.rows).toEqual(expect.arrayContaining([
+      { subject_id: decisionRace.id, count: 1 },
+      { subject_id: duplicateRace.id, count: 1 },
+    ]));
+  });
+
   it("replays TMC create idempotently across PostgreSQL connections", async () => {
     const fixture = await seedFixture(6);
     const actor = { userId: fixture.initiatorId, role: "employee" as const };
@@ -579,6 +1071,11 @@ function wrapInsert(
     findUserById: repository.findUserById.bind(repository),
     findCandidates: repository.findCandidates.bind(repository),
     findById: repository.findById.bind(repository),
+    findByIdForUpdate: repository.findByIdForUpdate.bind(repository),
+    findItemPhoto: repository.findItemPhoto.bind(repository),
+    decideItem: repository.decideItem.bind(repository),
+    closeRequest: repository.closeRequest.bind(repository),
+    cancelRequest: repository.cancelRequest.bind(repository),
     insertRequest: repository.insertRequest.bind(repository),
     async insertRequestItem(input) {
       await beforeInsert(source, input);

@@ -91,6 +91,7 @@ test("findCandidates returns validation data without hiding problematic items", 
           responsible_role: null,
           responsible_is_active: null,
           responsible_deleted_at: null,
+          responsible_version: null,
           has_active_transfer: true,
         }),
         candidateRow({
@@ -139,6 +140,7 @@ test("findCandidates returns validation data without hiding problematic items", 
       role: "employee",
       active: true,
       deletedAt: null,
+      version: 4,
     },
     hasActiveTransfer: false,
   });
@@ -160,6 +162,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
       role: "employee",
       is_active: true,
       deleted_at: null,
+      version: 9,
     }] },
     { rows: [{
       id: "77777777-7777-4777-8777-777777777777",
@@ -168,6 +171,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
       role: "warehouse",
       is_active: false,
       deleted_at: deletedAt,
+      version: 10,
     }] },
     { rows: [] },
   ]);
@@ -184,6 +188,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
       role: "employee",
       active: true,
       deletedAt: null,
+      version: 9,
     },
   );
   assert.deepEqual(
@@ -195,6 +200,7 @@ test("findUserById returns active, inactive, and missing recipients", async () =
       role: "warehouse",
       active: false,
       deletedAt,
+      version: 10,
     },
   );
   assert.equal(
@@ -537,6 +543,33 @@ test("decideItem assigns an item that was still unassigned when accepted", async
   assert.match(source.calls[4]!.text, /result = \$2[\s\S]+version = version \+ 1/i);
 });
 
+test("decideItem maps a concurrent responsibility insert to a domain conflict", async () => {
+  const conflict = Object.assign(new Error("duplicate open responsibility"), {
+    code: "23505",
+    constraint: "responsibility_periods_open_item_unique",
+  });
+  const source = new QueryQueue([
+    { rows: [{ version: 1, result: "pending" }] },
+    { rows: [{ status: "active", archived_at: null }] },
+    { rows: [] },
+    conflict,
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
+
+  await assert.rejects(
+    repository.decideItem({
+      requestId: uuid(10), requestItemId: uuid(11), itemId: uuid(1),
+      responsibilityPeriodIdAtRequest: null, currentResponsibleIdAtRequest: null,
+      expectedVersion: 1, decision: "accept", recipientId: uuid(3), decidedBy: uuid(3),
+      decidedAt: new Date("2026-08-10T12:00:00.000Z"), newResponsibilityPeriodId: uuid(13),
+    }),
+    (error: unknown) =>
+      error instanceof TmcOperationRepositoryConflictError &&
+      error.problem === "responsibility_changed",
+  );
+  assert.equal(source.calls.length, 4);
+});
+
 test("decideItem invalidates stale inventory without creating responsibility", async () => {
   const source = new QueryQueue([
     { rows: [{ version: 1, result: "pending" }] },
@@ -635,6 +668,25 @@ test("stage-four direct notifications allocate a mailbox sequence before event a
   assert.match(source.calls[4]!.text, /tmc_web_push_outbox/i);
 });
 
+test("stage-four audit persists canonical administrator-exception metadata", async () => {
+  const source = new QueryQueue([{ rows: [], rowCount: 1 }]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;
+  const occurredAt = new Date("2026-08-10T12:00:00Z");
+  await repository.appendAudit({
+    id: uuid(1), domainEventId: uuid(2), actorId: uuid(3), actorRole: "admin",
+    subjectKind: "tmc_transfer_request", subjectId: uuid(4), subjectRevision: 2,
+    action: "tmc_transfer.completed", beforeValues: { status: "pending" },
+    afterValues: { status: "accepted" }, reason: "Emergency handover",
+    isAdministrativeException: true, occurredAt,
+  });
+  assert.match(source.calls[0]!.text, /reason, is_administrative_exception/i);
+  assert.deepEqual(source.calls[0]!.values?.slice(-3), [
+    "Emergency handover",
+    true,
+    occurredAt,
+  ]);
+});
+
 test("cancelRequest changes only pending children, uses parent CAS, and fences overdue push", async () => {
   const source = new QueryQueue([{ rows: [], rowCount: 2 }, { rows: [], rowCount: 1 }, { rows: [], rowCount: 1 }]);
   const repository = createPostgresTmcOperationRepositories(source.asSource()).transferRequests;
@@ -669,6 +721,7 @@ function candidateRow(overrides: Record<string, unknown> = {}) {
     responsible_role: "employee",
     responsible_is_active: true,
     responsible_deleted_at: null,
+    responsible_version: 4,
     has_active_transfer: false,
     ...overrides,
   };

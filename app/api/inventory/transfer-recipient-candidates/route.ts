@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 const get = createTmcRecipientCandidatesGetHandler({
   authenticate: (request) =>
     requirePermission(request, "inventory.tmc.transfer_request.create"),
-  search: (query, actorUserId) =>
-    getApplicationServices().users.searchTmcRecipients(query, actorUserId),
+  search: (query, actor) =>
+    getApplicationServices().users.searchTmcRecipients(query, actor),
 });
 
 export async function GET(request: Request) {

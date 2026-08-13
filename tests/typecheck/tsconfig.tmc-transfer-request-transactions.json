@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../database/tmc-transfer-request-transactions.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

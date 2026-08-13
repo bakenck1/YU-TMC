@@ -7,9 +7,11 @@ import type {
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import {
   normalizeTmcRecipientQuery,
+  TMC_RECIPIENT_QUERY_MAX_LENGTH,
   TMC_RECIPIENT_RESULT_LIMIT,
 } from "@/lib/tmc-recipient-search";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   PasswordCredentialRecord,
@@ -17,7 +19,11 @@ import type {
   UserRepositories,
 } from "@/lib/application/ports/user-repositories";
 import type { PasswordHasher } from "@/lib/application/ports/password-hasher";
-import { canManageUser } from "@/lib/security/permissions";
+import {
+  canManageUser,
+  hasPermission,
+  type AuthorizationActor,
+} from "@/lib/security/permissions";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DUMMY_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -40,6 +46,10 @@ export interface CurrentAccount extends AuthenticatedAccount {
   userId: string;
   sessionVersion: number;
 }
+
+type AuthenticatedRecipientSearchActor = AuthorizationActor & {
+  sessionVersion: number;
+};
 
 export type AuthenticationResult =
   | {
@@ -364,17 +374,55 @@ export class UserService {
 
   async searchTmcRecipients(
     query: string,
-    actorUserId: string,
+    actor: AuthenticatedRecipientSearchActor,
   ): Promise<TmcOperationUserDto[]> {
     const normalizedQuery = normalizeTmcRecipientQuery(query);
-    if (Array.from(normalizedQuery).length < 2) return [];
-    return this.unitOfWork.read(({ users }) =>
-      users.searchActiveRecipients(
+    if (
+      Array.from(normalizedQuery).length > TMC_RECIPIENT_QUERY_MAX_LENGTH
+    ) {
+      throw new ApplicationError("validation", "recipient_query_too_long");
+    }
+    if (
+      !isUuid(actor.userId) ||
+      !Number.isSafeInteger(actor.sessionVersion) ||
+      actor.sessionVersion < 1 ||
+      !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
+    ) {
+      throw new ApplicationError("forbidden", "forbidden");
+    }
+
+    const actorUserId = actor.userId.toLowerCase();
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const currentActor = await users.findByIdForUpdate(actorUserId);
+      if (
+        !currentActor ||
+        currentActor.id.toLowerCase() !== actorUserId ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== actor.sessionVersion ||
+        currentActor.role !== actor.role ||
+        !hasPermission(
+          currentActor.role,
+          "inventory.tmc.transfer_request.create",
+        )
+      ) {
+        throw new ApplicationError("forbidden", "forbidden");
+      }
+      if (Array.from(normalizedQuery).length < 2) return [];
+      const candidates = await users.searchActiveRecipients(
         normalizedQuery,
         actorUserId,
         TMC_RECIPIENT_RESULT_LIMIT,
-      ),
-    );
+      );
+      return candidates
+        .slice(0, TMC_RECIPIENT_RESULT_LIMIT)
+        .map(({ id, fullName, email, role }) => ({
+          id,
+          fullName,
+          email,
+          role,
+        }));
+    }, { isolation: "repeatable-read", readOnly: false });
   }
 
   async getProfile(userId: string): Promise<UserDto> {

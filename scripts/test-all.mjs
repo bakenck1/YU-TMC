@@ -32,6 +32,7 @@ run(
 if (process.env.TEST_DATABASE_URL) {
   for (const databaseTest of [
     "tests/database/persistent-users.test.ts",
+    "tests/database/inventory-transfer-override.test.ts",
     "tests/database/tmc-operation-migration.test.ts",
     "tests/database/tmc-operation-repositories.test.ts",
     "tests/database/tmc-transfer-request-transactions.test.ts",

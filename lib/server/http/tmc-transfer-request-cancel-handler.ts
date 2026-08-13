@@ -11,11 +11,15 @@ const MAXIMUM_BODY_BYTES = 4 * 1024;
 const FIELDS = new Set(["requestVersion", "administrativeReason"]);
 
 export function createTmcTransferRequestCancelPostHandler(dependencies: {
-  authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
+  authenticate(request: Request): Promise<{
+    userId: string;
+    role: UserRole;
+    sessionVersion: number;
+  }>;
   cancelIdempotent(
     requestId: string,
     input: CancelTmcTransferRequestInput,
-    actor: { userId: string; role: UserRole },
+    actor: { userId: string; role: UserRole; sessionVersion: number },
     key: string,
   ): Promise<{ status: 200; kind: "completed" | "replayed"; body: { request: TmcTransferRequestDto } }>;
   onCompleted?(): void;

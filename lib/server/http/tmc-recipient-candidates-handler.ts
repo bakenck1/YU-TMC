@@ -1,4 +1,5 @@
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+import type { UserRole } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -8,11 +9,19 @@ import {
 
 interface RecipientSearchActor {
   userId: string;
+  role: UserRole;
+  sessionVersion: number;
 }
+
+const PRIVATE_RESPONSE_CACHE_CONTROL =
+  "private, no-store, max-age=0, must-revalidate";
 
 export function createTmcRecipientCandidatesGetHandler(dependencies: {
   authenticate(request: Request): Promise<RecipientSearchActor>;
-  search(query: string, actorUserId: string): Promise<TmcOperationUserDto[]>;
+  search(
+    query: string,
+    actor: RecipientSearchActor,
+  ): Promise<TmcOperationUserDto[]>;
 }) {
   return async function GET(request: Request): Promise<Response> {
     try {
@@ -26,22 +35,32 @@ export function createTmcRecipientCandidatesGetHandler(dependencies: {
       const users =
         Array.from(query).length < 2
           ? []
-          : await dependencies.search(query, actor.userId);
-      return noStore(Response.json({ users }));
-    } catch (error) {
-      return noStore(
-        error instanceof ApplicationError
-          ? applicationErrorResponse(error)
-          : Response.json(
-              { error: "recipient_search_unavailable" },
-              { status: 503 },
-            ),
+          : await dependencies.search(query, actor);
+      return Response.json(
+        { users },
+        { headers: privateHeaders() },
       );
+    } catch (error) {
+      const headers = privateHeaders(error);
+      return error instanceof ApplicationError
+        ? applicationErrorResponse(error, headers)
+        : Response.json(
+            { error: "recipient_search_unavailable" },
+            { status: 503, headers },
+          );
     }
   };
 }
 
-function noStore(response: Response): Response {
-  response.headers.set("cache-control", "no-store");
-  return response;
+function privateHeaders(error?: unknown): HeadersInit {
+  const retryAfter =
+    error instanceof ApplicationError && error.kind === "rate_limited"
+      ? error.safeDetails?.retryAfterSeconds
+      : undefined;
+  return {
+    "cache-control": PRIVATE_RESPONSE_CACHE_CONTROL,
+    ...(retryAfter && /^[1-9]\d{0,8}$/.test(retryAfter)
+      ? { "retry-after": retryAfter }
+      : {}),
+  };
 }

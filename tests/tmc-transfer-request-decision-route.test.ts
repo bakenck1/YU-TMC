@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTmcTransferRequestDecisionPostHandler } from "../lib/server/http/tmc-transfer-request-decision-handler";
@@ -7,7 +8,7 @@ import { ApplicationError } from "../lib/domain/application-error";
 test("decision POST forwards authenticated actor, path scope and idempotency key", async () => {
   const calls: unknown[] = [];
   const handler = createTmcTransferRequestDecisionPostHandler({
-    async authenticate() { return { userId: "actor", role: "employee" }; },
+    async authenticate() { return { userId: "actor", role: "employee", sessionVersion: 7 }; },
     async decideIdempotent(requestId, input, actor, key) {
       calls.push({ requestId, input, actor, key });
       return { body: { request: { id: requestId } as never }, kind: "completed", status: 200 };
@@ -20,7 +21,11 @@ test("decision POST forwards authenticated actor, path scope and idempotency key
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.equal(calls.length, 1);
-  assert.deepEqual((calls[0] as { actor: unknown }).actor, { userId: "actor", role: "employee" });
+  assert.deepEqual((calls[0] as { actor: unknown }).actor, {
+    userId: "actor",
+    role: "employee",
+    sessionVersion: 7,
+  });
 });
 
 test("decision POST exposes replay and bounded retry headers", async () => {
@@ -30,7 +35,7 @@ test("decision POST exposes replay and bounded retry headers", async () => {
     new ApplicationError("rate_limited", "rate_limited", { safeDetails: { retryAfterSeconds: "7" } }),
   ];
   const handler = createTmcTransferRequestDecisionPostHandler({
-    async authenticate() { return { userId: "actor", role: "employee" }; },
+    async authenticate() { return { userId: "actor", role: "employee", sessionVersion: 1 }; },
     async decideIdempotent() {
       const outcome = outcomes.shift()!;
       if (outcome instanceof Error) throw outcome;
@@ -50,7 +55,7 @@ test("decision POST exposes replay and bounded retry headers", async () => {
 test("decision POST rejects unsupported, malformed and oversized payloads before mutation", async () => {
   let calls = 0;
   const handler = createTmcTransferRequestDecisionPostHandler({
-    async authenticate() { return { userId: "actor", role: "employee" }; },
+    async authenticate() { return { userId: "actor", role: "employee", sessionVersion: 1 }; },
     async decideIdempotent() { calls += 1; throw new Error("must not run"); },
   });
   const requests = [
@@ -66,7 +71,7 @@ test("decision POST rejects unsupported, malformed and oversized payloads before
 
 test("decision POST rejects unknown fields and missing idempotency key", async () => {
   const handler = createTmcTransferRequestDecisionPostHandler({
-    async authenticate() { return { userId: "actor", role: "employee" }; },
+    async authenticate() { return { userId: "actor", role: "employee", sessionVersion: 1 }; },
     async decideIdempotent() { throw new Error("must not run"); },
   });
   for (const request of [
@@ -76,6 +81,20 @@ test("decision POST rejects unknown fields and missing idempotency key", async (
     const response = await handler(request, "22222222-2222-4222-8222-222222222222");
     assert.equal(response.status, 400);
   }
+});
+
+test("decision authentication rejects cross-site mutations before consuming API budget", () => {
+  const source = readFileSync(
+    new URL("../lib/server/security/request-user.ts", import.meta.url),
+    "utf8",
+  );
+  const functionBody = source.slice(
+    source.indexOf("export async function requireCurrentUser"),
+  );
+  assert.ok(
+    functionBody.indexOf("requireSameOriginMutation(request)") <
+      functionBody.indexOf("consumeApiRateLimit(request)"),
+  );
 });
 
 function jsonRequest(body: unknown) {

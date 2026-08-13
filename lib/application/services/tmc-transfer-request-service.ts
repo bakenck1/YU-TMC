@@ -41,6 +41,8 @@ const CREATE_OPERATION = "tmc.transfer_request.create";
 const DECIDE_OPERATION = "tmc.transfer_request.decision";
 const CANCEL_OPERATION = "tmc.transfer_request.cancel";
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
+const ADMINISTRATIVE_REASON_VISIBLE_CONTENT = /[\p{L}\p{N}]/u;
+const ADMINISTRATIVE_REASON_IGNORABLE = /\p{Default_Ignorable_Code_Point}/u;
 const ADMINISTRATIVE_ASSIGNMENT_REASON =
   "Назначение ответственного администратором";
 
@@ -67,6 +69,14 @@ export interface IdempotentTmcTransferRequestDecision {
   resourceId: string;
   status: 200;
 }
+
+type AuthenticatedTmcDecisionActor = AuthorizationActor & {
+  sessionVersion: number;
+};
+
+type AuthenticatedTmcCancellationActor = AuthorizationActor & {
+  sessionVersion: number;
+};
 
 type ClassifiedItem =
   | {
@@ -244,7 +254,7 @@ export class TmcTransferRequestService {
   async decide(
     requestId: string,
     input: DecideTmcTransferRequestInput,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcDecisionActor,
   ): Promise<TmcTransferRequestDto> {
     const normalized = normalizeDecisionInput(requestId, input, actor);
     try {
@@ -254,7 +264,12 @@ export class TmcTransferRequestService {
       const actorId = normalized.actorId;
       const isRecipient = request.recipient.id === actorId;
       const currentActor = await transferRequests.findUserById(actorId);
-      if (!currentActor || !currentActor.active || currentActor.deletedAt) {
+      if (
+        !currentActor ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== normalized.sessionVersion
+      ) {
         throw requestNotFound();
       }
       const isAdministrativeDecision = !isRecipient && currentActor.role === "admin";
@@ -305,7 +320,9 @@ export class TmcTransferRequestService {
           decidedBy: actorId,
           decidedAt,
           newResponsibilityPeriodId: this.ids.create(),
-          responsibilitySource: "transfer",
+          responsibilitySource: isAdministrativeDecision
+            ? "admin_override"
+            : "transfer",
         }));
       }
       const hasAccepted =
@@ -337,7 +354,7 @@ export class TmcTransferRequestService {
   async decideIdempotent(
     requestId: string,
     input: DecideTmcTransferRequestInput,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcDecisionActor,
     idempotencyKey: string,
   ): Promise<IdempotentTmcTransferRequestDecision> {
     const normalized = normalizeDecisionInput(requestId, input, actor);
@@ -373,6 +390,7 @@ export class TmcTransferRequestService {
             !currentActor ||
             !currentActor.active ||
             currentActor.deletedAt ||
+            currentActor.version !== normalized.sessionVersion ||
             (request.recipient.id !== normalized.actorId && currentActor.role !== "admin")
           ) {
             throw requestNotFound();
@@ -394,7 +412,7 @@ export class TmcTransferRequestService {
   async cancelIdempotent(
     requestId: string,
     input: CancelTmcTransferRequestInput,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcCancellationActor,
     idempotencyKey: string,
   ): Promise<IdempotentTmcTransferRequestCancellation> {
     const normalized = normalizeCancellationInput(requestId, input, actor);
@@ -419,6 +437,7 @@ export class TmcTransferRequestService {
           const request = await transferRequests.findById(normalized.requestId);
           const currentActor = await transferRequests.findUserById(normalized.actorId);
           if (!request || !currentActor || !currentActor.active || currentActor.deletedAt ||
+              currentActor.version !== normalized.sessionVersion ||
               (request.initiator.id !== normalized.actorId && currentActor.role !== "admin")) {
             throw requestNotFound();
           }
@@ -433,13 +452,19 @@ export class TmcTransferRequestService {
   async cancel(
     requestId: string,
     input: CancelTmcTransferRequestInput,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcCancellationActor,
   ): Promise<TmcTransferRequestDto> {
     const normalized = normalizeCancellationInput(requestId, input, actor);
     return this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
       const request = await transferRequests.findByIdForUpdate(normalized.requestId);
       const currentActor = await transferRequests.findUserById(normalized.actorId);
-      if (!request || !currentActor || !currentActor.active || currentActor.deletedAt) throw requestNotFound();
+      if (
+        !request ||
+        !currentActor ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== normalized.sessionVersion
+      ) throw requestNotFound();
       const isInitiator = request.initiator.id === normalized.actorId;
       const isAdministrator = currentActor.role === "admin";
       if (!isInitiator && !isAdministrator) throw requestNotFound();
@@ -906,7 +931,10 @@ export class TmcTransferRequestService {
         version: after.version,
         comment: after.comment,
         administrativeReason: after.administrativeReason,
-      }, occurredAt,
+      },
+      reason: after.administrativeReason,
+      isAdministrativeException: after.isAdministrativeDecision,
+      occurredAt,
     });
     const previousDecisionById = new Map(before.items.map((i) => [i.id, i]));
     for (const item of after.items) {
@@ -928,6 +956,8 @@ export class TmcTransferRequestService {
           result: item.result,
           responsibleUserId: item.result === "accepted" ? after.recipient.id : previous.currentResponsibleIdAtRequest,
         },
+        reason: after.administrativeReason,
+        isAdministrativeException: after.isAdministrativeDecision,
         occurredAt,
       });
     }
@@ -1022,7 +1052,10 @@ export class TmcTransferRequestService {
         version: after.version,
         comment: after.comment,
         administrativeReason: after.administrativeReason,
-      }, occurredAt,
+      },
+      reason: after.administrativeReason,
+      isAdministrativeException: after.isAdministrativeDecision,
+      occurredAt,
     });
     const previousCancellationById = new Map(before.items.map((i) => [i.id, i]));
     for (const item of after.items) {
@@ -1042,6 +1075,8 @@ export class TmcTransferRequestService {
           requestItemId: item.id,
           result: item.result,
         },
+        reason: after.administrativeReason,
+        isAdministrativeException: after.isAdministrativeDecision,
         occurredAt,
       });
     }
@@ -1356,11 +1391,12 @@ async function hashDecisionRequest(
     requestVersion: input.requestVersion,
     decisions: [...input.decisions].sort((left, right) =>
       left.itemId.localeCompare(right.itemId),
-    ),
-    administrativeReason:
-      typeof input.administrativeReason === "string"
-        ? input.administrativeReason.normalize("NFKC").trim()
-        : null,
+    ).map(({ itemId, itemVersion, decision }) => ({
+      itemId,
+      itemVersion,
+      decision,
+    })),
+    administrativeReason: canonicalAdministrativeReason(input.administrativeReason),
   });
 }
 
@@ -1371,10 +1407,9 @@ async function hashCancellationRequest(
     operation: CANCEL_OPERATION,
     requestId: input.requestId,
     requestVersion: input.requestVersion,
-    administrativeReason:
-      typeof input.administrativeReason === "string"
-        ? input.administrativeReason.normalize("NFKC").trim()
-        : null,
+    administrativeReason: canonicalAdministrativeReason(
+      input.administrativeReason,
+    ),
   });
 }
 
@@ -1656,7 +1691,7 @@ function requestNotFound() {
 function normalizeDecisionInput(
   requestId: string,
   input: DecideTmcTransferRequestInput,
-  actor: AuthorizationActor,
+  actor: AuthenticatedTmcDecisionActor,
 ) {
   if (!isUuid(requestId) || !isUuid(actor.userId)) throw requestNotFound();
   if (
@@ -1673,7 +1708,11 @@ function normalizeDecisionInput(
       decision.itemVersion < 1 ||
       !["accept", "reject"].includes(decision.decision)
     ) throw validation("invalid_decision");
-    return { ...decision, itemId: decision.itemId.toLowerCase() };
+    return {
+      itemId: decision.itemId.toLowerCase(),
+      itemVersion: decision.itemVersion,
+      decision: decision.decision,
+    };
   });
   if (new Set(decisions.map((decision) => decision.itemId)).size !== decisions.length) {
     throw validation("duplicate_item");
@@ -1681,6 +1720,7 @@ function normalizeDecisionInput(
   return {
     requestId: requestId.toLowerCase(),
     actorId: actor.userId.toLowerCase(),
+    sessionVersion: actor.sessionVersion,
     requestVersion: input.requestVersion,
     decisions,
     administrativeReason: input.administrativeReason,
@@ -1690,7 +1730,7 @@ function normalizeDecisionInput(
 function normalizeCancellationInput(
   requestId: string,
   input: CancelTmcTransferRequestInput,
-  actor: AuthorizationActor,
+  actor: AuthenticatedTmcCancellationActor,
 ) {
   if (!isUuid(requestId) || !isUuid(actor.userId)) throw requestNotFound();
   if (!input || typeof input !== "object" ||
@@ -1700,6 +1740,7 @@ function normalizeCancellationInput(
   return {
     requestId: requestId.toLowerCase(),
     actorId: actor.userId.toLowerCase(),
+    sessionVersion: actor.sessionVersion,
     requestVersion: input.requestVersion,
     administrativeReason: input.administrativeReason,
   };
@@ -1709,8 +1750,12 @@ function normalizeAdministrativeReason(
   value: string | null | undefined,
   required: boolean,
 ) {
-  const normalized = typeof value === "string" ? value.normalize("NFKC").trim() : "";
-  if (normalized.includes("\u0000")) {
+  const normalized = canonicalAdministrativeReason(value) ?? "";
+  if (
+    normalized.includes("\u0000") ||
+    ADMINISTRATIVE_REASON_IGNORABLE.test(normalized) ||
+    (normalized.length > 0 && !ADMINISTRATIVE_REASON_VISIBLE_CONTENT.test(normalized))
+  ) {
     throw validation("invalid_administrative_reason");
   }
   if (Array.from(normalized).length > MAX_COMMENT_CODE_POINTS) {
@@ -1719,4 +1764,10 @@ function normalizeAdministrativeReason(
   if (required && !normalized) throw validation("administrative_reason_required");
   if (!required && normalized) throw validation("administrative_reason_not_allowed");
   return required ? normalized : null;
+}
+
+function canonicalAdministrativeReason(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  const normalized = value.normalize("NFKC").trim();
+  return normalized || null;
 }

@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createTmcTransferRequestCancelPostHandler } from "../lib/server/http/tmc-transfer-request-cancel-handler";
+import { ApplicationError } from "../lib/domain/application-error";
 
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
-const ACTOR = { userId: "11111111-1111-4111-8111-111111111111", role: "employee" as const };
+const ACTOR = {
+  userId: "11111111-1111-4111-8111-111111111111",
+  role: "employee" as const,
+  sessionVersion: 7,
+};
 
 test("cancel route requires strict JSON and forwards server identity plus idempotency key", async () => {
   const calls: unknown[][] = [];
@@ -22,6 +27,7 @@ test("cancel route requires strict JSON and forwards server identity plus idempo
   }), REQUEST_ID);
 
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(calls, [[REQUEST_ID, { requestVersion: 1 }, ACTOR, "tmc-cancel-000001"]]);
 });
 
@@ -40,3 +46,94 @@ test("cancel route rejects identity injection, unknown fields and non-json bodie
   }
   assert.equal(calls, 0);
 });
+
+test("cancel route exposes replay and bounded retry headers without caching errors", async () => {
+  const outcomes = [
+    {
+      status: 200 as const,
+      kind: "replayed" as const,
+      body: { request: { id: REQUEST_ID } as never },
+    },
+    new ApplicationError("conflict", "idempotency_request_in_progress"),
+    new ApplicationError("rate_limited", "too_many_requests", {
+      safeDetails: { retryAfterSeconds: "7" },
+    }),
+  ];
+  const handler = createTmcTransferRequestCancelPostHandler({
+    authenticate: async () => ACTOR,
+    cancelIdempotent: async () => {
+      const outcome = outcomes.shift()!;
+      if (outcome instanceof Error) throw outcome;
+      return outcome;
+    },
+  });
+
+  const replay = await handler(jsonRequest({ requestVersion: 1 }), REQUEST_ID);
+  assert.equal(replay.headers.get("idempotency-replayed"), "true");
+  assert.equal(replay.headers.get("cache-control"), "no-store");
+
+  const inProgress = await handler(jsonRequest({ requestVersion: 1 }), REQUEST_ID);
+  assert.equal(inProgress.status, 409);
+  assert.equal(inProgress.headers.get("retry-after"), "1");
+  assert.equal(inProgress.headers.get("cache-control"), "no-store");
+
+  const limited = await handler(jsonRequest({ requestVersion: 1 }), REQUEST_ID);
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "7");
+  assert.equal(limited.headers.get("cache-control"), "no-store");
+});
+
+test("cancel route rejects malformed, oversized and non-canonical input before mutation", async () => {
+  let calls = 0;
+  const handler = createTmcTransferRequestCancelPostHandler({
+    authenticate: async () => ACTOR,
+    cancelIdempotent: async () => {
+      calls += 1;
+      throw new Error("must_not_run");
+    },
+  });
+  const cases: Array<[Request, number]> = [
+    [new Request("https://inventory.example/cancel", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "tmc-cancel-000001",
+      },
+      body: "{",
+    }), 400],
+    [jsonRequest({ requestVersion: 0 }), 400],
+    [jsonRequest({ requestVersion: 2_147_483_648 }), 400],
+    [jsonRequest({ requestVersion: 1, administrativeReason: 7 }), 400],
+    [jsonRequest({ requestVersion: 1, unexpected: true }), 400],
+    [new Request("https://inventory.example/cancel", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "tmc-cancel-000001",
+      },
+      body: JSON.stringify({ requestVersion: 1, padding: "x".repeat(5_000) }),
+    }), 413],
+    [new Request("https://inventory.example/cancel", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestVersion: 1 }),
+    }), 400],
+  ];
+  for (const [request, status] of cases) {
+    const response = await handler(request, REQUEST_ID);
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
+  assert.equal(calls, 0);
+});
+
+function jsonRequest(body: unknown) {
+  return new Request("https://inventory.example/cancel", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": "tmc-cancel-000001",
+    },
+    body: JSON.stringify(body),
+  });
+}
