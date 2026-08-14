@@ -46,7 +46,7 @@ for (const incident of incidents) {
   const fileName = known?.fileName ?? makeFileName(incident.title, incident.fingerprint);
   const filePath = path.join(outputDir, fileName);
   const merged = mergeIncident(incident, known);
-  await writeFile(filePath, renderIncidentMarkdown(merged), { encoding: "utf8", mode: 0o600 });
+  await writeFile(filePath, renderIncidentMarkdown(merged, sinceMinutes), { encoding: "utf8", mode: 0o600 });
   await chmod(filePath, 0o600).catch(() => {});
   updatedState.incidents[incident.fingerprint] = {
     fileName,
@@ -248,7 +248,7 @@ function mergeIncident(current, known) {
   };
 }
 
-function renderIncidentMarkdown(incident) {
+function renderIncidentMarkdown(incident, sourceWindowMinutes) {
   const contextLines = incident.sample.split(/\r?\n/).slice(0, 40).join("\n");
   const trace = incident.entries.map((entry) => entry.trace).join("\n\n---\n\n");
 
@@ -259,7 +259,7 @@ first_seen_utc: "${escapeYaml(incident.firstSeenUtc)}"
 last_seen_utc: "${escapeYaml(incident.lastSeenUtc)}"
 occurrences: ${incident.occurrences}
 level: "${escapeYaml(incident.level ?? "error")}"
-source_window_minutes: ${DEFAULT_SINCE_MINUTES}
+source_window_minutes: ${sourceWindowMinutes}
 ---
 
 # ${incident.title}

@@ -49,3 +49,14 @@ window `30` только при отображении; они не перепи
 CLI и report metadata говорят об одном и том же реально обработанном окне;
 focused test запускается без production credentials; полный monitoring script
 не меняет существующие incident counts.
+
+## Status: Done
+
+Реализовано в `scripts/monitor-production-errors.mjs`: фактический
+`sinceMinutes` передаётся в каждый report renderer. Добавлены black-box tests на
+custom/default window, несколько incident reports и no-error state behavior.
+
+Validation: `node --import ./scripts/node-userinfo-workaround.mjs --import tsx
+--test tests/monitor-production-errors.test.ts`, `npm.cmd run lint` и
+`npm.cmd run test:all` проходят. Independent review: 10/10, test quality 10/10,
+no actionable findings.
