@@ -75,3 +75,24 @@ canvas-like renderer, если это явно обозначено как inten
 contracts и route responses не изменились; focused tests показывают сохранение
 authorization, transactionality и DTO privacy; component files имеют понятную
 ответственность.
+
+## Status: Done
+
+Закрыт один ближайший и безопасный seam без переписывания домена: чистые
+operation/error presentation helpers вынесены из `InventoryItemDetails.tsx` в
+`components/InventoryItemDetailsPresentation.ts`. Stateful UI, fetch/mutation
+flows, authorization и server/client boundary остались на прежнем месте.
+
+Добавлены focused tests для audit/transfer labels, rich operation details,
+error sanitization и HTTP status mapping; существующий UI wiring test переведён
+на новый модуль. Остальные крупные service/presentation units оставлены как
+явно отложенные optional extractions: они требуют отдельного workflow consumer
+и не оправдывают generic abstraction в этой задаче.
+
+Validation: focused tests 14/14, full `npm.cmd run test:all` (535 server, 15 UI,
+41 component; DB skipped locally), `npm.cmd run ui:check`, lint и
+`git diff --check` проходят. Production build в окружении заблокирован внешним
+fetch Google Fonts из `app/layout.tsx`, unrelated к extraction.
+
+Independent review scores: first pass 8.5/10 (test quality 7.5/10), second pass
+9.5/10 (test quality 9/10), actionable findings отсутствуют.

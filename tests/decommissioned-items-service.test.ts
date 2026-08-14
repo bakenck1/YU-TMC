@@ -292,6 +292,10 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
     "components/InventoryItemDetails.tsx",
     "utf8",
   );
+  const presentationSource = readFileSync(
+    "components/InventoryItemDetailsPresentation.ts",
+    "utf8",
+  );
 
   assert.match(componentSource, /const \[photoOpen, setPhotoOpen\] = useState\(false\)/);
   assert.match(
@@ -323,8 +327,8 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   assert.match(componentSource, /protectedBuildingRooms\.map\(\(room\) =>/);
   assert.match(componentSource, /result\.response\.status === 409/);
   assert.match(componentSource, /latestResponse = await fetch/);
-  assert.match(componentSource, /itemDetails\.errorInventoryNumber/);
-  assert.match(componentSource, /itemDetails\.errorInvalidFields/);
+  assert.match(presentationSource, /itemDetails\.errorInventoryNumber/);
+  assert.match(presentationSource, /itemDetails\.errorInvalidFields/);
   assert.match(componentSource, /h-\[208px\] w-full max-w-\[208px\]/);
   assert.match(componentSource, /sm:grid-cols-\[minmax\(0,1fr\)_190px\]/);
   assert.match(componentSource, /kind=qr&format=svg/);
