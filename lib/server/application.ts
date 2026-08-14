@@ -13,9 +13,9 @@ import { WebPushService } from "@/lib/application/services/web-push-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
-import { FileSettingsRepository } from "@/lib/server/persistence/file/file-settings-repository";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import { PostgresSettingsRepository } from "@/lib/server/persistence/postgres/postgres-settings-repository";
 import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
 import { createPostgresRoomWorkspaceRepositories } from "@/lib/server/persistence/postgres/postgres-room-workspace-repositories";
 import { createPostgresServiceRequestRepositories } from "@/lib/server/persistence/postgres/postgres-service-request-repositories";
@@ -127,7 +127,7 @@ function createApplicationServices(): ApplicationServices {
       { create: () => randomUUID() },
     ),
     push,
-    settings: new SettingsService(new FileSettingsRepository()),
+    settings: new SettingsService(new PostgresSettingsRepository()),
     tmcTransferRequests: new TmcTransferRequestService(
       createPostgresUnitOfWork(createPostgresTmcOperationRepositories),
       { now: () => new Date() },

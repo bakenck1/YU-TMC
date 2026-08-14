@@ -38,6 +38,7 @@ yarn-error.log*
 /.data/postgres-development/
 /.data/backups/
 /.data/caddy-public/
+/.settings-import/
 /_migration/
 
 # production error reports may contain sensitive log context

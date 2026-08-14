@@ -26,7 +26,7 @@ release-процессу, multi-instance deployment и доказательст�
 | Приоритет | Задача | Результат | Сложность |
 | --- | --- | --- | --- |
 | P1 | [CI и release gates](01-ci-release-gates.md) | CI проверяет критический автоматический release-контур и явно отделяет ручные gates | M |
-| P1 | [Settings persistence](02-settings-persistence.md) | settings имеют честную multi-instance гарантию либо deployment жёстко ограничен одной инстанцией | L / decision |
+| P1 | [Settings persistence](02-settings-persistence.md) | Done: PostgreSQL singleton, guarded import и multi-instance-safe update | L / decision |
 | P2 | [Monitoring window](03-monitoring-window.md) | отчёт показывает фактическое окно сбора ошибок | S |
 | P2 | [Node/Docker reproducibility](04-node-docker-reproducibility.md) | CI и production используют совместимый, lockfile-based toolchain | M |
 | P2 | [Documentation drift](05-documentation-drift.md) | README/docs/TASKS ведут на существующие команды и пути | S |
@@ -40,9 +40,9 @@ release-процессу, multi-instance deployment и доказательст�
 Near-term: `03`, `05`, `01`, `04`, затем `07`. Эти изменения маленькие или
 локализованные и дают максимальный эффект без переписывания домена.
 
-Hard/optional: `02`, `06`, `08`, `09`. Они требуют решения о deployment model,
-границах модулей или хранении исторических материалов. Их нельзя закрывать
-механическим удалением compatibility-кода.
+Hard/optional: `08`, `09`. `02` и `06` уже закрыты минимальными seams; оставшиеся
+задачи требуют решения о compatibility policy или хранении исторических
+материалов. Их нельзя закрывать механическим удалением compatibility-кода.
 
 ## Общие правила реализации
 

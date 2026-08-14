@@ -84,6 +84,7 @@ and for tests:
 docker compose --profile development up -d --wait postgres-development
 Copy-Item .env.example .env.local
 npm run db:migrate -- --target=development
+npm run db:import-settings -- --target=development
 npm run db:smoke -- --target=development
 ```
 
@@ -174,6 +175,35 @@ must remain compatible with the previously deployed application version.
 separately in `yu_migrations.__drizzle_migrations`. Application schema objects
 are always qualified; connections use a restricted search path rather than
 implicitly trusting `public`.
+
+Application settings live in the singleton `yu_inventory.settings` row with
+`id = 'global'`, a validated `payload`, a positive `version`, and
+`updated_at`. The runtime role may read and update that row but cannot insert
+another row or delete it. A database trigger rejects deletes even for the
+migrator role. Apply migrations before shifting traffic, then import a legacy
+`.data/settings.json` source once if it exists:
+
+```powershell
+npm run db:migrate -- --target=production
+npm run db:import-settings -- --target=production
+npm run db:smoke -- --target=production
+```
+
+The production Compose migrator runs the same import and smoke check
+automatically. It mounts only the dedicated `./.settings-import` directory at
+read-only `/run/legacy-settings`; copy the old
+`.data/settings.json` there before the release when migration is required.
+The directory may be empty, in which case the import records that defaults
+remain active. Do not mount the whole `.data` directory into production; it
+also contains authentication and session secrets. For a one-off path outside
+Compose, pass `--source=/path/to/settings.json` to `db:import-settings`.
+
+The import is guarded by the untouched default version/payload and is
+idempotent. A missing source keeps defaults; invalid JSON or an invalid
+settings shape fails closed. Keep the file backup through at least the
+seven-day production soak and archive it only after the database row backup
+and error-free read/write evidence are recorded. A rollback must use a
+DB-aware release; the former file-only binary is not a lossless rollback.
 
 The bootstrap migration creates the technical
 `yu_inventory.__schema_contract`; it is not a domain entity. Later migrations

@@ -14,7 +14,21 @@ services:
       DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
       DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
       DATABASE_MIGRATION_LOCK_TIMEOUT_MS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_MS:-60000}
-    command: ["npm", "run", "db:migrate", "--", "--target=production"]
+      YU_DATA_DIRECTORY: /run/legacy-settings
+    command:
+      - sh
+      - -c
+      - >-
+        npm run db:migrate -- --target=production
+        && npm run db:import-settings -- --target=production
+        && npm run db:smoke -- --target=production
+    volumes:
+      - type: bind
+        source: ./.settings-import
+        target: /run/legacy-settings
+        read_only: true
+        bind:
+          create_host_path: true
     restart: "no"
 
   app:

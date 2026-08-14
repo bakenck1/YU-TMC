@@ -148,6 +148,13 @@
       "when": 1786424367465,
       "tag": "20260811045927_mean_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786704977876,
+      "tag": "20260814105617_settings-persistence",
+      "breakpoints": true
     }
   ]
 }

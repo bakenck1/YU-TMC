@@ -43,6 +43,8 @@ async function main() {
       can_read_migration_history: boolean;
       can_write_migration_history: boolean;
       can_delete_push_subscriptions: boolean;
+      can_delete_settings: boolean;
+      can_insert_settings: boolean;
     }>(
       `select coalesce(
          has_schema_privilege(current_user, 'yu_inventory', 'USAGE'),
@@ -79,7 +81,23 @@ async function main() {
            'DELETE'
          ),
          false
-       ) as can_delete_push_subscriptions`,
+       ) as can_delete_push_subscriptions,
+       coalesce(
+         has_table_privilege(
+           current_user,
+           '"yu_inventory"."settings"',
+           'DELETE'
+         ),
+         false
+       ) as can_delete_settings,
+       coalesce(
+         has_table_privilege(
+           current_user,
+           '"yu_inventory"."settings"',
+           'INSERT'
+         ),
+         false
+       ) as can_insert_settings`,
     );
 
     if (privilegeResult.rows[0]?.has_usage !== true) {
@@ -114,6 +132,16 @@ async function main() {
         "Runtime database role cannot delete web push subscriptions.",
       );
     }
+    if (privilegeResult.rows[0]?.can_delete_settings === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can delete the settings singleton.",
+      );
+    }
+    if (privilegeResult.rows[0]?.can_insert_settings === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can insert additional settings rows.",
+      );
+    }
 
     await assertSchemaContract(
       runtimePool,
@@ -138,6 +166,19 @@ async function main() {
         for share`,
       ["00000000-0000-0000-0000-000000000000"],
     );
+
+    const settingsCount = await runtimePool.query<{ record_count: number }>(
+      `select count(*)::int as record_count
+         from "yu_inventory"."settings"`,
+    );
+    if (settingsCount.rows[0]?.record_count !== 1) {
+      throw new DatabaseOperationError(
+        "The settings singleton must exist exactly once.",
+      );
+    }
+
+    await assertRuntimeSettingsDeleteRejected(runtimePool);
+    await assertMigratorSettingsDeleteRejected(migrationPool);
     await runtimePool.query(
       `select s.id, s.user_id, s.endpoint, s.p256dh, s.auth,
               s.expiration_time, s.user_agent, s.created_at, s.updated_at
@@ -155,6 +196,60 @@ async function main() {
   } finally {
     await Promise.all([runtimePool.end(), migrationPool.end()]);
   }
+}
+
+async function assertRuntimeSettingsDeleteRejected(
+  runtimePool: ReturnType<typeof createPostgresPool>,
+): Promise<void> {
+  try {
+    await runtimePool.query(
+      `delete from "yu_inventory"."settings" where id = 'global'`,
+    );
+  } catch (error) {
+    if (postgresErrorCode(error) !== "42501") {
+      throw new DatabaseOperationError(
+        "Runtime settings delete was rejected for an unexpected reason.",
+      );
+    }
+    return;
+  }
+  throw new DatabaseOperationError(
+    "Runtime database role unexpectedly deleted the settings singleton.",
+  );
+}
+
+async function assertMigratorSettingsDeleteRejected(
+  migrationPool: ReturnType<typeof createPostgresPool>,
+): Promise<void> {
+  const client = await migrationPool.connect();
+  try {
+    await client.query("begin");
+    let deletionError: unknown;
+    try {
+      await client.query(
+        `delete from "yu_inventory"."settings" where id = 'global'`,
+      );
+    } catch (error) {
+      deletionError = error;
+    }
+    await client.query("rollback");
+    if (postgresErrorCode(deletionError) !== "55006") {
+      throw new DatabaseOperationError(
+        "Migration settings delete was not rejected by the protection trigger.",
+      );
+    }
+    return;
+  } finally {
+    client.release();
+  }
+}
+
+function postgresErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 main().catch((error: unknown) => {

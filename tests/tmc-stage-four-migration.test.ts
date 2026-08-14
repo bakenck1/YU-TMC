@@ -36,8 +36,13 @@ test("stage-four and unassigned-item migrations remain committed in order", () =
     tag: "20260810140000_tmc_stage_four",
     breakpoints: true,
   });
-  assert.equal(journal.entries.at(-2)?.tag, "20260811045420_mysterious_wind_dancer");
-  assert.equal(journal.entries.at(-1)?.tag, "20260811045927_mean_wonder_man");
+  const unassignedIndex = journal.entries.findIndex(
+    (entry) => entry.tag === "20260811045420_mysterious_wind_dancer",
+  );
+  const snapshotConstraintIndex = journal.entries.findIndex(
+    (entry) => entry.tag === "20260811045927_mean_wonder_man",
+  );
+  assert.equal(snapshotConstraintIndex, unassignedIndex + 1);
 });
 
 test("unassigned-item migration only relaxes the two responsibility snapshot columns", () => {

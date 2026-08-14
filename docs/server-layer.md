@@ -16,16 +16,19 @@ only and never expose database rows or driver types.
 
 ## Current vertical slice
 
-Application settings are the first complete slice. The settings route owns
-HTTP concerns (rate limiting, the existing authorization check and response
+Application settings are a complete server slice. The settings route owns HTTP
+concerns (rate limiting, the existing authorization check and response
 mapping), `SettingsService` owns patch validation, and
-`FileSettingsRepository` owns persistence.
+`PostgresSettingsRepository` owns durable persistence.
 
-The file adapter is a compatibility adapter until settings move to PostgreSQL.
-It serializes updates inside one process and uses a same-directory temporary
-file plus rename so readers see either the old or new document. It deliberately
-does not claim cross-process locking. Missing files create defaults; corrupt
-JSON and I/O failures are reported and are never silently overwritten.
+The PostgreSQL adapter stores one `global` row in `yu_inventory.settings` and
+locks it during every update. This is the source of truth for all runtime
+instances; a PostgreSQL error is returned to the caller and never falls back to
+the file source. The old `FileSettingsRepository` is retained only for the
+guarded `db:import-settings` migration window and local recovery until the
+production soak period is complete. Missing legacy files leave database
+defaults unchanged, while corrupt legacy JSON stops the import without a
+write.
 
 Existing authentication storage and the TypeScript inventory arrays are
 migrated by their later, explicit tasks.

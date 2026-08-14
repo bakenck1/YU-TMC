@@ -89,6 +89,7 @@ async function runWithEmbeddedPostgres() {
 
     const startupCommands = [
       ["run", "db:migrate", "--", "--target=development"],
+      ["run", "db:import-settings", "--", "--target=development"],
       ...(process.env.YU_INVENTORY_IMPORT_LEGACY_AUTH === "true"
         ? [["run", "db:import-auth", "--", "--target=development"]]
         : []),
@@ -359,7 +360,19 @@ function runProcess(command, args, environment) {
 }
 
 if (configuredDatabaseUrl) {
-  process.exitCode = await runCommand(["run", "dev:next"], process.env);
+  const startupCommands = [
+    ["run", "db:migrate", "--", "--target=development"],
+    ["run", "db:import-settings", "--", "--target=development"],
+    ["run", "db:smoke", "--", "--target=development"],
+  ];
+  let exitCode = 0;
+  for (const args of startupCommands) {
+    exitCode = await runCommand(args, process.env);
+    if (exitCode !== 0) break;
+  }
+  process.exitCode = exitCode === 0
+    ? await runCommand(["run", "dev:next"], process.env)
+    : exitCode;
 } else {
   process.exitCode = await runWithEmbeddedPostgres();
 }

@@ -60,8 +60,12 @@ services:
       DATABASE_DEPLOYMENT_ID: yu-inventory-local-development
       DATABASE_SSL_MODE: disable
       DATABASE_MIGRATION_LOCK_TIMEOUT_MS: 60000
+      YU_DATA_DIRECTORY: /run/legacy-settings
+    volumes:
+      - ./.settings-import:/run/legacy-settings:ro
     command: >-
       sh -c "npm run db:migrate -- --target=development
+      && npm run db:import-settings -- --target=development
       && npm run db:smoke -- --target=development"
     restart: "no"
 

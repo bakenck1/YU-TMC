@@ -49,6 +49,9 @@ manifest не совпадает, smoke не видит runtime grants или da
 - [ ] production TLS использует `verify-full` или отдельно одобренный private
       CA; ingress/trusted proxy headers настроены и проверены;
 - [ ] backup создан, restore проверен на отдельной target database;
+- [ ] settings migration применена до DB-aware runtime, результат legacy import
+      записан, а `.data/settings.json` сохранён на семидневный soak вместе с
+      подтверждённым backup settings row;
 - [ ] staging browser/PWA smoke пройден для login, OAuth, password reset,
       QR, photos и push;
 - [ ] authenticated DAST/pentest выполнен с учётом object-level authorization;

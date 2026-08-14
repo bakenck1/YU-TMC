@@ -2,6 +2,7 @@ import {
   formatDatabaseCommandError,
   loadTargetEnvironment,
 } from "@/lib/db/cli";
+import { DEFAULT_APP_SETTINGS } from "@/lib/app-settings";
 import { DatabaseOperationError, readDatabaseConfig } from "@/lib/db/env";
 import {
   assertDatabaseMigrationHistory,
@@ -31,6 +32,7 @@ const APPLICATION_TABLES = [
   "buildings",
   "idempotency_requests",
   "audit_records",
+  "settings",
   "user_password_credentials",
   "auth_bootstrap",
   "users",
@@ -75,6 +77,11 @@ async function main() {
       await client.query(
         'insert into "yu_inventory"."auth_bootstrap" ("singleton") values (true)',
       );
+      await client.query(
+        `insert into "yu_inventory"."settings" ("id", "payload")
+         values ('global', $1::jsonb)`,
+        [DEFAULT_APP_SETTINGS],
+      );
       await assertResetState(client);
       await client.query("commit");
       console.log(
@@ -100,7 +107,8 @@ async function assertResetState(client: {
     const result = await client.query<{ record_count: number }>(
       `select count(*)::int as record_count from "yu_inventory"."${table}"`,
     );
-    const expectedCount = table === "auth_bootstrap" ? 1 : 0;
+    const expectedCount =
+      table === "auth_bootstrap" || table === "settings" ? 1 : 0;
     if (result.rows[0]?.record_count !== expectedCount) {
       throw new DatabaseOperationError(
         `Database reset verification failed for ${table}.`,

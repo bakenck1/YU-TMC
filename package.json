@@ -26,6 +26,7 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db/migrate.ts",
     "db:import-auth": "node --conditions=react-server --import tsx scripts/db/import-legacy-auth.ts",
+    "db:import-settings": "node --conditions=react-server --import tsx scripts/db/import-settings.ts",
     "db:smoke": "tsx scripts/db/smoke.ts",
     "db:seed": "node --conditions=react-server --import tsx scripts/db/seed.ts",
     "db:reset": "tsx scripts/db/reset.ts",

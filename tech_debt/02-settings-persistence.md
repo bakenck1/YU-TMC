@@ -122,7 +122,50 @@ read/write errors и подтверждённый backup DB row.
 - deployment test подтверждает выбранную модель;
 - при варианте B multi-instance startup test завершается понятной ошибкой.
 
-## Done
+## Status: Done
 
 Есть принятое deployment решение, отсутствует неявный multi-instance data loss,
 миграция/rollback документированы, а test suite доказывает выбранную гарантию.
+
+### Что поставлено в коде
+
+- `yu_inventory.settings` стал singleton-таблицей с `global`-ключом, JSONB
+  payload, версией, временем изменения, default row и защитным delete trigger;
+- `PostgresSettingsRepository` читает и обновляет settings через PostgreSQL,
+  блокирует строку `FOR UPDATE`, увеличивает версию и не использует file
+  adapter как runtime fallback; ошибки подключения и повреждённые строки
+  превращаются в стабильный `settings_unavailable`;
+- `db:import-settings` выполняет одноразовый guarded import старого
+  `.data/settings.json`, поддерживает явный `--source`, fail-closed для
+  повреждённого/невалидного файла и безопасен при повторном запуске;
+- production Compose выполняет migration → import → smoke и монтирует только
+  `./.settings-import`; mobile и оба режима `npm run dev` выполняют ту же
+  подготовку до запуска приложения;
+- runtime/migrator privileges, reset/smoke checks, release checklist, database
+  runbook и test-coverage documentation синхронизированы с контрактом.
+
+### Доказательства и review
+
+- `npm.cmd run test:all`: 548 server, 15 UI и 41 component tests;
+- `npm.cmd run test:database:local`: все локальные PostgreSQL suites, включая
+  4 settings integration tests;
+- focused settings/release tests: 16/16; `lint`, `docs:check`, `ui:check`,
+  `db:check`, `security:check`, `build`, Compose config и `git diff --check` —
+  green;
+- первый независимый review: 7/10 (tests 8/10); исправлены production import,
+  strict payload guard, нормализация ошибок repository и regression coverage;
+- второй независимый review: 7/10 (tests 8/10); исправлены production smoke,
+  внешний `DATABASE_URL` dev startup и отдельный mobile import mount. По
+  договорённости выполнено два review-прохода, третий не запускается.
+
+### Оставленные осознанные границы
+
+- schema owner/superuser всё ещё может намеренно удалить trigger/table или
+  обойти прикладную защиту — это не полномочие runtime роли;
+- JSON shape валидируется application layer, а не отдельной JSON Schema в БД;
+- два одновременных изменения одного и того же поля имеют last-writer-wins;
+  row lock не делает API optimistic-CAS без отдельного expected version;
+- семидневный production soak, backup и archive legacy source остаются
+  операционным release gate и требуют фактического выполнения;
+- реальная сборка Docker image не запускалась локально: Docker daemon
+  недоступен, проверен только `docker compose ... config --quiet`.

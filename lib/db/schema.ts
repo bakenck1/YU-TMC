@@ -19,6 +19,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import type { AppSettings } from "@/lib/app-settings";
+
 import {
   AUDIT_SUBJECT_KINDS,
   DECISION_RECIPIENT_KINDS,
@@ -197,6 +199,22 @@ export const userCodeSequence = inventorySchema.sequence(
 export const passwordResetGenerationSequence = inventorySchema.sequence(
   "password_reset_generation_sequence",
   { startWith: 1, increment: 1, minValue: 1, cache: 1 },
+);
+
+export const settingsTable = inventorySchema.table(
+  "settings",
+  {
+    id: text().primaryKey(),
+    payload: jsonb().$type<AppSettings>().notNull(),
+    version: integer().notNull().default(1),
+    updatedAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check("settings_id_check", sql`${table.id} = 'global'`),
+    check("settings_version_check", sql`${table.version} > 0`),
+  ],
 );
 
 export const usersTable = inventorySchema.table(
