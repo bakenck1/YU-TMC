@@ -43,6 +43,7 @@ live under `components/`. There is no starter `app/page.tsx` to edit.
 npm run lint
 npm run ui:check
 npm run docs:check
+npm run legacy:check
 npm run test:all
 npm run test:database:local
 npm run db:check
@@ -117,11 +118,14 @@ The release gate checklist is maintained in
 [docs/release-checklist.md](docs/release-checklist.md).
 The functional coverage matrix and TDD boundary rules are maintained in
 [docs/test-coverage.md](docs/test-coverage.md).
+The compatibility inventory and legacy sunset policy are maintained in
+[docs/legacy-compatibility.md](docs/legacy-compatibility.md).
 
 Run the documentation contract itself with:
 
 ```powershell
 npm run docs:check
+npm run legacy:check
 ```
 
 The package is private and intentionally retains the existing npm name

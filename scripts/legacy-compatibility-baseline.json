@@ -1,0 +1,85 @@
+{
+  "created": "2026-08-14",
+  "nextReview": "2026-11-12",
+  "evidenceRetentionDays": 90,
+  "inventoryIds": [
+    "LEGACY-PERMISSIONS",
+    "LEGACY-TRANSFER-ROUTES",
+    "LEGACY-QR-ALIASES",
+    "LEGACY-AUTH-IMPORT",
+    "LEGACY-COOKIE-CONTRACT",
+    "LEGACY-SEED-DATA"
+  ],
+  "legacyPermissions": [
+    "legacy.dashboard.read",
+    "legacy.items.read",
+    "legacy.locations.read",
+    "legacy.analytics.read",
+    "legacy.users.read",
+    "legacy.users.manage",
+    "legacy.users.manage_privileged",
+    "legacy.settings.manage"
+  ],
+  "qrFormats": [
+    "legacy_raw",
+    "legacy_url"
+  ],
+  "documentedValues": {
+    "LEGACY-PERMISSIONS": [
+      "legacy.dashboard.read",
+      "legacy.items.read",
+      "legacy.locations.read",
+      "legacy.analytics.read",
+      "legacy.users.read",
+      "legacy.users.manage",
+      "legacy.users.manage_privileged",
+      "legacy.settings.manage"
+    ],
+    "LEGACY-TRANSFER-ROUTES": [
+      "app/api/inventory/transfers/route.ts",
+      "app/api/inventory/transfers/[id]/cancel/route.ts",
+      "app/api/inventory/transfers/[id]/decision/route.ts",
+      "app/api/inventory/transfers/[id]/override/route.ts"
+    ],
+    "LEGACY-QR-ALIASES": [
+      "legacy_raw",
+      "legacy_url"
+    ],
+    "LEGACY-AUTH-IMPORT": [
+      "scripts/db/import-legacy-auth.ts",
+      "lib/server/persistence/legacy/legacy-credential-source.ts",
+      "auth-credentials.json",
+      "AUTH_ADMIN_*"
+    ],
+    "LEGACY-COOKIE-CONTRACT": [
+      "sub",
+      "name",
+      "role",
+      "iat",
+      "exp",
+      "jti",
+      "ver"
+    ],
+    "LEGACY-SEED-DATA": [
+      "scripts/db/seed.ts",
+      "lib/data.ts"
+    ]
+  },
+  "legacyRouteFiles": [
+    "app/api/inventory/transfers/route.ts",
+    "app/api/inventory/transfers/[id]/cancel/route.ts",
+    "app/api/inventory/transfers/[id]/decision/route.ts",
+    "app/api/inventory/transfers/[id]/override/route.ts"
+  ],
+  "seedImportOnly": "scripts/db/seed.ts",
+  "credentialImportOnly": "scripts/db/import-legacy-auth.ts",
+  "cookieContractFields": [
+    "sub",
+    "name",
+    "role",
+    "iat",
+    "exp",
+    "jti",
+    "ver"
+  ]
+}

@@ -13,6 +13,7 @@ const documentationFiles = [
   "docs/production-monitoring.md",
   "docs/release-checklist.md",
   "docs/test-coverage.md",
+  "docs/legacy-compatibility.md",
   "TASKS.md",
 ];
 

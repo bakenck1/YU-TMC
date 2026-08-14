@@ -57,6 +57,7 @@ jobs:
       - name: Validate source, UI and migration contracts
         run: |
           npm run docs:check
+          npm run legacy:check
           npm run lint
           npm run ui:check
           npm run db:check

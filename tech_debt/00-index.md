@@ -32,7 +32,7 @@ release-процессу, multi-instance deployment и доказательст�
 | P2 | [Documentation drift](05-documentation-drift.md) | README/docs/TASKS ведут на существующие команды и пути | S |
 | P2 | [God services/components](06-god-services-components.md) | крупные units разделяются по стабильным workflow seams без смены доменных правил | L |
 | P2 | [Functional test coverage](07-functional-test-coverage.md) | критичные вертикали имеют доказуемые contract/integration/UI tests | M |
-| P3 | [Legacy compatibility policy](08-legacy-compatibility-policy.md) | legacy-код имеет owner, usage evidence и sunset criteria | M |
+| P3 | [Legacy compatibility policy](08-legacy-compatibility-policy.md) | Done: inventory, 90-day evidence policy и CI gate против новых compatibility surfaces | M |
 | P3 | [Audit repository policy](09-audit-repository-policy.md) | исторические audit/generated материалы имеют понятную политику хранения | S / decision |
 
 ## Near-term versus hard/optional
@@ -40,9 +40,9 @@ release-процессу, multi-instance deployment и доказательст�
 Near-term: `03`, `05`, `01`, `04`, затем `07`. Эти изменения маленькие или
 локализованные и дают максимальный эффект без переписывания домена.
 
-Hard/optional: `08`, `09`. `02` и `06` уже закрыты минимальными seams; оставшиеся
-задачи требуют решения о compatibility policy или хранении исторических
-материалов. Их нельзя закрывать механическим удалением compatibility-кода.
+Hard/optional: `09`. `02`, `06` и `08` уже закрыты минимальными seams; оставшаяся
+задача требует решения о хранении исторических материалов. Её нельзя закрывать
+механическим удалением audit/generated data.
 
 ## Общие правила реализации
 
