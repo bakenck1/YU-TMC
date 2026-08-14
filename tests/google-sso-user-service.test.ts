@@ -157,6 +157,7 @@ test("administrator can provision an active SSO-only user without a password", a
       active: true,
     },
     admin.id,
+    admin.version,
   );
 
   assert.equal(created.active, true);

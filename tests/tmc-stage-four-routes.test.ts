@@ -3,7 +3,11 @@ import test from "node:test";
 
 import { createTmcHistoryGetHandler, createTmcNotificationReadPostHandler, createTmcNotificationsGetHandler } from "../lib/server/http/tmc-stage-four-handlers";
 
-const ACTOR = { userId: "11111111-1111-4111-8111-111111111111", role: "employee" as const };
+const ACTOR = {
+  userId: "11111111-1111-4111-8111-111111111111",
+  role: "employee" as const,
+  sessionVersion: 7,
+};
 
 test("history GET parses an allowlisted filter set and rejects parameter pollution", async () => {
   const calls: unknown[][] = [];
@@ -13,11 +17,54 @@ test("history GET parses an allowlisted filter set and rejects parameter polluti
   });
   const response = await handler(new Request("https://inventory.example/api/inventory/transfer-requests?status=pending&overdue=true&limit=10"));
   assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get("cache-control"),
+    "private, no-store, max-age=0, must-revalidate",
+  );
   assert.deepEqual(calls, [[{ status: "pending", overdue: true, limit: 10 }, ACTOR]]);
   for (const query of ["status=pending&status=accepted", "actorId=x", "overdue=1", "limit=999"]) {
     assert.equal((await handler(new Request(`https://inventory.example/api/inventory/transfer-requests?${query}`))).status, 400);
   }
   assert.equal(calls.length, 1);
+});
+
+test("history GET keeps private error responses and forwards only safe retry timing", async () => {
+  const outcomes: unknown[] = [
+    new (await import("../lib/domain/application-error")).ApplicationError(
+      "rate_limited",
+      "too_many_requests",
+      { safeDetails: { retryAfterSeconds: "9" } },
+    ),
+    new (await import("../lib/domain/application-error")).ApplicationError(
+      "rate_limited",
+      "too_many_requests",
+      { safeDetails: { retryAfterSeconds: "\r\nunsafe" } },
+    ),
+    new Error("database secret"),
+  ];
+  const handler = createTmcHistoryGetHandler({
+    authenticate: async () => {
+      throw outcomes.shift();
+    },
+    listHistory: async () => {
+      throw new Error("must_not_run");
+    },
+  });
+
+  const limited = await handler(new Request("https://inventory.example/api/inventory/transfer-requests"));
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "9");
+  assert.match(limited.headers.get("cache-control") ?? "", /private/);
+  assert.match(limited.headers.get("cache-control") ?? "", /no-store/);
+
+  const unsafe = await handler(new Request("https://inventory.example/api/inventory/transfer-requests"));
+  assert.equal(unsafe.status, 429);
+  assert.equal(unsafe.headers.get("retry-after"), null);
+
+  const unavailable = await handler(new Request("https://inventory.example/api/inventory/transfer-requests"));
+  assert.equal(unavailable.status, 500);
+  assert.deepEqual(await unavailable.json(), { error: "internal_error" });
+  assert.match(unavailable.headers.get("cache-control") ?? "", /no-store/);
 });
 
 test("notification routes enforce bounded feed size and bodyless read command", async () => {

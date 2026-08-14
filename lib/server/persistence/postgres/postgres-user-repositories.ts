@@ -18,6 +18,11 @@ import type {
 } from "@/lib/application/ports/user-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const USERS = '"yu_inventory"."users"';
 const CREDENTIALS = '"yu_inventory"."user_password_credentials"';
@@ -73,9 +78,10 @@ class PostgresUserRepository implements UserRepository {
     const result = await this.source.query<UserRow>(
       `select *
        from ${USERS}
-       order by created_at desc, id`,
+       order by created_at desc, id
+       ${sqlCollectionLimit(COLLECTION_LIMITS.users)}`,
     );
-    return result.rows.map(mapUser);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.users).map(mapUser);
   }
 
   async searchActiveRecipients(

@@ -6,11 +6,14 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 const HISTORY_PARAMETERS = new Set(["status", "createdFrom", "createdTo", "initiatorId", "recipientId", "buildingId", "roomId", "itemId", "overdue", "limit", "requestCursor", "locationCursor"]);
+const PRIVATE_RESPONSE_CACHE_CONTROL =
+  "private, no-store, max-age=0, must-revalidate";
 type Actor = { userId: string; role: UserRole };
+type AuthenticatedHistoryActor = Actor & { sessionVersion: number };
 
 export function createTmcHistoryGetHandler(dependencies: {
-  authenticate(request: Request): Promise<Actor>;
-  listHistory(filters: TmcTransferHistoryFilters, actor: Actor): Promise<TmcTransferHistoryDto>;
+  authenticate(request: Request): Promise<AuthenticatedHistoryActor>;
+  listHistory(filters: TmcTransferHistoryFilters, actor: AuthenticatedHistoryActor): Promise<TmcTransferHistoryDto>;
 }) {
   return async (request: Request) => {
     try {
@@ -39,9 +42,12 @@ export function createTmcHistoryGetHandler(dependencies: {
           filters[key] = value;
         }
       }
-      return Response.json(await dependencies.listHistory(filters, actor), { headers: { "cache-control": "no-store" } });
+      return Response.json(
+        await dependencies.listHistory(filters, actor),
+        { headers: historyHeaders() },
+      );
     } catch (error) {
-      return applicationErrorResponse(error, { "cache-control": "no-store" });
+      return applicationErrorResponse(error, historyHeaders(error));
     }
   };
 }
@@ -81,3 +87,16 @@ export function createTmcNotificationReadPostHandler(dependencies: {
 }
 
 function invalid() { return new ApplicationError("validation", "invalid_request"); }
+
+function historyHeaders(error?: unknown): HeadersInit {
+  const retryAfter =
+    error instanceof ApplicationError && error.kind === "rate_limited"
+      ? error.safeDetails?.retryAfterSeconds
+      : undefined;
+  return {
+    "cache-control": PRIVATE_RESPONSE_CACHE_CONTROL,
+    ...(retryAfter && /^[1-9]\d{0,8}$/.test(retryAfter)
+      ? { "retry-after": retryAfter }
+      : {}),
+  };
+}

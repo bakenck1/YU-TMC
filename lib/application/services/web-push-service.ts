@@ -98,13 +98,19 @@ export class WebPushService {
     const subscription = normalizeSubscription(input);
     await this.unitOfWork.transaction(async ({ webPushSubscriptions }) => {
       await webPushSubscriptions.lockUserSubscriptions(actor.userId);
-      await webPushSubscriptions.upsert({
+      const stored = await webPushSubscriptions.upsert({
         id: this.ids.create(),
         userId: actor.userId,
         ...subscription,
         userAgent: normalizeUserAgent(userAgent),
         now: this.clock.now(),
       });
+      if (!stored) {
+        throw new ApplicationError(
+          "conflict",
+          "push_subscription_conflict",
+        );
+      }
       await webPushSubscriptions.deleteOlderThanLimit(actor.userId, 10);
     });
   }
@@ -638,6 +644,8 @@ function normalizeEndpoint(value: unknown) {
       endpoint.username ||
       endpoint.password ||
       endpoint.port ||
+      value.includes("#") ||
+      (endpoint.search === "" && value.includes("?")) ||
       !isTrustedPushServiceHost(endpoint.hostname) ||
       endpoint.href !== value
     ) {

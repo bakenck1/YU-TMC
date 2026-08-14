@@ -19,6 +19,10 @@ import {
 } from "@/lib/tmc-transfer-request-card";
 import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";
 
+function formatContact(user: { fullName: string; email: string | null }) {
+  return user.email ? `${user.fullName} · ${user.email}` : user.fullName;
+}
+
 export default function TmcTransferRequestCard({
   request,
   canDecide,
@@ -207,8 +211,8 @@ export default function TmcTransferRequestCard({
         </div>
         {canCancel && request.status === "pending" ? <button type="button" disabled={submitting} onClick={() => void cancelRequest()} className="mt-4 min-h-11 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.cancel")}</button> : null}
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-          <TmcRequestMeta label={t("tmc.request.initiator")} value={`${request.initiator.fullName} · ${request.initiator.email}`} />
-          <TmcRequestMeta label={t("tmc.request.recipient")} value={`${request.recipient.fullName} · ${request.recipient.email}`} />
+          <TmcRequestMeta label={t("tmc.request.initiator")} value={formatContact(request.initiator)} />
+          <TmcRequestMeta label={t("tmc.request.recipient")} value={formatContact(request.recipient)} />
           <div><dt className="font-medium text-zinc-500">{t("tmc.request.createdAt")}</dt><dd className="mt-1 text-zinc-900"><time dateTime={request.createdAt}>{createdAt}</time></dd></div>
           <TmcRequestMeta label={t("tmc.request.summary")} value={`${request.summary.pending} / ${request.summary.total}`} />
         </dl>

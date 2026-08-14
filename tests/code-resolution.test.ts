@@ -7,7 +7,6 @@ import type {
 } from "../lib/application/ports/qr-resolution-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { QrResolutionService } from "../lib/application/services/qr-resolution-service";
-import { ApplicationError } from "../lib/domain/application-error";
 
 const QR_RECORD: QrResolutionRecord = {
   canonicalKey: "INV-42",
@@ -166,13 +165,9 @@ test("item-only QR permission never discloses non-item or inactive targets", asy
     { ...BARCODE_RECORD, targetStatus: "maintenance" as const },
   ]) {
     record = restricted;
-    await assert.rejects(
-      () => service.resolve("INV-42", employee, "qr"),
-      (error: unknown) =>
-        error instanceof ApplicationError &&
-        error.kind === "not_found" &&
-        error.publicCode === "not_accessible",
-    );
+    const result = await service.resolve("INV-42", employee, "qr");
+    assert.equal(result.status, "unknown");
+    assert.equal(result.target, null);
   }
 
   record = BARCODE_RECORD;
@@ -187,16 +182,16 @@ test("item-only QR permission never discloses non-item or inactive targets", asy
         ?.kind,
       "room",
     );
-    await assert.rejects(
-      () =>
-        service.resolve(
+    assert.equal(
+      (
+        await service.resolve(
           "INV-42",
           { userId: role, role },
           "qr",
           "item",
-        ),
-      (error: unknown) =>
-        error instanceof ApplicationError && error.publicCode === "not_accessible",
+        )
+      ).target,
+      null,
     );
   }
 });
@@ -218,17 +213,96 @@ test("an explicit room scope preserves the authenticated room scanner", async ()
     "room",
   );
   assert.equal(result.target?.kind, "room");
-  await assert.rejects(
-    () =>
-      service.resolve(
+  assert.equal(
+    (
+      await service.resolve(
         "INV-42",
         { userId: "employee", role: "employee" },
         "qr",
         "item",
-      ),
-    (error: unknown) =>
-      error instanceof ApplicationError && error.publicCode === "not_accessible",
+      )
+    ).target,
+    null,
   );
+});
+
+test("employee lookups cannot distinguish inaccessible records from absent codes", async () => {
+  let record: QrResolutionRecord | null = null;
+  const service = createService({
+    async findByCanonicalKey() {
+      return record;
+    },
+    async findItemByBarcode() {
+      return record;
+    },
+  });
+  const employee = { userId: "employee", role: "employee" } as const;
+
+  const absentBarcode = await service.resolve(
+    "INV-42",
+    employee,
+    "barcode",
+    "item",
+  );
+  record = { ...BARCODE_RECORD, targetStatus: "maintenance" };
+  const inaccessibleBarcode = await service.resolve(
+    "INV-42",
+    employee,
+    "barcode",
+    "item",
+  );
+  assert.deepEqual(inaccessibleBarcode, absentBarcode);
+
+  record = null;
+  const absentQr = await service.resolve(
+    "INV-42",
+    employee,
+    "qr",
+    "item",
+  );
+  record = QR_RECORD;
+  const wrongTargetQr = await service.resolve(
+    "INV-42",
+    employee,
+    "qr",
+    "item",
+  );
+  assert.deepEqual(wrongTargetQr, absentQr);
+});
+
+test("employee resolution exposes assignment state without a foreign owner's name", async () => {
+  const foreignItem: QrResolutionRecord = {
+    ...BARCODE_RECORD,
+    responsibleName: "Foreign Owner",
+    responsibleUserId: "foreign-employee",
+  };
+  const service = createService({
+    async findByCanonicalKey() {
+      return foreignItem;
+    },
+    async findItemByBarcode() {
+      return foreignItem;
+    },
+  });
+
+  const employeeResult = await service.resolve(
+    "INV-42",
+    { userId: "employee", role: "employee" },
+    "barcode",
+    "item",
+  );
+  assert.equal(employeeResult.target?.responsibleName, undefined);
+  assert.equal(employeeResult.target?.isAssigned, true);
+  assert.equal(employeeResult.target?.isCurrentUserResponsible, false);
+
+  const warehouseResult = await service.resolve(
+    "INV-42",
+    { userId: "warehouse", role: "warehouse" },
+    "barcode",
+    "item",
+  );
+  assert.equal(warehouseResult.target?.responsibleName, "Foreign Owner");
+  assert.equal(warehouseResult.target?.isAssigned, true);
 });
 
 function createService(

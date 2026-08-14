@@ -6,6 +6,7 @@ import type {
   TmcStageFourRepository,
   TmcTransferHistoryQuery,
   TmcTransferRequestRecord,
+  TmcTransferUserRecord,
 } from "../lib/application/ports/tmc-operation-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { TmcTransferRequestService } from "../lib/application/services/tmc-transfer-request-service";
@@ -14,6 +15,7 @@ import { ApplicationError } from "../lib/domain/application-error";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_ID = "22222222-2222-4222-8222-222222222222";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
+const ADMIN_ID = "abababab-abab-4bab-8bab-abababababab";
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 
 test("history is scoped to participants for employees and can include all for admins", async () => {
@@ -23,8 +25,13 @@ test("history is scoped to participants for employees and can include all for ad
   const employeeHistory = await service.listHistory({ status: "pending", overdue: true, limit: 25 }, {
     userId: USER_ID,
     role: "employee",
+    sessionVersion: 7,
   });
-  await service.listHistory({}, { userId: USER_ID, role: "admin" });
+  await service.listHistory({}, {
+    userId: ADMIN_ID,
+    role: "admin",
+    sessionVersion: 7,
+  });
 
   assert.equal(employeeHistory.locationChanges[0]?.occurredAt, NOW.toISOString());
 
@@ -36,7 +43,7 @@ test("history is scoped to participants for employees and can include all for ad
     limit: query.limit,
   })), [
     { actorId: USER_ID, includeAll: false, status: "pending", overdue: true, limit: 26 },
-    { actorId: USER_ID, includeAll: true, status: undefined, overdue: undefined, limit: 51 },
+    { actorId: ADMIN_ID, includeAll: true, status: undefined, overdue: undefined, limit: 51 },
   ]);
 });
 
@@ -52,6 +59,7 @@ test("history only exposes a snapshot participant's own items from a multi-owner
   const result = await service.listHistory({}, {
     userId: USER_ID,
     role: "employee",
+    sessionVersion: 7,
   });
 
   assert.deepEqual(
@@ -61,9 +69,9 @@ test("history only exposes a snapshot participant's own items from a multi-owner
   assert.equal(result.requests[0]?.summary.total, 1);
 
   for (const actor of [
-    { userId: request.initiator.id, role: "employee" as const },
-    { userId: request.recipient.id, role: "employee" as const },
-    { userId: "abababab-abab-4bab-8bab-abababababab", role: "admin" as const },
+    { userId: request.initiator.id, role: "employee" as const, sessionVersion: 7 },
+    { userId: request.recipient.id, role: "employee" as const, sessionVersion: 7 },
+    { userId: ADMIN_ID, role: "admin" as const, sessionVersion: 7 },
   ]) {
     const full = await service.listHistory({}, actor);
     assert.equal(full.requests[0]?.items.length, 2);
@@ -85,6 +93,7 @@ test("snapshot-only history derives status from the participant's items instead 
   const result = await createService(stageFour).listHistory({}, {
     userId: USER_ID,
     role: "employee",
+    sessionVersion: 7,
   });
 
   assert.equal(result.requests[0]?.status, "rejected");
@@ -94,7 +103,11 @@ test("snapshot-only history derives status from the participant's items instead 
 test("history rejects unknown identities, impossible periods, invalid ids and excessive limits", async () => {
   const stageFour = new MemoryStageFourRepository();
   const service = createService(stageFour);
-  const actor = { userId: USER_ID, role: "employee" as const };
+  const actor = {
+    userId: USER_ID,
+    role: "employee" as const,
+    sessionVersion: 7,
+  };
 
   for (const filters of [
     { createdFrom: "2026-08-11T00:00:00.000Z", createdTo: "2026-08-10T00:00:00.000Z" },
@@ -107,6 +120,62 @@ test("history rejects unknown identities, impossible periods, invalid ids and ex
       (error: unknown) => error instanceof ApplicationError && error.kind === "validation",
     );
   }
+  assert.equal(stageFour.historyQueries.length, 0);
+});
+
+test("history reauthorizes role, activity, deletion and session version before collection reads", async () => {
+  const staleReaders: Array<TmcTransferUserRecord | null> = [
+    null,
+    { ...liveHistoryReader(ADMIN_ID), active: false },
+    { ...liveHistoryReader(ADMIN_ID), deletedAt: NOW },
+    { ...liveHistoryReader(ADMIN_ID), version: 8 },
+    { ...liveHistoryReader(ADMIN_ID), role: "employee" },
+  ];
+
+  for (const currentReader of staleReaders) {
+    const stageFour = new MemoryStageFourRepository();
+    stageFour.history = [historyRequest([historyItem(OTHER_ID, "Foreign", "INV-FOREIGN")])];
+    let authorizationLookups = 0;
+    const service = createService(stageFour, () => {
+      authorizationLookups += 1;
+      return currentReader;
+    });
+
+    await assert.rejects(
+      service.listHistory({}, {
+        userId: ADMIN_ID,
+        role: "admin",
+        sessionVersion: 7,
+      }),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.kind === "forbidden",
+    );
+    assert.equal(authorizationLookups, 1);
+    assert.equal(stageFour.historyQueries.length, 0);
+    assert.equal(stageFour.locationHistoryQueries.length, 0);
+  }
+});
+
+test("history rejects malformed session actors before repository access", async () => {
+  const stageFour = new MemoryStageFourRepository();
+  let authorizationLookups = 0;
+  const service = createService(stageFour, (id) => {
+    authorizationLookups += 1;
+    return liveHistoryReader(id);
+  });
+
+  for (const sessionVersion of [0, -1, 1.5, Number.NaN]) {
+    await assert.rejects(
+      service.listHistory({}, {
+        userId: USER_ID,
+        role: "employee",
+        sessionVersion,
+      }),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.kind === "forbidden",
+    );
+  }
+  assert.equal(authorizationLookups, 0);
   assert.equal(stageFour.historyQueries.length, 0);
 });
 
@@ -138,11 +207,16 @@ test("marking a notification read hides BOLA as not found", async () => {
   assert.equal(stageFour.markCalls[0]?.includeAdminQueue, false);
 });
 
-function createService(stageFour: MemoryStageFourRepository) {
+function createService(
+  stageFour: MemoryStageFourRepository,
+  findReader: (id: string) => TmcTransferUserRecord | null = liveHistoryReader,
+) {
   const repositories = {
     stageFour,
     idempotency: {},
-    transferRequests: {},
+    transferRequests: {
+      findUserById: async (id: string) => findReader(id),
+    },
   } as unknown as TmcOperationRepositories;
   const unitOfWork: UnitOfWork<TmcOperationRepositories> = {
     read: (work) => work(repositories),
@@ -153,6 +227,18 @@ function createService(stageFour: MemoryStageFourRepository) {
     { now: () => NOW },
     { create: () => "99999999-9999-4999-8999-999999999999" },
   );
+}
+
+function liveHistoryReader(id: string): TmcTransferUserRecord {
+  return {
+    id,
+    fullName: id === ADMIN_ID ? "Administrator" : "Employee",
+    email: `${id}@example.test`,
+    role: id === ADMIN_ID ? "admin" : "employee",
+    active: true,
+    deletedAt: null,
+    version: 7,
+  };
 }
 
 class MemoryStageFourRepository implements TmcStageFourRepository {

@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   TMC_TRANSFER_ITEM_RESULTS,
   TMC_TRANSFER_REQUEST_STATUSES,
-  type TmcTransferItemResult,
   type TmcTransferRequestStatus,
 } from "@/lib/contracts/inventory-domain";
 import {
@@ -17,6 +16,7 @@ export type {
 
 export const TMC_OPERATION_PROBLEM_CODES = [
   "item_not_found",
+  "item_unavailable",
   "item_inactive",
   "item_unassigned",
   "forbidden",
@@ -34,7 +34,8 @@ export type TmcOperationProblemCode =
 export interface TmcOperationUserDto {
   id: string;
   fullName: string;
-  email: string;
+  /** Contact email is omitted from participant-scoped request projections. */
+  email: string | null;
   role: UserRole;
 }
 
@@ -295,7 +296,7 @@ const timestampSchema = z.string().refine(
 const operationUserSchema = z.object({
   id: uuidSchema,
   fullName: z.string(),
-  email: z.string(),
+  email: z.string().nullable(),
   role: z.enum(USER_ROLES),
 }).strict();
 const itemCardSchema = z.object({

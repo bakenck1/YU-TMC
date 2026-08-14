@@ -25,6 +25,7 @@ export async function PATCH(
       id,
       input,
       actor.userId,
+      actor.sessionVersion,
     );
     return Response.json({ user });
   } catch (error) {
@@ -47,6 +48,7 @@ export async function DELETE(
       id,
       version,
       actor.userId,
+      actor.sessionVersion,
     );
     return new Response(null, { status: 204 });
   } catch (error) {

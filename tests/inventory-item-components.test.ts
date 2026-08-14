@@ -360,6 +360,7 @@ test("administrator and assigned employee can add normalized item comments while
     role: "employee",
   });
   assert.equal(result[0]?.message, "Checked\r\nonsite");
+  assert.equal(result[0]?.authorEmail, null);
   assert.equal(audits[0]?.action, "item.comment_added");
   assert.deepEqual(audits[0]?.afterValues, { message: "Checked\r\nonsite" });
   await assert.rejects(
@@ -374,6 +375,12 @@ test("administrator and assigned employee can add normalized item comments while
     role: "warehouse",
   });
   assert.equal(warehouseComments.length, 1);
+  assert.equal(warehouseComments[0]?.authorEmail, null);
+  const administratorComments = await service.listComments(IDS[0], {
+    userId: "admin-1",
+    role: "admin",
+  });
+  assert.equal(administratorComments[0]?.authorEmail, "employee@example.com");
   await assert.rejects(
     service.addComment(IDS[0], "   ", {
       userId: "employee-1",
@@ -410,6 +417,7 @@ test("comment attachments are normalized, stored atomically, and exposed to read
   assert.equal(attachments[0]?.fileName, "evidence.txt");
   assert.equal(attachments[0]?.sizeBytes, 8);
   assert.equal(result[0]?.attachment?.fileName, "evidence.txt");
+  assert.equal(result[0]?.authorEmail, null);
   await assert.rejects(service.addComment(IDS[0], "bad", { userId: "employee-1", role: "employee" }, {
     fileName: "payload.html",
     mediaType: "text/html",

@@ -199,7 +199,7 @@ describe("TMC transfer request transactions", () => {
     });
     expect(changedResponsibility.items[0]).toMatchObject({
       itemId: externallyClosedPeriodItemId,
-      problem: "forbidden",
+      problem: "item_unavailable",
     });
     expect(await requestCount()).toBe(requestsBeforeResponsibilityChange);
   });
@@ -247,28 +247,28 @@ describe("TMC transfer request transactions", () => {
     expect(employeeResult.items.map((item) =>
       item.outcome === "problem" ? item.problem : item.outcome)).toEqual([
       "included",
-      "forbidden",
+      "item_unavailable",
     ]);
 
-    const requestsBeforeForbiddenBatch = await requestCount();
-    const forbiddenResult = await createService().create({
+    const requestsBeforeUnavailableBatch = await requestCount();
+    const unavailableResult = await createService().create({
       recipientId: fixture.recipientIds[1]!,
       itemIds: [fixture.itemIds[3]!],
     }, { userId: fixture.initiatorId, role: "employee" });
-    expect(forbiddenResult).toMatchObject({
+    expect(unavailableResult).toMatchObject({
       request: null,
       included: 0,
       problems: 1,
     });
-    expect(forbiddenResult.items[0]).toMatchObject({ problem: "forbidden" });
-    expect(await requestCount()).toBe(requestsBeforeForbiddenBatch);
+    expect(unavailableResult.items[0]).toMatchObject({ problem: "item_unavailable" });
+    expect(await requestCount()).toBe(requestsBeforeUnavailableBatch);
 
     const requestsBeforeStaleAdmin = await requestCount();
     const staleAdminResult = await createService().create({
       recipientId: fixture.recipientIds[1]!,
       itemIds: [fixture.itemIds[3]!],
     }, { userId: fixture.initiatorId, role: "admin" });
-    expect(staleAdminResult.items[0]).toMatchObject({ problem: "forbidden" });
+    expect(staleAdminResult.items[0]).toMatchObject({ problem: "item_unavailable" });
     expect(await requestCount()).toBe(requestsBeforeStaleAdmin);
 
     await database.query(

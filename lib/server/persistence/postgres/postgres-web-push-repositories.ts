@@ -11,6 +11,11 @@ import type {
   TmcPushOutboxRepository,
 } from "@/lib/application/ports/web-push-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const SUBSCRIPTIONS = '"yu_inventory"."web_push_subscriptions"';
 const USERS = '"yu_inventory"."users"';
@@ -216,9 +221,9 @@ class PostgresWebPushSubscriptionRepository
 
   async upsert(
     input: UpsertWebPushSubscriptionRecord,
-  ): Promise<WebPushSubscriptionRecord> {
+  ): Promise<WebPushSubscriptionRecord | null> {
     const result = await this.source.query<SubscriptionRow>(
-      `insert into ${SUBSCRIPTIONS}
+      `insert into ${SUBSCRIPTIONS} as existing
          (id, user_id, endpoint, p256dh, auth, expiration_time, user_agent,
           language, created_at, updated_at)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
@@ -230,6 +235,7 @@ class PostgresWebPushSubscriptionRepository
            user_agent = excluded.user_agent,
            language = excluded.language,
            updated_at = excluded.updated_at
+       where existing.user_id = excluded.user_id
        returning id, user_id, endpoint, p256dh, auth, expiration_time,
                  user_agent, language, created_at, updated_at`,
       [
@@ -245,8 +251,7 @@ class PostgresWebPushSubscriptionRepository
       ],
     );
     const row = result.rows[0];
-    if (!row) throw new Error("push_subscription_upsert_failed");
-    return mapSubscription(row);
+    return row ? mapSubscription(row) : null;
   }
 
   async listByUser(userId: string): Promise<WebPushSubscriptionRecord[]> {
@@ -260,10 +265,15 @@ class PostgresWebPushSubscriptionRepository
           and u.is_active = true
           and u.deleted_at is null
           and u.role in ('admin', 'warehouse', 'employee')
-        order by s.updated_at desc, s.id`,
+        order by s.updated_at desc, s.id
+        ${sqlCollectionLimit(COLLECTION_LIMITS.pushSubscriptionsPerUser)}`,
       [userId],
     );
-    return result.rows.map(mapSubscription);
+    return assertCollectionSize(
+      result.rows,
+      COLLECTION_LIMITS.pushSubscriptionsPerUser,
+      "push_subscriptions_too_large",
+    ).map(mapSubscription);
   }
 
   async deleteOlderThanLimit(userId: string, keep: number): Promise<void> {

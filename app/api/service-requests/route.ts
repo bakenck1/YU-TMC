@@ -17,6 +17,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PRIVATE_RESPONSE_HEADERS = {
+  "cache-control": "private, no-store, max-age=0, must-revalidate",
+};
+
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
@@ -25,7 +29,7 @@ export async function GET(request: Request) {
       parseFilters(url.searchParams),
       authorizationActor(user),
     );
-    return Response.json({ requests });
+    return Response.json({ requests }, { headers: PRIVATE_RESPONSE_HEADERS });
   } catch (error) {
     return errorResponse(error);
   }
@@ -39,7 +43,10 @@ export async function POST(request: Request) {
       parseCreate(await readPhotoJsonRequest(request)),
       authorizationActor(user),
     );
-    return Response.json({ request: serviceRequest }, { status: 201 });
+    return Response.json(
+      { request: serviceRequest },
+      { status: 201, headers: PRIVATE_RESPONSE_HEADERS },
+    );
   } catch (error) {
     return errorResponse(error instanceof SyntaxError ? invalidRequest() : error);
   }
@@ -111,6 +118,9 @@ function invalidRequest() {
 
 function errorResponse(error: unknown) {
   return error instanceof ApplicationError
-    ? applicationErrorResponse(error)
-    : Response.json({ error: "service_requests_unavailable" }, { status: 503 });
+    ? applicationErrorResponse(error, PRIVATE_RESPONSE_HEADERS)
+    : Response.json(
+        { error: "service_requests_unavailable" },
+        { status: 503, headers: PRIVATE_RESPONSE_HEADERS },
+      );
 }

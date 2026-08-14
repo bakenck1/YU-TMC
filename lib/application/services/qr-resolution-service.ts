@@ -45,7 +45,15 @@ export class QrResolutionService {
           barcode.fallbackKey,
         ),
       );
-      if (!record) {
+      if (
+        !record ||
+        !isRecordAccessible(record, {
+          fullAccess,
+          itemAccess,
+          roomAccess,
+          targetScope,
+        })
+      ) {
         return {
           status: "unknown",
           canonicalKey: barcode.value,
@@ -54,13 +62,7 @@ export class QrResolutionService {
           target: null,
         };
       }
-      assertRecordAccessible(record, {
-        fullAccess,
-        itemAccess,
-        roomAccess,
-        targetScope,
-      });
-      return toDto(record, fullAccess || itemAccess, actor.userId);
+      return toDto(record, fullAccess, actor.userId);
     }
 
     const parsed = parseQrIdentifierInput(input);
@@ -84,7 +86,15 @@ export class QrResolutionService {
         barcode.fallbackKey,
       );
     });
-    if (!record) {
+    if (
+      !record ||
+      !isRecordAccessible(record, {
+        fullAccess,
+        itemAccess,
+        roomAccess,
+        targetScope,
+      })
+    ) {
       return {
         status:
           parsed.format === "generated_v1"
@@ -96,21 +106,15 @@ export class QrResolutionService {
         target: null,
       };
     }
-    // A physical QR is not a universal capability. Item-only lookups stay
-    // opaque for foreign targets; active rooms require the explicit room
-    // scope used by the authenticated room scanner.
-    assertRecordAccessible(record, {
-      fullAccess,
-      itemAccess,
-      roomAccess,
-      targetScope,
-    });
 
-    return toDto(record, fullAccess || itemAccess, actor.userId);
+    return toDto(record, fullAccess, actor.userId);
   }
 }
 
-function assertRecordAccessible(
+// A physical code is not a universal capability. Inaccessible and absent
+// records intentionally share the same resolver result to avoid an existence
+// oracle for revoked, inactive, or out-of-scope targets.
+function isRecordAccessible(
   record: QrResolutionRecord,
   access: {
     fullAccess: boolean;
@@ -118,15 +122,15 @@ function assertRecordAccessible(
     roomAccess: boolean;
     targetScope: "any" | "item" | "room";
   },
-): void {
+): boolean {
   if (
     access.targetScope !== "any" &&
     record.targetKind !== access.targetScope
   ) {
-    throw new ApplicationError("not_found", "not_accessible");
+    return false;
   }
-  if (access.fullAccess) return;
-  if (
+  if (access.fullAccess) return true;
+  return !(
     record.qrStatus !== "active" ||
     record.targetStatus !== "active" ||
     !(
@@ -135,16 +139,16 @@ function assertRecordAccessible(
         access.targetScope === "room" &&
         access.roomAccess)
     )
-  ) {
-    throw new ApplicationError("not_found", "not_accessible");
-  }
+  );
 }
 
 function toDto(
   record: QrResolutionRecord,
-  includeResponsibleName: boolean,
+  includeAllResponsibleNames: boolean,
   actorUserId: string,
 ): QrResolutionDto {
+  const isCurrentUserResponsible =
+    record.responsibleUserId === actorUserId;
   return {
     status: record.qrStatus === "revoked" ? "revoked" : "resolved",
     canonicalKey: record.canonicalKey,
@@ -158,10 +162,14 @@ function toDto(
       buildingName: record.buildingName ?? undefined,
       roomDesignation: record.roomDesignation ?? undefined,
       inventoryNumber: record.inventoryNumber ?? undefined,
-      responsibleName: includeResponsibleName
+      responsibleName:
+        includeAllResponsibleNames || isCurrentUserResponsible
         ? record.responsibleName
         : undefined,
-      isCurrentUserResponsible: record.responsibleUserId === actorUserId,
+      isAssigned:
+        typeof record.responsibleUserId === "string" &&
+        record.responsibleUserId.length > 0,
+      isCurrentUserResponsible,
     },
   };
 }

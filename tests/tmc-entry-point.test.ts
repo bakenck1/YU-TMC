@@ -71,6 +71,11 @@ test("TMC entry route loads participant-scoped requests and the user's own items
   assert.match(header, /<TmcNotifications/);
 });
 
+test("TMC history page forwards the session proof to the history service", () => {
+  const page = readFileSync("app/(protected)/tmc/history/page.tsx", "utf8");
+  assert.match(page, /listHistory\(filters,\s*\{[\s\S]*userId: user\.userId[\s\S]*role: user\.role[\s\S]*sessionVersion: user\.sessionVersion/);
+});
+
 test("TMC landing exposes exactly the three specified operations", () => {
   assert.deepEqual(TMC_OPERATIONS, [
     { id: "receive", href: "/tmc/receive", labelKey: "tmc.operation.receive" },

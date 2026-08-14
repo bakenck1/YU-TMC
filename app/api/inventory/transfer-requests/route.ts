@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     authenticate: requireCurrentUser,
     createIdempotent: (input, actor, idempotencyKey) =>
       services.tmcTransferRequests.createIdempotent(input, actor, idempotencyKey),
-    onCreated: (event) => {
+    onCreated: () => {
       after(() => services.push.processTmcPushOutbox());
     },
     onCreationNotificationSchedulingError: (event, error) => {

@@ -17,6 +17,11 @@ import type {
   RoomSnapshot,
 } from "@/lib/application/ports/inventory-inspection-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const INSPECTIONS = '"yu_inventory"."inspections"';
 const INSPECTION_ROOMS = '"yu_inventory"."inspection_rooms"';
@@ -106,10 +111,11 @@ class PostgresInventoryInspectionRepository
          from ${INSPECTIONS}
         ${technicianId ? "where technician_id = $1" : ""}
         order by updated_at desc, id
+        ${sqlCollectionLimit(COLLECTION_LIMITS.inspections)}
         `,
       technicianId ? [technicianId] : [],
     );
-    return result.rows.map(mapInspection);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inspections).map(mapInspection);
   }
 
   async findInspection(id: string): Promise<InspectionRecord | null> {
@@ -160,10 +166,11 @@ class PostgresInventoryInspectionRepository
               added_at, inspected_at
          from ${INSPECTION_ROOMS}
         where inspection_id = $1
-        order by added_at, id`,
+        order by added_at, id
+        ${sqlCollectionLimit(COLLECTION_LIMITS.inspectionRooms)}`,
       [inspectionId],
     );
-    return result.rows.map(mapRoom);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inspectionRooms).map(mapRoom);
   }
 
   async findInspectionRoom(
@@ -231,10 +238,13 @@ class PostgresInventoryInspectionRepository
 
   async listItemResults(inspectionId: string): Promise<ItemResultRecord[]> {
     const result = await this.source.query<ItemResultRow>(
-      itemResultSelect("where ir.inspection_id = $1"),
+      itemResultSelect(
+        "where ir.inspection_id = $1",
+        sqlCollectionLimit(COLLECTION_LIMITS.inspectionRows),
+      ),
       [inspectionId],
     );
-    return result.rows.map(mapItemResult);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inspectionRows).map(mapItemResult);
   }
 
   async listExpectedItems(inspectionId: string): Promise<InspectionExpectedItemRecord[]> {
@@ -250,10 +260,11 @@ class PostgresInventoryInspectionRepository
          join ${INSPECTION_ROOMS} room on room.id = snapshot.inspection_room_id
         where room.inspection_id = $1
         order by snapshot.building_name_snapshot, snapshot.room_designation_snapshot,
-                 snapshot.item_name_snapshot, snapshot.item_id`,
+                 snapshot.item_name_snapshot, snapshot.item_id
+        ${sqlCollectionLimit(COLLECTION_LIMITS.inspectionRows)}`,
       [inspectionId],
     );
-    return result.rows.map((row) => ({
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inspectionRows).map((row) => ({
       inspectionRoomId: row.inspection_room_id,
       itemId: row.item_id,
       registryRoomId: row.registry_room_id,
@@ -588,7 +599,7 @@ function mapRoom(row: InspectionRoomRow): InspectionRoomRecord {
   };
 }
 
-function itemResultSelect(where: string) {
+function itemResultSelect(where: string, limit = "") {
   return `select ir.id, ir.inspection_id, ir.inspection_room_id, ir.item_id,
                  ir.registry_room_id_at_scan, ir.responsible_id_at_scan,
                  ir.item_name_snapshot, ir.inventory_number_snapshot,
@@ -603,7 +614,8 @@ function itemResultSelect(where: string) {
                limit 1
             ) revision on true
             ${where}
-           order by ir.created_at desc, ir.id`;
+           order by ir.created_at desc, ir.id
+           ${limit}`;
 }
 
 function mapItemResult(row: ItemResultRow): ItemResultRecord {

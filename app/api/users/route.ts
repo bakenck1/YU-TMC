@@ -8,12 +8,20 @@ import { requirePermission } from "@/lib/server/security/request-user";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PRIVATE_NO_STORE_HEADERS = {
+  "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+} as const;
+
 export async function GET(request: Request) {
   try {
-    await requirePermission(request, "legacy.users.read");
-    return Response.json({
-      users: await getApplicationServices().users.listUsers(),
-    });
+    const actor = await requirePermission(request, "legacy.users.read");
+    return Response.json(
+      {
+        users:
+          await getApplicationServices().users.listUsersForManagement(actor),
+      },
+      { headers: PRIVATE_NO_STORE_HEADERS },
+    );
   } catch (error) {
     return userErrorResponse(normalizeRequestError(error));
   }
@@ -27,8 +35,12 @@ export async function POST(request: Request) {
     const user = await getApplicationServices().users.createUser(
       input,
       actor.userId,
+      actor.sessionVersion,
     );
-    return Response.json({ user }, { status: 201 });
+    return Response.json(
+      { user },
+      { status: 201, headers: PRIVATE_NO_STORE_HEADERS },
+    );
   } catch (error) {
     return userErrorResponse(normalizeRequestError(error));
   }
@@ -74,6 +86,9 @@ function normalizeRequestError(error: unknown): unknown {
 
 function userErrorResponse(error: unknown): Response {
   return error instanceof ApplicationError
-    ? applicationErrorResponse(error)
-    : Response.json({ error: "users_unavailable" }, { status: 503 });
+    ? applicationErrorResponse(error, PRIVATE_NO_STORE_HEADERS)
+    : Response.json(
+        { error: "users_unavailable" },
+        { status: 503, headers: PRIVATE_NO_STORE_HEADERS },
+      );
 }

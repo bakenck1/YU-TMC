@@ -28,7 +28,7 @@ const PROBLEM_RESULT: CreateTmcTransferRequestResultDto = {
   total: 1,
   included: 0,
   problems: 1,
-  items: [{ itemId: ITEM_ID, outcome: "problem", problem: "item_not_found" }],
+  items: [{ itemId: ITEM_ID, outcome: "problem", problem: "item_unavailable" }],
 };
 
 test("TMC transfer request server boundary type-checks and wires only idempotent create", () => {

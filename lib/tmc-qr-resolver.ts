@@ -178,6 +178,7 @@ function parseResolutionBody(body: unknown): QrResolutionDto | null {
     !optionalString(target.roomDesignation) ||
     !optionalString(target.inventoryNumber) ||
     !optionalNullableString(target.responsibleName) ||
+    typeof target.isAssigned !== "boolean" ||
     !optionalBoolean(target.isCurrentUserResponsible)
   ) {
     return null;

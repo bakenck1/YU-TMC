@@ -19,6 +19,11 @@ import type {
 } from "@/lib/application/ports/inventory-location-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const BUILDINGS = '"yu_inventory"."buildings"';
 const ROOMS = '"yu_inventory"."rooms"';
@@ -75,9 +80,10 @@ class PostgresInventoryLocationRepository
       buildingSelect(
         "where b.status = 'active'",
         "order by b.name_key, b.id",
+        sqlCollectionLimit(COLLECTION_LIMITS.buildings),
       ),
     );
-    return result.rows.map(mapBuilding);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.buildings).map(mapBuilding);
   }
 
   async findBuildingById(id: string): Promise<BuildingRecord | null> {
@@ -216,10 +222,13 @@ class PostgresInventoryLocationRepository
 
   async listRooms(buildingId: string): Promise<RoomRecord[]> {
     const result = await this.source.query<RoomRow>(
-      roomSelect("where r.building_id = $1 and r.status = 'active'"),
+      roomSelect(
+        "where r.building_id = $1 and r.status = 'active'",
+        sqlCollectionLimit(COLLECTION_LIMITS.roomsPerBuilding),
+      ),
       [buildingId],
     );
-    return result.rows.map(mapRoom);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomsPerBuilding).map(mapRoom);
   }
 
   async findRoomById(id: string): Promise<RoomRecord | null> {
@@ -340,7 +349,7 @@ class PostgresInventoryLocationRepository
   }
 }
 
-function buildingSelect(whereClause: string, orderClause = "") {
+function buildingSelect(whereClause: string, orderClause = "", limitClause = "") {
   return `
     select b.id, b.name, b.name_key, b.address, b.address_key, b.status,
            b.version, b.created_at, b.updated_at,
@@ -354,6 +363,7 @@ function buildingSelect(whereClause: string, orderClause = "") {
     ${whereClause}
     group by b.id, q.original_value
     ${orderClause}
+    ${limitClause}
   `;
 }
 
@@ -380,7 +390,7 @@ function mapBuilding(row: BuildingRow): BuildingRecord {
   };
 }
 
-function roomSelect(whereClause: string) {
+function roomSelect(whereClause: string, limitClause = "") {
   return `
     select r.id, r.building_id, r.designation, r.designation_key,
            r.floor_number, r.floor_label, r.status, r.version,
@@ -394,6 +404,7 @@ function roomSelect(whereClause: string) {
     left join ${USERS} responsible on responsible.id = r.primary_responsible_id
     ${whereClause}
     order by r.floor_number, r.designation_key, r.id
+    ${limitClause}
   `;
 }
 

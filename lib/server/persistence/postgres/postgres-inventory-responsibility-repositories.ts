@@ -17,6 +17,11 @@ import type {
   TransferRecord,
 } from "@/lib/application/ports/inventory-responsibility-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const ITEMS = '"yu_inventory"."items"';
 const RESPONSIBILITY = '"yu_inventory"."responsibility_periods"';
@@ -226,10 +231,15 @@ class PostgresInventoryResponsibilityRepository
     const result = await this.source.query<TransferRow>(
       transferSelect(
         "where t.requested_by = $1 or t.current_responsible_id_at_request = $1",
+        "",
+        sqlCollectionLimit(COLLECTION_LIMITS.responsibilityTransfers),
       ),
       [userId],
     );
-    return result.rows.map(mapTransfer);
+    return assertCollectionSize(
+      result.rows,
+      COLLECTION_LIMITS.responsibilityTransfers,
+    ).map(mapTransfer);
   }
 
   async listTransfersForAuthorizedUser(
@@ -254,10 +264,15 @@ class PostgresInventoryResponsibilityRepository
               and authorized_actor.deleted_at is null
               and authorized_actor.version = $3
          )`,
+        "",
+        sqlCollectionLimit(COLLECTION_LIMITS.responsibilityTransfers),
       ),
       [input.userId, input.role, input.sessionVersion],
     );
-    return result.rows.map(mapTransfer);
+    return assertCollectionSize(
+      result.rows,
+      COLLECTION_LIMITS.responsibilityTransfers,
+    ).map(mapTransfer);
   }
 
   async listTimeline(itemId: string): Promise<ResponsibilityTimelineRecord[]> {
@@ -282,10 +297,14 @@ class PostgresInventoryResponsibilityRepository
          join ${USERS} requester on requester.id = t.requested_by
          join ${USERS} proposed on proposed.id = t.proposed_responsible_id
         where t.item_id = $1
-       order by occurred_at desc, id desc`,
+       order by occurred_at desc, id desc
+       ${sqlCollectionLimit(COLLECTION_LIMITS.responsibilityTimeline)}`,
       [itemId],
     );
-    return result.rows.map(mapTimeline);
+    return assertCollectionSize(
+      result.rows,
+      COLLECTION_LIMITS.responsibilityTimeline,
+    ).map(mapTimeline);
   }
 
   async insertResponsibility(input: InsertResponsibilityRecord): Promise<void> {
@@ -473,7 +492,7 @@ class PostgresInventoryResponsibilityRepository
   }
 }
 
-function transferSelect(where: string, lock = "") {
+function transferSelect(where: string, lock = "", limit = "") {
   return `
     select t.id, t.item_id, i.name as item_name,
            i.inventory_number as item_inventory_number, t.requested_by,
@@ -488,8 +507,9 @@ function transferSelect(where: string, lock = "") {
       join ${USERS} requester on requester.id = t.requested_by
       join ${USERS} current_owner
         on current_owner.id = t.current_responsible_id_at_request
-      ${where}
+     ${where}
      order by t.requested_at desc, t.id
+     ${limit}
      ${lock}`;
 }
 

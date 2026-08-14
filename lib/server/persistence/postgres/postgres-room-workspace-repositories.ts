@@ -8,6 +8,11 @@ import type {
   RoomWorkspaceRepository,
 } from "@/lib/application/ports/room-workspace-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const ROOMS = '"yu_inventory"."rooms"';
 const BUILDINGS = '"yu_inventory"."buildings"';
@@ -89,10 +94,11 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
          ) period on true
          left join ${USERS} responsible on responsible.id = period.responsible_user_id
         where i.room_id = $1 and i.archived_at is null
-        order by i.name, i.inventory_number`,
+        order by i.name, i.inventory_number
+        ${sqlCollectionLimit(COLLECTION_LIMITS.roomWorkspaceItems)}`,
       [roomId],
     );
-    return result.rows.map((row) => ({
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomWorkspaceItems).map((row) => ({
       id: row.id,
       name: row.name,
       inventoryNumber: row.inventory_number,

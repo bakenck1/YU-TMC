@@ -41,6 +41,65 @@ describe("PostgreSQL web push subscriptions", () => {
     await expect(subscriptions.listByUser(users[3]!)).resolves.toHaveLength(0);
     await expect(subscriptions.listByUser(users[4]!)).resolves.toHaveLength(0);
   });
+
+  it("atomically refuses to rebind an endpoint owned by another user", async () => {
+    const ownerId = await seedUser("employee", true, false);
+    const attackerId = await seedUser("employee", true, false);
+    const endpoint = `https://fcm.googleapis.com/subscription/${randomUUID()}`;
+    const subscriptions = createPostgresWebPushRepositories(database).webPushSubscriptions;
+
+    await expect(
+      subscriptions.upsert(subscriptionInput(ownerId, endpoint, "P", "A")),
+    ).resolves.toMatchObject({ userId: ownerId, endpoint });
+    await expect(
+      subscriptions.upsert(subscriptionInput(ownerId, endpoint, "R", "C")),
+    ).resolves.toMatchObject({
+      userId: ownerId,
+      endpoint,
+      p256dh: "R".repeat(65),
+      auth: "C".repeat(22),
+    });
+    await expect(
+      subscriptions.upsert(subscriptionInput(attackerId, endpoint, "Q", "B")),
+    ).resolves.toBeNull();
+
+    await subscriptions.deleteForUser(attackerId, endpoint);
+    const ownerRecord = (await subscriptions.listByUser(ownerId)).find(
+      (subscription) => subscription.endpoint === endpoint,
+    );
+    expect(ownerRecord).toMatchObject({
+      userId: ownerId,
+      endpoint,
+      p256dh: "R".repeat(65),
+      auth: "C".repeat(22),
+    });
+    expect(
+      (await subscriptions.listByUser(attackerId)).some(
+        (subscription) => subscription.endpoint === endpoint,
+      ),
+    ).toBe(false);
+  });
+
+  it("allows only one owner when two users concurrently claim a new endpoint", async () => {
+    const firstUserId = await seedUser("employee", true, false);
+    const secondUserId = await seedUser("employee", true, false);
+    const endpoint = `https://fcm.googleapis.com/subscription/${randomUUID()}`;
+    const subscriptions = createPostgresWebPushRepositories(database).webPushSubscriptions;
+
+    const results = await Promise.all([
+      subscriptions.upsert(subscriptionInput(firstUserId, endpoint, "P", "A")),
+      subscriptions.upsert(subscriptionInput(secondUserId, endpoint, "Q", "B")),
+    ]);
+
+    const accepted = results.filter((record) => record !== null);
+    expect(accepted).toHaveLength(1);
+    const winner = accepted[0]!;
+    const stored = (await subscriptions.listByUser(winner.userId)).filter(
+      (subscription) => subscription.endpoint === endpoint,
+    );
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.userId).toBe(winner.userId);
+  });
 });
 
 async function seedUser(role: "admin" | "warehouse" | "employee", active: boolean, deleted: boolean) {
@@ -61,6 +120,25 @@ async function seedSubscription(userId: string, index: number) {
      values ($1, $2, $3, $4, $5, 'ru')`,
     [randomUUID(), userId, `https://fcm.googleapis.com/subscription/pg-${index}`, "P".repeat(65), "A".repeat(22)],
   );
+}
+
+function subscriptionInput(
+  userId: string,
+  endpoint: string,
+  p256dhMarker: string,
+  authMarker: string,
+) {
+  return {
+    id: randomUUID(),
+    userId,
+    endpoint,
+    p256dh: p256dhMarker.repeat(65),
+    auth: authMarker.repeat(22),
+    expirationTime: null,
+    userAgent: "Security regression test",
+    language: "ru" as const,
+    now: new Date(),
+  };
 }
 
 async function resetSchemas(databaseConfig: DatabaseConfig) {

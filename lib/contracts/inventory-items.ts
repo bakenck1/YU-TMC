@@ -82,7 +82,8 @@ export interface InventoryItemOperationDto {
 export interface InventoryItemCommentDto {
   id: string;
   authorName: string;
-  authorEmail: string;
+  /** Email is restricted to administrators; ordinary readers receive null. */
+  authorEmail: string | null;
   message: string;
   createdAt: string;
   attachment: {

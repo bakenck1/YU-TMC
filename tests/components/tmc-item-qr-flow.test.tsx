@@ -154,7 +154,7 @@ describe("TmcItemQrFlow", () => {
   });
 
   it("does not send a receive command for an item owned by another user", async () => {
-    vi.mocked(fetch).mockResolvedValue(responseForItem({ responsibleName: "Other owner" }));
+    vi.mocked(fetch).mockResolvedValue(responseForItem({ isAssigned: true }));
     render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.receive} />);
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
@@ -241,9 +241,11 @@ describe("TmcItemQrFlow", () => {
 });
 
 function responseForItem({
+  isAssigned = false,
   isCurrentUserResponsible = false,
   responsibleName = null,
 }: {
+  isAssigned?: boolean;
   isCurrentUserResponsible?: boolean;
   responsibleName?: string | null;
 } = {}) {
@@ -252,7 +254,7 @@ function responseForItem({
     json: async () => ({
       resolution: {
         status: "resolved", canonicalKey: "qr-1", format: "generated_v1", qrStatus: "active",
-        target: { kind: "item", id: "33333333-3333-4333-8333-333333333333", status: "active", title: "Laptop", inventoryNumber: "INV-1", buildingName: "A", roomDesignation: "101", responsibleName, isCurrentUserResponsible },
+        target: { kind: "item", id: "33333333-3333-4333-8333-333333333333", status: "active", title: "Laptop", inventoryNumber: "INV-1", buildingName: "A", roomDesignation: "101", responsibleName, isAssigned, isCurrentUserResponsible },
       },
     }),
   } as Response;

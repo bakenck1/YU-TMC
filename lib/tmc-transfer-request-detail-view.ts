@@ -25,8 +25,8 @@ export interface TmcTransferRequestCardItemView {
 
 export interface TmcTransferRequestCardView {
   id: string;
-  initiator: { fullName: string; email: string };
-  recipient: { fullName: string; email: string };
+  initiator: { fullName: string; email: string | null };
+  recipient: { fullName: string; email: string | null };
   status: TmcTransferRequestStatus;
   comment: string | null;
   createdAt: string;

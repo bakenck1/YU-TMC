@@ -59,6 +59,19 @@ for (const forbidden of ["_migration", "errors", ".data"]) {
     throw new Error(`Forbidden path found in standalone output: ${forbidden}`);
   }
 }
+for (const outputRoot of [
+  standaloneRoot,
+  path.join(process.cwd(), ".next", "static"),
+]) {
+  if (!existsSync(outputRoot)) continue;
+  const sourceMaps = readdirSync(outputRoot, {
+    recursive: true,
+    withFileTypes: true,
+  }).filter((entry) => entry.isFile() && entry.name.endsWith(".map"));
+  if (sourceMaps.length) {
+    throw new Error(`Production output contains source maps under ${outputRoot}`);
+  }
+}
 
 console.log("Security invariants verified.");
 

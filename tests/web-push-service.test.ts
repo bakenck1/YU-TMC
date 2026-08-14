@@ -32,17 +32,19 @@ const OTHER_EMPLOYEE = {
 
 test("binds a browser subscription to the authenticated account", async () => {
   const fixture = createFixture();
+  const forgedInputOwner = {
+    endpoint: "https://fcm.googleapis.com/subscription/1",
+    expirationTime: null,
+    keys: {
+      p256dh: "P".repeat(65),
+      auth: "A".repeat(22),
+    },
+    language: "en",
+    userId: OTHER_EMPLOYEE.userId,
+  };
 
   await fixture.service.subscribe(
-    {
-      endpoint: "https://fcm.googleapis.com/subscription/1",
-      expirationTime: null,
-      keys: {
-        p256dh: "P".repeat(65),
-        auth: "A".repeat(22),
-      },
-      language: "en",
-    },
+    forgedInputOwner,
     EMPLOYEE,
     "Mobile Browser",
   );
@@ -58,18 +60,57 @@ test("binds a browser subscription to the authenticated account", async () => {
   });
 });
 
-test("endpoint ownership moves on sign-in and only its current owner can remove it", async () => {
+test("another account cannot rebind or remove an owned push endpoint", async () => {
   const fixture = createFixture();
-  const input = fixture.subscriptionInput("shared");
+  const ownerInput = fixture.subscriptionInput("owned");
+  const attackerInput = {
+    ...ownerInput,
+    keys: {
+      p256dh: "Q".repeat(65),
+      auth: "B".repeat(22),
+    },
+    language: "en" as const,
+  };
 
-  await fixture.service.subscribe(input, EMPLOYEE, null);
-  await fixture.service.subscribe(input, OTHER_EMPLOYEE, null);
-  await fixture.service.unsubscribe(input.endpoint, EMPLOYEE);
+  await fixture.service.subscribe(ownerInput, EMPLOYEE, "Owner browser");
+  await assert.rejects(
+    fixture.service.subscribe(attackerInput, OTHER_EMPLOYEE, "Attacker browser"),
+    (error) =>
+      error instanceof ApplicationError &&
+      error.kind === "conflict" &&
+      error.publicCode === "push_subscription_conflict",
+  );
 
-  assert.equal(fixture.records.get(input.endpoint)?.userId, OTHER_EMPLOYEE.userId);
+  const stored = fixture.records.get(ownerInput.endpoint);
+  assert.equal(stored?.userId, EMPLOYEE.userId);
+  assert.equal(stored?.p256dh, "P".repeat(65));
+  assert.equal(stored?.auth, "A".repeat(22));
+  assert.equal(stored?.language, "ru");
+  assert.equal(stored?.userAgent, "Owner browser");
 
-  await fixture.service.unsubscribe(input.endpoint, OTHER_EMPLOYEE);
-  assert.equal(fixture.records.has(input.endpoint), false);
+  await fixture.service.unsubscribe(ownerInput.endpoint, OTHER_EMPLOYEE);
+  assert.equal(fixture.records.has(ownerInput.endpoint), true);
+
+  await fixture.service.unsubscribe(ownerInput.endpoint, EMPLOYEE);
+  assert.equal(fixture.records.has(ownerInput.endpoint), false);
+});
+
+test("concurrent accounts cannot both claim the same push endpoint", async () => {
+  const fixture = createFixture();
+  const input = fixture.subscriptionInput("raced");
+
+  const results = await Promise.allSettled([
+    fixture.service.subscribe(input, EMPLOYEE, null),
+    fixture.service.subscribe(input, OTHER_EMPLOYEE, null),
+  ]);
+
+  assert.equal(results.filter(({ status }) => status === "fulfilled").length, 1);
+  const rejected = results.find(({ status }) => status === "rejected");
+  assert.ok(rejected && rejected.status === "rejected");
+  assert.ok(rejected.reason instanceof ApplicationError);
+  assert.equal(rejected.reason.kind, "conflict");
+  assert.equal(rejected.reason.publicCode, "push_subscription_conflict");
+  assert.equal(fixture.records.size, 1);
 });
 
 test("serializes subscription updates and retains at most ten devices", async () => {
@@ -119,6 +160,22 @@ test("rejects non-HTTPS or malformed subscription input", async () => {
       error.kind === "validation" &&
       error.message === "invalid_push_subscription",
   );
+  for (const aliasSuffix of ["#foreign-owner", "#", "?"]) {
+    await assert.rejects(
+      fixture.service.subscribe(
+        {
+          ...fixture.subscriptionInput("url-alias"),
+          endpoint: `${fixture.endpoint("url-alias")}${aliasSuffix}`,
+        },
+        EMPLOYEE,
+        null,
+      ),
+      (error) =>
+        error instanceof ApplicationError &&
+        error.kind === "validation" &&
+        error.message === "invalid_push_subscription",
+    );
+  }
 });
 
 test("delivers assignment payload and prunes expired push endpoints", async () => {
@@ -376,6 +433,7 @@ function createFixture(
     },
     async upsert(input) {
       const existing = records.get(input.endpoint);
+      if (existing && existing.userId !== input.userId) return null;
       const value = toRecord(input, existing);
       records.set(value.endpoint, value);
       return value;

@@ -10,6 +10,10 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import type { AuthorizationActor } from "@/lib/security/permissions";
 
+type AuthenticatedServiceRequestActor = AuthorizationActor & {
+  sessionVersion: number;
+};
+
 export interface ServiceRequestPhotoProcessor {
   normalize(imageDataUrl: unknown): Promise<{
     bytes: Uint8Array;
@@ -27,17 +31,28 @@ export class ServiceRequestService {
     private readonly photos: ServiceRequestPhotoProcessor,
   ) {}
 
-  async list(filters: ServiceRequestFilters, actor: AuthorizationActor) {
-    const viewerId = actor.role === "employee" ? actor.userId : undefined;
-    if (actor.role !== "admin" && actor.role !== "warehouse" && !viewerId) {
+  async list(
+    filters: ServiceRequestFilters,
+    actor: AuthenticatedServiceRequestActor,
+  ) {
+    assertAuthenticatedActor(actor);
+    if (
+      actor.role !== "admin" &&
+      actor.role !== "warehouse" &&
+      actor.role !== "employee"
+    ) {
       throw forbidden();
     }
     return this.unitOfWork.read(async ({ requests }) =>
-      (await requests.list(filters, viewerId)).map(toDto),
+      (await requests.list(filters, actor)).map(toDto),
     );
   }
 
-  async create(input: CreateServiceRequestInput, actor: AuthorizationActor) {
+  async create(
+    input: CreateServiceRequestInput,
+    actor: AuthenticatedServiceRequestActor,
+  ) {
+    assertAuthenticatedActor(actor);
     if (actor.role !== "admin" && actor.role !== "employee") throw forbidden();
     if (!isUuid(input.itemId)) throw validation();
     if (![
@@ -55,20 +70,34 @@ export class ServiceRequestService {
         context.roomResponsibleId !== actor.userId &&
         context.itemResponsibleId !== actor.userId
       ) {
-        throw forbidden();
+        throw itemNotFound();
       }
     });
     const photo = await this.photos.normalize(input.photo?.imageDataUrl);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ requests }) => {
-      const context = await requests.findItemContext(input.itemId);
-      if (!context) throw new ApplicationError("not_found", "item_not_found");
+      const authorization = await requests.findCreateAuthorizationForUpdate(
+        input.itemId,
+        actor.userId,
+      );
+      const currentActor = authorization.actor;
+      if (
+        !currentActor ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== actor.sessionVersion ||
+        currentActor.role !== actor.role
+      ) {
+        throw unauthorized();
+      }
+      const context = authorization.item;
+      if (!context) throw itemNotFound();
       if (
         actor.role === "employee" &&
         context.roomResponsibleId !== actor.userId &&
         context.itemResponsibleId !== actor.userId
       ) {
-        throw forbidden();
+        throw itemNotFound();
       }
       const id = this.ids.create();
       const created = await requests.insert({
@@ -102,29 +131,61 @@ export class ServiceRequestService {
     id: string,
     status: ServiceRequestStatus,
     version: number,
-    actor: AuthorizationActor,
+    actor: AuthenticatedServiceRequestActor,
   ) {
+    assertAuthenticatedActor(actor);
     if (actor.role !== "admin") throw forbidden();
-    if (!isUuid(id) || !Number.isInteger(version) || version < 1) throw validation();
+    if (
+      !isUuid(id) ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      version > 2_147_483_647
+    ) throw validation();
     if (!["new", "in_progress", "completed"].includes(status)) throw validation();
+    const normalizedId = id.toLowerCase();
+    const normalizedActorId = actor.userId.toLowerCase();
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ requests }) => {
-      const current = await requests.findById(id);
+      const currentActor = await requests.findAuthorizationUserForUpdate(
+        normalizedActorId,
+      );
+      if (
+        !currentActor ||
+        currentActor.id.toLowerCase() !== normalizedActorId ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== actor.sessionVersion ||
+        currentActor.role !== actor.role ||
+        currentActor.role !== "admin"
+      ) {
+        throw unauthorized();
+      }
+      const current = await requests.findByIdForUpdate(normalizedId);
       if (!current) throw new ApplicationError("not_found", "service_request_not_found");
       if (current.version !== version) throw new ApplicationError("conflict", "version_conflict");
       const updated = await requests.updateStatus({
-        id,
+        id: normalizedId,
         status,
-        actorId: actor.userId,
+        expectedStatus: current.status,
+        actorId: normalizedActorId,
+        actorRole: currentActor.role,
+        actorSessionVersion: actor.sessionVersion,
         expectedVersion: version,
         occurredAt,
       });
-      if (!updated) throw new ApplicationError("conflict", "version_conflict");
+      if (
+        !updated ||
+        updated.id.toLowerCase() !== normalizedId ||
+        updated.status !== status ||
+        updated.version !== version + 1
+      ) {
+        throw new ApplicationError("conflict", "version_conflict");
+      }
       await requests.appendAudit({
         id: this.ids.create(),
-        actorId: actor.userId,
-        actorRole: actor.role,
-        subjectId: id,
+        actorId: currentActor.id.toLowerCase(),
+        actorRole: currentActor.role,
+        subjectId: normalizedId,
         subjectRevision: updated.version,
         action: "service_request.status_changed",
         beforeValues: { status: current.status },
@@ -135,14 +196,30 @@ export class ServiceRequestService {
     });
   }
 
-  async getPhoto(id: string, actor: AuthorizationActor) {
+  async getPhoto(id: string, actor: AuthenticatedServiceRequestActor) {
+    assertAuthenticatedActor(actor);
     if (!isUuid(id)) throw validation();
-    return this.unitOfWork.read(async ({ requests }) => {
-      const request = await requests.findById(id);
-      if (!request || !canRead(request, actor)) {
+    const normalizedId = id.toLowerCase();
+    const normalizedActorId = actor.userId.toLowerCase();
+    return this.unitOfWork.transaction(async ({ requests }) => {
+      const currentActor = await requests.findAuthorizationUserForUpdate(
+        normalizedActorId,
+      );
+      if (
+        !currentActor ||
+        currentActor.id.toLowerCase() !== normalizedActorId ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.version !== actor.sessionVersion ||
+        currentActor.role !== actor.role
+      ) {
+        throw unauthorized();
+      }
+      const request = await requests.findByIdForUpdate(normalizedId);
+      if (!request || !canRead(request, { userId: normalizedActorId, role: currentActor.role })) {
         throw new ApplicationError("not_found", "service_request_not_found");
       }
-      const photo = await requests.findPhoto(id);
+      const photo = await requests.findPhoto(normalizedId);
       if (!photo) throw new ApplicationError("not_found", "service_request_photo_not_found");
       return photo;
     });
@@ -190,4 +267,22 @@ function validation() {
 
 function forbidden() {
   return new ApplicationError("forbidden", "forbidden");
+}
+
+function itemNotFound() {
+  return new ApplicationError("not_found", "item_not_found");
+}
+
+function unauthorized() {
+  return new ApplicationError("unauthorized", "unauthorized");
+}
+
+function assertAuthenticatedActor(actor: AuthenticatedServiceRequestActor) {
+  if (
+    !isUuid(actor.userId) ||
+    !Number.isSafeInteger(actor.sessionVersion) ||
+    actor.sessionVersion < 1
+  ) {
+    throw unauthorized();
+  }
 }

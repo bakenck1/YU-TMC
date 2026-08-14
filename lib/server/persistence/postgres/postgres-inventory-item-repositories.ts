@@ -28,6 +28,11 @@ import type {
 } from "@/lib/application/ports/inventory-item-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const ITEMS = '"yu_inventory"."items"';
 const ROOMS = '"yu_inventory"."rooms"';
@@ -93,24 +98,33 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(itemSelect(""), []);
-    return result.rows.map(mapItem);
+    const result = await this.source.query<ItemRow>(
+      itemSelect("", sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems)),
+      [],
+    );
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where rp.responsible_user_id = $1 or r.primary_responsible_id = $1"),
+      itemSelect(
+        "where rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
+        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
+      ),
       [userId],
     );
-    return result.rows.map(mapItem);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where i.status = 'decommissioned'"),
+      itemSelect(
+        "where i.status = 'decommissioned'",
+        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
+      ),
       [],
     );
-    return result.rows.map(mapItem);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItemsAssignedTo(
@@ -119,10 +133,11 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const result = await this.source.query<ItemRow>(
       itemSelect(
         "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status = 'decommissioned'",
+        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
       ),
       [userId],
     );
-    return result.rows.map(mapItem);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async findItemById(id: string): Promise<InventoryItemRecord | null> {
@@ -144,10 +159,11 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
              from ${COMPONENTS}
             where left_item_id = $1 or right_item_id = $1
          )`,
+        sqlCollectionLimit(COLLECTION_LIMITS.itemComponents),
       ),
       [itemId],
     );
-    return result.rows.map(mapItem);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.itemComponents).map(mapItem);
   }
 
   async listOperations(itemId: string): Promise<InventoryItemOperationRecord[]> {
@@ -220,10 +236,10 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
          end
         where a.subject_kind = 'transfer' and t.item_id = $1
         order by "occurredAt" desc, id desc
-        limit 100`,
+        ${sqlCollectionLimit(100)}`,
       [itemId],
     );
-    return result.rows.map((row) => ({
+    return assertCollectionSize(result.rows, 100, "item_operations_too_large").map((row) => ({
       id: row.id,
       kind: row.kind,
       action: row.action,
@@ -263,10 +279,10 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           and a.subject_id = $1
           and a.action = 'item.comment_added'
         order by a.occurred_at desc, a.id desc
-        limit 200`,
+        ${sqlCollectionLimit(200)}`,
       [itemId],
     );
-    return result.rows.map((row) => ({
+    return assertCollectionSize(result.rows, 200, "item_comments_too_large").map((row) => ({
       id: row.id,
       authorName: row.author_name,
       authorEmail: row.author_email,
@@ -825,10 +841,11 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
          from ${AUDIT} a
          left join ${USERS} u on u.id = a.actor_id
         where a.subject_kind = 'item' and a.subject_id = $1
-        order by a.occurred_at desc, a.id desc`,
+        order by a.occurred_at desc, a.id desc
+        ${sqlCollectionLimit(COLLECTION_LIMITS.itemAudit)}`,
       [itemId],
     );
-    return result.rows.map((row) => ({
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.itemAudit, "item_audit_too_large").map((row) => ({
       id: row.id,
       actorId: row.actor_id,
       actorName: row.actor_name,

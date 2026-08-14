@@ -45,19 +45,52 @@ export interface ServiceRequestPhotoRecord {
   mediaType: "image/jpeg";
 }
 
+export interface ServiceRequestAuthorizationActor {
+  userId: string;
+  role: UserRole;
+  sessionVersion: number;
+}
+
+export interface ServiceRequestAuthorizationUser {
+  id: string;
+  role: UserRole;
+  active: boolean;
+  deletedAt: Date | null;
+  version: number;
+}
+
+export interface ServiceRequestItemContext {
+  roomId: string;
+  roomResponsibleId: string | null;
+  itemResponsibleId: string | null;
+}
+
 export interface ServiceRequestRepository {
-  list(filters: ServiceRequestFilters, viewerId?: string): Promise<ServiceRequestRecord[]>;
+  list(
+    filters: ServiceRequestFilters,
+    actor: ServiceRequestAuthorizationActor,
+  ): Promise<ServiceRequestRecord[]>;
   findById(id: string): Promise<ServiceRequestRecord | null>;
-  findItemContext(itemId: string): Promise<{
-    roomId: string;
-    roomResponsibleId: string | null;
-    itemResponsibleId: string | null;
-  } | null>;
+  findByIdForUpdate(id: string): Promise<ServiceRequestRecord | null>;
+  findAuthorizationUserForUpdate(
+    userId: string,
+  ): Promise<ServiceRequestAuthorizationUser | null>;
+  findItemContext(itemId: string): Promise<ServiceRequestItemContext | null>;
+  findCreateAuthorizationForUpdate(
+    itemId: string,
+    actorId: string,
+  ): Promise<{
+    actor: ServiceRequestAuthorizationUser | null;
+    item: ServiceRequestItemContext | null;
+  }>;
   insert(input: InsertServiceRequestRecord): Promise<ServiceRequestRecord>;
   updateStatus(input: {
     id: string;
     status: ServiceRequestStatus;
+    expectedStatus: ServiceRequestStatus;
     actorId: string;
+    actorRole: UserRole;
+    actorSessionVersion: number;
     expectedVersion: number;
     occurredAt: Date;
   }): Promise<ServiceRequestRecord | null>;

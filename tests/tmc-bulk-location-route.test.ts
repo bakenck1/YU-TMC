@@ -69,6 +69,36 @@ test("bulk-location route rejects identity injection and oversized selections", 
   assert.equal(calls, 0);
 });
 
+test("bulk-location route rejects an oversized streamed body before command execution", async () => {
+  let calls = 0;
+  const handler = createTmcBulkLocationPostHandler({
+    authenticate: async () => ACTOR,
+    changeLocation: async () => {
+      calls += 1;
+      throw new Error("must_not_run");
+    },
+  });
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(17 * 1024));
+      controller.close();
+    },
+  });
+  const request = new Request(
+    "https://inventory.example/api/inventory/items/bulk-location",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" },
+  );
+  const response = await handler(request);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "payload_too_large" });
+  assert.equal(calls, 0);
+});
+
 function jsonRequest(value: unknown) {
   return new Request("https://inventory.example/api/inventory/items/bulk-location", {
     method: "POST",

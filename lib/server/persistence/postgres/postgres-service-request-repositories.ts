@@ -4,6 +4,8 @@ import type { QueryResultRow } from "pg";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type {
   InsertServiceRequestRecord,
+  ServiceRequestAuthorizationActor,
+  ServiceRequestAuthorizationUser,
   ServiceRequestPhotoRecord,
   ServiceRequestRecord,
   ServiceRequestRepositories,
@@ -11,6 +13,11 @@ import type {
 } from "@/lib/application/ports/service-request-repositories";
 import type { ServiceRequestFilters } from "@/lib/contracts/service-requests";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import {
+  assertCollectionSize,
+  COLLECTION_LIMITS,
+  sqlCollectionLimit,
+} from "@/lib/server/persistence/collection-limits";
 
 const REQUESTS = '"yu_inventory"."service_requests"';
 const ITEMS = '"yu_inventory"."items"';
@@ -42,6 +49,20 @@ interface RequestRow extends QueryResultRow {
   version: number;
 }
 
+interface AuthorizationUserRow extends QueryResultRow {
+  id: string;
+  role: ServiceRequestAuthorizationUser["role"];
+  is_active: boolean;
+  deleted_at: Date | null;
+  version: number;
+}
+
+interface ItemContextRow extends QueryResultRow {
+  room_id: string;
+  room_responsible_id: string | null;
+  item_responsible_id: string | null;
+}
+
 export function createPostgresServiceRequestRepositories(
   source: PostgresRepositorySource,
 ): ServiceRequestRepositories {
@@ -51,17 +72,33 @@ export function createPostgresServiceRequestRepositories(
 class PostgresServiceRequestRepository implements ServiceRequestRepository {
   constructor(private readonly source: PostgresRepositorySource) {}
 
-  async list(filters: ServiceRequestFilters, viewerId?: string) {
+  async list(
+    filters: ServiceRequestFilters,
+    actor: ServiceRequestAuthorizationActor,
+  ) {
     const values: unknown[] = [];
     const clauses: string[] = [];
     const add = (clause: string, value: unknown) => {
       values.push(value);
       clauses.push(clause.replace("?", `$${values.length}`));
     };
-    if (viewerId) {
-      values.push(viewerId);
+    values.push(actor.userId, actor.role, actor.sessionVersion);
+    const actorIdIndex = values.length - 2;
+    const actorRoleIndex = values.length - 1;
+    const actorVersionIndex = values.length;
+    clauses.push(
+      `exists (
+         select 1 from ${USERS} authorized_actor
+          where authorized_actor.id = $${actorIdIndex}
+            and authorized_actor.role = $${actorRoleIndex}
+            and authorized_actor.is_active = true
+            and authorized_actor.deleted_at is null
+            and authorized_actor.version = $${actorVersionIndex}
+       )`,
+    );
+    if (actor.role === "employee") {
       clauses.push(
-        `(r.primary_responsible_id = $${values.length} or period.responsible_user_id = $${values.length})`,
+        `(r.primary_responsible_id = $${actorIdIndex} or period.responsible_user_id = $${actorIdIndex})`,
       );
     }
     if (filters.status) add("request.status = ?", filters.status);
@@ -73,10 +110,10 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
     const result = await this.source.query<RequestRow>(
       `${requestSelect()} ${where}
        order by request.created_at desc, request.id desc
-       limit 1000`,
+       ${sqlCollectionLimit(COLLECTION_LIMITS.serviceRequests)}`,
       values,
     );
-    return result.rows.map(mapRequest);
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.serviceRequests).map(mapRequest);
   }
 
   async findById(id: string) {
@@ -87,12 +124,36 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
     return result.rows[0] ? mapRequest(result.rows[0]) : null;
   }
 
+  async findByIdForUpdate(id: string) {
+    const result = await this.source.query<RequestRow>(
+      `${requestSelect()} where request.id = $1 limit 1 for update of request`,
+      [id],
+    );
+    return result.rows[0] ? mapRequest(result.rows[0]) : null;
+  }
+
+  async findAuthorizationUserForUpdate(userId: string) {
+    const result = await this.source.query<AuthorizationUserRow>(
+      `select id, role, is_active, deleted_at, version
+         from ${USERS}
+        where id = $1
+          for update`,
+      [userId],
+    );
+    const actor = result.rows[0];
+    return actor
+      ? {
+          id: actor.id,
+          role: actor.role,
+          active: actor.is_active,
+          deletedAt: actor.deleted_at ? new Date(actor.deleted_at) : null,
+          version: Number(actor.version),
+        }
+      : null;
+  }
+
   async findItemContext(itemId: string) {
-    const result = await this.source.query<{
-      room_id: string;
-      room_responsible_id: string | null;
-      item_responsible_id: string | null;
-    } & QueryResultRow>(
+    const result = await this.source.query<ItemContextRow>(
       `select i.room_id, r.primary_responsible_id as room_responsible_id,
               period.responsible_user_id as item_responsible_id
          from ${ITEMS} i
@@ -113,6 +174,51 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
           itemResponsibleId: row.item_responsible_id,
         }
       : null;
+  }
+
+  async findCreateAuthorizationForUpdate(itemId: string, actorId: string) {
+    const actorResult = await this.source.query<AuthorizationUserRow>(
+      `select id, role, is_active, deleted_at, version
+         from ${USERS}
+        where id = $1
+          for update`,
+      [actorId],
+    );
+    const itemResult = await this.source.query<ItemContextRow>(
+      `select i.room_id, r.primary_responsible_id as room_responsible_id,
+              period.responsible_user_id as item_responsible_id
+         from ${ITEMS} i
+         join ${ROOMS} r on r.id = i.room_id
+         left join lateral (
+           select responsible_user_id from ${RESPONSIBILITY}
+            where item_id = i.id and ended_at is null
+            order by started_at desc limit 1
+            for update
+         ) period on true
+        where i.id = $1 and i.archived_at is null
+          for update of i, r`,
+      [itemId],
+    );
+    const actor = actorResult.rows[0];
+    const item = itemResult.rows[0];
+    return {
+      actor: actor
+        ? {
+            id: actor.id,
+            role: actor.role,
+            active: actor.is_active,
+            deletedAt: actor.deleted_at ? new Date(actor.deleted_at) : null,
+            version: Number(actor.version),
+          }
+        : null,
+      item: item
+        ? {
+            roomId: item.room_id,
+            roomResponsibleId: item.room_responsible_id,
+            itemResponsibleId: item.item_responsible_id,
+          }
+        : null,
+    };
   }
 
   async insert(input: InsertServiceRequestRecord) {
@@ -166,17 +272,41 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
   async updateStatus(input: {
     id: string;
     status: ServiceRequestRecord["status"];
+    expectedStatus: ServiceRequestRecord["status"];
     actorId: string;
+    actorRole: ServiceRequestAuthorizationUser["role"];
+    actorSessionVersion: number;
     expectedVersion: number;
     occurredAt: Date;
   }) {
     const result = await this.source.query(
-      `update ${REQUESTS}
+      `update ${REQUESTS} as request
           set status = $2,
               completed_at = case when $2 = 'completed' then $4 else null end,
               updated_by = $3, updated_at = $4, version = version + 1
-        where id = $1 and version = $5`,
-      [input.id, input.status, input.actorId, input.occurredAt, input.expectedVersion],
+        where request.id = $1
+          and request.version = $5
+          and request.status = $6
+          and exists (
+            select 1
+              from ${USERS} authorized_actor
+             where authorized_actor.id = $3
+               and authorized_actor.role = $7
+               and authorized_actor.role = 'admin'
+               and authorized_actor.is_active = true
+               and authorized_actor.deleted_at is null
+               and authorized_actor.version = $8
+          )`,
+      [
+        input.id,
+        input.status,
+        input.actorId,
+        input.occurredAt,
+        input.expectedVersion,
+        input.expectedStatus,
+        input.actorRole,
+        input.actorSessionVersion,
+      ],
     );
     if (result.rowCount !== 1) return null;
     return this.findById(input.id);

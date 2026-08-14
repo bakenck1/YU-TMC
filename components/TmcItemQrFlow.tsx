@@ -264,7 +264,9 @@ export default function TmcItemQrFlow({
   const receiveUnavailable =
     operation.id === "receive" &&
     !receiveAlreadyAssigned &&
-    Boolean(item?.responsibleName?.trim());
+    item?.isAssigned === true;
+  const responsibleNameHidden =
+    item?.isAssigned === true && !item.responsibleName?.trim();
 
   return (
     <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm sm:p-6">
@@ -297,7 +299,7 @@ export default function TmcItemQrFlow({
               {item.inventoryNumber ? <p className="mt-1 text-sm text-zinc-600">{item.inventoryNumber}</p> : null}
               {location ? <p className="mt-3 flex items-center gap-2 text-sm text-zinc-700"><MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />{location}</p> : null}
               {/* Task 3C: hide the owner's name when the item is occupied in receive mode */}
-              {!receiveUnavailable ? (
+              {!responsibleNameHidden ? (
                 <p className="mt-2 flex items-center gap-2 text-sm text-zinc-700">
                   <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
                   {item.responsibleName || t("tmc.qr.noResponsible")}

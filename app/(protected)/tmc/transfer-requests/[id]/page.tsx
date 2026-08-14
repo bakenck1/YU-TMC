@@ -17,6 +17,7 @@ export default async function TmcTransferRequestPage({
     () => getApplicationServices().tmcTransferRequests.getById(id, {
       userId: user.userId,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     }),
     notFound,
   );

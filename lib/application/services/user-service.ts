@@ -51,6 +51,10 @@ type AuthenticatedRecipientSearchActor = AuthorizationActor & {
   sessionVersion: number;
 };
 
+type AuthenticatedUserManagementActor = AuthorizationActor & {
+  sessionVersion: number;
+};
+
 export type AuthenticationResult =
   | {
       status: "authenticated";
@@ -372,6 +376,37 @@ export class UserService {
     );
   }
 
+  async listUsersForManagement(
+    actor: AuthenticatedUserManagementActor,
+  ): Promise<UserDto[]> {
+    if (
+      !isUuid(actor.userId) ||
+      !Number.isSafeInteger(actor.sessionVersion) ||
+      actor.sessionVersion < 1 ||
+      !hasPermission(actor.role, "legacy.users.read")
+    ) {
+      throw new ApplicationError("forbidden", "forbidden");
+    }
+
+    const actorUserId = actor.userId.toLowerCase();
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const currentActor = await requireCurrentActor(
+        users,
+        actorUserId,
+        actor.sessionVersion,
+      );
+      if (
+        currentActor.role !== actor.role ||
+        !hasPermission(currentActor.role, "legacy.users.read")
+      ) {
+        throw new ApplicationError("forbidden", "forbidden");
+      }
+      return (await users.list())
+        .filter((user) => !user.deletedAt)
+        .map(toUserDto);
+    });
+  }
+
   async searchTmcRecipients(
     query: string,
     actor: AuthenticatedRecipientSearchActor,
@@ -436,6 +471,7 @@ export class UserService {
   async createUser(
     input: CreateUserInput,
     actorUserId: string,
+    actorSessionVersion: number,
   ): Promise<UserDto> {
     const id = this.ids.create();
     const createdAt = this.clock.now();
@@ -451,7 +487,11 @@ export class UserService {
     }
 
     return this.unitOfWork.transaction(async ({ users, credentials }) => {
-      const actor = await requireActiveActor(users, actorUserId);
+      const actor = await requireCurrentActor(
+        users,
+        actorUserId,
+        actorSessionVersion,
+      );
       if (!canManageUser(actor.role, { nextRole: input.role })) {
         throw new ApplicationError("forbidden", "forbidden");
       }
@@ -483,6 +523,7 @@ export class UserService {
     id: string,
     input: UpdateUserInput,
     actorUserId: string,
+    actorSessionVersion: number,
   ): Promise<UserDto> {
     const fullName = requireName(input.fullName);
     const phone = normalizePhone(input.phone);
@@ -493,7 +534,11 @@ export class UserService {
 
     return this.unitOfWork.transaction(async (repositories) => {
       const { users } = repositories;
-      const actor = await requireActiveActor(users, actorUserId);
+      const actor = await requireCurrentActor(
+        users,
+        actorUserId,
+        actorSessionVersion,
+      );
       const current = await users.findByIdForUpdate(id);
       if (!current || current.deletedAt) {
         throw new ApplicationError("not_found", "user_not_found");
@@ -557,9 +602,14 @@ export class UserService {
     id: string,
     version: number,
     actorUserId: string,
+    actorSessionVersion: number,
   ): Promise<void> {
     await this.unitOfWork.transaction(async ({ users }) => {
-      const actor = await requireActiveActor(users, actorUserId);
+      const actor = await requireCurrentActor(
+        users,
+        actorUserId,
+        actorSessionVersion,
+      );
       const current = await users.findByIdForUpdate(id);
       if (!current || current.deletedAt) {
         throw new ApplicationError("not_found", "user_not_found");
@@ -586,13 +636,21 @@ async function assertAnotherActiveAdmin(
   }
 }
 
-async function requireActiveActor(
+async function requireCurrentActor(
   users: UserRepositories["users"],
   actorUserId: string,
+  actorSessionVersion: number,
 ): Promise<UserRecord> {
   const actor = await users.findByIdForUpdate(actorUserId);
-  if (!actor || !actor.active || actor.deletedAt) {
-    throw new ApplicationError("unauthorized", "unauthorized");
+  if (
+    !actor ||
+    !actor.active ||
+    actor.deletedAt ||
+    !Number.isSafeInteger(actorSessionVersion) ||
+    actorSessionVersion < 1 ||
+    actor.version !== actorSessionVersion
+  ) {
+    throw new ApplicationError("forbidden", "forbidden");
   }
   return actor;
 }

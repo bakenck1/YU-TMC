@@ -59,6 +59,35 @@ test("participants and admin can read a request while BOLA is hidden as not foun
   assert.equal(harness.repository.findByIdCalls, calls);
 });
 
+test("detail and photo reads reject a revoked or demoted session before object lookup", async () => {
+  const harness = createHarness();
+  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
+  harness.repository.photo = { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+  harness.repository.users.set(
+    ACTOR.userId,
+    user({ id: ACTOR.userId, role: "employee", version: ACTOR.sessionVersion + 1 }),
+  );
+
+  const hiddenNotFound = (error: unknown) =>
+    error instanceof ApplicationError &&
+    error.kind === "not_found" &&
+    error.publicCode === "request_not_found";
+  await assert.rejects(
+    harness.service.getById(harness.repository.aggregate.id, ACTOR),
+    hiddenNotFound,
+  );
+  await assert.rejects(
+    harness.service.getItemPhoto(
+      harness.repository.aggregate.id,
+      harness.repository.aggregate.items[0]!.itemId,
+      ACTOR,
+    ),
+    hiddenNotFound,
+  );
+  assert.equal(harness.repository.findByIdCalls, 0);
+  assert.deepEqual(harness.repository.photoCalls, []);
+});
+
 test("snapshot-only readers cannot see sibling items owned by other users", async () => {
   const firstOwner = user({
     id: SNAPSHOT_OWNER_ID,
@@ -214,6 +243,10 @@ test("participant-scoped view of a cancelled request resolves without throwing (
   assert.equal(scoped.status, "cancelled");
   assert.equal(scoped.closedAt, cancelledAt.toISOString());
   assert.equal(scoped.closedBy?.id, cancelledBy.id);
+  assert.equal(scoped.initiator.email, null);
+  assert.equal(scoped.recipient.email, null);
+  assert.equal(scoped.closedBy?.email, null);
+  assert.equal(scoped.items[0]?.responsibleUserProfile?.email, null);
   // Participant only sees their own item.
   assert.deepEqual(scoped.items.map((item) => item.item.id), [participantItem.itemId]);
   assert.deepEqual(scoped.summary, {
@@ -1036,7 +1069,7 @@ test("uses the current database role instead of a stale admin actor", async () =
   assert.deepEqual(result.items, [{
     itemId,
     outcome: "problem",
-    problem: "forbidden",
+    problem: "item_unavailable",
   }]);
 });
 
@@ -1088,7 +1121,7 @@ test("applies employee ownership per item without revealing foreign state", asyn
   assert.deepEqual(
     result.items.map((item) =>
       item.outcome === "problem" ? item.problem : item.outcome),
-    ["included", "forbidden", "included"],
+    ["included", "item_unavailable", "included"],
   );
   assert.deepEqual(
     harness.repository.insertedItems.map((item) => item.itemId),
@@ -1112,7 +1145,7 @@ test("does not persist a parent for an all-foreign employee batch", async () => 
   assert.deepEqual(
     result.items.map((item) =>
       item.outcome === "problem" ? item.problem : item.outcome),
-    ["forbidden", "forbidden"],
+    ["item_unavailable", "item_unavailable"],
   );
   assert.equal(harness.repository.insertedRequests.length, 0);
   assert.equal(harness.repository.insertedItems.length, 0);
@@ -1294,17 +1327,26 @@ test("canonicalizes UUIDs and detects duplicates across letter case", async () =
 });
 
 test("normalizes optional comments and rejects unavailable recipients", async () => {
-  const unavailableUsers: Array<TmcTransferUserRecord | null> = [
-    null,
-    user({ active: false }),
-    user({ deletedAt: new Date("2026-08-09T11:00:00.000Z") }),
-    user({ id: ACTOR.userId }),
+  const recipientCases: Array<{
+    recipient: TmcTransferUserRecord | null;
+    recipientId: string;
+    publicCode: string;
+  }> = [
+    { recipient: null, recipientId: RECIPIENT_ID, publicCode: "recipient_unavailable" },
+    { recipient: user({ active: false }), recipientId: RECIPIENT_ID, publicCode: "recipient_unavailable" },
+    {
+      recipient: user({ deletedAt: new Date("2026-08-09T11:00:00.000Z") }),
+      recipientId: RECIPIENT_ID,
+      publicCode: "recipient_unavailable",
+    },
+    { recipient: user({ id: ACTOR.userId }), recipientId: ACTOR.userId, publicCode: "recipient_must_differ_from_initiator" },
   ];
-  for (const recipient of unavailableUsers) {
+  for (const { recipient, recipientId, publicCode } of recipientCases) {
     const harness = createHarness({ recipient });
     await assert.rejects(
-      harness.service.create({ recipientId: recipient?.id ?? RECIPIENT_ID, itemIds: [uuid(1)] }, ACTOR),
-      ApplicationError,
+      harness.service.create({ recipientId, itemIds: [uuid(1)] }, ACTOR),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.publicCode === publicCode,
     );
     assert.equal(harness.repository.insertedRequests.length, 0);
   }
@@ -1323,6 +1365,40 @@ test("normalizes optional comments and rejects unavailable recipients", async ()
       ACTOR,
     );
     assert.equal(emptyHarness.repository.insertedRequests[0]?.comment, null);
+  }
+});
+
+test("uses one neutral item outcome for missing, foreign, and inaccessible items", async () => {
+  const itemId = uuid(1);
+  const cases: Array<{
+    candidates: TmcTransferCandidateRecord[];
+    expected: "item_unavailable";
+  }> = [
+    { candidates: [], expected: "item_unavailable" },
+    {
+      candidates: [candidate(itemId, { responsibleUser: user({ id: uuid(77) }) })],
+      expected: "item_unavailable",
+    },
+    {
+      candidates: [candidate(itemId, {
+        itemStatus: "maintenance",
+        responsibleUser: user({ id: uuid(77) }),
+      })],
+      expected: "item_unavailable",
+    },
+  ];
+
+  for (const { candidates, expected } of cases) {
+    const harness = createHarness({ candidates });
+    const result = await harness.service.create(
+      { recipientId: RECIPIENT_ID, itemIds: [itemId] },
+      ACTOR,
+    );
+    assert.deepEqual(result.items, [{
+      itemId,
+      outcome: "problem",
+      problem: expected,
+    }]);
   }
 });
 
@@ -1362,11 +1438,11 @@ test("classifies a mixed batch with deterministic precedence and input order", a
     ),
     [
       [ids[0], "included"],
-      [ids[1], "item_not_found"],
+      [ids[1], "item_unavailable"],
       [ids[2], "item_inactive"],
       [ids[3], "item_inactive"],
-      [ids[4], "forbidden"],
-      [ids[5], "forbidden"],
+      [ids[4], "item_unavailable"],
+      [ids[5], "item_unavailable"],
       [ids[6], "active_transfer_exists"],
       [ids[0], "duplicate_item"],
     ],
@@ -1392,7 +1468,7 @@ test("does not create a parent when every item is problematic", async () => {
     problems: 2,
     items: [
       { itemId, outcome: "problem", problem: "item_inactive" },
-      { itemId: uuid(2), outcome: "problem", problem: "item_not_found" },
+      { itemId: uuid(2), outcome: "problem", problem: "item_unavailable" },
     ],
   });
   assert.equal(harness.repository.insertedRequests.length, 0);

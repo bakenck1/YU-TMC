@@ -27,7 +27,7 @@ export interface WebPushSubscriptionRepository {
   lockUserSubscriptions(userId: string): Promise<void>;
   upsert(
     input: UpsertWebPushSubscriptionRecord,
-  ): Promise<WebPushSubscriptionRecord>;
+  ): Promise<WebPushSubscriptionRecord | null>;
   listByUser(userId: string): Promise<WebPushSubscriptionRecord[]>;
   deleteOlderThanLimit(userId: string, keep: number): Promise<void>;
   deleteForUser(userId: string, endpoint: string): Promise<void>;

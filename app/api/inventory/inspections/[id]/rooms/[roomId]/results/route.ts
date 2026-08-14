@@ -38,7 +38,7 @@ export async function POST(
 function parseInput(value: unknown): RecordItemResultInput {
   if (!value || typeof value !== "object") throw invalidRequest();
   const body = value as Record<string, unknown>;
-  if (typeof body.itemId !== "string" || typeof body.result !== "string") {
+  if (!isUuid(body.itemId) || typeof body.result !== "string") {
     throw invalidRequest();
   }
   if (

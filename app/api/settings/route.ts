@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const apiLimit = consumeApiRateLimit(request);
+  const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
   const headers = rateLimitHeaders(apiLimit);
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const apiLimit = consumeApiRateLimit(request);
+  const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
   const headers = rateLimitHeaders(apiLimit);
   try {

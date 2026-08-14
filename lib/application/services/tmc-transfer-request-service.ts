@@ -78,6 +78,17 @@ type AuthenticatedTmcCancellationActor = AuthorizationActor & {
   sessionVersion: number;
 };
 
+type AuthenticatedTmcHistoryActor = AuthorizationActor & {
+  sessionVersion: number;
+};
+
+// Route handlers always provide the session proof. Keep the property optional
+// for older in-process callers, while making the external read path recheck a
+// supplied proof inside the same transaction as the object read.
+type AuthenticatedTmcReadActor = AuthorizationActor & {
+  sessionVersion?: number;
+};
+
 type ClassifiedItem =
   | {
       itemId: string;
@@ -104,15 +115,33 @@ export class TmcTransferRequestService {
 
   async listHistory(
     filters: TmcTransferHistoryFilters,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcHistoryActor,
   ): Promise<TmcTransferHistoryDto> {
-    const actorId = normalizeReader(actor);
+    const normalizedActor = normalizeHistoryReader(actor);
     const normalized = normalizeHistoryFilters(filters);
     const now = this.clock.now();
-    const history = await this.unitOfWork.read(async ({ stageFour }) => {
+    const history = await this.unitOfWork.transaction(async ({
+      stageFour,
+      transferRequests,
+    }) => {
+      // Keep the authorization row locked through both collection queries so a
+      // role change, revocation, deletion, or session invalidation cannot race
+      // a privileged history read.
+      const currentActor = await transferRequests.findUserById(
+        normalizedActor.actorId,
+      );
+      if (
+        !currentActor ||
+        !currentActor.active ||
+        currentActor.deletedAt ||
+        currentActor.role !== normalizedActor.role ||
+        currentActor.version !== normalizedActor.sessionVersion
+      ) {
+        throw forbidden();
+      }
       const query = {
-        actorId,
-        includeAll: actor.role === "admin",
+        actorId: normalizedActor.actorId,
+        includeAll: currentActor.role === "admin",
         ...normalized,
         now,
         limit: normalized.limit + 1,
@@ -130,8 +159,8 @@ export class TmcTransferRequestService {
         const projected = toHistoryRequestDto(
           request,
           now,
-          actorId,
-          actor.role,
+          normalizedActor.actorId,
+          normalizedActor.role,
         );
         return projected ? [projected] : [];
       }),
@@ -198,28 +227,38 @@ export class TmcTransferRequestService {
 
   async getById(
     id: string,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcReadActor,
   ): Promise<TmcTransferRequestDto> {
     if (
       !isUuid(id) ||
       !isUuid(actor.userId) ||
       !hasPermission(actor.role, "inventory.tmc.transfer_request.create")
     ) throw requestNotFound();
-    const request = await this.unitOfWork.read(({ transferRequests }) =>
-      transferRequests.findById(id.toLowerCase()),
-    );
     const actorId = actor.userId.toLowerCase();
-    const projected = request
-      ? toReaderScopedRequestDto(request, this.clock.now(), actorId, actor.role)
-      : null;
-    if (!projected) throw requestNotFound();
-    return projected;
+    return this.unitOfWork.transaction(async ({ transferRequests }) => {
+      if (actor.sessionVersion !== undefined) {
+        if (
+          !Number.isSafeInteger(actor.sessionVersion) ||
+          actor.sessionVersion < 1
+        ) throw requestNotFound();
+        const currentActor = await transferRequests.findUserById(actorId);
+        if (!isCurrentReadActor(currentActor, actor.role, actor.sessionVersion)) {
+          throw requestNotFound();
+        }
+      }
+      const request = await transferRequests.findById(id.toLowerCase());
+      const projected = request
+        ? toReaderScopedRequestDto(request, this.clock.now(), actorId, actor.role)
+        : null;
+      if (!projected) throw requestNotFound();
+      return projected;
+    });
   }
 
   async getItemPhoto(
     requestId: string,
     itemId: string,
-    actor: AuthorizationActor,
+    actor: AuthenticatedTmcReadActor,
   ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" }> {
     if (
       !isUuid(requestId) ||
@@ -229,9 +268,19 @@ export class TmcTransferRequestService {
     ) {
       throw requestNotFound();
     }
-    return this.unitOfWork.read(async ({ transferRequests }) => {
+    const actorId = actor.userId.toLowerCase();
+    return this.unitOfWork.transaction(async ({ transferRequests }) => {
+      if (actor.sessionVersion !== undefined) {
+        if (
+          !Number.isSafeInteger(actor.sessionVersion) ||
+          actor.sessionVersion < 1
+        ) throw requestNotFound();
+        const currentActor = await transferRequests.findUserById(actorId);
+        if (!isCurrentReadActor(currentActor, actor.role, actor.sessionVersion)) {
+          throw requestNotFound();
+        }
+      }
       const request = await transferRequests.findById(requestId.toLowerCase());
-      const actorId = actor.userId.toLowerCase();
       const requestItem = request?.items.find(
         (item) => item.itemId === itemId.toLowerCase(),
       );
@@ -597,7 +646,8 @@ export class TmcTransferRequestService {
         role: currentActor.role,
       };
       const recipient = users.get(normalized.recipientId);
-      if (!recipient) throw validation("recipient_not_found");
+      // Keep recipient existence and lifecycle state indistinguishable to callers.
+      if (!recipient) throw validation("recipient_unavailable");
       if (!recipient.active || recipient.deletedAt) {
         throw validation("recipient_unavailable");
       }
@@ -632,7 +682,7 @@ export class TmcTransferRequestService {
             return {
               itemId: item.itemId,
               outcome: item.outcome,
-              problem: item.problem,
+              problem: publicCreationProblem(item.problem),
             };
           }),
         };
@@ -691,7 +741,7 @@ export class TmcTransferRequestService {
               return {
                 itemId: item.itemId,
                 outcome: "problem" as const,
-                problem: item.problem,
+                problem: publicCreationProblem(item.problem),
               };
             }
             if (!lateProblem) {
@@ -700,7 +750,7 @@ export class TmcTransferRequestService {
             return {
               itemId: item.itemId,
               outcome: "problem" as const,
-              problem: lateProblem,
+              problem: publicCreationProblem(lateProblem),
             };
           }),
         });
@@ -713,7 +763,7 @@ export class TmcTransferRequestService {
           return {
             itemId: item.itemId,
             outcome: "problem" as const,
-            problem: item.problem,
+            problem: publicCreationProblem(item.problem),
           };
         }
         const lateProblem = lateProblemsByItemId.get(item.itemId);
@@ -721,7 +771,7 @@ export class TmcTransferRequestService {
           return {
             itemId: item.itemId,
             outcome: "problem" as const,
-            problem: lateProblem,
+            problem: publicCreationProblem(lateProblem),
           };
         }
         const inserted = insertedByItemId.get(item.itemId)!;
@@ -1121,6 +1171,35 @@ function normalizeReader(actor: AuthorizationActor): string {
   return actor.userId.toLowerCase();
 }
 
+function isCurrentReadActor(
+  currentActor: TmcTransferUserRecord | null,
+  role: AuthorizationActor["role"],
+  sessionVersion: number,
+) {
+  return Boolean(
+    currentActor &&
+      currentActor.active &&
+      !currentActor.deletedAt &&
+      currentActor.role === role &&
+      currentActor.version === sessionVersion,
+  );
+}
+
+function normalizeHistoryReader(actor: AuthenticatedTmcHistoryActor) {
+  const actorId = normalizeReader(actor);
+  if (
+    !Number.isSafeInteger(actor.sessionVersion) ||
+    actor.sessionVersion < 1
+  ) {
+    throw forbidden();
+  }
+  return {
+    actorId,
+    role: actor.role,
+    sessionVersion: actor.sessionVersion,
+  };
+}
+
 function canReadRequest(
   request: TmcTransferRequestRecord,
   actorId: string,
@@ -1189,7 +1268,7 @@ function toParticipantRequestDto(
       isAdministrativeDecision: false,
       administrativeReason: null,
       items: [...participantItems],
-    }, now);
+    }, now, { includeContactEmails: false });
   }
   // When all participant items are cancelled, they have no decidedAt —
   // the cancellation was driven by the request itself, so we use the
@@ -1203,7 +1282,7 @@ function toParticipantRequestDto(
       isAdministrativeDecision: false,
       administrativeReason: null,
       items: [...participantItems],
-    }, now);
+    }, now, { includeContactEmails: false });
   }
   // For accepted/rejected, items have decidedAt set — use the most recent one.
   const finalItem = [...participantItems]
@@ -1220,7 +1299,7 @@ function toParticipantRequestDto(
     isAdministrativeDecision: false,
     administrativeReason: null,
     items: [...participantItems],
-  }, now);
+  }, now, { includeContactEmails: false });
 }
 
 /**
@@ -1465,14 +1544,16 @@ function classifyItems(
     if (seen.has(itemId)) return problem(itemId, "duplicate_item");
     seen.add(itemId);
     const candidate = candidatesById.get(itemId);
-    if (!candidate) return problem(itemId, "item_not_found");
+    // A missing item and an item outside the caller's ownership scope must not
+    // produce distinguishable batch outcomes.
+    if (!candidate) return problem(itemId, "item_unavailable");
     if (
       !canPerformInventoryOperation(actor, {
         operation: "tmc.transfer_request.create",
         currentResponsibleId: candidate.responsibleUser?.id ?? "",
       })
     ) {
-      return problem(itemId, "forbidden");
+      return problem(itemId, "item_unavailable");
     }
     if (candidate.itemStatus !== "active" || candidate.archivedAt) {
       return problem(itemId, "item_inactive");
@@ -1523,18 +1604,22 @@ function incompleteProjection() {
 function toRequestDto(
   record: TmcTransferRequestRecord,
   now: Date,
+  options: { includeContactEmails?: boolean } = {},
 ): TmcTransferRequestDto {
+  const includeContactEmails = options.includeContactEmails ?? true;
   const base = {
     id: record.id,
-    initiator: toUserDto(record.initiator),
-    recipient: toUserDto(record.recipient),
+    initiator: toUserDto(record.initiator, includeContactEmails),
+    recipient: toUserDto(record.recipient, includeContactEmails),
     comment: record.comment,
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt.toISOString(),
     overdue: record.status === "pending" && now.getTime() >= record.expiresAt.getTime(),
     version: record.version,
     summary: summarize(record.items),
-    items: record.items.map(toRequestItemDto),
+    items: record.items.map((item) =>
+      toRequestItemDto(item, includeContactEmails),
+    ),
   };
   if (record.status === "pending") {
     if (
@@ -1561,7 +1646,7 @@ function toRequestDto(
       ...base,
       status: record.status,
       closedAt: record.closedAt.toISOString(),
-      closedBy: toUserDto(record.closedBy),
+      closedBy: toUserDto(record.closedBy, includeContactEmails),
       isAdministrativeDecision: true,
       administrativeReason: record.administrativeReason,
     };
@@ -1571,7 +1656,7 @@ function toRequestDto(
     ...base,
     status: record.status,
     closedAt: record.closedAt.toISOString(),
-    closedBy: toUserDto(record.closedBy),
+    closedBy: toUserDto(record.closedBy, includeContactEmails),
     isAdministrativeDecision: false,
     administrativeReason: null,
   };
@@ -1579,6 +1664,7 @@ function toRequestDto(
 
 function toRequestItemDto(
   record: TmcTransferRequestItemRecord,
+  includeContactEmails: boolean,
 ): TmcTransferRequestItemDto {
   const base = {
     id: record.id,
@@ -1602,7 +1688,7 @@ function toRequestItemDto(
     responsibilityPeriodIdAtRequest: record.responsibilityPeriodIdAtRequest,
     currentResponsibleIdAtRequest: record.currentResponsibleIdAtRequest,
     responsibleUserProfile: record.responsibleUserProfile
-      ? toUserDto(record.responsibleUserProfile)
+      ? toUserDto(record.responsibleUserProfile, includeContactEmails)
       : null,
     createdAt: record.createdAt.toISOString(),
     version: record.version,
@@ -1628,7 +1714,9 @@ function toRequestItemDto(
       result: "cancelled",
       invalidReason: null,
       decidedAt: record.decidedAt ? record.decidedAt.toISOString() : null,
-      decidedBy: record.decidedBy ? toUserDto(record.decidedBy) : null,
+      decidedBy: record.decidedBy
+        ? toUserDto(record.decidedBy, includeContactEmails)
+        : null,
     };
   }
   if (!record.decidedAt || !record.decidedBy) throw incompleteProjection();
@@ -1639,7 +1727,7 @@ function toRequestItemDto(
       result: "invalidated",
       invalidReason: record.invalidReason,
       decidedAt: record.decidedAt.toISOString(),
-      decidedBy: toUserDto(record.decidedBy),
+      decidedBy: toUserDto(record.decidedBy, includeContactEmails),
     };
   }
   if (record.invalidReason) throw incompleteProjection();
@@ -1648,7 +1736,7 @@ function toRequestItemDto(
     result: record.result,
     invalidReason: null,
     decidedAt: record.decidedAt.toISOString(),
-    decidedBy: toUserDto(record.decidedBy),
+    decidedBy: toUserDto(record.decidedBy, includeContactEmails),
   };
 }
 
@@ -1667,11 +1755,11 @@ function summarize(
   return summary;
 }
 
-function toUserDto(user: TmcOperationUserRecord) {
+function toUserDto(user: TmcOperationUserRecord, includeEmail = true) {
   return {
     id: user.id,
     fullName: user.fullName,
-    email: user.email,
+    email: includeEmail ? user.email : null,
     role: user.role,
   };
 }
@@ -1764,6 +1852,14 @@ function normalizeAdministrativeReason(
   if (required && !normalized) throw validation("administrative_reason_required");
   if (!required && normalized) throw validation("administrative_reason_not_allowed");
   return required ? normalized : null;
+}
+
+function publicCreationProblem(
+  code: TmcOperationProblemCode,
+): TmcOperationProblemCode {
+  return code === "item_not_found" || code === "forbidden"
+    ? "item_unavailable"
+    : code;
 }
 
 function canonicalAdministrativeReason(value: string | null | undefined) {

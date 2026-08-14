@@ -75,13 +75,14 @@ describe("persistent PostgreSQL users", () => {
   });
 
   it("assigns unique server codes and enforces normalized unique email", async () => {
+    const adminSessionVersion = await sessionVersionFor(adminActorId);
     const created = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
         service.createUser({
           email: `user-${index}@example.com`,
           fullName: `User ${index}`,
           role: "employee",
-        }, adminActorId),
+        }, adminActorId, adminSessionVersion),
       ),
     );
     expect(new Set(created.map((user) => user.code)).size).toBe(created.length);
@@ -90,7 +91,7 @@ describe("persistent PostgreSQL users", () => {
         email: " USER-0@EXAMPLE.COM ",
         fullName: "Duplicate User",
         role: "employee",
-      }, adminActorId),
+      }, adminActorId, adminSessionVersion),
     ).rejects.toMatchObject({ publicCode: "email_already_exists" });
   });
 
@@ -100,7 +101,7 @@ describe("persistent PostgreSQL users", () => {
       fullName: "Another Admin",
       role: "admin",
       initialPassword: "Another-Admin-Password-2026!",
-    }, adminActorId);
+    }, adminActorId, await sessionVersionFor(adminActorId));
     const activeSecond = await service.updateUser(second.id, {
       fullName: second.fullName,
       phone: second.phone,
@@ -108,10 +109,11 @@ describe("persistent PostgreSQL users", () => {
       emailVerified: second.emailVerified,
       active: true,
       version: second.version,
-    }, adminActorId);
+    }, adminActorId, await sessionVersionFor(adminActorId));
     const first = (await service.listUsers()).find(
       (user) => user.role === "admin" && user.id !== activeSecond.id,
     )!;
+    const adminSessionVersion = await sessionVersionFor(adminActorId);
 
     const results = await Promise.allSettled([
       service.updateUser(first.id, {
@@ -121,7 +123,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: first.emailVerified,
         active: false,
         version: first.version,
-      }, adminActorId),
+      }, adminActorId, adminSessionVersion),
       service.updateUser(activeSecond.id, {
         fullName: activeSecond.fullName,
         phone: activeSecond.phone,
@@ -129,7 +131,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: activeSecond.emailVerified,
         active: false,
         version: activeSecond.version,
-      }, adminActorId),
+      }, adminActorId, adminSessionVersion),
     ]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(
       1,
@@ -148,12 +150,13 @@ describe("persistent PostgreSQL users", () => {
       role: "employee",
       active: true,
       initialPassword: "Race-Owner-Password-2026!",
-    }, adminActorId);
+    }, adminActorId, await sessionVersionFor(adminActorId));
     const target = await service.createUser({
       email: "promotion-race@example.com",
       fullName: "Promotion Race",
       role: "employee",
-    }, adminActorId);
+    }, adminActorId, await sessionVersionFor(adminActorId));
+    const adminSessionVersion = await sessionVersionFor(adminActorId);
 
     const [promotion, ownerMutation] = await Promise.allSettled([
       service.updateUser(target.id, {
@@ -163,7 +166,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: target.emailVerified,
         active: target.active,
         version: target.version,
-      }, adminActorId),
+      }, adminActorId, adminSessionVersion),
       service.updateUser(target.id, {
         fullName: "Owner overwrite",
         phone: target.phone,
@@ -171,7 +174,7 @@ describe("persistent PostgreSQL users", () => {
         emailVerified: target.emailVerified,
         active: target.active,
         version: target.version + 1,
-      }, employee.id),
+      }, employee.id, employee.version),
     ]);
 
     expect(promotion.status).toBe("fulfilled");
@@ -188,7 +191,7 @@ describe("persistent PostgreSQL users", () => {
       role: "admin",
       active: true,
       initialPassword: "Concurrent-Actor-Password-2026!",
-    }, adminActorId);
+    }, adminActorId, await sessionVersionFor(adminActorId));
     const client = await pool.connect();
     let committed = false;
     try {
@@ -203,7 +206,7 @@ describe("persistent PostgreSQL users", () => {
         email: "must-not-exist@example.com",
         fullName: "Must Not Exist",
         role: "employee",
-      }, actor.id);
+      }, actor.id, actor.version);
       await new Promise<void>((resolve) => setImmediate(resolve));
       await client.query("commit");
       committed = true;
@@ -298,6 +301,11 @@ describe("persistent PostgreSQL users", () => {
       remaining: 1,
     });
   });
+
+  async function sessionVersionFor(userId: string) {
+    return (await service.listUsers()).find((user) => user.id === userId)!
+      .version;
+  }
 });
 
 function createService(config: DatabaseConfig) {

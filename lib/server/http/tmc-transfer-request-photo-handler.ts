@@ -6,11 +6,15 @@ import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { itemPhotoResponse } from "@/lib/server/http/photo-request";
 
 export function createTmcTransferRequestPhotoGetHandler(dependencies: {
-  authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
+  authenticate(request: Request): Promise<{
+    userId: string;
+    role: UserRole;
+    sessionVersion?: number;
+  }>;
   getItemPhoto(
     requestId: string,
     itemId: string,
-    actor: { userId: string; role: UserRole },
+    actor: { userId: string; role: UserRole; sessionVersion?: number },
   ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" }>;
 }) {
   return async function get(

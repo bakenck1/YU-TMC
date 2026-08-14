@@ -167,7 +167,7 @@ export default function InventoryTransfersManager() {
   const scanAction = scanResult
     ? employeeScanAction({
         status: scanResult.status as "active" | "maintenance" | "decommissioned",
-        responsibleName: scanResult.responsibleName,
+        isAssigned: scanResult.isAssigned,
         isCurrentUserResponsible: scanResult.isCurrentUserResponsible,
       })
     : ({ kind: "unavailable" } as const);
@@ -205,7 +205,7 @@ export default function InventoryTransfersManager() {
             <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Этот свободный предмет можно сразу закрепить за собой.</p>
           ) : null}
           {scanAction.kind === "request_transfer" ? (
-            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">Этот предмет закреплён за {scanAction.ownerName}. Вы не можете подключить его напрямую — запросите передачу владельцу.</p>
+            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">Этот предмет закреплён за другим сотрудником. Вы не можете подключить его напрямую — запросите передачу.</p>
           ) : null}
           {scanAction.kind === "already_owned" ? (
             <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-900">Этот предмет уже закреплён за вами.</p>

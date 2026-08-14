@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../app/api/users/route.ts",
+    "../../lib/application/services/user-service.ts",
+    "../users-collection-authorization.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

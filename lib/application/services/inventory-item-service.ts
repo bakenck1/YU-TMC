@@ -308,7 +308,9 @@ export class InventoryItemService {
       assertItemReadable(item, actor);
       return items.listComments(normalizedId);
     });
-    return records.map((record) => toCommentDto(normalizedId, record));
+    return records.map((record) =>
+      toCommentDto(normalizedId, record, actor.role === "admin"),
+    );
   }
 
   async addComment(
@@ -350,7 +352,9 @@ export class InventoryItemService {
       }
       return items.listComments(normalizedId);
     });
-    return records.map((record) => toCommentDto(normalizedId, record));
+    return records.map((record) =>
+      toCommentDto(normalizedId, record, actor.role === "admin"),
+    );
   }
 
   async findCommentAttachment(
@@ -1613,11 +1617,12 @@ function toAuditDto(record: InventoryItemAuditRecord): InventoryItemAuditDto {
 function toCommentDto(
   itemId: string,
   record: InventoryItemCommentRecord,
+  includeAuthorEmail: boolean,
 ): InventoryItemCommentDto {
   return {
     id: record.id,
     authorName: record.authorName,
-    authorEmail: record.authorEmail,
+    authorEmail: includeAuthorEmail ? record.authorEmail : null,
     message: record.message,
     createdAt: record.createdAt.toISOString(),
     attachment: record.attachment

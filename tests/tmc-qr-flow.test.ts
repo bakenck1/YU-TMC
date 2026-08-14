@@ -25,6 +25,7 @@ const ACTIVE_ITEM: QrResolutionDto = {
     buildingName: "Main building",
     roomDesignation: "301",
     responsibleName: null,
+    isAssigned: false,
     isCurrentUserResponsible: false,
   },
 };
@@ -45,6 +46,7 @@ test("classifies only a resolved active item as a TMC QR selection", () => {
       kind: "item",
       id: "5e81ce80-1675-4da7-84ac-c97e15ff123c",
       status: "active",
+      isAssigned: false,
       title: "Стул",
     },
   });

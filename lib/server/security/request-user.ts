@@ -14,7 +14,7 @@ import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 
 export async function requireCurrentUser(request: Request) {
   requireSameOriginMutation(request);
-  const limit = consumeApiRateLimit(request);
+  const limit = await consumeApiRateLimit(request);
   if (!limit.allowed) {
     throw new ApplicationError("rate_limited", "too_many_requests", {
       safeDetails: { retryAfterSeconds: String(limit.retryAfterSeconds) },
@@ -75,6 +75,11 @@ export async function requirePermission(
 export function authorizationActor(user: {
   userId: string;
   role: AuthorizationActor["role"];
-}): AuthorizationActor {
-  return { userId: user.userId, role: user.role };
+  sessionVersion: number;
+}): AuthorizationActor & { sessionVersion: number } {
+  return {
+    userId: user.userId,
+    role: user.role,
+    sessionVersion: user.sessionVersion,
+  };
 }

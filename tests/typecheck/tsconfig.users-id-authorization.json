@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "../../app/api/users/[id]/route.ts",
+    "../../lib/application/services/user-service.ts",
+    "../database/persistent-users.test.ts",
+    "../users-id-authorization.test.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

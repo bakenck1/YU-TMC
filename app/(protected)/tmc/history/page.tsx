@@ -20,7 +20,11 @@ export default async function TmcHistoryPage({ searchParams }: { searchParams: P
     const value = raw[key];
     if (typeof value === "string" && value) filters[key] = value;
   }
-  const result = await getApplicationServices().tmcTransferRequests.listHistory(filters, { userId: user.userId, role: user.role });
+  const result = await getApplicationServices().tmcTransferRequests.listHistory(filters, {
+    userId: user.userId,
+    role: user.role,
+    sessionVersion: user.sessionVersion,
+  });
   const view = toTmcHistoryPageView(result);
   return <TmcHistory
     requests={view.requests}

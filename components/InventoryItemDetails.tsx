@@ -1123,7 +1123,10 @@ export default function InventoryItemDetails({
                 <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="font-medium text-zinc-800">
-                      {entry.authorName} <span className="font-normal text-zinc-400">· {entry.authorEmail}</span>
+                      {entry.authorName}
+                      {entry.authorEmail ? (
+                        <span className="font-normal text-zinc-400">· {entry.authorEmail}</span>
+                      ) : null}
                     </p>
                     <time dateTime={entry.createdAt} className="text-xs text-zinc-400">
                       {new Date(entry.createdAt).toLocaleString(locale)}

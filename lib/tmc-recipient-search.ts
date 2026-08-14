@@ -14,12 +14,17 @@ type RecipientSearchSource = Pick<
   "id" | "fullName" | "email" | "role" | "active"
 > & { deletedAt?: Date | null };
 
+export type TmcRecipientCandidate = Omit<
+  TmcOperationUserDto,
+  "email"
+> & { email: string };
+
 export function searchEligibleTmcRecipients(
   users: readonly RecipientSearchSource[],
   actorUserId: string,
   queryInput: string,
   limit = TMC_RECIPIENT_RESULT_LIMIT,
-): TmcOperationUserDto[] {
+): TmcRecipientCandidate[] {
   const query = normalizeTmcRecipientQuery(queryInput);
   if (Array.from(query).length < 2) return [];
 

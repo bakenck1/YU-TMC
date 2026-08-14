@@ -1,8 +1,10 @@
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim AS base
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+FROM base AS dependencies
 
 COPY package.json package-lock.json ./
 # The Windows-only embedded PostgreSQL package is needed by the workstation
@@ -10,13 +12,40 @@ COPY package.json package-lock.json ./
 # platform install scripts and forcing npm to ignore that package's OS guard.
 RUN npm install --ignore-scripts --force --no-audit --no-fund
 
+FROM dependencies AS builder
+
 COPY . .
 
 # Compile once while building the image so the container serves pages without
 # Turbopack's first-request compilation delay.
 RUN npm run build
 
+FROM dependencies AS migrator
+
+COPY . .
+
+FROM dependencies AS worker
+
+COPY . .
+
+CMD ["node", "--conditions=react-server", "--import", "tsx", "scripts/process-tmc-push-outbox.ts", "--loop"]
+
+FROM dependencies AS runner
+
+ENV NODE_ENV=production
+
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+# Server bundles must not carry source maps into the runtime image. They can
+# disclose server-side source if a future proxy accidentally serves an
+# internal .next path.
+RUN find /app/.next -type f -name '*.map' -delete
+
+# The read-only runtime receives this directory as a bounded tmpfs mount.
+RUN mkdir -p /app/.next/cache
+
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0"]
- 
+CMD ["node", "server.js"]

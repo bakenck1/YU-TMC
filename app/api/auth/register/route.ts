@@ -35,7 +35,7 @@ function validName(value: string) {
 }
 
 export async function POST(request: Request) {
-  const apiLimit = consumeApiRateLimit(request);
+  const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
   if (!isAuthorizedBootstrapRequest(request)) {

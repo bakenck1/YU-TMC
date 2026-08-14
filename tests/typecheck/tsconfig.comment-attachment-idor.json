@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [],
+  "files": [
+    "../../app/api/inventory/items/[id]/comments/[commentId]/attachments/[attachmentId]/route.ts",
+    "../../lib/application/ports/inventory-item-repositories.ts",
+    "../../lib/application/services/inventory-item-service.ts",
+    "../../lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
+    "../comment-attachment-idor.test.ts"
+  ]
+}

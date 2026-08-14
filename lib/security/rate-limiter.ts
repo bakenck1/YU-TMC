@@ -245,8 +245,16 @@ const apiRateLimiter = new InMemoryRateLimiter({
   windowMs: 60_000,
 });
 
-export function consumeApiRateLimit(request: Request) {
-  return apiRateLimiter.consume(getClientIp(request));
+export function consumeApiRateLimit(request: Request): Promise<RateLimitResult> {
+  if (process.env.NODE_ENV !== "test") {
+    return consumeDurableRateLimit({
+      namespace: "api-by-ip-v2",
+      key: getClientIp(request),
+      limit: 120,
+      windowMs: 60_000,
+    });
+  }
+  return Promise.resolve(apiRateLimiter.consume(getClientIp(request)));
 }
 
 export function resetRateLimitStateForTests() {

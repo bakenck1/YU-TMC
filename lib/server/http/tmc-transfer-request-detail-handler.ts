@@ -6,10 +6,14 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 export function createTmcTransferRequestDetailGetHandler(dependencies: {
-  authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
+  authenticate(request: Request): Promise<{
+    userId: string;
+    role: UserRole;
+    sessionVersion?: number;
+  }>;
   getById(
     id: string,
-    actor: { userId: string; role: UserRole },
+    actor: { userId: string; role: UserRole; sessionVersion?: number },
   ): Promise<TmcTransferRequestDto>;
 }) {
   return async function get(request: Request, id: string): Promise<Response> {
