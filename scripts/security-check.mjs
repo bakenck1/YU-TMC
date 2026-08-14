@@ -2,8 +2,14 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const requiredDockerExclusions = [
+  "/_audit/",
+  "docs",
+  "tests",
   "/_migration/",
   "/errors/",
+  "/storybook-static/",
+  "drizzle-probe",
+  "*.tsbuildinfo",
   "**/.data/**",
   "**/.env*",
   "**/*secret*",

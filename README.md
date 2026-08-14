@@ -44,6 +44,7 @@ npm run lint
 npm run ui:check
 npm run docs:check
 npm run legacy:check
+npm run artifacts:check
 npm run test:all
 npm run test:database:local
 npm run db:check
@@ -120,12 +121,15 @@ The functional coverage matrix and TDD boundary rules are maintained in
 [docs/test-coverage.md](docs/test-coverage.md).
 The compatibility inventory and legacy sunset policy are maintained in
 [docs/legacy-compatibility.md](docs/legacy-compatibility.md).
+The audit, generated-history and repository-artifact policy is maintained in
+[docs/repository-artifacts.md](docs/repository-artifacts.md).
 
 Run the documentation contract itself with:
 
 ```powershell
 npm run docs:check
 npm run legacy:check
+npm run artifacts:check
 ```
 
 The package is private and intentionally retains the existing npm name

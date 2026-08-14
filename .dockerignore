@@ -20,6 +20,7 @@ node_modules
 /_migration/
 /errors/
 /errors-test/
+/storybook-static/
 **/*.dump
 **/*.bak
 **/PG_VERSION
@@ -31,3 +32,4 @@ README.md
 docs
 tests
 drizzle-probe
+*.tsbuildinfo

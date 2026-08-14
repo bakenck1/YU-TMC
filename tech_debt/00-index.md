@@ -33,16 +33,16 @@ release-процессу, multi-instance deployment и доказательст�
 | P2 | [God services/components](06-god-services-components.md) | крупные units разделяются по стабильным workflow seams без смены доменных правил | L |
 | P2 | [Functional test coverage](07-functional-test-coverage.md) | критичные вертикали имеют доказуемые contract/integration/UI tests | M |
 | P3 | [Legacy compatibility policy](08-legacy-compatibility-policy.md) | Done: inventory, 90-day evidence policy и CI gate против новых compatibility surfaces | M |
-| P3 | [Audit repository policy](09-audit-repository-policy.md) | исторические audit/generated материалы имеют понятную политику хранения | S / decision |
+| P3 | [Audit repository policy](09-audit-repository-policy.md) | Done: immutable audit catalog, pinned provenance, generated-history gate и Docker boundary | S / decision |
 
 ## Near-term versus hard/optional
 
 Near-term: `03`, `05`, `01`, `04`, затем `07`. Эти изменения маленькие или
 локализованные и дают максимальный эффект без переписывания домена.
 
-Hard/optional: `09`. `02`, `06` и `08` уже закрыты минимальными seams; оставшаяся
-задача требует решения о хранении исторических материалов. Её нельзя закрывать
-механическим удалением audit/generated data.
+Hard/optional: none. `02`, `06`, `08` и `09` закрыты минимальными seams;
+external archive для `_audit/` остаётся отдельным будущим решением только после
+измерения clone cost, reviewer access, retention и проверочного restore.
 
 ## Общие правила реализации
 

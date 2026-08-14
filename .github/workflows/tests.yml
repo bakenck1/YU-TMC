@@ -58,6 +58,7 @@ jobs:
         run: |
           npm run docs:check
           npm run legacy:check
+          npm run artifacts:check
           npm run lint
           npm run ui:check
           npm run db:check

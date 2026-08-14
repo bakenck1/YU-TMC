@@ -47,3 +47,44 @@ provenance. Любой перенос требует сохранённого ha
 Владелец репозитория зафиксировал выбранную policy и дату пересмотра; audit evidence не теряется;
 generated snapshots остаются согласованными с migrations; Docker/security
 checks подтверждают отсутствие лишних материалов в runtime.
+
+## Status: Done
+
+### Реализация
+
+- Выбран и зафиксирован вариант «оставить evidence в основном репозитории до
+  отдельного решения об archive»: исторические отчёты не переписываются,
+  новые отчёты добавляются датированными append-only файлами.
+- Добавлен каталог [`docs/repository-artifacts.md`](../docs/repository-artifacts.md)
+  с owner, retention, review date `2026-11-12`, provenance SHA для каждого
+  отчёта, правилами нового audit report и критериями external archive.
+- Добавлены machine-readable baseline и `npm run artifacts:check`. Gate
+  проверяет каталог reports, даты и SHA, pinned audit gitlink и `.gitmodules`,
+  90-дневное review window, CI/README/docs wiring, Docker context/runtime
+  exclusions, tracked generated artifacts и SQL/journal/snapshot mapping.
+- Drizzle raw-SQL-only migration
+  `20260808120000_security_resource_quotas` зафиксирована как единственное
+  объяснённое исключение без generated snapshot; SQL и journal entry всё равно
+  обязательны.
+- Добавлен contract test, `.gitmodules`, exclusions для Storybook/probe/
+  TypeScript build output и усилен `security:check` для audit/docs/tests.
+
+### Validation
+
+- `npm.cmd run test:all`: 552 server, 15 UI и 41 component tests passed;
+  PostgreSQL integration skipped без paired test credentials.
+- `npm.cmd run artifacts:check`, `docs:check`, `lint`, `ui:check`,
+  `security:check`, `db:check`, `npm.cmd run build` и `git diff --check` passed.
+- Два fresh independent review-agent прохода были запущены без контекста
+  предыдущего диалога. Оба зависли на статусе `running` и не вернули оценку;
+  после двух попыток были остановлены по лимиту проходов. Поэтому score
+  sub-agent честно не фиксируется как выданный; реализация выровнена по
+  локальным проверкам и ручной проверке acceptance, без третьего прохода.
+
+### Осознанные границы
+
+- Docker image build и external archive restore требуют CI/staging environment;
+  локально подтверждены context rules, production security gate и Next build.
+- Перенос `_audit/` не выполнялся: до измерения clone cost, проверки доступа,
+  backup/restore и legal/security retention удаление tracked evidence было бы
+  необратимым и нарушило бы provenance.

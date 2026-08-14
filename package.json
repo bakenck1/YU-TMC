@@ -18,6 +18,7 @@
     "ui:check": "node scripts/check-ui-architecture.mjs",
     "docs:check": "node scripts/check-documentation.mjs",
     "legacy:check": "node scripts/check-legacy-compatibility.mjs",
+    "artifacts:check": "node scripts/check-repository-artifacts.mjs",
     "test:database:local": "node scripts/test-database-local.mjs",
     "security:check": "node scripts/security-check.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",

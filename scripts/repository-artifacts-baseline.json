@@ -1,0 +1,125 @@
+{
+  "created": "2026-08-14",
+  "nextReview": "2026-11-12",
+  "reviewIntervalDays": 90,
+  "owner": "repository maintainer",
+  "policyDocument": "docs/repository-artifacts.md",
+  "auditSubmodule": {
+    "path": "_audit/Anthropic-Cybersecurity-Skills",
+    "commit": "e612f4944c55d306bb75565022442d7da8cf2b9a",
+    "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills.git"
+  },
+  "reports": [
+    {
+      "path": "docs/security-audit-2026-08-03.md",
+      "kind": "security-audit",
+      "date": "2026-08-03",
+      "scope": "security, authorization, dependency and release-readiness review",
+      "commit": "b28f9a1336da078063e792ffddcab85ec430ff8e",
+      "commands": [
+        "npm audit --json",
+        "npm audit --omit=dev --json",
+        "next build"
+      ]
+    },
+    {
+      "path": "docs/security-audit-2026-08-10.md",
+      "kind": "security-audit",
+      "date": "2026-08-10",
+      "scope": "production-readiness security review and remediation evidence",
+      "commit": "0e819ebd3bf00bc3603e23062977d0808a69d6c1",
+      "commands": [
+        "npm run test:all",
+        "npm run test:database:local",
+        "npm run build",
+        "npm run db:check",
+        "npm run lint -- --quiet",
+        "npm run security:check",
+        "npm audit --omit=dev",
+        "git diff --check"
+      ]
+    },
+    {
+      "path": "docs/security-audit-2026-08-14.md",
+      "kind": "security-audit",
+      "date": "2026-08-14",
+      "scope": "API authorization, persistence boundaries, build and runtime-image hardening",
+      "commit": "b81d8dc306f36c6d4983082b8319c93785c9e513",
+      "commands": [
+        "npm run test:all",
+        "npm run test:database:local",
+        "npm run build",
+        "npm run storybook:build",
+        "npm run lint",
+        "npm run security:check",
+        "npm run db:check",
+        "npm run ui:check",
+        "npm audit --omit=dev --audit-level=high --prefer-offline",
+        "git diff --check",
+        "docker compose -f docker-compose.mobile.yml config --quiet"
+      ]
+    },
+    {
+      "path": "docs/ui-refactor-report.md",
+      "kind": "engineering-report",
+      "date": "2026-08-12",
+      "scope": "UI architecture, component boundaries and Storybook enforcement",
+      "commit": "2ae72709ee298b2e51f6aece69242cc8bc3e9ad8",
+      "commands": [
+        "npm run storybook:build",
+        "npm run ui:check",
+        "npm run lint",
+        "npm run test:components",
+        "npm run test:all",
+        "npm run build"
+      ]
+    }
+  ],
+  "generatedHistory": {
+    "directory": "drizzle",
+    "journal": "drizzle/meta/_journal.json",
+    "sqlPattern": "*.sql",
+    "snapshotPattern": "*_snapshot.json",
+    "retention": "append-only",
+    "snapshotExceptions": [
+      {
+        "tag": "20260808120000_security_resource_quotas",
+        "reason": "Raw SQL-only indexes, routines and quota tables are not represented by the Drizzle schema snapshot."
+      }
+    ]
+  },
+  "dockerContextExclusions": ["/_audit/", "docs", "tests", "*.tsbuildinfo"],
+  "ignoredArtifacts": [
+    {
+      "path": "errors/",
+      "gitignore": "/errors/",
+      "dockerignore": "/errors/",
+      "allowedTracked": ["errors/.gitkeep", "errors/README.md"]
+    },
+    {
+      "path": "errors-test/",
+      "gitignore": null,
+      "dockerignore": "/errors-test/"
+    },
+    {
+      "path": "storybook-static/",
+      "gitignore": "/storybook-static/",
+      "dockerignore": "/storybook-static/"
+    },
+    {
+      "path": ".next/",
+      "gitignore": "/.next/",
+      "dockerignore": ".next"
+    },
+    {
+      "path": "drizzle-probe/",
+      "gitignore": "/drizzle-probe/",
+      "dockerignore": "drizzle-probe"
+    },
+    {
+      "path": "*.tsbuildinfo",
+      "gitignore": "*.tsbuildinfo",
+      "dockerignore": "*.tsbuildinfo"
+    }
+  ]
+}
