@@ -59,3 +59,22 @@ settings и monitoring.
 - UI critical states покрыты без brittle snapshots;
 - matrix показывает coverage и осознанные exclusions;
 - CI запускает обязательные suites и различает skipped/ran.
+
+## Status: Done
+
+Добавлена матрица [`docs/test-coverage.md`](../docs/test-coverage.md) с
+явными evidence, TDD-правилами и exclusions. Добавлены focused service
+contracts в [`tests/application-service-contracts.test.ts`](../tests/application-service-contracts.test.ts):
+idempotency completion/replay/retry, QR privacy and masking, room projections,
+location create/update/archive workflows, authorization, validation and CAS
+conflicts. Documentation checker теперь также проверяет coverage matrix.
+
+Validation: focused service/documentation tests 12/12, `npm.cmd run docs:check`,
+`npm.cmd run lint` и полный `npm.cmd run test:all` (532 server, 15 UI,
+41 component; DB skipped locally without credentials) проходят.
+
+Independent review scores: first pass 6/10 (test quality 6/10), second pass
+6/10 (test quality 5/10). Второй проход выявил compile-ошибки в callback-фейках
+и false-positive риски; они исправлены, после чего повторно прогнаны focused и
+full suites. Matrix намеренно не объявляет route-level/list/UI states закрытыми,
+если для них нет отдельного evidence.

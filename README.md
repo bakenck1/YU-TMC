@@ -115,6 +115,8 @@ legacy import, backups and deployment rules are documented in
 documented in [docs/production-monitoring.md](docs/production-monitoring.md).
 The release gate checklist is maintained in
 [docs/release-checklist.md](docs/release-checklist.md).
+The functional coverage matrix and TDD boundary rules are maintained in
+[docs/test-coverage.md](docs/test-coverage.md).
 
 Run the documentation contract itself with:
 
