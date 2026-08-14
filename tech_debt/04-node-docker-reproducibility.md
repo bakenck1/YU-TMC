@@ -50,3 +50,22 @@ workaround для Linux/native build. Поэтому механическая з
 
 CI и Docker используют один объявленный Node major; clean image build
 воспроизводим по lockfile; builder/worker/migrator/runtime smoke зелёные.
+
+## Status: Done
+
+Node 22 is now declared in `package.json`, `.nvmrc`, CI and Docker; `.npmrc`
+rejects other Node majors during dependency installation. Docker uses the
+committed lockfile with `npm ci`, keeps platform-specific native optional
+packages, and CI builds all image targets with native/import/runtime smoke.
+
+Validation: `npm.cmd ci --dry-run --engine-strict=false --ignore-scripts`,
+toolchain contract tests (3/3), `npm.cmd run lint`, `npm.cmd run docs:check`,
+native module imports, production build, security check and full `npm.cmd run
+test:all` pass. The real Docker build cannot run in this workstation because the
+Docker daemon is unavailable; the CI workflow now performs it on every gate run.
+
+Independent review scores: first pass 8/10 (test quality 5/10), second pass
+7/10 (test quality 5/10). The second-pass findings about `.npmrc` propagation
+and native/runtime smoke were addressed in the final corrective pass. Exact base
+image digest pinning remains intentionally outside this minimal major/toolchain
+alignment and is a separate release-infrastructure follow-up.

@@ -20,8 +20,10 @@ build.
 9. `npm run db:smoke -- --target=test` через runtime/migrator URLs;
 10. `npm run test:all` с database suites enabled;
 11. `npm run storybook:build`;
-12. `npm audit --omit=dev --audit-level=high`;
-13. production `npm run build` и `npm run security:check`.
+12. Docker targets `builder`, `migrator`, `worker`, `runner` собираются из
+    `Dockerfile.mobile` и проходят native/import/runtime smoke;
+13. `npm audit --omit=dev --audit-level=high`;
+14. production `npm run build` и `npm run security:check`.
 
 Test database roles разделены:
 

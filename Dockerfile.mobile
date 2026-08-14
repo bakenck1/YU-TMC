@@ -6,11 +6,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS dependencies
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 # The Windows-only embedded PostgreSQL package is needed by the workstation
-# fallback, but Docker runs on Linux. Install the lockfile while skipping
-# platform install scripts and forcing npm to ignore that package's OS guard.
-RUN npm install --ignore-scripts --force --no-audit --no-fund
+# fallback, but npm resolves platform-specific optional packages from the
+# committed lockfile while retaining the lifecycle setup required by native
+# packages such as esbuild, unrs-resolver and sharp.
+RUN npm ci --no-audit --no-fund
 
 FROM dependencies AS builder
 

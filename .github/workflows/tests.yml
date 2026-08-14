@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Create restricted PostgreSQL roles
@@ -80,6 +80,15 @@ jobs:
         run: npm run test:all
       - name: Build Storybook
         run: npm run storybook:build
+      - name: Build all Docker targets
+        run: |
+          for target in builder migrator worker runner; do
+            docker build --file Dockerfile.mobile --target "$target" --tag "yu-inventory-ci:$target" .
+          done
+          docker run --rm yu-inventory-ci:builder node -e "require('sharp'); require('esbuild')"
+          docker run --rm yu-inventory-ci:migrator node --conditions=react-server --import tsx --input-type=module -e "await import('./lib/db/migrations.ts')"
+          docker run --rm yu-inventory-ci:worker node --conditions=react-server --import tsx --input-type=module -e "await import('./lib/server/application.ts')"
+          docker run --rm yu-inventory-ci:runner node -e "require('fs').accessSync('server.js')"
       - run: npm audit --omit=dev --audit-level=high
       - name: Production build and security invariants
         env:
