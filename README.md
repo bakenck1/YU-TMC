@@ -112,8 +112,8 @@ PostgreSQL environment separation, migration ordering, restricted roles,
 legacy import, backups and deployment rules are documented in
 [docs/database.md](docs/database.md). The production monitoring command is
 documented in [docs/production-monitoring.md](docs/production-monitoring.md).
-The release gate checklist is maintained separately with the release-gates
-workstream.
+The release gate checklist is maintained in
+[docs/release-checklist.md](docs/release-checklist.md).
 
 Run the documentation contract itself with:
 

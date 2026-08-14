@@ -135,7 +135,21 @@ checklist не представлены как единый контракт.
 - Release checklist явно показывает automated/manual status.
 - Текущие unit, UI, component и database suites остаются зелёными.
 
-## Done
+## Status: Done
 
-Задача считается закрытой только после зелёного CI/release job и независимого
-review, подтвердившего отсутствие незакрытых actionable findings.
+Основной CI/release-контур закрыт: обязательные source/UI/database checks, lint,
+мigrations, runtime smoke, полный test runner, Storybook, audit, production build
+и security invariants теперь выполняются в одном workflow; database integration не
+может быть незаметно пропущена.
+
+Validation: `npm.cmd run docs:check`, CI contract tests, `npm.cmd run lint`,
+`npm.cmd run db:check`, `git diff --check` и `npm.cmd run test:all` проходят.
+Локальный `test:all` явно сообщает, что PostgreSQL suite skipped без credentials;
+полный DB прогон остаётся CI gate.
+
+Independent review: первый проход — 5/10, test quality 4/10; после корректирующего
+прохода — 7/10, test quality 6/10. Оставшиеся замечания относятся к отдельным
+следующим задачам и не скрыты: локальный embedded-PostgreSQL runner пока создаёт
+superuser migrator, а контрактные тесты workflow остаются текстовыми. Их не
+маскируем статусом этой задачи; они будут закрыты вместе с воспроизводимостью
+toolchain/DB и усилением test-contract coverage.

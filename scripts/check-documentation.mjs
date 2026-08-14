@@ -11,6 +11,7 @@ const documentationFiles = [
   "README.md",
   "docs/database.md",
   "docs/production-monitoring.md",
+  "docs/release-checklist.md",
   "TASKS.md",
 ];
 

@@ -15,7 +15,7 @@ test("documentation checker rejects stale commands and broken paths", async () =
   const directory = await mkdtemp(path.join(os.tmpdir(), "yu-docs-"));
   try {
     await writeFile(path.join(directory, "package.json"), JSON.stringify({ scripts: { start: "next start" } }), "utf8");
-    for (const file of ["README.md", "docs/database.md", "docs/production-monitoring.md", "TASKS.md"]) {
+    for (const file of ["README.md", "docs/database.md", "docs/production-monitoring.md", "docs/release-checklist.md", "TASKS.md"]) {
       const target = file === "README.md" ? "npm run missing-command\n[nothing](missing)\n[directory](docs)\n" : "ok\n";
       const filePath = path.join(directory, file);
       await mkdirFor(filePath);

@@ -38,12 +38,40 @@ async function main() {
 
     const privilegeResult = await runtimePool.query<{
       has_usage: boolean;
+      can_create_objects: boolean;
+      can_use_migration_schema: boolean;
+      can_read_migration_history: boolean;
+      can_write_migration_history: boolean;
       can_delete_push_subscriptions: boolean;
     }>(
       `select coalesce(
          has_schema_privilege(current_user, 'yu_inventory', 'USAGE'),
          false
        ) as has_usage,
+       coalesce(
+         has_schema_privilege(current_user, 'yu_inventory', 'CREATE'),
+         false
+       ) as can_create_objects,
+       coalesce(
+         has_schema_privilege(current_user, 'yu_migrations', 'USAGE'),
+         false
+       ) as can_use_migration_schema,
+       coalesce(
+         has_table_privilege(
+           current_user,
+           '"yu_migrations"."__drizzle_migrations"',
+           'SELECT'
+         ),
+         false
+       ) as can_read_migration_history,
+       coalesce(
+         has_table_privilege(
+           current_user,
+           '"yu_migrations"."__drizzle_migrations"',
+           'INSERT'
+         ),
+         false
+       ) as can_write_migration_history,
        coalesce(
          has_table_privilege(
            current_user,
@@ -57,6 +85,26 @@ async function main() {
     if (privilegeResult.rows[0]?.has_usage !== true) {
       throw new DatabaseOperationError(
         "Runtime database role cannot use the application schema.",
+      );
+    }
+    if (privilegeResult.rows[0]?.can_create_objects === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can create application schema objects.",
+      );
+    }
+    if (privilegeResult.rows[0]?.can_use_migration_schema === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can use the private migration schema.",
+      );
+    }
+    if (privilegeResult.rows[0]?.can_read_migration_history === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can read private migration history.",
+      );
+    }
+    if (privilegeResult.rows[0]?.can_write_migration_history === true) {
+      throw new DatabaseOperationError(
+        "Runtime database role can write private migration history.",
       );
     }
     if (

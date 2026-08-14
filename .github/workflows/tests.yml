@@ -11,25 +11,25 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       NODE_ENV: test
       SESSION_SECRET: ci-only-session-secret-with-at-least-43-characters-123456
       TEST_DATABASE_URL: postgresql://yu_inventory_test_runtime:local-runtime-test-password@127.0.0.1:55433/yu_inventory_test
       TEST_DATABASE_MIGRATOR_URL: postgresql://yu_inventory_test_migrator:local-migrator-test-password@127.0.0.1:55433/yu_inventory_test
-      TEST_DATABASE_DEPLOYMENT_ID: yu-inventory-ci-test
+      TEST_DATABASE_DEPLOYMENT_ID: yu-inventory-ci-${{ github.run_id }}-${{ github.run_attempt }}
       TEST_DATABASE_SSL_MODE: disable
     services:
       postgres:
         image: postgres:17-alpine
         env:
           POSTGRES_DB: yu_inventory_test
-          POSTGRES_PASSWORD: local-migrator-test-password
-          POSTGRES_USER: yu_inventory_test_migrator
+          POSTGRES_PASSWORD: local-postgres-admin-password
+          POSTGRES_USER: postgres
         ports:
           - 55433:5432
         options: >-
-          --health-cmd "pg_isready -U yu_inventory_test_migrator -d yu_inventory_test"
+          --health-cmd "pg_isready -U postgres -d yu_inventory_test"
           --health-interval 2s
           --health-timeout 3s
           --health-retries 20
@@ -42,16 +42,44 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Create restricted PostgreSQL runtime role
+      - name: Create restricted PostgreSQL roles
         run: >-
           docker exec "${{ job.services.postgres.id }}"
           psql
           --set ON_ERROR_STOP=1
-          --username yu_inventory_test_migrator
+          --username postgres
           --dbname yu_inventory_test
           --command
-          "CREATE ROLE yu_inventory_test_runtime LOGIN PASSWORD 'local-runtime-test-password'"
-      - run: npm run test:all
+          "CREATE ROLE yu_inventory_test_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD 'local-migrator-test-password';
+          CREATE ROLE yu_inventory_test_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD 'local-runtime-test-password';
+          GRANT CONNECT ON DATABASE yu_inventory_test TO yu_inventory_test_migrator, yu_inventory_test_runtime;
+          GRANT CREATE ON DATABASE yu_inventory_test TO yu_inventory_test_migrator"
+      - name: Validate source, UI and migration contracts
+        run: |
+          npm run docs:check
+          npm run lint
+          npm run ui:check
+          npm run db:check
+          docker compose -f docker-compose.mobile.yml config --quiet
+          DATABASE_URL=postgresql://yu_inventory_runtime:local-runtime-password@127.0.0.1:5433/yu_inventory_dev \
+          DATABASE_MIGRATOR_URL=postgresql://yu_inventory:local-development-password@127.0.0.1:5433/yu_inventory_dev \
+          DATABASE_DEPLOYMENT_ID=yu-inventory-ci-compose-check \
+          DATABASE_SSL_MODE=disable \
+          SESSION_SECRET=ci-only-compose-secret-with-at-least-43-characters \
+          APP_PUBLIC_ORIGIN=https://inventory-ci.example.invalid \
+          TRUSTED_CLIENT_IP_HEADER=x-real-ip \
+          WEB_PUSH_VAPID_PUBLIC_KEY=ci-placeholder \
+          WEB_PUSH_VAPID_PRIVATE_KEY=ci-placeholder \
+          WEB_PUSH_VAPID_SUBJECT=mailto:ci@example.invalid \
+          docker compose -f docker-compose.production.yml config --quiet
+      - name: Apply test migrations
+        run: npm run db:migrate -- --target=test
+      - name: Verify test database contract
+        run: npm run db:smoke -- --target=test
+      - name: Run all tests
+        run: npm run test:all
+      - name: Build Storybook
+        run: npm run storybook:build
       - run: npm audit --omit=dev --audit-level=high
       - name: Production build and security invariants
         env:

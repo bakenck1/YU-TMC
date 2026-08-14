@@ -2,8 +2,21 @@ import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
+import { getDatabaseTestFiles } from "./database-test-files.mjs";
+
 const root = process.cwd();
 const testDirectory = path.join(root, "tests");
+const hasRuntimeDatabase = Boolean(process.env.TEST_DATABASE_URL);
+const hasMigratorDatabase = Boolean(process.env.TEST_DATABASE_MIGRATOR_URL);
+
+if (hasRuntimeDatabase !== hasMigratorDatabase) {
+  throw new Error(
+    "TEST_DATABASE_URL and TEST_DATABASE_MIGRATOR_URL must be provided together.",
+  );
+}
+if (process.env.CI && !hasRuntimeDatabase) {
+  throw new Error("TEST_DATABASE_URL and TEST_DATABASE_MIGRATOR_URL are required in CI.");
+}
 const clientTests = new Set([
   "employee-items-tabs.test.ts",
   "room-service-requests.test.ts",
@@ -29,15 +42,8 @@ run(
   { ...process.env, NODE_ENV: "test" },
 );
 
-if (process.env.TEST_DATABASE_URL) {
-  for (const databaseTest of [
-    "tests/database/persistent-users.test.ts",
-    "tests/database/inventory-transfer-override.test.ts",
-    "tests/database/tmc-operation-migration.test.ts",
-    "tests/database/tmc-operation-repositories.test.ts",
-    "tests/database/tmc-transfer-request-transactions.test.ts",
-    "tests/database/web-push-repositories.test.ts",
-  ]) {
+if (hasRuntimeDatabase) {
+  for (const databaseTest of getDatabaseTestFiles(root)) {
     run(
       process.execPath,
       [path.join(root, "node_modules/vitest/vitest.mjs"), "run", databaseTest],
@@ -50,11 +56,15 @@ if (process.env.TEST_DATABASE_URL) {
       },
     );
   }
-} else if (process.env.CI) {
-  throw new Error("TEST_DATABASE_URL is required in CI");
 } else {
-  console.warn("Skipping PostgreSQL integration test: TEST_DATABASE_URL is not set.");
+  console.warn(
+    "PostgreSQL integration: SKIPPED (set TEST_DATABASE_URL and TEST_DATABASE_MIGRATOR_URL to run it).",
+  );
 }
+
+console.log(
+  `Test suite summary: server=ran, ui=ran, components=ran, database=${hasRuntimeDatabase ? "ran" : "SKIPPED"}.`,
+);
 
 function runNodeTests(files, extraArguments) {
   run(

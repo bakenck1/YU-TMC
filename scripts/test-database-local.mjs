@@ -7,6 +7,8 @@ import path from "node:path";
 import { initdb, pg_ctl } from "@embedded-postgres/windows-x64";
 import pg from "pg";
 
+import { getDatabaseTestFiles } from "./database-test-files.mjs";
+
 if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("This local PostgreSQL runner supports Windows x64 only.");
 }
@@ -79,14 +81,7 @@ try {
     TEST_DATABASE_MIGRATOR_URL:
       `postgresql://${migrator}:${migratorPassword}@127.0.0.1:${port}/${database}`,
   };
-  for (const databaseTest of [
-    "tests/database/persistent-users.test.ts",
-    "tests/database/inventory-transfer-override.test.ts",
-    "tests/database/tmc-operation-migration.test.ts",
-    "tests/database/tmc-operation-repositories.test.ts",
-    "tests/database/tmc-transfer-request-transactions.test.ts",
-    "tests/database/web-push-repositories.test.ts",
-  ]) {
+  for (const databaseTest of getDatabaseTestFiles(root)) {
     run(process.execPath, [
       path.join(root, "node_modules/vitest/vitest.mjs"),
       "run",
