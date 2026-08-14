@@ -45,3 +45,15 @@
 
 Новый разработчик по README запускает проект, тесты и database checks без
 несуществующих команд; docs checker зелёный; package-name решение зафиксировано.
+
+## Status: Done
+
+README переписан под YU Inventory, stale `npm test`/`npm run test:db` и
+starter-template references удалены, а private package name `my-next-app`
+сохранён как compatibility decision. Добавлены `scripts/check-documentation.mjs`,
+`npm run docs:check` и positive/negative Node tests на команды, relative links,
+missing files и directory targets.
+
+Validation: `npm.cmd run docs:check`, focused documentation test,
+`npm.cmd run lint` и `npm.cmd run test:all` проходят. Independent review: 10/10,
+test quality 9.5/10, no actionable findings.

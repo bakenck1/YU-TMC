@@ -1,112 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# YU Inventory
 
-## Getting Started
+YU Inventory is a Next.js application for university inventory, QR workflows,
+inspections, responsibility transfers, service requests and TMC operations.
+The application uses PostgreSQL as its durable source of truth and supports
+Russian, Kazakh and English UI languages.
 
-First, run the development server:
+## Prerequisites
 
-```bash
+- Node.js 22.x;
+- npm with the committed `package-lock.json`;
+- either the project-managed local PostgreSQL fallback or an external/Postgres
+  test service;
+- Docker Desktop only when using the mobile Compose runtime.
+
+## Local development
+
+```powershell
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+With no `DATABASE_URL`, `npm run dev` starts the project-managed persistent
+PostgreSQL instance under `%LOCALAPPDATA%/YUInventory/postgres-development`,
+applies migrations, imports the local credential when configured, and starts
+Next.js. Docker is not required for this path.
 
-`npm run dev` uses `DATABASE_URL` when it is configured. Otherwise it starts a
-persistent embedded PostgreSQL instance in `%LOCALAPPDATA%/YUInventory/postgres-development`,
-applies migrations, imports the existing local credential, and then starts
-Next.js. Docker is not required for this local fallback.
+For an external development database, copy `.env.example` to `.env.local`, set
+the dedicated database variables, then run:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm run db:migrate -- --target=development
+npm run db:smoke -- --target=development
+```
 
-### Google Workspace SSO
+The application routes live under `app/`; reusable UI and screen components
+live under `components/`. There is no starter `app/page.tsx` to edit.
 
-Create a Google Cloud OAuth 2.0 client of type **Web application** and register
-the exact callback URL:
+## Verification commands
+
+```powershell
+npm run lint
+npm run ui:check
+npm run docs:check
+npm run test:all
+npm run test:database:local
+npm run db:check
+npm run build
+npm start
+npm run security:check
+```
+
+`npm run test:all` always runs server, UI and component suites. PostgreSQL
+integration suites require `TEST_DATABASE_URL` and
+`TEST_DATABASE_MIGRATOR_URL`; CI provides them and fails if they are absent.
+Without those variables a local run reports the database suite as skipped.
+Use `npm run test:database:local` to start the isolated local PostgreSQL path
+and run the database suites explicitly.
+
+For a clean development database, use the guarded command:
+
+```powershell
+npm run db:reset -- --target=development --confirm=DELETE_ALL_APPLICATION_DATA
+```
+
+It removes application data but not schema or migration history.
+
+## Google Workspace SSO
+
+Create a Google Cloud OAuth web client and register:
 
 ```text
 http://localhost:3000/api/auth/google/callback
 ```
 
-Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and
+Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and
 `GOOGLE_WORKSPACE_DOMAIN=yu.edu.kz` in `.env.local`. Production callback URLs
-must use HTTPS. A verified Workspace user is created as an active `employee` on
-the first sign-in; an administrator can then change the role or deactivate the
-account.
-The callback verifies the ID token, nonce, audience, verified email, and
-Workspace `hd` claim before creating the application session.
+must use HTTPS. The callback verifies the ID token, nonce, audience, verified
+email and Workspace domain before creating an application session.
 
-### Web Push
+## Web Push
 
 Generate one VAPID key pair and store it in the deployment secret store:
 
-```bash
+```powershell
 npx web-push generate-vapid-keys --json
 ```
 
-Set `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, and
-`WEB_PUSH_VAPID_SUBJECT` (an HTTPS URL or `mailto:` contact). After installing
-the PWA, each technician enables notifications on the Inventory page. The
-subscription is bound to the signed-in account and removed from the device on
-logout.
+Set `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and
+`WEB_PUSH_VAPID_SUBJECT`. Push delivery is best-effort: authoritative inventory
+transactions commit first, while transient push failures are retried and final
+failures are logged. The durable TMC outbox is processed by:
 
-Assignment notifications are best-effort: the inspection is committed first
-and is never rolled back because a push provider is unavailable. Transient
-network, HTTP 429, and HTTP 5xx failures are retried up to three times in a
-Next.js `after()` callback, so delivery does not delay the creation response.
-Final delivery and subscription-cleanup failures are written to the server
-error log. This keeps the inventory workflow authoritative while making push
-failures observable, but it is not a durable delivery queue. Self-hosted
-deployments must use graceful `SIGINT`/`SIGTERM` shutdown so pending `after()`
-callbacks can finish.
+```powershell
+npm run worker:tmc-push
+```
 
-PostgreSQL setup, environment isolation, migration commands, and production
-deployment rules are documented in [docs/database.md](docs/database.md).
-
-### Запуск в Docker для телефона
-
-Docker Desktop запускает приложение, PostgreSQL, миграции, HTTPS-прокси и
-worker уведомлений одной командой:
+## Mobile Docker runtime
 
 ```powershell
 npm run docker:mobile:up
 ```
 
-Команда использует временный ASCII-диск для сборки: это обязательно, когда
-путь проекта содержит кириллицу и Docker Buildx не может создать build-session.
+The mobile setup starts the app, PostgreSQL, migrations, HTTPS proxy and push
+worker. It uses an ASCII temporary build path when the repository path contains
+Cyrillic characters. See `docker-compose.mobile.yml` and `Caddyfile.mobile` for
+the local network address and certificate endpoint.
 
-В текущей мобильной конфигурации откройте `https://172.20.10.2/login` на
-телефоне, подключённом к той же сети. Локальный сертификат Caddy доступен по
-адресу `http://172.20.10.2/yu-inventory-local-ca.crt`. Если IP компьютера
-изменился, синхронно обновите его в `docker-compose.mobile.yml` и
-`Caddyfile.mobile`. Логи и остановка:
+## Database and release operations
+
+PostgreSQL environment separation, migration ordering, restricted roles,
+legacy import, backups and deployment rules are documented in
+[docs/database.md](docs/database.md). The production monitoring command is
+documented in [docs/production-monitoring.md](docs/production-monitoring.md).
+The release gate checklist is maintained separately with the release-gates
+workstream.
+
+Run the documentation contract itself with:
 
 ```powershell
-docker compose -f docker-compose.mobile.yml logs -f app
-docker compose -f docker-compose.mobile.yml down
+npm run docs:check
 ```
 
-Данные PostgreSQL сохраняются в Docker volume, а `.data` монтируется из
-проекта, поэтому текущий администратор и настройки сохраняются между
-перезапусками.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The package is private and intentionally retains the existing npm name
+`my-next-app` for compatibility with local tooling; it is not a published
+package identity.

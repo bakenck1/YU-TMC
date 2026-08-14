@@ -92,7 +92,7 @@ storage and the committed `.env.test` contains local-only, non-secret defaults:
 
 ```powershell
 docker compose --profile test up -d --wait postgres-test
-npm run test:db
+npm run test:database:local
 ```
 
 To begin local development with a clean database while keeping all migrations
@@ -112,7 +112,8 @@ database and override `TEST_DATABASE_URL` and
 `TEST_DATABASE_MIGRATOR_URL` with distinct runtime and migrator roles, while
 giving the database a unique `TEST_DATABASE_DEPLOYMENT_ID`. The committed
 Compose setup creates both roles so the suite can verify runtime grants and
-denials. `test:db` deliberately fails if the service or credentials are absent;
+denials. `npm run test:database:local` deliberately fails if the service or
+credentials are absent;
 it never skips database verification silently.
 
 ### Reproducible inventory seed

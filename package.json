@@ -13,6 +13,7 @@
     "test:all": "node scripts/test-all.mjs",
     "test:components": "tsc --project tests/typecheck/tsconfig.components.json --pretty false && vitest run --config vitest.components.config.mts",
     "ui:check": "node scripts/check-ui-architecture.mjs",
+    "docs:check": "node scripts/check-documentation.mjs",
     "test:database:local": "node scripts/test-database-local.mjs",
     "security:check": "node scripts/security-check.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
