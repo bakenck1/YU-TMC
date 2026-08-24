@@ -1,0 +1,24 @@
+[Unit]
+Description=YU Inventory TMC push worker
+After=network-online.target yu-inventory.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yu-inventory
+Group=yu-inventory
+WorkingDirectory=/opt/yu-inventory/current
+EnvironmentFile=/etc/yu-inventory/yu-inventory.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run worker:tmc-push -- --loop
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=35s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

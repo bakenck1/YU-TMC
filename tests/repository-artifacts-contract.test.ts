@@ -23,9 +23,8 @@ test("repository artifact policy is discoverable and enforced in CI", async () =
   assert.match(packageSource, /"artifacts:check"\s*:/);
   assert.match(workflow, /npm run artifacts:check/);
   assert.match(documentationChecker, /docs\/repository-artifacts\.md/);
-  assert.match(securityChecker, /\"\/_audit\/\"/);
-  assert.match(securityChecker, /\"docs\"/);
-  assert.match(securityChecker, /\"tests\"/);
+  assert.match(securityChecker, /Production output contains source maps/);
+  assert.match(securityChecker, /Inventory files must never be stored under public\/items/);
   assert.match(gitmodules, /path = _audit\/Anthropic-Cybersecurity-Skills/);
   for (const report of baseline.reports) {
     assert.match(policy, new RegExp(report.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

@@ -216,23 +216,10 @@ async function assertGeneratedHistory(manifest) {
 
 async function assertIgnoreBoundaries(manifest) {
   const gitignore = await readText(".gitignore");
-  const dockerignore = await readText(".dockerignore");
-  for (const exclusion of manifest.dockerContextExclusions ?? []) {
-    if (!hasLine(dockerignore, exclusion)) {
-      problems.push(`.dockerignore: missing repository context exclusion ${exclusion}`);
-    }
-  }
   for (const artifact of manifest.ignoredArtifacts) {
     if (artifact.gitignore && !hasLine(gitignore, artifact.gitignore)) {
       problems.push(`.gitignore: missing artifact rule ${artifact.gitignore}`);
     }
-    if (artifact.dockerignore && !hasLine(dockerignore, artifact.dockerignore)) {
-      problems.push(`.dockerignore: missing artifact rule ${artifact.dockerignore}`);
-    }
-  }
-  const dockerfile = await readText("Dockerfile.mobile");
-  if (!dockerfile.includes("COPY . .") || !dockerfile.includes("COPY --from=builder /app/.next/standalone ./")) {
-    problems.push("Dockerfile.mobile: expected context-copy build stages and standalone runtime boundary are missing");
   }
   const submodule = manifest.auditSubmodule;
   const gitmodules = await readText(".gitmodules");

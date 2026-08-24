@@ -19,7 +19,7 @@ function originForIncomingRequest(request: Request): string {
       : requestUrl.protocol;
 
   // `next start --hostname 0.0.0.0` retains the bind address in request.url
-  // when it is exposed through Docker. The Host header remains the browser's
+  // when the app listens on an internal interface. The Host header remains the browser's
   // actual destination, so use it for same-origin validation when available.
   if (!host) return requestUrl.origin;
 

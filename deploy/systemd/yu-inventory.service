@@ -1,0 +1,27 @@
+[Unit]
+Description=YU Inventory web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yu-inventory
+Group=yu-inventory
+WorkingDirectory=/opt/yu-inventory/current
+EnvironmentFile=/etc/yu-inventory/yu-inventory.env
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=35s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/yu-inventory/current/.next/cache
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

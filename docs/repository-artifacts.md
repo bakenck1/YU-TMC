@@ -10,9 +10,8 @@ Created: 2026-08-14. Next review: 2026-11-12. The review interval is 90 days.
 
 The repository keeps `_audit/` as tracked immutable evidence until an external
 archive satisfies the migration criteria below. This is a provenance and
-maintenance decision, not a runtime-data decision: Docker build context and
-the production runtime must not receive audit reports, tests, documentation,
-or local generated artifacts.
+maintenance decision, not a runtime-data decision: the production release must
+not receive audit reports, tests, documentation, or local generated artifacts.
 
 Historical reports are never rewritten to make them look current. A correction
 or a new audit creates a new dated report. The current catalog, report commit
@@ -61,15 +60,15 @@ journal entry and committed SQL.
 ## Ephemeral local and build artifacts
 
 Generated contents of the following paths are not repository evidence and must
-remain untracked and out of Docker build context: `errors/`, `errors-test/`,
-`storybook-static/`, `.next/`, `drizzle-probe/`, and TypeScript
+remain untracked: `errors/`, `errors-test/`, `storybook-static/`, `.next/`,
+`drizzle-probe/`, and TypeScript
 `*.tsbuildinfo`. The tracked `errors/.gitkeep` and `errors/README.md` are only
 an empty operational scaffold; generated error reports may contain sensitive
 context. Build/probe output is reproducible and has no retention requirement.
 
-The `.gitignore` and `.dockerignore` entries for these paths are part of the
-policy. If a generated artifact needs long-term retention, copy a sanitized,
-dated report into the evidence catalog instead of committing the raw output.
+The `.gitignore` entries for these paths are part of the policy. If a generated
+artifact needs long-term retention, copy a sanitized, dated report into the
+evidence catalog instead of committing the raw output.
 
 ## New audit report contract
 

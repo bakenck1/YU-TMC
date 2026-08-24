@@ -88,38 +88,31 @@
       }
     ]
   },
-  "dockerContextExclusions": ["/_audit/", "docs", "tests", "*.tsbuildinfo"],
   "ignoredArtifacts": [
     {
       "path": "errors/",
       "gitignore": "/errors/",
-      "dockerignore": "/errors/",
       "allowedTracked": ["errors/.gitkeep", "errors/README.md"]
     },
     {
       "path": "errors-test/",
-      "gitignore": null,
-      "dockerignore": "/errors-test/"
+      "gitignore": null
     },
     {
       "path": "storybook-static/",
-      "gitignore": "/storybook-static/",
-      "dockerignore": "/storybook-static/"
+      "gitignore": "/storybook-static/"
     },
     {
       "path": ".next/",
-      "gitignore": "/.next/",
-      "dockerignore": ".next"
+      "gitignore": "/.next/"
     },
     {
       "path": "drizzle-probe/",
-      "gitignore": "/drizzle-probe/",
-      "dockerignore": "drizzle-probe"
+      "gitignore": "/drizzle-probe/"
     },
     {
       "path": "*.tsbuildinfo",
-      "gitignore": "*.tsbuildinfo",
-      "dockerignore": "*.tsbuildinfo"
+      "gitignore": "*.tsbuildinfo"
     }
   ]
 }

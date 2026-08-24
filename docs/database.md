@@ -16,9 +16,9 @@ non-secret logical identity (`DATABASE_DEPLOYMENT_ID` or
 `TEST_DATABASE_DEPLOYMENT_ID`); test and non-test identities must differ.
 Application runtimes normally derive the database target from `NODE_ENV`. A
 standalone Next.js server always uses production optimizations, so a local
-container that connects to the development database must explicitly set
-`DATABASE_TARGET=development`; production deployments should leave it unset or
-set it to `production`.
+production-mode server that connects to the development database must explicitly
+set `DATABASE_TARGET=development`; production deployments should leave it unset
+or set it to `production`.
 
 Migration commands always require an explicit target. Development may reuse
 its runtime role locally. Tests and production require
@@ -70,29 +70,26 @@ set a small limit or use the provider's transaction pooler for runtime traffic.
 Running `npm run dev` without `DATABASE_URL` starts the project-managed,
 persistent PostgreSQL instance in `%LOCALAPPDATA%/YUInventory/postgres-development`, applies pending
 migrations, verifies the schema, and starts Next.js. This is the default setup
-on a workstation without Docker. It does not recreate a legacy account after a
+on a workstation. It does not recreate a legacy account after a
 reset, so the first account registered in the application becomes the real
 administrator. To deliberately import a legacy account, run
 `npm run db:import-auth -- --target=development`, or set
 `YU_INVENTORY_IMPORT_LEGACY_AUTH=true` for a development startup.
 
 To use an external PostgreSQL instance instead, set `DATABASE_URL` and the
-related development variables. The Compose file is available for that workflow
-and for tests:
+related development variables:
 
 ```powershell
-docker compose --profile development up -d --wait postgres-development
 Copy-Item .env.example .env.local
 npm run db:migrate -- --target=development
 npm run db:import-settings -- --target=development
 npm run db:smoke -- --target=development
 ```
 
-The development data volume is persistent. The test service uses temporary
-storage and the committed `.env.test` contains local-only, non-secret defaults:
+The development database is persistent. For an isolated local database test,
+use the project-managed PostgreSQL path:
 
 ```powershell
-docker compose --profile test up -d --wait postgres-test
 npm run test:database:local
 ```
 
@@ -112,8 +109,8 @@ CI should provision a native PostgreSQL service or an ephemeral managed
 database and override `TEST_DATABASE_URL` and
 `TEST_DATABASE_MIGRATOR_URL` with distinct runtime and migrator roles, while
 giving the database a unique `TEST_DATABASE_DEPLOYMENT_ID`. The committed
-Compose setup creates both roles so the suite can verify runtime grants and
-denials. `npm run test:database:local` deliberately fails if the service or
+CI setup creates both roles so the suite can verify runtime grants and denials.
+`npm run test:database:local` deliberately fails if the service or
 credentials are absent;
 it never skips database verification silently.
 
@@ -189,14 +186,12 @@ npm run db:import-settings -- --target=production
 npm run db:smoke -- --target=production
 ```
 
-The production Compose migrator runs the same import and smoke check
-automatically. It mounts only the dedicated `./.settings-import` directory at
-read-only `/run/legacy-settings`; copy the old
-`.data/settings.json` there before the release when migration is required.
-The directory may be empty, in which case the import records that defaults
-remain active. Do not mount the whole `.data` directory into production; it
-also contains authentication and session secrets. For a one-off path outside
-Compose, pass `--source=/path/to/settings.json` to `db:import-settings`.
+For a direct Node.js deployment, copy the old `.data/settings.json` to a
+dedicated protected directory outside the release, then pass its full path to
+`db:import-settings` with `--source=/path/to/settings.json`. The source may be
+absent, in which case the import records that defaults remain active. Do not
+use the whole `.data` directory in production; it can contain authentication
+and session secrets.
 
 The import is guarded by the untouched default version/payload and is
 idempotent. A missing source keeps defaults; invalid JSON or an invalid

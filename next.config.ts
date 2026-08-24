@@ -29,27 +29,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  output: "standalone",
   poweredByHeader: false,
   experimental: {
-    // Production runtime bundles must not expose source maps. The Docker
-    // packaging step keeps a second defense, but the build itself should be
-    // safe to inspect and archive.
+    // Production runtime bundles must not expose source maps, including when
+    // the application is deployed directly with `next start`.
     turbopackSourceMaps: false,
     serverSourceMaps: false,
-  },
-  outputFileTracingExcludes: {
-    "/*": [
-      ".data/**/*",
-      "_migration/**/*",
-      "errors/**/*",
-      ".env*",
-      "**/.env*",
-      "**/*secret*",
-      "**/*credential*",
-      "**/*.dump",
-      "**/PG_VERSION",
-    ],
   },
   distDir: process.env.NEXT_DIST_DIR || ".next",
   turbopack: {

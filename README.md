@@ -12,7 +12,6 @@ Russian, Kazakh and English UI languages.
 - npm with the committed `package-lock.json`;
 - either the project-managed local PostgreSQL fallback or an external/Postgres
   test service;
-- Docker Desktop only when using the mobile Compose runtime.
 
 ## Local development
 
@@ -24,7 +23,7 @@ npm run dev
 With no `DATABASE_URL`, `npm run dev` starts the project-managed persistent
 PostgreSQL instance under `%LOCALAPPDATA%/YUInventory/postgres-development`,
 applies migrations, imports the local credential when configured, and starts
-Next.js. Docker is not required for this path.
+Next.js.
 
 For an external development database, copy `.env.example` to `.env.local`, set
 the dedicated database variables, then run:
@@ -98,16 +97,12 @@ failures are logged. The durable TMC outbox is processed by:
 npm run worker:tmc-push
 ```
 
-## Mobile Docker runtime
+## Production deployment without Docker
 
-```powershell
-npm run docker:mobile:up
-```
-
-The mobile setup starts the app, PostgreSQL, migrations, HTTPS proxy and push
-worker. It uses an ASCII temporary build path when the repository path contains
-Cyrillic characters. See `docker-compose.mobile.yml` and `Caddyfile.mobile` for
-the local network address and certificate endpoint.
+Production uses a regular Node.js process managed by systemd, with Nginx in
+front and PostgreSQL as an external or local system service. Docker is not
+required. Ready-to-use unit files, an Nginx virtual host and the deployment
+procedure are in [deploy/README.md](deploy/README.md).
 
 ## Database and release operations
 

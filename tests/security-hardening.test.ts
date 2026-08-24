@@ -46,7 +46,7 @@ test("allows same-origin mutations and safe cross-site reads", () => {
   );
 });
 
-test("uses the external Host header when Next is bound to Docker's 0.0.0.0", () => {
+test("uses the external Host header when Next is bound to a local interface", () => {
   assert.doesNotThrow(() =>
     requireSameOriginMutation(
       new Request("http://0.0.0.0:3000/api/items", {
@@ -109,11 +109,9 @@ test("production API limiting uses the durable database bucket", () => {
   assert.match(source, /process\.env\.NODE_ENV !== "test"/);
 });
 
-test("production runtime packaging removes source maps", () => {
-  const dockerfile = readFileSync("Dockerfile.mobile", "utf8");
+test("production Node.js build does not expose source maps", () => {
   const securityCheck = readFileSync("scripts/security-check.mjs", "utf8");
   const nextConfig = readFileSync("next.config.ts", "utf8");
-  assert.match(dockerfile, /find \/app\/\.next -type f -name '\*\.map' -delete/);
   assert.match(securityCheck, /entry\.name\.endsWith\("\.map"\)/);
   assert.match(nextConfig, /turbopackSourceMaps: false/);
   assert.match(nextConfig, /serverSourceMaps: false/);

@@ -44,8 +44,9 @@ jobs:
       - run: npm ci
       - name: Create restricted PostgreSQL roles
         run: >-
-          docker exec "${{ job.services.postgres.id }}"
-          psql
+          PGPASSWORD=local-postgres-admin-password psql
+          --host 127.0.0.1
+          --port 55433
           --set ON_ERROR_STOP=1
           --username postgres
           --dbname yu_inventory_test
@@ -62,18 +63,6 @@ jobs:
           npm run lint
           npm run ui:check
           npm run db:check
-          docker compose -f docker-compose.mobile.yml config --quiet
-          DATABASE_URL=postgresql://yu_inventory_runtime:local-runtime-password@127.0.0.1:5433/yu_inventory_dev \
-          DATABASE_MIGRATOR_URL=postgresql://yu_inventory:local-development-password@127.0.0.1:5433/yu_inventory_dev \
-          DATABASE_DEPLOYMENT_ID=yu-inventory-ci-compose-check \
-          DATABASE_SSL_MODE=disable \
-          SESSION_SECRET=ci-only-compose-secret-with-at-least-43-characters \
-          APP_PUBLIC_ORIGIN=https://inventory-ci.example.invalid \
-          TRUSTED_CLIENT_IP_HEADER=x-real-ip \
-          WEB_PUSH_VAPID_PUBLIC_KEY=ci-placeholder \
-          WEB_PUSH_VAPID_PRIVATE_KEY=ci-placeholder \
-          WEB_PUSH_VAPID_SUBJECT=mailto:ci@example.invalid \
-          docker compose -f docker-compose.production.yml config --quiet
       - name: Apply test migrations
         run: npm run db:migrate -- --target=test
       - name: Verify test database contract
@@ -82,15 +71,6 @@ jobs:
         run: npm run test:all
       - name: Build Storybook
         run: npm run storybook:build
-      - name: Build all Docker targets
-        run: |
-          for target in builder migrator worker runner; do
-            docker build --file Dockerfile.mobile --target "$target" --tag "yu-inventory-ci:$target" .
-          done
-          docker run --rm yu-inventory-ci:builder node -e "require('sharp'); require('esbuild')"
-          docker run --rm yu-inventory-ci:migrator node --conditions=react-server --import tsx --input-type=module -e "await import('./lib/db/migrations.ts')"
-          docker run --rm yu-inventory-ci:worker node --conditions=react-server --import tsx --input-type=module -e "await import('./lib/server/application.ts')"
-          docker run --rm yu-inventory-ci:runner node -e "require('fs').accessSync('server.js')"
       - run: npm audit --omit=dev --audit-level=high
       - name: Production build and security invariants
         env:
