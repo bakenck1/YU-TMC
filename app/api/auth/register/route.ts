@@ -16,6 +16,7 @@ import {
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
+import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import {
   createSessionToken,
   sessionCookieOptions,
@@ -37,6 +38,12 @@ function validName(value: string) {
 export async function POST(request: Request) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
+
+  try {
+    requireSameOriginMutation(request);
+  } catch (error) {
+    return applicationErrorResponse(error, rateLimitHeaders(apiLimit));
+  }
 
   if (!isAuthorizedBootstrapRequest(request)) {
     return Response.json(

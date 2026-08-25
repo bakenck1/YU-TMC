@@ -16,6 +16,7 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
 
 interface FieldErrors {
+  bootstrapToken?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -31,6 +32,7 @@ export default function RegisterForm() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [bootstrapToken, setBootstrapToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +42,9 @@ export default function RegisterForm() {
 
   function validate() {
     const errors: FieldErrors = {};
+    if (bootstrapToken.trim().length < 32) {
+      errors.bootstrapToken = t("auth.bootstrapTokenRequired");
+    }
     if (firstName.trim().length < 2) {
       errors.firstName = t("auth.firstNameRequired");
     }
@@ -69,9 +74,13 @@ export default function RegisterForm() {
 
     setLoading(true);
     try {
+      const normalizedBootstrapToken = bootstrapToken.trim();
       const response = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${normalizedBootstrapToken}`,
+        },
         credentials: "same-origin",
         body: JSON.stringify({
           firstName: firstName.trim(),
@@ -88,8 +97,16 @@ export default function RegisterForm() {
         const errorKey =
           body.error === "registration_closed"
             ? "auth.registrationClosed"
+            : body.error === "registration_not_authorized"
+              ? "auth.registrationNotAuthorized"
             : body.error === "too_many_registration_attempts"
               ? "auth.tooManyAttempts"
+              : body.error === "authentication_not_configured"
+                ? "auth.notConfigured"
+                : body.error === "public_origin_not_configured"
+                  ? "auth.publicOriginNotConfigured"
+                : body.error === "cross_site_request_blocked"
+                  ? "auth.requestBlocked"
               : body.error === "invalid_registration_data"
                 ? "auth.registrationFailed"
                 : "auth.connectionError";
@@ -138,14 +155,62 @@ export default function RegisterForm() {
           </div>
         ) : null}
 
+        <label className="block" htmlFor="bootstrap-token">
+          <span className="mb-2 block text-sm font-medium text-zinc-800">
+            {t("auth.bootstrapToken")}
+          </span>
+          <span className="relative block">
+            <ShieldCheck className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+            <input
+              id="bootstrap-token"
+              type="password"
+              value={bootstrapToken}
+              onChange={(event) => {
+                setBootstrapToken(event.target.value);
+                setFieldErrors((current) => ({
+                  ...current,
+                  bootstrapToken: undefined,
+                }));
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={loading}
+              aria-invalid={Boolean(fieldErrors.bootstrapToken)}
+              aria-describedby={
+                fieldErrors.bootstrapToken
+                  ? "bootstrap-token-hint bootstrap-token-error"
+                  : "bootstrap-token-hint"
+              }
+              placeholder={t("auth.bootstrapTokenPlaceholder")}
+              className={inputClass(Boolean(fieldErrors.bootstrapToken))}
+            />
+          </span>
+          <span
+            id="bootstrap-token-hint"
+            className="mt-1.5 block text-xs leading-5 text-zinc-500"
+          >
+            {t("auth.bootstrapTokenHint")}
+          </span>
+          {fieldErrors.bootstrapToken ? (
+            <span
+              id="bootstrap-token-error"
+              className="mt-1.5 block text-xs text-red-600"
+              role="alert"
+            >
+              {fieldErrors.bootstrapToken}
+            </span>
+          ) : null}
+        </label>
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
+          <label className="block" htmlFor="first-name">
             <span className="mb-2 block text-sm font-medium text-zinc-800">
               {t("auth.firstName")}
             </span>
             <span className="relative block">
               <UserRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
+                id="first-name"
                 value={firstName}
                 onChange={(event) => {
                   setFirstName(event.target.value);
@@ -156,24 +221,33 @@ export default function RegisterForm() {
                 }}
                 autoComplete="given-name"
                 disabled={loading}
+                aria-invalid={Boolean(fieldErrors.firstName)}
+                aria-describedby={
+                  fieldErrors.firstName ? "first-name-error" : undefined
+                }
                 placeholder={t("auth.firstNamePlaceholder")}
                 className={inputClass(Boolean(fieldErrors.firstName))}
               />
             </span>
             {fieldErrors.firstName ? (
-              <span className="mt-1.5 block text-xs text-red-600">
+              <span
+                id="first-name-error"
+                className="mt-1.5 block text-xs text-red-600"
+                role="alert"
+              >
                 {fieldErrors.firstName}
               </span>
             ) : null}
           </label>
 
-          <label className="block">
+          <label className="block" htmlFor="last-name">
             <span className="mb-2 block text-sm font-medium text-zinc-800">
               {t("auth.lastName")}
             </span>
             <span className="relative block">
               <UserRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
+                id="last-name"
                 value={lastName}
                 onChange={(event) => {
                   setLastName(event.target.value);
@@ -184,25 +258,34 @@ export default function RegisterForm() {
                 }}
                 autoComplete="family-name"
                 disabled={loading}
+                aria-invalid={Boolean(fieldErrors.lastName)}
+                aria-describedby={
+                  fieldErrors.lastName ? "last-name-error" : undefined
+                }
                 placeholder={t("auth.lastNamePlaceholder")}
                 className={inputClass(Boolean(fieldErrors.lastName))}
               />
             </span>
             {fieldErrors.lastName ? (
-              <span className="mt-1.5 block text-xs text-red-600">
+              <span
+                id="last-name-error"
+                className="mt-1.5 block text-xs text-red-600"
+                role="alert"
+              >
                 {fieldErrors.lastName}
               </span>
             ) : null}
           </label>
         </div>
 
-        <label className="block">
+        <label className="block" htmlFor="email">
           <span className="mb-2 block text-sm font-medium text-zinc-800">
             {t("auth.email")}
           </span>
           <span className="relative block">
             <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(event) => {
@@ -215,25 +298,32 @@ export default function RegisterForm() {
               autoComplete="email"
               inputMode="email"
               disabled={loading}
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
               placeholder={t("auth.emailPlaceholder")}
               className={inputClass(Boolean(fieldErrors.email))}
             />
           </span>
           {fieldErrors.email ? (
-            <span className="mt-1.5 block text-xs text-red-600">
+            <span
+              id="email-error"
+              className="mt-1.5 block text-xs text-red-600"
+              role="alert"
+            >
               {fieldErrors.email}
             </span>
           ) : null}
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
+          <label className="block" htmlFor="password">
             <span className="mb-2 block text-sm font-medium text-zinc-800">
               {t("auth.password")}
             </span>
             <span className="relative block">
               <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
+                id="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
@@ -245,6 +335,10 @@ export default function RegisterForm() {
                 }}
                 autoComplete="new-password"
                 disabled={loading}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={
+                  fieldErrors.password ? "password-error" : undefined
+                }
                 placeholder={t("auth.newPasswordPlaceholder")}
                 className={`${inputClass(Boolean(fieldErrors.password))} pr-12`}
               />
@@ -264,19 +358,24 @@ export default function RegisterForm() {
               </button>
             </span>
             {fieldErrors.password ? (
-              <span className="mt-1.5 block text-xs text-red-600">
+              <span
+                id="password-error"
+                className="mt-1.5 block text-xs text-red-600"
+                role="alert"
+              >
                 {fieldErrors.password}
               </span>
             ) : null}
           </label>
 
-          <label className="block">
+          <label className="block" htmlFor="confirm-password">
             <span className="mb-2 block text-sm font-medium text-zinc-800">
               {t("auth.confirmPassword")}
             </span>
             <span className="relative block">
               <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
+                id="confirm-password"
                 type={showPassword ? "text" : "password"}
                 value={confirmation}
                 onChange={(event) => {
@@ -288,12 +387,20 @@ export default function RegisterForm() {
                 }}
                 autoComplete="new-password"
                 disabled={loading}
+                aria-invalid={Boolean(fieldErrors.confirmation)}
+                aria-describedby={
+                  fieldErrors.confirmation ? "confirm-password-error" : undefined
+                }
                 placeholder={t("auth.confirmPasswordPlaceholder")}
                 className={inputClass(Boolean(fieldErrors.confirmation))}
               />
             </span>
             {fieldErrors.confirmation ? (
-              <span className="mt-1.5 block text-xs text-red-600">
+              <span
+                id="confirm-password-error"
+                className="mt-1.5 block text-xs text-red-600"
+                role="alert"
+              >
                 {fieldErrors.confirmation}
               </span>
             ) : null}
@@ -327,5 +434,3 @@ export default function RegisterForm() {
     </div>
   );
 }
-
-
