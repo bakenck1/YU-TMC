@@ -135,6 +135,132 @@ test("production deployment protects HTTPS activation and database backups", asy
   assert.match(deploymentSmokeTest, /Nginx reload failure was accepted/);
 });
 
+test("photo limits stay aligned across the implementation and product artifacts", async () => {
+  const validationGuide = await readFile("docs/field-validation.md", "utf8");
+  const mobileMockups = await readFile("docs/mobile-mockups.html", "utf8");
+  const itemPhotoService = await readFile(
+    "lib/application/services/inventory-item-service.ts",
+    "utf8",
+  );
+  const servicePhotoNormalizer = await readFile(
+    "lib/server/photos/normalize-uploaded-photo.ts",
+    "utf8",
+  );
+  const serviceRequestService = await readFile(
+    "lib/application/services/service-request-service.ts",
+    "utf8",
+  );
+  const serverApplication = await readFile("lib/server/application.ts", "utf8");
+  const schema = await readFile("lib/db/schema.ts", "utf8");
+  const serviceRequestRepository = await readFile(
+    "lib/server/persistence/postgres/postgres-service-request-repositories.ts",
+    "utf8",
+  );
+  const itemRepository = await readFile(
+    "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
+    "utf8",
+  );
+  const photoLifecycleMigration = await readFile(
+    "drizzle/20260826120000_photo_lifecycle_guard.sql",
+    "utf8",
+  );
+  const primaryPhotoSection = validationGuide.slice(
+    validationGuide.indexOf("### Основная фотография предмета"),
+    validationGuide.indexOf("### Фотография сервисной заявки"),
+  );
+  const serviceRequestPhotoSection = validationGuide.slice(
+    validationGuide.indexOf("### Фотография сервисной заявки"),
+    validationGuide.indexOf("### Фотографии проверок и споров"),
+  );
+  const inspectionPhotoSection = validationGuide.slice(
+    validationGuide.indexOf("### Фотографии проверок и споров"),
+    validationGuide.indexOf("Для всех потоков сервер"),
+  );
+  assert.ok(primaryPhotoSection.length > 0);
+  assert.ok(serviceRequestPhotoSection.length > 0);
+  assert.ok(inspectionPhotoSection.length > 0);
+  assert.match(primaryPhotoSection, /только JPEG/);
+  assert.match(primaryPhotoSection, /максимум 5 MiB/);
+  assert.match(primaryPhotoSection, /2,5 мегапикселя и 1920 px/);
+  assert.doesNotMatch(primaryPhotoSection, /10 MiB|8192 px/);
+  assert.match(serviceRequestPhotoSection, /JPEG, PNG и WebP/);
+  assert.match(serviceRequestPhotoSection, /не более 5 MiB/);
+  assert.match(serviceRequestPhotoSection, /20 мегапикселей/);
+  assert.match(serviceRequestPhotoSection, /до 1280 px/);
+  assert.match(serviceRequestPhotoSection, /service_requests\.photo_binary_data/);
+  assert.doesNotMatch(serviceRequestPhotoSection, /10 MiB|8192 px/);
+  assert.match(inspectionPhotoSection, /inspection_result/);
+  assert.match(inspectionPhotoSection, /decision_dispute/);
+  assert.match(inspectionPhotoSection, /1 до 10 MiB/);
+  assert.match(inspectionPhotoSection, /8192 px/);
+  assert.match(inspectionPhotoSection, /20 мегапикселей/);
+  assert.match(inspectionPhotoSection, /originalObjectKey/);
+  assert.match(inspectionPhotoSection, /после присоединения обязательно `previewObjectKey`/);
+  assert.match(
+    inspectionPhotoSection,
+    /mobile-mockups\.html.*result\.photoError.*10 МБ.*inspection_result.*сервисной заявки/s,
+  );
+  assert.match(
+    inspectionPhotoSection,
+    /upload\/read handlers.*inspection_result.*decision_dispute.*не подключены/,
+  );
+  assert.match(validationGuide, /inventory\.photo\.item_original/);
+  assert.match(validationGuide, /inventory\.photo\.inspection_original/);
+  assert.match(validationGuide, /inventory\.photo\.dispute_original/);
+  assert.match(validationGuide, /используют предварительное резервирование записей/);
+  assert.match(validationGuide, /не используют 30-минутную reservation-фазу/);
+  assert.match(mobileMockups, /"result\.photoError": "Фотографию не удалось обработать\. Выберите JPEG, PNG или WebP до 10 МБ\."/);
+  assert.match(mobileMockups, /"result\.photoError": "Фотосуретті өңдеу мүмкін болмады\. 10 МБ-қа дейінгі JPEG, PNG немесе WebP таңдаңыз\."/);
+  assert.match(mobileMockups, /"result\.photoError": "The photo could not be processed\. Choose a JPEG, PNG, or WebP file up to 10 MB\."/);
+  assert.match(mobileMockups, /"lab\.intro": "[^\n]*inspection_result[^\n]*10 МБ[^\n]*сервисная заявка\./);
+  assert.match(mobileMockups, /"lab\.intro": "[^\n]*inspection_result[^\n]*10 МБ-қа дейінгі[^\n]*сервис өтінімі емес\./);
+  assert.match(mobileMockups, /"lab\.intro": "[^\n]*inspection_result[^\n]*10 MB[^\n]*service-request flow\./);
+  assert.match(itemPhotoService, /data:image.*jpeg;base64/);
+  assert.match(itemPhotoService, /limitInputPixels: 2_500_000/);
+  assert.match(itemPhotoService, /width > 1920/);
+  assert.match(itemPhotoService, /height > 1920/);
+  assert.match(itemPhotoService, /processed\.data\.byteLength > 5 \* 1024 \* 1024/);
+  assert.match(servicePhotoNormalizer, /data:image.*jpeg.*png.*webp/);
+  assert.match(servicePhotoNormalizer, /const MAX_PHOTO_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(servicePhotoNormalizer, /source\.byteLength > MAX_PHOTO_BYTES/);
+  assert.match(servicePhotoNormalizer, /limitInputPixels: 20_000_000/);
+  assert.match(servicePhotoNormalizer, /metadata\.pages/);
+  assert.match(servicePhotoNormalizer, /width: 1280/);
+  assert.match(servicePhotoNormalizer, /height: 1280/);
+  assert.match(servicePhotoNormalizer, /normalized\.data\.byteLength > MAX_PHOTO_BYTES/);
+  assert.match(serviceRequestService, /this\.photos\.normalize\(input\.photo\?\.imageDataUrl\)/);
+  assert.match(serverApplication, /normalize: normalizeUploadedPhoto/);
+  assert.match(schema, /photoBinaryData: binaryData\("photo_binary_data"\)/);
+  assert.match(schema, /dataType: \(\) => "bytea"/);
+  assert.match(schema, /service_requests_photo_check/);
+  assert.match(schema, /photoByteSize} BETWEEN 1 AND 5242880/);
+  assert.match(schema, /photoWidth} BETWEEN 1 AND 1920/);
+  assert.match(schema, /photoHeight} BETWEEN 1 AND 1920/);
+  assert.match(schema, /photoWidth}::bigint \* .*photoHeight}::bigint <= 2500000/);
+  assert.match(schema, /photos_size_check/);
+  assert.match(schema, /BETWEEN 1 AND 10485760/);
+  assert.match(schema, /photos_dimensions_check/);
+  assert.match(schema, /BETWEEN 1 AND 8192/);
+  assert.match(schema, /<= 20000000/);
+  assert.match(schema, /photos_parent_check/);
+  assert.match(schema, /photos_attached_metadata_check/);
+  assert.match(schema, /photos_lifecycle_check/);
+  assert.match(photoLifecycleMigration, /photos_lifecycle_transition/);
+  assert.match(photoLifecycleMigration, /photos_lifecycle_transition_guard/);
+  assert.match(photoLifecycleMigration, /DROP TRIGGER IF EXISTS/);
+  assert.match(photoLifecycleMigration, /OLD\.status = 'reserved'/);
+  assert.match(photoLifecycleMigration, /OLD\.status = 'attached'/);
+  assert.match(photoLifecycleMigration, /NEW\.status = 'purged'/);
+  assert.match(serviceRequestRepository, /photo_binary_data/);
+  assert.match(serviceRequestRepository, /input\.photoBytes/);
+  assert.match(serviceRequestRepository, /new Uint8Array\(row\.photo_binary_data\)/);
+  assert.match(itemRepository, /insertServiceItemPhoto/);
+  assert.match(itemRepository, /purpose = 'service_request'/);
+  assert.match(itemRepository, /Buffer\.from\(input\.bytes\)/);
+  assert.match(itemRepository, /findServiceItemPhoto/);
+  assert.match(itemRepository, /row\?\.binary_data/);
+});
+
 test("external development startup prepares the database before Next.js", async () => {
   const devScript = await readFile("scripts/dev.mjs", "utf8");
   const externalBranch = devScript.slice(devScript.lastIndexOf("if (configuredDatabaseUrl)"));

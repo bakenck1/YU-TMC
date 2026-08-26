@@ -166,6 +166,117 @@ test("stores dimensions derived from the decoded JPEG instead of client claims",
   assert.equal(storedHeight, 3);
 });
 
+test("rejects non-JPEG bytes, oversized input and dimensions outside the primary-photo contract", async () => {
+  const png = await sharp({
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: "white",
+    },
+  })
+    .png()
+    .toBuffer();
+  const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+  oversized.set([0xff, 0xd8, 0xff]);
+  const service = createService({ findItemById: async () => item(null) });
+  const update = (bytes: Uint8Array) =>
+    service.updatePhoto(
+      ITEM_ID,
+      {
+        version: 1,
+        imageDataUrl: `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`,
+        width: 1,
+        height: 1,
+      },
+      { userId: "admin-1", role: "admin" },
+    );
+
+  await assert.rejects(update(png), /invalid_camera_photo/);
+  await assert.rejects(update(oversized), /invalid_camera_photo_size/);
+
+  const tooWide = await sharp({
+    create: {
+      width: 2000,
+      height: 1000,
+      channels: 3,
+      background: "white",
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  await assert.rejects(
+    update(tooWide),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.publicCode === "invalid_photo_dimensions",
+  );
+
+  const tooManyPixels = await sharp({
+    create: {
+      width: 1600,
+      height: 1600,
+      channels: 3,
+      background: "white",
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  await assert.rejects(
+    update(tooManyPixels),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.publicCode === "invalid_camera_photo",
+  );
+});
+
+test("auto-orients the primary item photo and strips EXIF metadata before storage", async () => {
+  const source = await sharp({
+    create: {
+      width: 200,
+      height: 100,
+      channels: 3,
+      background: "white",
+    },
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg()
+    .toBuffer();
+  let storedBytes: Uint8Array | undefined;
+  let storedWidth: number | undefined;
+  let storedHeight: number | undefined;
+  const service = createService({
+    findItemById: async () => item(null),
+    updateItemPhoto: async (input) => {
+      storedBytes = input.bytes;
+      storedWidth = input.width;
+      storedHeight = input.height;
+      return { ...item(null), version: 2 };
+    },
+    appendAudit: async () => undefined,
+  });
+
+  await service.updatePhoto(
+    ITEM_ID,
+    {
+      version: 1,
+      imageDataUrl: `data:image/jpeg;base64,${source.toString("base64")}`,
+      width: 1,
+      height: 1,
+    },
+    { userId: "admin-1", role: "admin" },
+  );
+
+  assert.equal(storedWidth, 100);
+  assert.equal(storedHeight, 200);
+  const metadata = await sharp(Buffer.from(storedBytes!)).metadata();
+  assert.equal(metadata.format, "jpeg");
+  assert.equal(metadata.width, 100);
+  assert.equal(metadata.height, 200);
+  assert.equal(metadata.exif, undefined);
+  assert.equal(metadata.orientation, undefined);
+});
+
 test("photo route guards JSON before parsing", () => {
   const source = readFileSync(
     "app/api/inventory/items/[id]/photo/route.ts",
