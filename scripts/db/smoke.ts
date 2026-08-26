@@ -59,18 +59,24 @@ async function main() {
          false
        ) as can_use_migration_schema,
        coalesce(
-         has_table_privilege(
-           current_user,
-           '"yu_migrations"."__drizzle_migrations"',
-           'SELECT'
+         (
+           select has_table_privilege(current_user, migration_table.oid, 'SELECT')
+             from pg_catalog.pg_class migration_table
+             join pg_catalog.pg_namespace migration_schema
+               on migration_schema.oid = migration_table.relnamespace
+            where migration_schema.nspname = 'yu_migrations'
+              and migration_table.relname = '__drizzle_migrations'
          ),
          false
        ) as can_read_migration_history,
        coalesce(
-         has_table_privilege(
-           current_user,
-           '"yu_migrations"."__drizzle_migrations"',
-           'INSERT'
+         (
+           select has_table_privilege(current_user, migration_table.oid, 'INSERT')
+             from pg_catalog.pg_class migration_table
+             join pg_catalog.pg_namespace migration_schema
+               on migration_schema.oid = migration_table.relnamespace
+            where migration_schema.nspname = 'yu_migrations'
+              and migration_table.relname = '__drizzle_migrations'
          ),
          false
        ) as can_write_migration_history,
