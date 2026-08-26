@@ -26,6 +26,7 @@ import {
   type TranslationKey,
   type TranslationParams,
 } from "@/lib/i18n";
+import { CLIENT_SETTINGS_CHANGE_EVENT } from "@/lib/client-language";
 import { syncPushSubscriptionLanguage } from "@/lib/client-push-subscription";
 import AppInitialLoading from "./AppInitialLoading";
 
@@ -70,6 +71,7 @@ function readLocalSettings() {
 function saveLocalSettings(settings: AppSettings) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new Event(CLIENT_SETTINGS_CHANGE_EVENT));
     return true;
   } catch {
     return false;
