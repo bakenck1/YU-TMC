@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import { useAppSettings } from "@/components/AppSettingsProvider";
 import {
   resolveMaintenanceItemWithRefresh,
   type MaintenanceResolutionStatus,
@@ -15,6 +16,7 @@ export default function MaintenanceItemsPanel({
   initialItems: InventoryItemDto[];
   canManage: boolean;
 }) {
+  const { locale, t } = useAppSettings();
   const [items, setItems] = useState(initialItems);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,19 +31,19 @@ export default function MaintenanceItemsPanel({
       await resolveMaintenanceItemWithRefresh(fetch, item, status);
       setItems((current) => current.filter((entry) => entry.id !== item.id));
     } catch {
-      setError("Не удалось обновить статус. Обновите страницу и повторите попытку.");
+      setError(t("maintenance.error"));
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
+    <section aria-labelledby="maintenance-items-title" className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-800">ТМЦ на обслуживании</h2>
+          <h2 id="maintenance-items-title" className="text-lg font-semibold text-zinc-800">{t("maintenance.title")}</h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Все предметы, ожидающие ремонта или решения о списании.
+            {t("maintenance.description")}
           </p>
         </div>
         <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
@@ -57,18 +59,19 @@ export default function MaintenanceItemsPanel({
 
       {items.length === 0 ? (
         <p className="mt-4 rounded-xl border border-dashed border-amber-200 bg-white p-6 text-center text-sm text-zinc-500">
-          ТМЦ на обслуживании нет.
+          {t("maintenance.empty")}
         </p>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-black/5 bg-white">
           <table className="min-w-full text-left text-sm">
+            <caption className="sr-only">{t("maintenance.tableCaption")}</caption>
             <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
-                <th className="px-3 py-3">ТМЦ</th>
-                <th className="px-3 py-3">Корпус / помещение</th>
-                <th className="px-3 py-3">Ответственный</th>
-                <th className="px-3 py-3">Переведено в сервис</th>
-                {canManage ? <th className="px-3 py-3">Действия</th> : null}
+                <th scope="col" className="px-3 py-3">{t("maintenance.item")}</th>
+                <th scope="col" className="px-3 py-3">{t("maintenance.location")}</th>
+                <th scope="col" className="px-3 py-3">{t("maintenance.responsible")}</th>
+                <th scope="col" className="px-3 py-3">{t("maintenance.startedAt")}</th>
+                {canManage ? <th scope="col" className="px-3 py-3">{t("maintenance.actions")}</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
@@ -88,10 +91,10 @@ export default function MaintenanceItemsPanel({
                     <div className="text-xs text-zinc-500">{item.room.designation}</div>
                   </td>
                   <td className="px-3 py-3 text-zinc-700">
-                    {item.responsible?.name || "Не назначен"}
+                    {item.responsible?.name || t("common.notAssigned")}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-zinc-600">
-                    {new Date(item.maintenanceStartedAt ?? item.updatedAt).toLocaleString("ru-RU")}
+                    {new Date(item.maintenanceStartedAt ?? item.updatedAt).toLocaleString(locale)}
                   </td>
                   {canManage ? (
                     <td className="px-3 py-3">
@@ -102,7 +105,7 @@ export default function MaintenanceItemsPanel({
                           onClick={() => void changeStatus(item, "active")}
                           className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                         >
-                          Вернуть в «Активен»
+                          {t("maintenance.returnActive")}
                         </button>
                         <button
                           type="button"
@@ -110,7 +113,7 @@ export default function MaintenanceItemsPanel({
                           onClick={() => void changeStatus(item, "decommissioned")}
                           className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
                         >
-                          Списать
+                          {t("maintenance.writeOff")}
                         </button>
                       </div>
                     </td>

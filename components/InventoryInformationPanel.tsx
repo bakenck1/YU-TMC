@@ -1,8 +1,45 @@
-import { useAppSettings } from "./AppSettingsProvider";
+"use client";
 
-export default function InventoryInformationPanel() {
+import type { InventoryItemOperationDto } from "@/lib/contracts/inventory-items";
+import { useAppSettings } from "./AppSettingsProvider";
+import { operationDetail, operationTitle } from "./InventoryItemDetailsPresentation";
+
+export default function InventoryInformationPanel({
+  operations = [],
+}: {
+  operations?: InventoryItemOperationDto[];
+}) {
   const { locale, t } = useAppSettings();
-  const operationDate = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  const operations = [[t("items.operationMove"), t("items.operationMoveText"), operationDate.format(new Date("2025-04-27T08:49:00"))], [t("items.operationAcceptance"), t("items.operationAcceptanceText"), operationDate.format(new Date("2025-04-27T08:49:00"))], [t("items.operationMove"), t("items.operationMoveText"), operationDate.format(new Date("2025-04-27T08:43:00"))], [t("items.operationAcceptance"), t("items.operationAcceptanceText"), operationDate.format(new Date("2025-04-27T08:43:00"))], [t("items.operationCreation"), t("items.operationCreationText"), operationDate.format(new Date("2025-04-27T08:38:00"))]];
-  return <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm"><h2 className="mb-6 text-lg font-semibold text-zinc-800">{t("items.recentOperations")}</h2><div>{operations.map(([title, description, date], index) => <div key={`${title}-${date}`} className="relative flex gap-4 pb-6 last:pb-0">{index < operations.length - 1 ? <span className="absolute left-[7px] top-4 h-full w-px bg-emerald-200" aria-hidden="true" /> : null}<span className="relative mt-1 h-4 w-4 shrink-0 rounded-full border-2 border-emerald-500 bg-white" aria-hidden="true" /><div className="min-w-0 flex-1"><div className="flex flex-col justify-between gap-1 sm:flex-row"><p className="font-medium text-zinc-800">{title}</p><time className="text-xs text-zinc-400">{date}</time></div><p className="mt-1 text-sm text-zinc-500">{description}</p><p className="mt-2 text-sm font-medium text-zinc-700">Demo User · legacy-user@example.test</p></div></div>)}</div></section>;
+
+  return (
+    <section aria-labelledby="legacy-item-operations-title" className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+      <h2 id="legacy-item-operations-title" className="mb-6 text-lg font-semibold text-zinc-800">
+        {t("itemDetails.recentOperations")}
+      </h2>
+      {operations.length ? (
+        <ol className="relative space-y-3 border-l border-emerald-200 pl-4">
+          {operations.map((entry) => (
+            <li key={`${entry.kind}-${entry.id}`} className="relative rounded-xl bg-slate-50 px-4 py-3 text-sm">
+              <span className="absolute -left-[1.35rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" aria-hidden="true" />
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-medium text-zinc-800">{operationTitle(entry, t)}</p>
+                <time className="text-xs text-zinc-400" dateTime={entry.occurredAt}>
+                  {new Date(entry.occurredAt).toLocaleString(locale)}
+                </time>
+              </div>
+              <p className="mt-1 text-sm text-zinc-500">
+                {entry.actorName ?? t("itemDetails.auditUnknownActor")}
+                {entry.actorEmail ? ` · ${entry.actorEmail}` : ""}
+                {operationDetail(entry, t)}
+              </p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="rounded-xl bg-slate-50 px-4 py-6 text-sm text-zinc-500">
+          {t("itemDetails.operationsEmpty")}
+        </p>
+      )}
+    </section>
+  );
 }

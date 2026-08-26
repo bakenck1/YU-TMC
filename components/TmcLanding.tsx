@@ -64,6 +64,7 @@ export default function TmcLanding({
                 key={tab}
                 type="button"
                 role="tab"
+                id={`tmc-tab-${tab}`}
                 aria-label={t(operation.labelKey)}
                 aria-selected={selected}
                 aria-controls={`tmc-workspace-${tab}`}
@@ -81,7 +82,7 @@ export default function TmcLanding({
       </header>
 
       {activeTab === "receive" ? (
-        <div id="tmc-workspace-receive" role="tabpanel" className="space-y-4">
+        <div id="tmc-workspace-receive" role="tabpanel" aria-labelledby="tmc-tab-receive" className="space-y-4">
           <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -116,7 +117,7 @@ export default function TmcLanding({
       ) : null}
 
       {activeTab === "issue" ? (
-        <div id="tmc-workspace-issue" role="tabpanel">
+        <div id="tmc-workspace-issue" role="tabpanel" aria-labelledby="tmc-tab-issue">
           <TmcOperationShell
             operation={TMC_OPERATION_BY_ID.issue}
             issueItems={issueItems}
@@ -127,7 +128,7 @@ export default function TmcLanding({
       ) : null}
 
       {activeTab === "transfer" && actorRole === "admin" ? (
-        <section id="tmc-workspace-transfer" role="tabpanel" className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+        <section id="tmc-workspace-transfer" role="tabpanel" aria-labelledby="tmc-tab-transfer" className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-zinc-900">{t("tmc.operation.transfer")}</h3>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">{t("tmc.transfer.adminHint")}</p>
           <Link href="/items" className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-5 text-sm font-semibold text-white hover:bg-emerald-800">{t("tmc.transfer.openItems")}</Link>

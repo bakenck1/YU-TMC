@@ -7,8 +7,9 @@ test("inspections page includes the maintenance inventory workflow", () => {
   const panel = readFileSync("components/MaintenanceItemsPanel.tsx", "utf8");
   const resolutionClient = readFileSync("lib/maintenance-resolution-client.ts", "utf8");
   assert.match(page, /item\.status === "maintenance"/);
-  assert.match(panel, /Вернуть в «Активен»/);
-  assert.match(panel, /Списать/);
+  assert.match(panel, /maintenance\.returnActive/);
+  assert.match(panel, /maintenance\.writeOff/);
+  assert.match(panel, /maintenance\.tableCaption/);
   assert.match(panel, /room\.buildingName/);
   assert.match(panel, /responsible\?\.name/);
   assert.match(panel, /maintenanceStartedAt/);

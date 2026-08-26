@@ -1,8 +1,10 @@
 import { Sparkles } from "lucide-react";
 import type { UserDto } from "@/lib/contracts/users";
 import { getProfileInitials, USER_PROFILE_ROLE_COPY } from "@/lib/user-profile-presentation";
+import { useAppSettings } from "@/components/AppSettingsProvider";
 
 export default function UserProfileHeader({ profile }: { profile: UserDto }) {
+  const { t } = useAppSettings();
   const role = USER_PROFILE_ROLE_COPY[profile.role];
   return (
     <header className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#001a4d] via-[#06458a] to-emerald-500 p-6 text-white shadow-xl shadow-blue-950/15 sm:p-8">
@@ -15,17 +17,17 @@ export default function UserProfileHeader({ profile }: { profile: UserDto }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-50 backdrop-blur">Профиль</span>
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-50 backdrop-blur">{t("nav.profile")}</span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-300/20 px-3 py-1 text-xs font-semibold text-emerald-50">
               <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden="true" />
-              {profile.active ? "Активный аккаунт" : "Аккаунт неактивен"}
+              {profile.active ? t("profile.activeAccount") : t("profile.inactiveAccount")}
             </span>
           </div>
           <h1 className="mt-4 break-words text-3xl font-bold tracking-tight sm:text-4xl">{profile.fullName}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">{role.description}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">{t(role.descriptionKey)}</p>
         </div>
         <div className="rounded-2xl border border-white/15 bg-black/10 px-4 py-3 backdrop-blur-sm">
-          <p className="text-xs uppercase tracking-[0.18em] text-blue-100">ID профиля</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-blue-100">{t("profile.idLabel")}</p>
           <p className="mt-1 font-mono text-sm font-semibold text-white">{profile.code}</p>
         </div>
       </div>

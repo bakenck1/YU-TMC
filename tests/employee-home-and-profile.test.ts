@@ -29,13 +29,13 @@ test("every authenticated role has a profile route and a profile navigation entr
 
   assert.match(page, /requireAuthorizedPage\("\/profile"\)/);
   assert.match(page, /getProfile/);
-  assert.match(profile, /Профиль/);
+  assert.match(profile, /profile\.userProfile/);
   assert.match(profile, /email/);
   assert.match(profile, /role/);
   assert.match(profile, /getProfileInitials/);
   assert.match(profile, /USER_PROFILE_ROLE_COPY/);
   assert.match(profile, /bg-gradient-to-br/);
-  assert.match(profile, /Email подтверждён/);
+  assert.match(profile, /profile\.emailVerified/);
   assert.match(sidebar, /\/profile/);
   assert.match(authorization, /\["\/profile", "legacy\.dashboard\.read"\]/);
 });

@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic";
 const operation = TMC_OPERATION_BY_ID.transfer;
 
 export default async function TmcTransferPage() {
-  await requireAuthorizedPage(operation.href);
-  return <TmcOperationShell operation={operation} />;
+  const user = await requireAuthorizedPage(operation.href);
+  return <TmcOperationShell operation={operation} actorUserId={user.userId} actorRole={user.role} />;
 }

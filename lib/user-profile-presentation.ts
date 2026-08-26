@@ -1,17 +1,18 @@
 import type { UserRole } from "./types";
+import type { TranslationKey } from "./i18n";
 
-export const USER_PROFILE_ROLE_COPY: Record<UserRole, { label: string; description: string }> = {
+export const USER_PROFILE_ROLE_COPY: Record<UserRole, { labelKey: TranslationKey; descriptionKey: TranslationKey }> = {
   admin: {
-    label: "Администратор",
-    description: "Полный контроль инвентаря и пользователей",
+    labelKey: "users.admin",
+    descriptionKey: "profile.roleAdminDescription",
   },
   warehouse: {
-    label: "Кладовщик",
-    description: "Учёт, аналитика и контроль движения ТМЦ",
+    labelKey: "users.warehouse",
+    descriptionKey: "profile.roleWarehouseDescription",
   },
   employee: {
-    label: "Сотрудник",
-    description: "Персональные ТМЦ и запросы на передачу",
+    labelKey: "users.employee",
+    descriptionKey: "profile.roleEmployeeDescription",
   },
 };
 

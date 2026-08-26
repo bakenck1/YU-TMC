@@ -1,12 +1,16 @@
+"use client";
+
 import type { UserDto } from "@/lib/contracts/users";
 import UserAccountDetailsCard from "./UserAccountDetailsCard";
 import UserEmailVerificationCard from "./UserEmailVerificationCard";
 import UserProfileHeader from "./UserProfileHeader";
 import UserProfileRoleCard from "./UserProfileRoleCard";
+import { useAppSettings } from "@/components/AppSettingsProvider";
 
 export default function UserProfileCard({ profile }: { profile: UserDto }) {
+  const { t } = useAppSettings();
   return (
-    <section className="mx-auto max-w-5xl space-y-6" aria-label="Профиль пользователя">
+    <section className="mx-auto max-w-5xl space-y-6" aria-label={t("profile.userProfile")}>
       <UserProfileHeader profile={profile} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <UserAccountDetailsCard profile={profile} />

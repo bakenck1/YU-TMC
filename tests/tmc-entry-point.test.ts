@@ -133,3 +133,15 @@ test("TMC operation routes remain available as protected deep links", () => {
     assert.doesNotMatch(page, /<button|<form|fetch\(|QR|scanner|picker/i);
   }
 });
+
+test("direct TMC operation routes forward the authenticated actor to the client flow", () => {
+  for (const operation of TMC_OPERATIONS) {
+    const page = readFileSync(
+      `app/(protected)/tmc/${operation.id}/page.tsx`,
+      "utf8",
+    );
+    assert.match(page, /const user = await requireAuthorizedPage\(operation\.href\)/);
+    assert.match(page, /actorUserId=\{user\.userId\}/);
+    assert.match(page, /actorRole=\{user\.role\}/);
+  }
+});

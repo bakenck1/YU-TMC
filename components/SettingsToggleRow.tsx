@@ -5,13 +5,14 @@ export interface SettingsToggleRowProps {
   hint: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
-export default function SettingsToggleRow({ label, hint, checked, onChange }: SettingsToggleRowProps) {
+export default function SettingsToggleRow({ label, hint, checked, onChange, disabled = false }: SettingsToggleRowProps) {
   return (
     <div className="flex items-center justify-between gap-4">
       <div><p className="text-sm text-zinc-700">{label}</p><p className="text-xs text-zinc-400">{hint}</p></div>
-      <Switch checked={checked} onChange={onChange} label={label} />
+      <Switch checked={checked} onChange={onChange} label={label} disabled={disabled} />
     </div>
   );
 }

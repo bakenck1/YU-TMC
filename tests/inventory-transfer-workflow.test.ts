@@ -165,8 +165,24 @@ test("transfers page is employee-only and exposes the complete QR workflow", asy
     "components/InventoryTransferList.tsx",
   ].map((path) => readFile(path, "utf8"))).then((sources) => sources.join("\n"));
   assert.match(source, /\/api\/inventory\/qr\/resolve/);
-  assert.match(source, /Запросить передачу/);
+  assert.match(source, /transfers\.scanHint/);
+  assert.match(source, /tmc\.qr\.scan/);
+  assert.match(source, /transfers\.request/);
   assert.match(source, /\/decision/);
-  assert.match(source, /Подтвердить/);
-  assert.match(source, /Отклонить/);
+  assert.match(source, /transfers\.confirm/);
+  assert.match(source, /transfers\.reject/);
+  assert.doesNotMatch(source, /Сканировать QR/);
+});
+
+test("employee inventory links directly to the production TMC workspace", async () => {
+  const items = await readFile("components/EmployeeItemsTabs.tsx", "utf8");
+  const landing = await readFile("components/TmcLanding.tsx", "utf8");
+  const flow = await readFile("components/TmcItemQrFlow.tsx", "utf8");
+
+  assert.match(items, /<Link href="\/tmc"/);
+  assert.doesNotMatch(items, /<Link href="\/transfers"/);
+  assert.match(landing, /TmcOperationShell/);
+  assert.match(landing, /tmc\.incoming\.openRequest/);
+  assert.match(flow, /\/api\/inventory\/transfer-requests/);
+  assert.match(flow, /InventoryItemCodeScanner/);
 });
