@@ -1,5 +1,7 @@
+import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { createInventoryRoomPostHandler } from "@/lib/server/http/inventory-room-handler";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
   authorizationActor,
   requirePermission,
@@ -41,4 +43,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return post(request, (await params).id);
+}
+
+function invalidRequest() {
+  return new ApplicationError("validation", "invalid_request");
+}
+
+function locationErrorResponse(error: unknown): Response {
+  return error instanceof ApplicationError
+    ? applicationErrorResponse(error)
+    : Response.json({ error: "locations_unavailable" }, { status: 503 });
 }
