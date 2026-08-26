@@ -70,7 +70,7 @@ test("validates Excel rows and rejects duplicate inventory numbers before import
   assert.deepEqual(parsed.inputs[0], {
     name: "Monitor",
     description: "Display",
-    itemType: "Equipment",
+    category: "electronics",
     brand: "HP",
     model: "E24",
     quantity: 2,

@@ -9,7 +9,7 @@ import {
 } from "../lib/inventory-columns";
 
 test("inventory columns use the PRD defaults", () => {
-  assert.equal(INVENTORY_COLUMN_KEYS.length, 12);
+  assert.equal(INVENTORY_COLUMN_KEYS.length, 13);
   assert.equal(DEFAULT_INVENTORY_COLUMNS.additionalInfo, false);
   assert.equal(DEFAULT_INVENTORY_COLUMNS.createdAt, false);
   for (const key of INVENTORY_COLUMN_KEYS) {
