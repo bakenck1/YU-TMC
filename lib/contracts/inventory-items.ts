@@ -4,11 +4,15 @@ import type {
   InventoryNumberKind,
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
+import type { InventoryItemCategory } from "@/lib/inventory-categories";
 
 export interface InventoryItemDto {
   id: string;
   name: string;
   description: string | null;
+  /** Category shown in the “Тип ТМЦ” column. */
+  category?: InventoryItemCategory;
+  /** @deprecated Kept during the data-model transition; it equals category. */
   itemType: string;
   brand: string | null;
   model: string | null;
@@ -97,8 +101,10 @@ export interface InventoryItemCommentDto {
 
 export interface CreateInventoryItemInput {
   name: string;
-  description?: string | null;
+  category?: InventoryItemCategory | null;
+  /** @deprecated Only accepted by trusted legacy import paths. Public APIs require category. */
   itemType?: string | null;
+  description?: string | null;
   brand?: string | null;
   model?: string | null;
   quantity?: number | null;
@@ -117,6 +123,7 @@ export interface CreateInventoryItemInput {
 export interface UpdateInventoryItemContentInput {
   version: number;
   name: string;
+  category?: InventoryItemCategory | null;
   description?: string | null;
   itemType?: string | null;
   brand?: string | null;

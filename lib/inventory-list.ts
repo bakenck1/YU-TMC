@@ -64,7 +64,9 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
             .includes(filters.location.trim().toLowerCase())) &&
         (!brand || itemBrand.includes(brand)) &&
         (!model || itemModel.includes(model)) &&
-        (!itemType || (item.itemType ?? item.category).toLowerCase().includes(itemType)) &&
+        (!itemType ||
+          item.name.toLowerCase().includes(itemType) ||
+          (item.itemType ?? item.category).toLowerCase().includes(itemType)) &&
         (!building || itemBuilding.includes(building)) &&
         (!responsible || item.responsible.toLowerCase().includes(responsible)) &&
         matchesStatusFilter(item, filters.statusKey),

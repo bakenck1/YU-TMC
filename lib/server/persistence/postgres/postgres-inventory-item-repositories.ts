@@ -22,6 +22,7 @@ import type {
   ResolveMaintenanceItemRecord,
   StoredInventoryItemCommentAttachment,
   UpdateInventoryItemContentRecord,
+  UpdateInventoryItemCategoryRecord,
   UpdateInventoryItemPhotoRecord,
   UpdateInventoryItemProtectedRecord,
   UpdateInventoryItemStatusRecord,
@@ -713,6 +714,42 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     );
     if (result.rowCount !== 1) return null;
     return this.findItemById(input.id);
+  }
+
+  async updateItemCategory(
+    input: UpdateInventoryItemCategoryRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set item_type = $2, updated_by = $3, updated_at = $4,
+           version = version + 1
+       where id = $1
+       returning id`,
+      [input.id, input.category, input.actorId, input.occurredAt],
+    );
+    if (!result.rows[0]) return null;
+    return this.findItemById(input.id);
+  }
+
+  async deleteItems(ids: readonly string[]): Promise<string[]> {
+    if (!ids.length) return [];
+    await this.source.query(
+      `delete from ${AUDIT}
+       where (subject_kind in ('item', 'responsibility')
+              and subject_id = any($1::uuid[]))
+          or (subject_kind = 'transfer' and subject_id in (
+                select id from "yu_inventory"."transfers"
+                 where item_id = any($1::uuid[])
+              ))`,
+      [ids],
+    );
+    const result = await this.source.query<{ id: string }>(
+      `delete from ${ITEMS}
+       where id = any($1::uuid[])
+       returning id`,
+      [ids],
+    );
+    return result.rows.map((row) => row.id);
   }
 
   async updateItemStatus(

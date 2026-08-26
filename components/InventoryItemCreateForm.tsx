@@ -33,7 +33,7 @@ export default function InventoryItemCreateForm({
   const [open, setOpen] = useState(openInitially);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [itemType, setItemType] = useState("");
+  const [category, setCategory] = useState<"" | "electronics" | "furniture">("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -83,7 +83,7 @@ export default function InventoryItemCreateForm({
         body: JSON.stringify({
           name,
           description: description || null,
-          itemType: restricted ? null : (itemType || null),
+          category,
           brand: restricted ? null : (brand || null),
           model: restricted ? null : (model || null),
           quantity: restricted ? 1 : Number(quantity),
@@ -98,7 +98,7 @@ export default function InventoryItemCreateForm({
       setOpen(false);
       setName("");
       setDescription("");
-      setItemType("");
+      setCategory("");
       setBrand("");
       setModel("");
       setQuantity("1");
@@ -153,9 +153,9 @@ export default function InventoryItemCreateForm({
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select></label>
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
@@ -193,7 +193,7 @@ export default function InventoryItemCreateForm({
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !roomId || (!restricted && (!itemType.trim() || !barcode.trim() || !photo))} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !category || !roomId || (!restricted && (!barcode.trim() || !photo))} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
 
             {codeScannerOpen ? (

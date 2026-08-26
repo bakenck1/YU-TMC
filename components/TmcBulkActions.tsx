@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, ChevronDown, MapPin, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, MapPin, Tags, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
@@ -17,7 +17,7 @@ import type {
 import type { UserRole } from "@/lib/contracts/users";
 import type { InventoryItem } from "@/lib/types";
 
-type Mode = "transfer" | "location";
+type Mode = "transfer" | "location" | "category" | "delete";
 type Outcome = TmcTransferRequestCreationItemOutcomeDto | TmcOperationItemOutcomeDto;
 
 export default function TmcBulkActions({
@@ -45,6 +45,7 @@ export default function TmcBulkActions({
   const [recipient, setRecipient] = useState<TmcOperationUserDto | null>(null);
   const [buildingId, setBuildingId] = useState("");
   const [roomId, setRoomId] = useState("");
+  const [category, setCategory] = useState<"electronics" | "furniture">("electronics");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +58,9 @@ export default function TmcBulkActions({
     variant === "issue" && items.every((item) => item.responsibleId === actorUserId)
   );
   const displayedItems = mode ? operationItems : items;
-  const selectionValid = displayedItems.length > 0 && displayedItems.length <= 50;
+  const selectionValid = displayedItems.length > 0 && displayedItems.length <= (mode === "transfer" || mode === "location" ? 50 : 2_000);
+  const standardSelectionValid = items.length > 0 && items.length <= 50;
+  const categorySelectionValid = items.length > 0 && items.length <= 2_000;
   const activeRooms = useMemo(
     () => rooms.filter((room) => room.status === "active" && room.buildingId === buildingId),
     [buildingId, rooms],
@@ -70,6 +73,7 @@ export default function TmcBulkActions({
     setRecipient(null);
     setBuildingId("");
     setRoomId("");
+    setCategory("electronics");
     setComment("");
     setOutcomes(null);
     setRequestId(null);
@@ -150,6 +154,48 @@ export default function TmcBulkActions({
     }
   }
 
+  async function submitCategory() {
+    if (!selectionValid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/inventory/items/bulk-category", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itemIds: operationItems.map((item) => item.id), category }),
+      });
+      if (!response.ok) throw new Error("request_failed");
+      setMode(null);
+      onClear?.();
+      onComplete();
+    } catch {
+      setError(t("tmc.bulk.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitDelete() {
+    if (!selectionValid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/inventory/items/bulk-delete", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itemIds: operationItems.map((item) => item.id) }),
+      });
+      if (!response.ok) throw new Error("request_failed");
+      setMode(null);
+      onClear?.();
+      onComplete();
+    } catch {
+      setError(t("tmc.bulk.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       {actorRole === "admin" || canTransfer ? (
@@ -170,7 +216,7 @@ export default function TmcBulkActions({
             aria-label={t("tmc.bulk.actions")}
             aria-haspopup="menu"
             aria-expanded={actionsOpen}
-            title={!selectionValid ? t("tmc.bulk.maximum") : undefined}
+            title={!categorySelectionValid ? t("tmc.bulk.maximum") : undefined}
             onClick={() => setActionsOpen((open) => !open)}
             className="inline-flex min-h-12 items-center gap-2.5 rounded-xl border border-emerald-400 bg-emerald-500 px-5 text-base font-semibold text-white shadow-[0_12px_30px_rgba(16,185,129,0.35)] transition hover:border-emerald-500 hover:bg-emerald-600 hover:shadow-[0_14px_34px_rgba(16,185,129,0.45)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 active:translate-y-px"
           >
@@ -183,13 +229,23 @@ export default function TmcBulkActions({
             <div role="menu" className="absolute left-0 top-full z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] origin-top-left overflow-hidden rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
               <p className="px-3 py-2 text-xs text-zinc-400">{t("items.selected", { count: items.length })}</p>
               {actorRole === "admin" ? (
-                <button type="button" role="menuitem" disabled={!selectionValid} onClick={() => open("location")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" role="menuitem" disabled={!standardSelectionValid} onClick={() => open("location")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
                   <MapPin className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t("tmc.bulk.changeLocation")}
                 </button>
               ) : null}
+              {actorRole === "admin" ? (
+                <button type="button" role="menuitem" disabled={!categorySelectionValid} onClick={() => open("category")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  <Tags className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t("items.type")}
+                </button>
+              ) : null}
               {canTransfer ? (
-                <button type="button" role="menuitem" disabled={!selectionValid} onClick={() => open("transfer")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" role="menuitem" disabled={!standardSelectionValid} onClick={() => open("transfer")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
                   <ArrowRightLeft className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t(variant === "issue" ? "tmc.operation.issue" : "tmc.bulk.transfer")}
+                </button>
+              ) : null}
+              {actorRole === "admin" ? (
+                <button type="button" role="menuitem" disabled={!categorySelectionValid} onClick={() => open("delete")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  <Trash2 className="h-4 w-4" aria-hidden="true" /> {t("items.delete")}
                 </button>
               ) : null}
               {onClear ? (
@@ -200,7 +256,7 @@ export default function TmcBulkActions({
                   </button>
                 </>
               ) : null}
-              {!selectionValid ? <p className="px-3 py-2 text-xs text-rose-600">{t("tmc.bulk.maximum")}</p> : null}
+              {!categorySelectionValid ? <p className="px-3 py-2 text-xs text-rose-600">{t("tmc.bulk.maximum")}</p> : null}
             </div>
           ) : null}
         </div>
@@ -208,16 +264,17 @@ export default function TmcBulkActions({
 
       {mode ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <section role="dialog" aria-modal="true" aria-label={t(mode === "transfer" ? "tmc.bulk.transfer" : "tmc.bulk.changeLocation")} className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-6">
+          <section role="dialog" aria-modal="true" aria-label={t(mode === "delete" ? "items.deleteTitle" : mode === "category" ? "items.type" : mode === "transfer" ? "tmc.bulk.transfer" : "tmc.bulk.changeLocation")} className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-zinc-900">{t(mode === "transfer" ? (actorRole === "admin" ? "tmc.bulk.assignmentTitle" : "tmc.bulk.transferTitle") : "tmc.bulk.locationTitle")}</h2>
+                <h2 className="text-xl font-bold text-zinc-900">{t(mode === "delete" ? "items.deleteTitle" : mode === "category" ? "items.type" : mode === "transfer" ? (actorRole === "admin" ? "tmc.bulk.assignmentTitle" : "tmc.bulk.transferTitle") : "tmc.bulk.locationTitle")}</h2>
                 <p className="mt-1 text-sm text-zinc-500">{t("tmc.bulk.selectedCount", { count: operationItems.length })}</p>
               </div>
               <button type="button" aria-label={t("common.close")} onClick={close} className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"><X className="h-5 w-5" /></button>
             </div>
 
             {mode === "transfer" ? <p className="mt-5 text-sm leading-6 text-zinc-500">{t(actorRole === "admin" ? "tmc.bulk.assignmentExplanation" : "tmc.bulk.transferExplanation")}</p> : null}
+            {mode === "delete" ? <p className="mt-5 text-sm leading-6 text-red-700">{t("items.deleteText")} {t("items.selected", { count: operationItems.length })}</p> : null}
 
             <ul className="mt-4 max-h-52 space-y-2 overflow-y-auto rounded-2xl bg-zinc-50 p-3">
               {operationItems.map((item) => (
@@ -231,9 +288,13 @@ export default function TmcBulkActions({
               ))}
             </ul>
 
-            {!outcomes ? (
+            {!outcomes && mode !== "delete" ? (
               <div className="mt-5 space-y-4">
-                {mode === "transfer" ? <TmcUserPicker value={recipient} onChange={setRecipient} /> : (
+                {mode === "transfer" ? <TmcUserPicker value={recipient} onChange={setRecipient} /> : mode === "category" ? (
+                  <label className="block text-sm text-zinc-600">{t("items.type")}
+                    <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5"><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select>
+                  </label>
+                ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="text-sm text-zinc-600">{t("tmc.bulk.building")}
                       <select aria-label={t("tmc.bulk.building")} value={buildingId} onChange={(event) => { setBuildingId(event.target.value); setRoomId(""); }} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5">
@@ -253,12 +314,12 @@ export default function TmcBulkActions({
                   <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5" />
                 </label>
               </div>
-            ) : <TmcOperationResults items={operationItems} outcomes={outcomes} requestId={requestId} />}
+            ) : outcomes ? <TmcOperationResults items={operationItems} outcomes={outcomes} requestId={requestId} /> : null}
 
             {error ? <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={close} disabled={busy} className="min-h-11 rounded-xl border border-black/10 px-5 text-sm font-semibold text-zinc-600">{outcomes ? t("common.close") : t("common.cancel")}</button>
-              {!outcomes ? <button type="button" disabled={busy || (mode === "transfer" ? !recipient : !roomId) || !selectionValid} onClick={mode === "transfer" ? submitTransfer : submitLocation} className="min-h-11 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white disabled:opacity-50">{busy ? t("tmc.operation.submitting") : t(mode === "transfer" ? (actorRole === "admin" ? "tmc.bulk.submitAssignment" : "tmc.bulk.submitTransfer") : "tmc.bulk.submitLocation")}</button> : null}
+              {!outcomes ? <button type="button" disabled={busy || (mode === "transfer" ? !recipient : mode === "location" ? !roomId : false) || !selectionValid} onClick={mode === "transfer" ? submitTransfer : mode === "location" ? submitLocation : mode === "category" ? submitCategory : submitDelete} className={`min-h-11 rounded-xl px-5 text-sm font-semibold text-white disabled:opacity-50 ${mode === "delete" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-500"}`}>{busy ? t("tmc.operation.submitting") : t(mode === "delete" ? "items.delete" : mode === "category" ? "common.save" : mode === "transfer" ? (actorRole === "admin" ? "tmc.bulk.submitAssignment" : "tmc.bulk.submitTransfer") : "tmc.bulk.submitLocation")}</button> : null}
             </div>
           </section>
         </div>

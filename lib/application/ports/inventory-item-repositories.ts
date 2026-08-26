@@ -69,6 +69,13 @@ export interface UpdateInventoryItemContentRecord {
   occurredAt: Date;
 }
 
+export interface UpdateInventoryItemCategoryRecord {
+  id: string;
+  category: "electronics" | "furniture";
+  actorId: string;
+  occurredAt: Date;
+}
+
 export interface UpdateInventoryItemPhotoRecord {
   id: string;
   photoId: string;
@@ -263,6 +270,10 @@ export interface InventoryItemRepository {
   updateItemContent(
     input: UpdateInventoryItemContentRecord,
   ): Promise<InventoryItemRecord | null>;
+  updateItemCategory(
+    input: UpdateInventoryItemCategoryRecord,
+  ): Promise<InventoryItemRecord | null>;
+  deleteItems(ids: readonly string[]): Promise<string[]>;
   updateItemPhoto(
     input: UpdateInventoryItemPhotoRecord,
   ): Promise<InventoryItemRecord | null>;

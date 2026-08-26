@@ -1,4 +1,5 @@
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import { categoryFromLegacyType } from "@/lib/inventory-categories";
 import type { InventoryItem } from "@/lib/types";
 
 export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
@@ -6,14 +7,14 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     id: item.id,
     name: item.name,
     inventoryNumber: item.inventoryNumber,
-    category: item.itemType as InventoryItem["category"],
+    category: item.category ?? categoryFromLegacyType(item.itemType),
     brand: item.brand ?? undefined,
     model: item.model ?? undefined,
     buildingId: item.room.buildingId,
     building: item.room.buildingName,
     roomId: item.room.id,
     room: item.room.designation,
-    location: `${item.room.buildingName} / ${item.room.designation}`,
+    location: `${item.room.buildingName} / ${item.room.floorNumber} этаж / ${item.room.designation}`,
     responsibleId: item.responsible?.id,
     responsible: item.responsible?.name ?? "",
     status: item.status,
@@ -25,8 +26,8 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     updatedAtIso: item.updatedAt,
     createdAt: new Date(item.createdAt).toLocaleDateString(),
     additionalInfo: item.description ?? undefined,
-    itemType: item.itemType,
-    brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || item.name,
+    itemType: item.category ?? categoryFromLegacyType(item.itemType),
+    brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || undefined,
     quantity: item.quantity,
     price: item.unitPrice,
     version: item.version,

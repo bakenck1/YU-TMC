@@ -80,7 +80,9 @@ export default function InventoryItemDetails({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
-  const [itemType, setItemType] = useState(item.itemType);
+  const [category, setCategory] = useState<"electronics" | "furniture">(
+    item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"),
+  );
   const [brand, setBrand] = useState(item.brand ?? "");
   const [model, setModel] = useState(item.model ?? "");
   const [quantity, setQuantity] = useState(String(item.quantity));
@@ -203,7 +205,7 @@ export default function InventoryItemDetails({
   function openContentEditor() {
     setName(item.name);
     setDescription(item.description ?? "");
-    setItemType(item.itemType);
+    setCategory(item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"));
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -218,7 +220,7 @@ export default function InventoryItemDetails({
     setEditing(false);
     setName(item.name);
     setDescription(item.description ?? "");
-    setItemType(item.itemType);
+    setCategory(item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"));
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -262,7 +264,7 @@ export default function InventoryItemDetails({
           version: item.version,
           name,
           description: description || null,
-          itemType,
+          category,
           brand: brand || null,
           model: model || null,
           quantity: Number(quantity),
@@ -277,7 +279,7 @@ export default function InventoryItemDetails({
         throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
-      setItemType(body.item.itemType);
+      setCategory(body.item.category ?? (body.item.itemType === "furniture" ? "furniture" : "electronics"));
       setBrand(body.item.brand ?? "");
       setModel(body.item.model ?? "");
       setQuantity(String(body.item.quantity));
@@ -870,7 +872,7 @@ export default function InventoryItemDetails({
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.type")}</span>
-                  <input value={itemType} onChange={(event) => setItemType(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
+                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select>
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("itemDetails.brand")}</span>
@@ -1007,7 +1009,7 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
-            <InventoryOverviewRow label={t("items.type")} value={item.itemType} />
+            <InventoryOverviewRow label={t("items.type")} value={item.category === "furniture" ? t("data.furniture") : t("common.electronics")} />
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />

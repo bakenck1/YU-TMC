@@ -84,7 +84,9 @@ export async function writeSchemaContract(
       `grant delete on table
          "yu_inventory"."web_push_subscriptions",
          "yu_inventory"."password_reset_challenges",
-         "yu_inventory"."security_rate_limits"
+         "yu_inventory"."security_rate_limits",
+         "yu_inventory"."items",
+         "yu_inventory"."audit_records"
        to ${runtimeRole}`,
     );
     await client.query(

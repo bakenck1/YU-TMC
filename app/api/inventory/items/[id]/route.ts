@@ -194,6 +194,10 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
   if (
     !Number.isInteger(body.version) ||
     typeof body.name !== "string" ||
+    (body.category !== undefined &&
+      body.category !== null &&
+      body.category !== "electronics" &&
+      body.category !== "furniture") ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -208,6 +212,7 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
   return {
     version: body.version as number,
     name: body.name,
+    category: body.category as "electronics" | "furniture" | null | undefined,
     description: body.description as string | null | undefined,
     itemType: body.itemType as string | null | undefined,
     brand: body.brand as string | null | undefined,

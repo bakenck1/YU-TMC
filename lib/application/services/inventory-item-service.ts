@@ -37,6 +37,11 @@ import {
   type AuthorizationActor,
 } from "@/lib/security/permissions";
 import type { ItemStatus } from "@/lib/contracts/inventory-domain";
+import {
+  categoryFromLegacyType,
+  isInventoryItemCategory,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 import sharp from "sharp";
 
 export interface InventoryItemClock {
@@ -633,6 +638,57 @@ export class InventoryItemService {
     }, { isolation: "serializable", maxAttempts: 3 });
   }
 
+  async bulkChangeCategory(
+    itemIds: readonly string[],
+    category: unknown,
+    actor: AuthorizationActor,
+  ): Promise<string[]> {
+    requirePermission(actor, "inventory.item.bulk_manage");
+    const ids = normalizeBulkItemIds(itemIds);
+    const normalizedCategory = normalizeCategory(category);
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const updatedIds: string[] = [];
+      for (const id of ids) {
+        const current = await items.findItemById(id);
+        if (!current) continue;
+        const updated = await items.updateItemCategory({
+          id,
+          category: normalizedCategory,
+          actorId: actor.userId,
+          occurredAt,
+        });
+        if (!updated) continue;
+        await items.appendAudit(
+          createAudit({
+            id: this.ids.create(),
+            actor,
+            subjectId: id,
+            subjectRevision: updated.version,
+            action: "item.category_updated",
+            beforeValues: { category: current.itemType },
+            afterValues: { category: updated.itemType },
+            occurredAt,
+          }),
+        );
+        updatedIds.push(id);
+      }
+      return updatedIds;
+    }, { isolation: "serializable", maxAttempts: 3 });
+  }
+
+  async deleteItems(
+    itemIds: readonly string[],
+    actor: AuthorizationActor,
+  ): Promise<string[]> {
+    requirePermission(actor, "inventory.item.delete");
+    const ids = normalizeBulkItemIds(itemIds);
+    return this.unitOfWork.transaction(
+      ({ items }) => items.deleteItems(ids),
+      { isolation: "serializable", maxAttempts: 3 },
+    );
+  }
+
   async updateContent(
     id: string,
     input: UpdateInventoryItemContentInput,
@@ -647,7 +703,7 @@ export class InventoryItemService {
       const values = {
         name: patch.name,
         description: patch.description,
-        itemType: patch.itemType ?? current.itemType,
+        itemType: patch.category ?? current.itemType,
         brand: patch.brand === undefined ? current.brand : patch.brand,
         model: patch.model === undefined ? current.model : patch.model,
         quantity: patch.quantity ?? current.quantity,
@@ -1066,7 +1122,7 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     : suppliedInventoryNumber;
   return {
     ...content,
-    itemType: content.itemType ?? "ТМЦ",
+    itemType: content.category ?? categoryFromLegacyType(input.itemType ?? ""),
     brand: content.brand ?? null,
     model: content.model ?? null,
     quantity: content.quantity ?? 1,
@@ -1080,7 +1136,6 @@ function normalizeWarehouseCreateInput(
   input: CreateInventoryItemInput,
 ): CreateInventoryItemInput {
   const hasProtectedValues =
-    (input.itemType !== undefined && input.itemType !== null) ||
     (input.brand !== undefined && input.brand !== null) ||
     (input.model !== undefined && input.model !== null) ||
     (input.quantity !== undefined && input.quantity !== null && input.quantity !== 1) ||
@@ -1090,10 +1145,10 @@ function normalizeWarehouseCreateInput(
   if (hasProtectedValues) throw forbidden();
   return {
     name: input.name,
+    category: input.category,
     description: input.description,
     roomId: input.roomId,
     photo: input.photo,
-    itemType: null,
     brand: null,
     model: null,
     quantity: 1,
@@ -1106,6 +1161,7 @@ function normalizeWarehouseCreateInput(
 function normalizeContentInput(input: {
   version: unknown;
   name: unknown;
+  category?: unknown;
   description?: unknown;
   itemType?: unknown;
   brand?: unknown;
@@ -1124,7 +1180,7 @@ function normalizeContentInput(input: {
   return {
     name,
     description,
-    itemType: normalizeOptionalText(input.itemType, 120, "invalid_item_type"),
+    category: normalizeOptionalCategory(input.category),
     brand: normalizeOptionalText(input.brand, 120, "invalid_item_brand"),
     model: normalizeOptionalText(input.model, 160, "invalid_item_model"),
     quantity: normalizeOptionalPositiveInteger(input.quantity),
@@ -1136,6 +1192,29 @@ function normalizeOptionalText(value: unknown, max: number, code: string) {
   if (value === undefined) return undefined;
   if (value === null) return null;
   return normalizeText(value, max, code);
+}
+
+function normalizeOptionalCategory(value: unknown): InventoryItemCategory | undefined {
+  if (value === undefined || value === null) return undefined;
+  return normalizeCategory(value);
+}
+
+function normalizeCategory(value: unknown): InventoryItemCategory {
+  if (!isInventoryItemCategory(value)) {
+    throw new ApplicationError("validation", "invalid_item_category");
+  }
+  return value;
+}
+
+function normalizeBulkItemIds(value: readonly string[]): string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2_000) {
+    throw new ApplicationError("validation", "invalid_item_selection");
+  }
+  const ids = value.map((id) => normalizeItemId(id));
+  if (new Set(ids).size !== ids.length) {
+    throw new ApplicationError("validation", "duplicate_item");
+  }
+  return ids;
 }
 
 function normalizeBulkLocationInput(input: BulkChangeTmcLocationInput) {
@@ -1429,7 +1508,8 @@ function requirePermission(
     | "inventory.item.resolve_maintenance"
     | "inventory.item.manage_protected_fields"
     | "inventory.item.manage_components"
-    | "inventory.item.bulk_manage",
+    | "inventory.item.bulk_manage"
+    | "inventory.item.delete",
 ) {
   if (!hasPermission(actor.role, permission)) throw forbidden();
 }
@@ -1550,6 +1630,9 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     id: record.id,
     name: record.name,
     description: record.description,
+    category: isInventoryItemCategory(record.itemType)
+      ? record.itemType
+      : categoryFromLegacyType(record.itemType),
     itemType: record.itemType,
     brand: record.brand,
     model: record.model,

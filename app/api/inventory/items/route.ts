@@ -53,13 +53,13 @@ function parseCreate(
   const body = value as Record<string, unknown>;
   if (
     typeof body.name !== "string" ||
+    (body.category !== "electronics" && body.category !== "furniture") ||
     typeof body.roomId !== "string" ||
     (!restricted && typeof body.barcode !== "string") ||
     (!restricted && (!body.photo || typeof body.photo !== "object")) ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
-    (body.itemType !== undefined && body.itemType !== null && typeof body.itemType !== "string") ||
     (body.brand !== undefined && body.brand !== null && typeof body.brand !== "string") ||
     (body.model !== undefined && body.model !== null && typeof body.model !== "string") ||
     (body.quantity !== undefined && body.quantity !== null && typeof body.quantity !== "number") ||
@@ -83,9 +83,9 @@ function parseCreate(
   )) throw invalidRequest();
   return {
     name: body.name,
+    category: body.category as "electronics" | "furniture",
     roomId: body.roomId,
     description: body.description as string | null | undefined,
-    itemType: body.itemType as string | null | undefined,
     brand: body.brand as string | null | undefined,
     model: body.model as string | null | undefined,
     quantity: body.quantity as number | null | undefined,

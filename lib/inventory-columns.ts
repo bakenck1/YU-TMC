@@ -1,6 +1,7 @@
 export const INVENTORY_COLUMN_KEYS = [
   "photo",
   "qrCode",
+  "name",
   "itemType",
   "brandModel",
   "location",
@@ -19,6 +20,7 @@ export type InventoryColumnVisibility = Record<InventoryColumnKey, boolean>;
 export const DEFAULT_INVENTORY_COLUMNS: InventoryColumnVisibility = {
   photo: true,
   qrCode: true,
+  name: true,
   itemType: true,
   brandModel: true,
   location: true,

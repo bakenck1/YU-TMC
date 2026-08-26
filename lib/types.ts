@@ -1,12 +1,6 @@
 export type ItemStatus = "active" | "maintenance" | "decommissioned";
 
-export type ItemCategory =
-  | "Компьютеры"
-  | "Оргтехника"
-  | "Мебель"
-  | "Лабораторное оборудование"
-  | "Аудио/видео"
-  | "Сеть";
+export type ItemCategory = import("@/lib/inventory-categories").InventoryItemCategory | string;
 
 export interface InventoryItem {
   id: string;

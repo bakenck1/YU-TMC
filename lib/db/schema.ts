@@ -603,7 +603,7 @@ export const itemsTable = inventorySchema.table(
     id: uuid().primaryKey(),
     name: varchar({ length: 160 }).notNull(),
     description: text(),
-    itemType: varchar({ length: 120 }).notNull().default("ТМЦ"),
+    itemType: varchar({ length: 120 }).notNull().default("electronics"),
     brand: varchar({ length: 120 }),
     model: varchar({ length: 160 }),
     quantity: integer().notNull().default(1),
@@ -654,7 +654,7 @@ export const itemsTable = inventorySchema.table(
       "items_display_values_check",
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
-          AND btrim(${table.itemType}) <> ''
+          AND ${table.itemType} in ('electronics', 'furniture')
           AND btrim(${table.inventoryNumber}) <> ''
           AND btrim(${table.inventoryNumberKey}) <> ''
           AND ${table.quantity} > 0
@@ -686,7 +686,7 @@ export const serviceRequestsTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     roomId: uuid()
@@ -764,13 +764,13 @@ export const itemComponentsTable = inventorySchema.table(
     leftItemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     rightItemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     createdBy: uuid()
@@ -801,7 +801,7 @@ export const itemInventoryNumberHistoryTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     kind: inventoryNumberKindEnum().notNull(),
@@ -878,7 +878,7 @@ export const qrIdentifiersTable = inventorySchema.table(
       onUpdate: "restrict",
     }),
     itemId: uuid().references(() => itemsTable.id, {
-      onDelete: "restrict",
+      onDelete: "cascade",
       onUpdate: "restrict",
     }),
     createdBy: uuid()
@@ -980,7 +980,7 @@ export const responsibilityPeriodsTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     responsibleUserId: uuid()
@@ -1053,7 +1053,7 @@ export const transfersTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     requestedBy: uuid()
@@ -1284,7 +1284,7 @@ export const tmcTransferRequestItemsTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     responsibilityPeriodIdAtRequest: uuid(),
@@ -1460,7 +1460,7 @@ export const inspectionRoomItemsTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     registryRoomId: uuid().notNull(),
@@ -1515,7 +1515,7 @@ export const itemResultsTable = inventorySchema.table(
     itemId: uuid()
       .notNull()
       .references(() => itemsTable.id, {
-        onDelete: "restrict",
+        onDelete: "cascade",
         onUpdate: "restrict",
       }),
     registryRoomIdAtScan: uuid()
@@ -1631,7 +1631,7 @@ export const itemResultRevisionsTable = inventorySchema.table(
         itemResultsTable.inspectionRoomId,
       ],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     foreignKey({
       name: "item_result_revisions_observed_room_context_fk",
@@ -1701,14 +1701,14 @@ export const deviationDecisionsTable = inventorySchema.table(
         itemResultRevisionsTable.revisionNumber,
       ],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     foreignKey({
       name: "deviation_decisions_previous_result_fk",
       columns: [table.previousDecisionId, table.resultId],
       foreignColumns: [table.id, table.resultId],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     foreignKey({
       name: "deviation_decisions_recipient_kind_snapshot_fk",
@@ -1718,7 +1718,7 @@ export const deviationDecisionsTable = inventorySchema.table(
         itemResultsTable.decisionRecipientKindAtScan,
       ],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     foreignKey({
       name: "deviation_decisions_recipient_user_snapshot_fk",
@@ -1728,7 +1728,7 @@ export const deviationDecisionsTable = inventorySchema.table(
         itemResultsTable.responsibleIdAtScan,
       ],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     check(
       "deviation_decisions_recipient_check",
@@ -1842,13 +1842,13 @@ export const photosTable = inventorySchema.table(
     removedAt: timestamp({ withTimezone: true, mode: "date" }),
     binaryDeletedAt: timestamp({ withTimezone: true, mode: "date" }),
     itemId: uuid().references(() => itemsTable.id, {
-      onDelete: "restrict",
+      onDelete: "cascade",
       onUpdate: "restrict",
     }),
     resultId: uuid(),
     resultRevisionNumber: integer(),
     decisionId: uuid().references(() => deviationDecisionsTable.id, {
-      onDelete: "restrict",
+      onDelete: "cascade",
       onUpdate: "restrict",
     }),
     version: integer().notNull().default(1),
@@ -1862,7 +1862,7 @@ export const photosTable = inventorySchema.table(
         itemResultRevisionsTable.revisionNumber,
       ],
     })
-      .onDelete("restrict")
+      .onDelete("cascade")
       .onUpdate("restrict"),
     check(
       "photos_object_keys_check",
@@ -2144,7 +2144,7 @@ export const tmcOperationNotificationsTable = inventorySchema.table(
         onUpdate: "restrict",
       }),
     itemId: uuid().references(() => itemsTable.id, {
-      onDelete: "restrict",
+      onDelete: "cascade",
       onUpdate: "restrict",
     }),
     createdAt: timestamp({ withTimezone: true, mode: "date" })

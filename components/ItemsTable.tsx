@@ -90,6 +90,7 @@ const EMPTY_TABLE_FILTERS = {
 const COLUMN_LABEL_KEYS = {
   photo: "items.photo",
   qrCode: "items.qrCode",
+  name: "items.name",
   itemType: "items.type",
   brandModel: "items.brandModel",
   location: "items.location",
@@ -101,6 +102,17 @@ const COLUMN_LABEL_KEYS = {
   quantity: "items.quantity",
   price: "items.price",
 } as const;
+
+function categoryLabel(
+  category: InventoryItem["category"],
+  t: (key: "common.electronics" | "data.furniture") => string,
+) {
+  return category === "furniture" ? t("data.furniture") : t("common.electronics");
+}
+
+function barcodeDigits(item: InventoryItem) {
+  return (item.qrCode ?? item.inventoryNumber).replace(/\D/g, "") || "—";
+}
 
 export default function ItemsTable({
   items,
@@ -143,11 +155,11 @@ export default function ItemsTable({
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const columnSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const searchFocusTimeoutRef = useRef<number | null>(null);
-  const pageSize = 10;
   const searchHistoryStorageKey = searchHistoryScope
     ? `yu-inventory:item-search-history:v1:${searchHistoryScope}`
     : null;
@@ -210,7 +222,7 @@ export default function ItemsTable({
   }, [items, query, filters]);
 
   const activeFilterCount = Object.entries(filters).filter(
-    ([key, value]) => value !== "" && value !== "all" && key !== "category",
+    ([, value]) => value !== "" && value !== "all",
   ).length;
 
   const pagination = paginateInventoryItems(filtered, page, pageSize);
@@ -314,6 +326,13 @@ export default function ItemsTable({
     });
   }
 
+  function updatePageSize(value: string) {
+    const max = Math.max(1, items.length);
+    const next = Math.min(max, Math.max(1, Number.parseInt(value, 10) || 1));
+    setPageSize(next);
+    setPage(1);
+  }
+
   return (
     <div className="space-y-4">
       {excelDataset || itemCreation ? (
@@ -391,7 +410,7 @@ export default function ItemsTable({
               if (!filterPanelOpen) setDraftFilters(filters);
               setFilterPanelOpen((value) => !value);
             }}
-            className="hidden min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 md:inline-flex"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-zinc-50 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
           >
             <SlidersHorizontal className="h-4 w-4" />
             {t("items.filters")}
@@ -445,6 +464,14 @@ export default function ItemsTable({
         {filterPanelOpen ? (
           <div id="inventory-advanced-filters" className="mt-4 border-t border-black/5 pt-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-sm text-zinc-600">
+                <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.type")}</span>
+                <select value={draftFilters.category} onChange={(event) => updateDraftFilter("category", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">
+                  <option value="all">{t("items.allCategories")}</option>
+                  <option value="electronics">{t("common.electronics")}</option>
+                  <option value="furniture">{t("data.furniture")}</option>
+                </select>
+              </label>
               <InventoryFilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:brand` : undefined} />
               <InventoryFilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:model` : undefined} />
               <InventoryFilterInput label={t("items.type")} value={draftFilters.itemType} onChange={(value) => updateDraftFilter("itemType", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:item-type` : undefined} />
@@ -494,6 +521,7 @@ export default function ItemsTable({
               <th className="w-16 px-2 py-2 text-center"><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></th>
               {visibleColumns.photo ? <th className="px-3 py-4 font-medium">{t("items.photo")}</th> : null}
               {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th> : null}
+              {visibleColumns.name ? <th className="px-3 py-4 font-medium">{t("items.name")}</th> : null}
               {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
               {visibleColumns.brandModel ? <th className="px-3 py-4 font-medium">{t("items.brandModel")}</th> : null}
               {visibleColumns.location ? <th className="px-3 py-4 font-medium">{t("items.location")}</th> : null}
@@ -508,7 +536,6 @@ export default function ItemsTable({
           </thead>
           <tbody>
             {pageItems.map((item) => {
-              const details = itemDetails(item);
               return (
                 <tr
                   key={item.id}
@@ -517,9 +544,10 @@ export default function ItemsTable({
                 >
                   <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
-                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{item.qrCode ?? item.inventoryNumber}</td> : null}
-                  {visibleColumns.itemType ? <td className="px-3 py-4"><p className="font-medium text-zinc-800">{dataLabel(item.itemType ?? details.type)}</p><p className="mt-1 text-zinc-500">{t("common.electronics")}</p></td> : null}
-                  {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></td> : null}
+                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeDigits(item)}</td> : null}
+                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
+                  {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
+                  {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
                   {visibleColumns.status ? <td className="px-3 py-4"><InventoryVisibleStatus status={visibleItemStatus(item)} /></td> : null}
                   {visibleColumns.responsible ? <td className="px-3 py-4 text-zinc-600">{item.responsible}</td> : null}
@@ -537,17 +565,16 @@ export default function ItemsTable({
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-sm text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3"><span>{t("items.recordsPerPage")}</span><span className="rounded-lg border border-black/10 px-3 py-1.5 font-medium">10</span></div>
+        <label className="flex items-center gap-3"><span>{t("items.recordsPerPage")}</span><input type="number" min="1" max={Math.max(1, items.length)} value={pageSize} onChange={(event) => updatePageSize(event.target.value)} className="w-20 rounded-lg border border-black/10 px-3 py-1.5 font-medium" /></label>
         <div className="flex items-center gap-3">
           <span>{t("items.range", { from: firstRecord, to: lastRecord, total: filtered.length })}</span>
-          <button aria-label={t("common.previous")} type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">вЂ№</button>
-          <button aria-label={t("common.next")} type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">вЂє</button>
+          <button aria-label={t("common.previous")} title={t("common.previous")} type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">←</button>
+          <button aria-label={t("common.next")} title={t("common.next")} type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">→</button>
         </div>
       </div>
 
       <div className="space-y-3 md:hidden">
         {pageItems.map((item) => {
-          const details = itemDetails(item);
           return (
             <article key={item.id} onClick={() => router.push(`/items/${item.id}`)} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
@@ -556,9 +583,10 @@ export default function ItemsTable({
                 </label>
                 {visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">
-                  {visibleColumns.brandModel ? <p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.brandModel ?? details.model}</Link></p> : null}
-                  {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{dataLabel(item.itemType ?? details.type)} В· {t("common.electronics")}</p> : null}
-                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{item.qrCode ?? item.inventoryNumber}</p> : null}
+                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
+                  {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{categoryLabel(item.category, t)}</p> : null}
+                  {visibleColumns.brandModel ? <p className="mt-1 text-xs text-zinc-500">{item.brandModel ?? "—"}</p> : null}
+                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeDigits(item)}</p> : null}
                   {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "вЂ”"}</p> : null}
                 </div>
                 {visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} /> : null}

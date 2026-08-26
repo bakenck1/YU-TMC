@@ -177,7 +177,7 @@ export async function parseInventoryWorkbook(
       inputs.push({
         name,
         description: description || null,
-        itemType,
+        category: itemType.trim().toLocaleLowerCase("ru-RU") === "мебель" ? "furniture" : "electronics",
         brand: brand || null,
         model: model || null,
         quantity,
