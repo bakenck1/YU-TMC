@@ -29,6 +29,8 @@ test("manual barcode input is sent to the item creation API", async () => {
   assert.match(route, /typeof body\.barcode !== "string"/);
   assert.match(form, /!barcode\.trim\(\)/);
   assert.match(form, /setBarcode\(value\)/);
+  assert.doesNotMatch(form, /if \(rooms\.length === 0\) return null/);
+  assert.match(form, /t\("createItem\.noRooms"\)/);
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {

@@ -426,6 +426,7 @@ test("location service covers successful building and room mutation workflows", 
     insertRoom: async (input) =>
       (() => {
         assert.equal(input.buildingId, "building-1");
+        assert.equal(input.primaryResponsibleId, null);
         return roomRecord({
           id: input.id,
           buildingId: input.buildingId,

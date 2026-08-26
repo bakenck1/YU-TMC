@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Barcode,
   Camera,
@@ -318,8 +319,19 @@ export default function InventoryInspectionsManager({
                 value={selectedTechnician}
                 onChange={(event) => setSelectedTechnician(event.target.value)}
                 aria-label={t("inspections.assignee")}
+                aria-describedby={
+                  technicians.length === 0
+                    ? "inspection-no-technicians"
+                    : undefined
+                }
+                disabled={technicians.length === 0}
                 className="min-w-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
               >
+                {technicians.length === 0 ? (
+                  <option value="">
+                    {t("inspections.noTechnicianOption")}
+                  </option>
+                ) : null}
                 {technicians.map((technician) => (
                   <option key={technician.id} value={technician.id}>
                     {technician.fullName} ·{" "}
@@ -345,6 +357,21 @@ export default function InventoryInspectionsManager({
             >
               <Plus className="h-4 w-4" /> {t("inspections.create")}
             </button>
+          </div>
+        ) : null}
+        {actorRole === "admin" && technicians.length === 0 ? (
+          <div
+            id="inspection-no-technicians"
+            role="status"
+            className="mt-3 flex flex-col gap-2 rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p>{t("inspections.noTechnicians")}</p>
+            <Link
+              href="/users"
+              className="font-semibold text-amber-950 underline decoration-amber-400 underline-offset-4"
+            >
+              {t("inspections.manageUsers")}
+            </Link>
           </div>
         ) : null}
         {error ? (

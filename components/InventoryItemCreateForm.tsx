@@ -54,7 +54,24 @@ export default function InventoryItemCreateForm({
   const showBuildingSelector = buildings.length > 0 && !initialRoomId;
   const visibleRooms = showBuildingSelector ? buildingRooms : rooms;
 
-  if (rooms.length === 0) return null;
+  if (rooms.length === 0) {
+    if (hideTrigger) return null;
+    return (
+      <div className="flex max-w-64 flex-col items-end gap-1.5">
+        <button
+          type="button"
+          disabled
+          aria-describedby="create-item-no-rooms"
+          className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white opacity-50 shadow-sm"
+        >
+          <Plus className="h-4 w-4" /> {t("createItem.add")}
+        </button>
+        <p id="create-item-no-rooms" role="status" className="text-right text-xs text-amber-700">
+          {t("createItem.noRooms")}
+        </p>
+      </div>
+    );
+  }
 
   async function submit() {
     setSaving(true);
@@ -134,11 +151,11 @@ export default function InventoryItemCreateForm({
               {!restricted && (
                 <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
               )}
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.name")}</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm"><span className="text-zinc-500">{t("items.type")}</span><input value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={itemType} onChange={(event) => setItemType(event.target.value)} placeholder={t("createItem.typePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
@@ -161,7 +178,7 @@ export default function InventoryItemCreateForm({
                   </select>
                 </label>
               ) : null}
-              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")}</span><select value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
               {!restricted && (
                 <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
               )}

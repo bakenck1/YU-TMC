@@ -22,16 +22,21 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
   const [employees, setEmployees] = useState<UserDto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedFloor = Number(floorNumber);
+  const canSubmit =
+    Boolean(designation.trim()) &&
+    Number.isInteger(selectedFloor) &&
+    selectedFloor >= 1 &&
+    selectedFloor <= floorCount;
 
   useEffect(() => { let active = true; void fetch("/api/users", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((body: { users?: UserDto[] } | null) => { if (active) setEmployees((body?.users ?? []).filter((user) => user.role === "employee" && user.active)); }); return () => { active = false; }; }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const floor = Number(floorNumber);
-    if (saving || !designation.trim() || !responsibleId || !Number.isInteger(floor) || floor < 1 || floor > floorCount) return;
+    if (saving || !canSubmit) return;
     setSaving(true); setError(null);
     try {
-      const response = await fetch(room ? `/api/inventory/rooms/${encodeURIComponent(room.id)}` : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`, { method: room ? "PATCH" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ designation: designation.trim(), floorNumber: floor, floorLabel: null, primaryResponsibleId: responsibleId, ...(room ? { version: room.version } : {}) }) });
+      const response = await fetch(room ? `/api/inventory/rooms/${encodeURIComponent(room.id)}` : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`, { method: room ? "PATCH" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ designation: designation.trim(), floorNumber: selectedFloor, floorLabel: null, primaryResponsibleId: responsibleId || null, ...(room ? { version: room.version } : {}) }) });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok || !body || typeof body !== "object" || !("room" in body)) { setError(t("inventory.saveFailed")); return; }
       onSave((body as { room: RoomDto }).room);
@@ -48,7 +53,7 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
           <SelectField label={t("inventory.floor")} fieldSize="lg" value={floorNumber} onChange={(event) => setFloorNumber(event.target.value)} required options={Array.from({ length: floorCount }, (_, index) => ({ value: index + 1, label: `${index + 1} ${t("inventory.floorShort")}` }))} />
         </div>
         {error ? <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <div className="mt-6 grid grid-cols-2 gap-3"><Button onClick={onClose} disabled={saving} fullWidth>{t("common.cancel")}</Button><Button type="submit" variant="primary" disabled={!designation.trim() || !responsibleId} loading={saving} fullWidth>{saving ? t("inventory.saving") : t("common.save")}</Button></div>
+        <div className="mt-6 grid grid-cols-2 gap-3"><Button onClick={onClose} disabled={saving} fullWidth>{t("common.cancel")}</Button><Button type="submit" variant="primary" disabled={!canSubmit} loading={saving} fullWidth>{saving ? t("inventory.saving") : t("common.save")}</Button></div>
       </form>
     </div>
   );
