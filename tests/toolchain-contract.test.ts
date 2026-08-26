@@ -30,3 +30,13 @@ test("direct production deployment uses lockfile installation and systemd servic
   assert.match(workerService, /Restart=on-failure/);
   assert.doesNotMatch(workflow, /docker (?:compose|build|run|exec)/);
 });
+
+test("production layout does not require a network request for fonts", async () => {
+  const layout = await readFile("app/layout.tsx", "utf8");
+  const styles = await readFile("app/globals.css", "utf8");
+
+  assert.doesNotMatch(layout, /next\/font\/google/);
+  assert.match(styles, /--font-geist-sans: ui-sans-serif/);
+  assert.match(styles, /--font-geist-mono: ui-monospace/);
+  assert.match(styles, /--font-montserrat:/);
+});

@@ -63,6 +63,11 @@ jobs:
           npm run lint
           npm run ui:check
           npm run db:check
+          bash -n deploy/backup-postgres.sh
+          bash -n deploy/enable-https.sh
+          node --check deploy/backup-postgres-connection.mjs
+      - name: Run isolated deployment smoke tests
+        run: bash scripts/test-deployment-runtime.sh
       - name: Apply test migrations
         run: npm run db:migrate -- --target=test
       - name: Verify test database contract

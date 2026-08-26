@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily YU Inventory PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 22:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=yu-inventory-backup.service
+
+[Install]
+WantedBy=timers.target

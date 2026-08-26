@@ -1,0 +1,16 @@
+[Unit]
+Description=YU Inventory PostgreSQL backup
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/yu-inventory-backup
+User=root
+Group=root
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/yu-inventory /run/lock
+TimeoutStartSec=30min
+UMask=0077

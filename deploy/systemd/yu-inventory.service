@@ -10,9 +10,7 @@ Group=yu-inventory
 WorkingDirectory=/opt/yu-inventory/current
 EnvironmentFile=/etc/yu-inventory/yu-inventory.env
 Environment=NODE_ENV=production
-Environment=HOSTNAME=127.0.0.1
-Environment=PORT=3000
-ExecStart=/usr/bin/npm run start
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=35s

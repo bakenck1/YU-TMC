@@ -6,6 +6,9 @@
   --accent: #002060;
   --accent-dark: #001845;
   --accent-light: #e6ecf7;
+  --font-geist-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-montserrat: "Trebuchet MS", "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 @theme inline {

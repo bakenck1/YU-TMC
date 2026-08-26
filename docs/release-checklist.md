@@ -22,11 +22,13 @@
 
 Перед релизом ответственный инженер подтверждает:
 
-- [ ] Node.js 22.x и PostgreSQL 16+ установлены на сервере;
+- [ ] Node.js 24.15.x и PostgreSQL 16+ установлены на сервере;
 - [ ] секреты находятся в `/etc/yu-inventory/yu-inventory.env` с правами `0600`, а не в Git;
 - [ ] runtime-роль и migrator-роль БД разделены; `npm run db:smoke -- --target=production` проходит;
 - [ ] PostgreSQL подключён с TLS (`verify-full`), а Nginx корректно задаёт доверенный IP-клиента;
+- [ ] исходный каталог сертификатов принадлежит `root`, не writable для группы/остальных, а `privkey.pem` закрыт;
 - [ ] создан бэкап БД и проверено восстановление на отдельной БД;
+- [ ] `yu-inventory-backup.timer` включён, последний custom-format dump проверен через `pg_restore --list`;
 - [ ] выполнены миграции и разовый import настроек до запуска новой версии;
 - [ ] systemd-сервисы `yu-inventory` и `yu-inventory-push-worker` работают;
 - [ ] Nginx отдаёт приложение по HTTPS, загрузка фото и QR-потоки проверены;
