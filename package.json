@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=24.15.0 <25"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",

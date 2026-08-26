@@ -7,8 +7,8 @@ Russian, Kazakh and English UI languages.
 
 ## Prerequisites
 
-- Node.js 22.x (the repository pins the major in `.nvmrc` and rejects other
-  Node majors during npm install/ci);
+- Node.js 24.15+ within the Node 24 major (the repository pins the CI baseline
+  in `.nvmrc` and rejects unsupported Node versions during npm install/ci);
 - npm with the committed `package-lock.json`;
 - either the project-managed local PostgreSQL fallback or an external/Postgres
   test service;
