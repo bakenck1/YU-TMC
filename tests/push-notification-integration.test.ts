@@ -323,7 +323,7 @@ test("an assigned employee starts with a room from the selected inspection", () 
     "inspection-1",
   );
 
-  assert.equal(roomId, "room-1");
+  assert.equal(roomId, "inspection-room-1");
 });
 
 test("recording and revising a result updates inspection progress immediately", () => {

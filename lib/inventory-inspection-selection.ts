@@ -7,7 +7,7 @@ export function firstInspectionRoomId(
 ) {
   return (
     inspections.find((inspection) => inspection.id === inspectionId)
-      ?.rooms[0]?.roomId ?? ""
+      ?.rooms[0]?.id ?? ""
   );
 }
 

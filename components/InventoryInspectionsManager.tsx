@@ -166,7 +166,7 @@ export default function InventoryInspectionsManager({
             : entry,
         ),
       );
-      setSelectedInspectionRoom(body.room.roomId);
+      setSelectedInspectionRoom(body.room.id);
     } catch (cause) {
       void cause;
       setError(t("inspections.operationFailed"));
@@ -204,7 +204,7 @@ export default function InventoryInspectionsManager({
   async function recordResult(result: RecordItemResultInput["result"]) {
     const inspection = inspections.find((entry) => entry.id === selectedInspection);
     const inspectionRoom = inspection?.rooms.find(
-      (room) => room.roomId === selectedInspectionRoom,
+      (room) => room.id === selectedInspectionRoom,
     );
     const itemId = resolution?.target?.kind === "item" ? resolution.target.id : null;
     if (!inspection || !inspectionRoom || !itemId) {
@@ -515,7 +515,7 @@ export default function InventoryInspectionsManager({
                     {!selectedInspection || !inspections
                       .find((inspection) => inspection.id === selectedInspection)
                       ?.rooms.some(
-                        (room) => room.roomId === selectedInspectionRoom,
+                        (room) => room.id === selectedInspectionRoom,
                       ) ? (
                       <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                         {t("inspections.selectDraftRoom")}
@@ -629,7 +629,7 @@ export default function InventoryInspectionsManager({
                       className="mt-1 w-full rounded-lg border border-black/10 bg-white px-2 py-2 text-sm text-zinc-700"
                     >
                       {inspection.rooms.map((room) => (
-                        <option key={room.id} value={room.roomId}>
+                        <option key={room.id} value={room.id}>
                           {translateCampusBuilding(language, room.buildingName)} · {room.roomDesignation}
                         </option>
                       ))}
