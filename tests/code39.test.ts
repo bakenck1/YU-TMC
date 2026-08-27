@@ -13,6 +13,7 @@ const ITEM_ID = "0d8c3600-5d2f-4e9c-b26f-1bc773146aec";
 test("uses a normalized inventory number when the barcode can encode it", () => {
   assert.equal(code39PayloadForItem(" 050-0002369 ", ITEM_ID), "050-0002369");
   assert.equal(code39PayloadForItem("ab/12", ITEM_ID), "AB/12");
+  assert.equal(code39PayloadForItem("1350/0923", ITEM_ID), "1350/0923");
 });
 
 test("falls back to a stable item UUID for unsupported inventory numbers", () => {

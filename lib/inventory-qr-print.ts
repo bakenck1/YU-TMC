@@ -1,4 +1,5 @@
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import { code39PayloadForItem } from "@/lib/domain/code39";
 
 export type InventoryQrPrintKind = "barcode" | "qr";
 
@@ -27,6 +28,9 @@ export function toInventoryQrPrintItem(
       designation: item.room.designation,
       buildingName: item.room.buildingName,
     },
-    printableValue: kind === "qr" ? item.qrCode : item.inventoryNumber,
+    printableValue:
+      kind === "qr"
+        ? item.qrCode
+        : code39PayloadForItem(item.inventoryNumber, item.id),
   };
 }
