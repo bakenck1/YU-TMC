@@ -5,6 +5,7 @@ import { isSafeReturnPath } from "@/lib/security/authorization";
 import { defaultPathForRole } from "@/lib/security/authorization";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";
 import { isGoogleSsoConfigured } from "@/lib/security/google-sso";
+import { automaticYessenovLoginTarget } from "@/lib/security/login-entry";
 import { isYessenovSsoConfigured } from "@/lib/security/yessenov-sso";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { resolveCurrentUserToken } from "@/lib/server/security/request-user";
@@ -23,6 +24,7 @@ export default async function LoginPage({
   searchParams: Promise<{
     returnTo?: string | string[];
     error?: string | string[];
+    manual?: string | string[];
   }>;
 }) {
   const cookieStore = await cookies();
@@ -38,18 +40,27 @@ export default async function LoginPage({
     isSafeReturnPath(requestedReturnTo)
       ? requestedReturnTo
       : undefined;
-  const registrationAvailable = await isRegistrationAvailable();
   const ssoError =
     typeof resolvedSearchParams.error === "string"
       ? resolvedSearchParams.error
       : undefined;
+  const yessenovSsoAvailable = isYessenovSsoConfigured();
+  const automaticLoginTarget = automaticYessenovLoginTarget({
+    enabled: yessenovSsoAvailable,
+    manualLogin: resolvedSearchParams.manual === "1",
+    error: ssoError,
+    returnTo,
+  });
+  if (automaticLoginTarget) redirect(automaticLoginTarget);
+
+  const registrationAvailable = await isRegistrationAvailable();
 
   return (
     <AuthPageFrame>
       <LoginForm
         returnTo={returnTo}
         registrationAvailable={registrationAvailable}
-        yessenovSsoAvailable={isYessenovSsoConfigured()}
+        yessenovSsoAvailable={yessenovSsoAvailable}
         googleSsoAvailable={isGoogleSsoConfigured()}
         ssoError={ssoError}
       />

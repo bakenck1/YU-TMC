@@ -27,6 +27,11 @@ YESSENOV_OIDC_REDIRECT_URI=https://<inventory-host>/api/auth/yessenov/callback
 The callback accepts only verified `@yu.edu.kz` employee identities. It links
 an existing local profile by normalized email, then permanently identifies the
 account by the provider's `sub` value. A deactivated local user remains blocked.
+When Yessenov SSO is configured, an unauthenticated visit to `/login`
+automatically starts this flow. If the provider already has an active session,
+the user returns directly to Inventory without seeing another login button.
+Administrators can reach the emergency local sign-in form at `/login?manual=1`;
+callback errors also stop automatic redirection so they cannot create a loop.
 On each successful login, verified `phone_number`, `orgunit`, `position`, and
 `tutor_id` claims refresh the local personnel profile. A valid IIN is filled
 only when no other active user owns it. Provider claims never change the local
