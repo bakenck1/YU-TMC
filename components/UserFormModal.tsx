@@ -16,6 +16,7 @@ import Wrapper from "./Wrapper";
 export interface UserFormValues {
   code: string;
   fullName: string;
+  iin: string;
   email: string;
   phone: string;
   role: UserRole;
@@ -38,6 +39,7 @@ export default function UserFormModal({ user, roleOptions, suggestedCode, onClos
   const [values, setValues] = useState<UserFormValues>({
     code: user?.code ?? suggestedCode,
     fullName: user?.fullName ?? "",
+    iin: user?.iin ?? "",
     email: user?.email ?? "",
     phone: user?.phone === "—" ? "" : (user?.phone ?? ""),
     role: user?.role ?? "employee",
@@ -54,6 +56,7 @@ export default function UserFormModal({ user, roleOptions, suggestedCode, onClos
         ...values,
         code: values.code.trim(),
         fullName: values.fullName.trim(),
+        iin: values.iin.trim(),
         email: values.email.trim(),
         phone: values.phone.trim() || "—",
       });
@@ -76,6 +79,7 @@ export default function UserFormModal({ user, roleOptions, suggestedCode, onClos
         <Wrapper display="grid" columns={1} gap="md" responsive={{ at: "sm", columns: 2 }}>
           <TextField required label={t("users.fullName")} value={values.fullName} onChange={(event) => setValues((current) => ({ ...current, fullName: event.target.value }))} placeholder={t("users.fullNamePlaceholder")} />
           <TextField required readOnly label={t("users.code")} value={values.code} placeholder={t("users.codePlaceholder")} />
+          <TextField required inputMode="numeric" pattern="[0-9]{12}" minLength={12} maxLength={12} label="ИИН" value={values.iin} onChange={(event) => setValues((current) => ({ ...current, iin: event.target.value.replace(/\D/g, "").slice(0, 12) }))} placeholder="000000000000" />
           <TextField required type="email" readOnly={user !== null} label="Email" value={values.email} onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))} placeholder="name@example.com" />
           <TextField type="tel" label={t("users.phone")} value={values.phone} onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))} placeholder={t("users.phonePlaceholder")} />
         </Wrapper>

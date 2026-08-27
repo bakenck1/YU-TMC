@@ -224,6 +224,7 @@ export const usersTable = inventorySchema.table(
     code: varchar({ length: 32 }).notNull().unique(),
     email: varchar({ length: 254 }).notNull().unique(),
     fullName: varchar({ length: 120 }).notNull(),
+    iin: varchar({ length: 12 }),
     role: authRoleEnum().notNull(),
     phone: varchar({ length: 32 }),
     emailVerified: boolean().notNull().default(false),
@@ -239,12 +240,226 @@ export const usersTable = inventorySchema.table(
       "users_email_normalized_check",
       sql`${table.email} = lower(btrim(${table.email}))`,
     ),
+    check(
+      "users_iin_format_check",
+      sql`${table.iin} IS NULL OR ${table.iin} ~ '^[0-9]{12}$'`,
+    ),
+    uniqueIndex("users_active_iin_unique")
+      .on(table.iin)
+      .where(sql`${table.deletedAt} IS NULL AND ${table.iin} IS NOT NULL`),
+    index("users_iin_lookup_idx").on(table.iin),
     check("users_version_positive_check", sql`${table.version} > 0`),
     check(
       "users_deactivated_state_check",
       sql`${table.isActive} OR ${table.deactivatedAt} IS NOT NULL`,
     ),
   ],
+);
+
+export const dockflowApiKeysTable = inventorySchema.table(
+  "dockflow_api_keys",
+  {
+    id: uuid().primaryKey(),
+    name: varchar({ length: 120 }).notNull(),
+    keyPrefix: varchar({ length: 32 }).notNull(),
+    keyHash: binaryData("key_hash").notNull(),
+    status: varchar({ length: 16 }).notNull().default("active"),
+    createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    createdBy: uuid().notNull().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    lastUsedAt: timestamp({ withTimezone: true, mode: "date" }),
+    revokedAt: timestamp({ withTimezone: true, mode: "date" }),
+    revokedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+  },
+  (table) => [
+    check("dockflow_api_keys_name_check", sql`btrim(${table.name}) <> ''`),
+    check("dockflow_api_keys_hash_check", sql`octet_length(${table.keyHash}) = 32`),
+    check(
+      "dockflow_api_keys_state_check",
+      sql`(
+        ${table.status} = 'active'
+        AND ${table.revokedAt} IS NULL
+        AND ${table.revokedBy} IS NULL
+      ) OR (
+        ${table.status} = 'revoked'
+        AND ${table.revokedAt} IS NOT NULL
+        AND ${table.revokedBy} IS NOT NULL
+      )`,
+    ),
+    uniqueIndex("dockflow_api_keys_single_active_unique")
+      .on(sql`(${table.status})`)
+      .where(sql`${table.status} = 'active'`),
+    index("dockflow_api_keys_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const dockflowRequestLogsTable = inventorySchema.table(
+  "dockflow_request_logs",
+  {
+    id: uuid().primaryKey(),
+    requestId: uuid().notNull().unique(),
+    apiKeyId: uuid().references(() => dockflowApiKeysTable.id, {
+      onDelete: "set null",
+      onUpdate: "restrict",
+    }),
+    keyPrefix: varchar({ length: 32 }),
+    result: varchar({ length: 64 }).notNull(),
+    httpStatus: integer().notNull(),
+    durationMs: integer().notNull(),
+    occurredAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("dockflow_request_logs_status_check", sql`${table.httpStatus} BETWEEN 100 AND 599`),
+    check("dockflow_request_logs_duration_check", sql`${table.durationMs} >= 0`),
+    index("dockflow_request_logs_occurred_at_idx").on(table.occurredAt),
+  ],
+);
+
+export const dockflowIntegrationSettingsTable = inventorySchema.table(
+  "dockflow_integration_settings",
+  {
+    singleton: boolean().primaryKey().default(true),
+    retentionDays: integer().notNull().default(90),
+    includeKeyPrefix: boolean().notNull().default(true),
+    updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+  },
+  (table) => [
+    check("dockflow_integration_settings_singleton_check", sql`${table.singleton} = true`),
+    check(
+      "dockflow_integration_settings_retention_check",
+      sql`${table.retentionDays} BETWEEN 1 AND 3650`,
+    ),
+  ],
+);
+
+export const dockflowApiKeyEventsTable = inventorySchema.table(
+  "dockflow_api_key_events",
+  {
+    id: uuid().primaryKey(),
+    apiKeyId: uuid().notNull().references(() => dockflowApiKeysTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    action: varchar({ length: 24 }).notNull(),
+    actorId: uuid().notNull().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    occurredAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "dockflow_api_key_events_action_check",
+      sql`${table.action} IN ('created', 'revoked', 'rotated')`,
+    ),
+    index("dockflow_api_key_events_key_time_idx").on(table.apiKeyId, table.occurredAt),
+  ],
+);
+
+export const assetLossCasesTable = inventorySchema.table(
+  "asset_loss_cases",
+  {
+    id: uuid().primaryKey(),
+    employeeId: uuid().notNull().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    itemId: uuid().notNull().references(() => itemsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    status: varchar({ length: 32 }).notNull().default("payment_pending"),
+    amount: numeric({ precision: 14, scale: 2 }).notNull(),
+    currency: varchar({ length: 3 }).notNull().default("KZT"),
+    receiptPhotoId: uuid().references(() => photosTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    submittedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    submittedAt: timestamp({ withTimezone: true, mode: "date" }),
+    reviewedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    reviewedAt: timestamp({ withTimezone: true, mode: "date" }),
+    reviewResult: varchar({ length: 16 }),
+    reviewComment: varchar({ length: 1000 }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    closedAt: timestamp({ withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    check("asset_loss_cases_amount_check", sql`${table.amount} >= 0`),
+    check("asset_loss_cases_currency_check", sql`${table.currency} = 'KZT'`),
+    check(
+      "asset_loss_cases_status_check",
+      sql`${table.status} IN ('payment_pending', 'accounting_review', 'rejected', 'closed')`,
+    ),
+    check(
+      "asset_loss_cases_state_check",
+      sql`(
+        ${table.status} = 'payment_pending'
+        AND ${table.receiptPhotoId} IS NULL
+        AND ${table.submittedBy} IS NULL AND ${table.submittedAt} IS NULL
+        AND ${table.reviewedBy} IS NULL AND ${table.reviewedAt} IS NULL
+        AND ${table.reviewResult} IS NULL AND ${table.reviewComment} IS NULL
+        AND ${table.closedAt} IS NULL
+      ) OR (
+        ${table.status} = 'accounting_review'
+        AND ${table.receiptPhotoId} IS NOT NULL
+        AND ${table.submittedBy} IS NOT NULL AND ${table.submittedAt} IS NOT NULL
+        AND ${table.reviewedBy} IS NULL AND ${table.reviewedAt} IS NULL
+        AND ${table.reviewResult} IS NULL AND ${table.closedAt} IS NULL
+      ) OR (
+        ${table.status} = 'rejected'
+        AND ${table.receiptPhotoId} IS NOT NULL
+        AND ${table.submittedBy} IS NOT NULL AND ${table.submittedAt} IS NOT NULL
+        AND ${table.reviewedBy} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL
+        AND ${table.reviewResult} = 'rejected' AND ${table.closedAt} IS NULL
+      ) OR (
+        ${table.status} = 'closed'
+        AND ${table.receiptPhotoId} IS NOT NULL
+        AND ${table.submittedBy} IS NOT NULL AND ${table.submittedAt} IS NOT NULL
+        AND ${table.reviewedBy} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL
+        AND ${table.reviewResult} = 'approved' AND ${table.closedAt} IS NOT NULL
+      )`,
+    ),
+    index("asset_loss_cases_employee_status_idx").on(table.employeeId, table.status),
+    uniqueIndex("asset_loss_cases_open_item_unique")
+      .on(table.itemId)
+      .where(sql`${table.status} <> 'closed'`),
+  ],
+);
+
+export const assetLossCaseEventsTable = inventorySchema.table(
+  "asset_loss_case_events",
+  {
+    id: uuid().primaryKey(),
+    lossCaseId: uuid().notNull().references(() => assetLossCasesTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    fromStatus: varchar({ length: 32 }),
+    toStatus: varchar({ length: 32 }).notNull(),
+    actorId: uuid().notNull().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    comment: varchar({ length: 1000 }),
+    occurredAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [index("asset_loss_case_events_case_time_idx").on(table.lossCaseId, table.occurredAt)],
 );
 
 export const userExternalIdentitiesTable = inventorySchema.table(
@@ -272,7 +487,7 @@ export const userExternalIdentitiesTable = inventorySchema.table(
     ),
     check(
       "user_external_identities_provider_check",
-      sql`${table.provider} = 'google'`,
+      sql`${table.provider} IN ('google', 'yessenov')`,
     ),
     check(
       "user_external_identities_email_normalized_check",
@@ -1916,7 +2131,7 @@ export const photosTable = inventorySchema.table(
             ${table.status} NOT IN ('reserved', 'expired')
             AND (
               (
-                  ${table.purpose}::text IN ('item', 'service_request')
+                  ${table.purpose}::text IN ('item', 'service_request', 'asset_loss_receipt')
                 AND ${table.itemId} IS NOT NULL
                 AND ${table.resultId} IS NULL
                 AND ${table.resultRevisionNumber} IS NULL

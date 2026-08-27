@@ -10,6 +10,8 @@ export interface UserDto {
   id: string;
   code: string;
   fullName: string;
+  /** Full value is returned only by authenticated administrator-management APIs. */
+  iin?: string | null;
   email: string;
   phone: string | null;
   role: UserRole;
@@ -21,6 +23,7 @@ export interface UserDto {
 
 export interface CreateUserInput {
   fullName: string;
+  iin?: string | null;
   email: string;
   phone?: string | null;
   role: UserRole;
@@ -31,6 +34,7 @@ export interface CreateUserInput {
 
 export interface UpdateUserInput {
   fullName: string;
+  iin?: string | null;
   phone?: string | null;
   role: UserRole;
   emailVerified: boolean;

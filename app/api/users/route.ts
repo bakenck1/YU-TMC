@@ -51,6 +51,7 @@ function parseCreateUser(value: unknown): CreateUserInput {
   const input = value as Record<string, unknown>;
   if (
     typeof input.fullName !== "string" ||
+    (input.iin !== undefined && input.iin !== null && typeof input.iin !== "string") ||
     typeof input.email !== "string" ||
     typeof input.role !== "string" ||
     !USER_ROLES.includes(input.role as (typeof USER_ROLES)[number]) ||
@@ -67,6 +68,7 @@ function parseCreateUser(value: unknown): CreateUserInput {
   }
   return {
     fullName: input.fullName,
+    iin: input.iin as string | null | undefined,
     email: input.email,
     role: input.role as CreateUserInput["role"],
     phone: input.phone as string | null | undefined,

@@ -57,6 +57,7 @@ export const PHOTO_PURPOSES = [
   "service_request",
   "inspection_result",
   "decision_dispute",
+  "asset_loss_receipt",
 ] as const;
 export type PhotoPurpose = (typeof PHOTO_PURPOSES)[number];
 

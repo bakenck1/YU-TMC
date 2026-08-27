@@ -70,7 +70,7 @@ export default function UsersManager({
 
     return records
       .filter((user) => {
-        const searchable = [user.code, user.fullName, user.email, user.role, t(USER_ROLE_LABEL_KEYS[user.role]), user.phone]
+        const searchable = [user.code, user.fullName, user.email, user.role, t(USER_ROLE_LABEL_KEYS[user.role]), user.iin, user.phone]
           .join(" ")
           .toLocaleLowerCase("ru-RU");
         const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
@@ -137,6 +137,7 @@ export default function UsersManager({
           existing
             ? {
                 fullName: values.fullName,
+                iin: values.iin,
                 phone: values.phone,
                 role: values.role,
                 emailVerified: values.emailVerified,
@@ -146,6 +147,7 @@ export default function UsersManager({
               }
             : {
                 fullName: values.fullName,
+                iin: values.iin,
                 email: values.email,
                 phone: values.phone,
                 role: values.role,
@@ -181,6 +183,7 @@ export default function UsersManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         fullName: user.fullName,
+        iin: user.iin,
         phone: user.phone,
         role: user.role,
         emailVerified: user.emailVerified,
@@ -364,16 +367,15 @@ export default function UsersManager({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[9%]" />
+              <col className="w-[24%]" />
               <col className="w-[22%]" />
-              <col className="w-[23%]" />
-              <col className="w-[17%]" />
+              <col className="w-[16%]" />
               <col className="w-[14%]" />
-              <col className="w-[15%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50/50 text-xs uppercase tracking-wide">
-                <th className="px-4 py-4 font-medium text-zinc-400">{t("users.columnCode")}</th>
                 <th className="px-4 py-4 font-medium">
                   <SortableTableHeader label={t("users.fullName")} sortKey="fullName" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
@@ -383,6 +385,7 @@ export default function UsersManager({
                 <th className="px-4 py-4 font-medium">
                   <SortableTableHeader label={t("users.role")} sortKey="role" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
+                <th className="px-4 py-4 font-medium text-zinc-400">{t("users.iin")}</th>
                 <th className="px-4 py-4 font-medium text-zinc-400">{t("users.phone")}</th>
                 <th className="px-4 py-4 font-medium">
                   <SortableTableHeader label={t("users.addedAt")} sortKey="addedAt" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
@@ -398,7 +401,6 @@ export default function UsersManager({
                   onKeyDown={(event) => handleRowKeyDown(event, user.id)}
                   className="cursor-pointer border-b border-zinc-100 outline-none transition last:border-0 hover:bg-emerald-50/40 focus:bg-emerald-50/50"
                 >
-                  <td className="px-4 py-3.5 font-mono text-xs font-medium text-zinc-500">{user.code}</td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">
@@ -419,7 +421,8 @@ export default function UsersManager({
                   <td className="px-4 py-3.5">
                     <UserRoleBadge role={user.role} />
                   </td>
-                  <td className="px-4 py-3.5 text-zinc-500">{user.phone}</td>
+                  <td className="px-4 py-3.5 font-mono text-xs text-zinc-500">{user.iin ?? "—"}</td>
+                  <td className="px-4 py-3.5 text-zinc-500">{user.phone ?? "—"}</td>
                   <td className="px-4 py-3.5 text-zinc-500">{formatUserDate(user.addedAt, locale)}</td>
                 </tr>
               ))}

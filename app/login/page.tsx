@@ -5,6 +5,7 @@ import { isSafeReturnPath } from "@/lib/security/authorization";
 import { defaultPathForRole } from "@/lib/security/authorization";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";
 import { isGoogleSsoConfigured } from "@/lib/security/google-sso";
+import { isYessenovSsoConfigured } from "@/lib/security/yessenov-sso";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { resolveCurrentUserToken } from "@/lib/server/security/request-user";
 import { cookies } from "next/headers";
@@ -38,7 +39,7 @@ export default async function LoginPage({
       ? requestedReturnTo
       : undefined;
   const registrationAvailable = await isRegistrationAvailable();
-  const googleError =
+  const ssoError =
     typeof resolvedSearchParams.error === "string"
       ? resolvedSearchParams.error
       : undefined;
@@ -48,8 +49,9 @@ export default async function LoginPage({
       <LoginForm
         returnTo={returnTo}
         registrationAvailable={registrationAvailable}
+        yessenovSsoAvailable={isYessenovSsoConfigured()}
         googleSsoAvailable={isGoogleSsoConfigured()}
-        googleError={googleError}
+        ssoError={ssoError}
       />
     </AuthPageFrame>
   );

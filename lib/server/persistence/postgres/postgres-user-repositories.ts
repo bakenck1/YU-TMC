@@ -35,6 +35,7 @@ interface UserRow extends QueryResultRow {
   code: string;
   email: string;
   full_name: string;
+  iin: string | null;
   role: UserRecord["role"];
   phone: string | null;
   email_verified: boolean;
@@ -150,16 +151,16 @@ class PostgresUserRepository implements UserRepository {
     try {
       const result = await this.source.query<UserRow>(
         `insert into ${USERS}
-           (id, code, email, full_name, role, phone, email_verified,
+           (id, code, email, full_name, iin, role, phone, email_verified,
             is_active, created_at, updated_at, deactivated_at)
          values (
            $1,
            'USR-' || lpad(nextval('${CODE_SEQUENCE}')::text, 6, '0'),
-           $2, $3, $4, $5::varchar, $6::boolean, $7::boolean,
-           $8::timestamptz, $8::timestamptz,
+           $2, $3, $4, $5, $6::varchar, $7::boolean, $8::boolean,
+           $9::timestamptz, $9::timestamptz,
            case
-             when $7::boolean then null
-             else $8::timestamptz
+             when $8::boolean then null
+             else $9::timestamptz
            end
          )
          returning *`,
@@ -167,6 +168,7 @@ class PostgresUserRepository implements UserRepository {
           input.id,
           input.email,
           input.fullName,
+          input.iin ?? null,
           input.role,
           input.phone,
           input.emailVerified,
@@ -184,31 +186,42 @@ class PostgresUserRepository implements UserRepository {
           cause: error,
         });
       }
+      if (
+        postgresCode(error) === "23505" &&
+        postgresConstraint(error) === "users_active_iin_unique"
+      ) {
+        throw new ApplicationError("conflict", "iin_already_exists", {
+          cause: error,
+        });
+      }
       throw error;
     }
   }
 
   async update(input: UpdateUserRecord): Promise<UserRecord | null> {
-    const result = await this.source.query<UserRow>(
+    try {
+      const result = await this.source.query<UserRow>(
       `update ${USERS}
        set full_name = $2,
-           role = $3,
-           phone = $4,
-           email_verified = $5,
-           is_active = $6,
-           updated_at = $7,
+           iin = coalesce($3, iin),
+           role = $4,
+           phone = $5,
+           email_verified = $6,
+           is_active = $7,
+           updated_at = $8,
            deactivated_at = case
-             when $6 then null
-             else coalesce(deactivated_at, $7)
+             when $7 then null
+             else coalesce(deactivated_at, $8)
            end,
            version = version + 1
        where id = $1
-         and version = $8
+         and version = $9
          and deleted_at is null
        returning *`,
       [
         input.id,
         input.fullName,
+        input.iin ?? null,
         input.role,
         input.phone,
         input.emailVerified,
@@ -217,7 +230,18 @@ class PostgresUserRepository implements UserRepository {
         input.expectedVersion,
       ],
     );
-    return result.rows[0] ? mapUser(result.rows[0]) : null;
+      return result.rows[0] ? mapUser(result.rows[0]) : null;
+    } catch (error) {
+      if (
+        postgresCode(error) === "23505" &&
+        postgresConstraint(error) === "users_active_iin_unique"
+      ) {
+        throw new ApplicationError("conflict", "iin_already_exists", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   async softDelete(
@@ -452,6 +476,7 @@ function mapUser(row: UserRow): UserRecord {
     code: row.code,
     email: row.email,
     fullName: row.full_name,
+    iin: row.iin,
     role: row.role,
     phone: row.phone,
     emailVerified: row.email_verified,

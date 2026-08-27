@@ -5,4 +5,4 @@ const meta = { title: "Auth/LoginForm", component: LoginForm, tags: ["autodocs"]
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
-export const GoogleError: Story = { args: { googleError: "access_denied" } };
+export const GoogleError: Story = { args: { ssoError: "google_access_denied" } };

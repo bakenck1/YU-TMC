@@ -5,6 +5,7 @@ export interface UserRecord {
   code: string;
   email: string;
   fullName: string;
+  iin?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -34,6 +35,7 @@ export interface InsertUserRecord {
   id: string;
   email: string;
   fullName: string;
+  iin?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -44,6 +46,7 @@ export interface InsertUserRecord {
 export interface UpdateUserRecord {
   id: string;
   fullName: string;
+  iin?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -80,7 +83,7 @@ export interface UserRepository {
   countActiveAdminsForUpdate(): Promise<number>;
 }
 
-export type ExternalIdentityProvider = "google";
+export type ExternalIdentityProvider = "google" | "yessenov";
 
 export interface ExternalIdentityRecord {
   provider: ExternalIdentityProvider;

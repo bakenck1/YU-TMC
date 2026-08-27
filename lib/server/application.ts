@@ -28,6 +28,8 @@ import { createPostgresWebPushRepositories } from "@/lib/server/persistence/post
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
 import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
+import { DockflowService } from "@/lib/server/dockflow-service";
+import { AssetLossService } from "@/lib/server/asset-loss-service";
 import {
   NodeWebPushSender,
   readWebPushConfiguration,
@@ -45,6 +47,8 @@ export interface ApplicationServices {
   readonly settings: SettingsService;
   readonly tmcTransferRequests: TmcTransferRequestService;
   readonly users: UserService;
+  readonly dockflow: DockflowService;
+  readonly assetLosses: AssetLossService;
 }
 
 const globalApplication = globalThis as typeof globalThis & {
@@ -139,6 +143,8 @@ function createApplicationServices(): ApplicationServices {
       { now: () => new Date() },
       { create: () => randomUUID() },
     ),
+    dockflow: new DockflowService(),
+    assetLosses: new AssetLossService(),
   };
 }
 

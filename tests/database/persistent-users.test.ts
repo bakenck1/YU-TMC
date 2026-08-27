@@ -259,16 +259,19 @@ describe("persistent PostgreSQL users", () => {
       const result = await database.query<{
         passwordReset: boolean;
         rateLimits: boolean;
+        dockflowLogs: boolean;
         users: boolean;
       }>(
         `select
           has_table_privilege(current_user, 'yu_inventory.password_reset_challenges', 'DELETE') as "passwordReset",
           has_table_privilege(current_user, 'yu_inventory.security_rate_limits', 'DELETE') as "rateLimits",
+          has_table_privilege(current_user, 'yu_inventory.dockflow_request_logs', 'DELETE') as "dockflowLogs",
           has_table_privilege(current_user, 'yu_inventory.users', 'DELETE') as users`,
       );
       expect(result.rows[0]).toEqual({
         passwordReset: true,
         rateLimits: true,
+        dockflowLogs: true,
         users: false,
       });
     } finally {

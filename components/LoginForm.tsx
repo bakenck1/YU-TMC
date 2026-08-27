@@ -22,8 +22,9 @@ import type { TranslationKey } from "@/lib/i18n";
 interface LoginFormProps {
   returnTo?: string;
   registrationAvailable?: boolean;
+  yessenovSsoAvailable?: boolean;
   googleSsoAvailable?: boolean;
-  googleError?: string;
+  ssoError?: string;
 }
 
 interface FieldErrors {
@@ -36,8 +37,9 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginForm({
   returnTo,
   registrationAvailable = false,
+  yessenovSsoAvailable = false,
   googleSsoAvailable = false,
-  googleError,
+  ssoError,
 }: LoginFormProps) {
   const { t } = useAppSettings();
   const { refreshSession } = useAuth();
@@ -47,7 +49,7 @@ export default function LoginForm({
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(() =>
-    googleError ? t(googleErrorKey(googleError)) : null,
+    ssoError ? t(ssoErrorKey(ssoError)) : null,
   );
   const [loading, setLoading] = useState(false);
 
@@ -135,7 +137,31 @@ export default function LoginForm({
         </p>
       </div>
 
-      <a
+      <div className="mt-9 space-y-3">
+        <a
+          href={
+            yessenovSsoAvailable
+              ? `/api/auth/yessenov${
+                  returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""
+                }`
+              : undefined
+          }
+          aria-disabled={!yessenovSsoAvailable}
+          className={`flex h-13 w-full items-center justify-center gap-3 rounded-2xl border px-5 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-emerald-100 ${
+            yessenovSsoAvailable
+              ? "border-emerald-200 bg-emerald-600 text-white hover:bg-emerald-700"
+              : "pointer-events-none border-zinc-100 bg-zinc-50 text-zinc-400"
+          }`}
+        >
+          <span
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-bold text-emerald-700"
+            aria-hidden="true"
+          >
+            YU
+          </span>
+          {t("auth.signInWithYessenov")}
+        </a>
+        <a
         href={
           googleSsoAvailable
             ? `/api/auth/google${
@@ -144,7 +170,7 @@ export default function LoginForm({
             : undefined
         }
         aria-disabled={!googleSsoAvailable}
-        className={`mt-9 flex h-13 w-full items-center justify-center gap-3 rounded-2xl border px-5 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-emerald-100 ${
+        className={`flex h-13 w-full items-center justify-center gap-3 rounded-2xl border px-5 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-emerald-100 ${
           googleSsoAvailable
             ? "border-zinc-200 bg-white text-zinc-800 hover:border-emerald-300 hover:bg-emerald-50"
             : "pointer-events-none border-zinc-100 bg-zinc-50 text-zinc-400"
@@ -157,7 +183,13 @@ export default function LoginForm({
           G
         </span>
         {t("auth.signInWithGoogle")}
-      </a>
+        </a>
+      </div>
+      {!yessenovSsoAvailable ? (
+        <p className="mt-2 text-center text-xs text-zinc-400">
+          {t("auth.yessenovNotConfiguredHint")}
+        </p>
+      ) : null}
       {!googleSsoAvailable ? (
         <p className="mt-2 text-center text-xs text-zinc-400">
           {t("auth.googleNotConfiguredHint")}
@@ -322,8 +354,19 @@ export default function LoginForm({
   );
 }
 
-function googleErrorKey(error: string): TranslationKey {
+function ssoErrorKey(error: string): TranslationKey {
   switch (error) {
+    case "yessenov_access_denied":
+      return "auth.yessenovAccessDenied";
+    case "yessenov_account_invalid":
+      return "auth.yessenovAccountInvalid";
+    case "yessenov_account_blocked":
+      return "auth.yessenovAccountBlocked";
+    case "yessenov_not_configured":
+      return "auth.yessenovNotConfigured";
+    case "yessenov_failed":
+    case "yessenov_invalid_response":
+      return "auth.yessenovFailed";
     case "google_access_denied":
       return "auth.googleAccessDenied";
     case "google_account_not_provisioned":
@@ -336,5 +379,4 @@ function googleErrorKey(error: string): TranslationKey {
       return "auth.googleFailed";
   }
 }
-
 

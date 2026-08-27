@@ -85,6 +85,22 @@
       {
         "tag": "20260808120000_security_resource_quotas",
         "reason": "Raw SQL-only indexes, routines and quota tables are not represented by the Drizzle schema snapshot."
+      },
+      {
+        "tag": "20260827143000_dockflow_integration",
+        "reason": "Hand-authored forward migration keeps existing users deployable while adding the nullable IIN rollout, Dockflow audit/key tables, and loss-case constraints represented in the current schema."
+      },
+      {
+        "tag": "20260827150000_asset_loss_receipt_enum",
+        "reason": "PostgreSQL enum additions are isolated in their own transaction and are not represented by a standalone Drizzle schema snapshot."
+      },
+      {
+        "tag": "20260827150100_asset_loss_receipt_constraint",
+        "reason": "The follow-up raw SQL constraint migration safely consumes the enum value committed by the preceding migration."
+      },
+      {
+        "tag": "20260827170000_yessenov_sso",
+        "reason": "The forward-only constraint update adds Yessenov ID as an allowed external identity provider without changing the existing table shape."
       }
     ]
   },

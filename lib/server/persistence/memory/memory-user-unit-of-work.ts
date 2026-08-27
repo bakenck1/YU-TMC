@@ -122,10 +122,19 @@ class MemoryUserRepository implements UserRepository {
     ) {
       throw new ApplicationError("conflict", "email_already_exists");
     }
+    if (
+      input.iin &&
+      [...this.state.users.values()].some(
+        (candidate) => !candidate.deletedAt && candidate.iin === input.iin,
+      )
+    ) {
+      throw new ApplicationError("conflict", "iin_already_exists");
+    }
     const code = `USR-${String(this.state.nextCode).padStart(6, "0")}`;
     this.state.nextCode += 1;
     const user: UserRecord = {
       ...input,
+      iin: input.iin ?? null,
       code,
       version: 1,
       updatedAt: input.createdAt,
@@ -148,6 +157,7 @@ class MemoryUserRepository implements UserRepository {
     const updated: UserRecord = {
       ...current,
       fullName: input.fullName,
+      iin: input.iin ?? current.iin,
       role: input.role,
       phone: input.phone,
       emailVerified: input.emailVerified,

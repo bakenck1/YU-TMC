@@ -30,7 +30,9 @@ systemd-сервисом по timer.
 production-переменные из `.env.example`, включая `DATABASE_URL`,
 `DATABASE_MIGRATOR_URL`, `DATABASE_DEPLOYMENT_ID`, `DATABASE_SSL_MODE`,
 `SESSION_SECRET`, `APP_PUBLIC_ORIGIN`, `TRUSTED_CLIENT_IP_HEADER` и все три
-`WEB_PUSH_VAPID_*` переменные. Для TLS БД с частным CA укажите сертификат в
+`WEB_PUSH_VAPID_*` переменные. Для входа через Yessenov ID также задайте
+`YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` и точный HTTPS
+`YESSENOV_OIDC_REDIRECT_URI`. Для TLS БД с частным CA укажите сертификат в
 `DATABASE_SSL_CA` одной строкой с экранированными переводами строки (`\n`).
 Backup читает только database-переменные из строк формата `KEY=value`; он не
 исполняет содержимое env-файла как shell-код.

@@ -61,6 +61,7 @@ function parseUpdateUser(value: unknown): UpdateUserInput {
   const input = value as Record<string, unknown>;
   if (
     typeof input.fullName !== "string" ||
+    (input.iin !== undefined && input.iin !== null && typeof input.iin !== "string") ||
     typeof input.role !== "string" ||
     !USER_ROLES.includes(input.role as (typeof USER_ROLES)[number]) ||
     (input.phone !== undefined &&
@@ -78,6 +79,7 @@ function parseUpdateUser(value: unknown): UpdateUserInput {
   }
   return {
     fullName: input.fullName,
+    iin: input.iin as string | null | undefined,
     role: input.role as UpdateUserInput["role"],
     phone: input.phone as string | null | undefined,
     emailVerified: input.emailVerified,

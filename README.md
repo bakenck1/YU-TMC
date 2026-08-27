@@ -80,6 +80,16 @@ Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and
 must use HTTPS. The callback verifies the ID token, nonce, audience, verified
 email and Workspace domain before creating an application session.
 
+## Yessenov ID SSO
+
+Register the production entry URL
+`https://inventory.yu.edu.kz/api/auth/yessenov` and exact callback
+`https://inventory.yu.edu.kz/api/auth/yessenov/callback` with Yessenov ID.
+Configure `YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` and
+`YESSENOV_OIDC_REDIRECT_URI`. First login creates an `employee`; elevated roles
+remain local administrator decisions. See [docs/yessenov-sso.md](docs/yessenov-sso.md)
+for provider claims and the guarded personnel JSON import.
+
 ## Web Push
 
 Generate one VAPID key pair and store it in the deployment secret store:

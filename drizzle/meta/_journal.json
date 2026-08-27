@@ -169,6 +169,34 @@
       "when": 1787743341863,
       "tag": "20260826112221_overconfident_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787833800000,
+      "tag": "20260827143000_dockflow_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787835600000,
+      "tag": "20260827150000_asset_loss_receipt_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787835660000,
+      "tag": "20260827150100_asset_loss_receipt_constraint",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1787842800000,
+      "tag": "20260827170000_yessenov_sso",
+      "breakpoints": true
     }
   ]
 }

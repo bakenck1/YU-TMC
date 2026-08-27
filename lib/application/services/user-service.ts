@@ -193,6 +193,95 @@ export class UserService {
     );
   }
 
+  async authenticateYessenovIdentity(input: {
+    subject: string;
+    email: string;
+    name: string;
+    iin?: string | null;
+  }): Promise<AuthenticationResult> {
+    let email: string;
+    let fullName: string;
+    try {
+      email = requireEmail(input.email);
+      fullName = requireName(input.name);
+    } catch {
+      return { status: "invalid" };
+    }
+    const subject = input.subject.trim();
+    if (!isWorkspaceEmail(email) || !subject || subject.length > 255) {
+      return { status: "invalid" };
+    }
+
+    return this.unitOfWork.transaction(
+      async ({ users, externalIdentities }) => {
+        await externalIdentities.lockProvisioning("yessenov", subject, email);
+        let user = await externalIdentities.findUserBySubject(
+          "yessenov",
+          subject,
+        );
+
+        if (!user) {
+          user = await users.findByNormalizedEmailForUpdate(email);
+          if (!user) {
+            const createdAt = this.clock.now();
+            user = await users.insert({
+              id: this.ids.create(),
+              email,
+              fullName,
+              // IIN is filled by the reviewed personnel import or an admin.
+              // A login callback must not guess ownership of a duplicated IIN.
+              iin: null,
+              role: "employee",
+              phone: null,
+              emailVerified: true,
+              active: true,
+              createdAt,
+            });
+          } else {
+            if (user.deletedAt) return { status: "invalid" };
+            if (!user.active) return { status: "blocked" };
+          }
+
+          const existingIdentity = await externalIdentities.findByUser(
+            "yessenov",
+            user.id,
+          );
+          if (existingIdentity && existingIdentity.subject !== subject) {
+            return { status: "invalid" };
+          }
+          if (!existingIdentity) {
+            try {
+              await externalIdentities.insert({
+                provider: "yessenov",
+                subject,
+                userId: user.id,
+                emailAtLink: email,
+                createdAt: this.clock.now(),
+              });
+            } catch (error) {
+              if (
+                error instanceof ApplicationError &&
+                error.kind === "conflict"
+              ) {
+                return { status: "invalid" };
+              }
+              throw error;
+            }
+          }
+        }
+
+        if (user.deletedAt) return { status: "invalid" };
+        if (!user.active) return { status: "blocked" };
+        return {
+          status: "authenticated",
+          user: authenticatedAccount(user),
+          sessionVersion: user.version,
+        };
+      },
+      { isolation: "read-committed" },
+    );
+  }
+
   async resolveSessionSubject(
     subject: string,
   ): Promise<AuthenticatedAccount | null> {
@@ -372,7 +461,7 @@ export class UserService {
     return this.unitOfWork.read(async ({ users }) =>
       (await users.list())
         .filter((user) => !user.deletedAt)
-        .map(toUserDto),
+        .map((user) => toUserDto(user)),
     );
   }
 
@@ -403,7 +492,7 @@ export class UserService {
       }
       return (await users.list())
         .filter((user) => !user.deletedAt)
-        .map(toUserDto);
+        .map((user) => toUserDto(user, true));
     });
   }
 
@@ -477,6 +566,7 @@ export class UserService {
     const createdAt = this.clock.now();
     const email = requireEmail(input.email);
     const fullName = requireName(input.fullName);
+    const iin = normalizeIin(input.iin);
     const phone = normalizePhone(input.phone);
     const initialPassword = normalizeInitialPassword(input.initialPassword);
     const passwordHash = initialPassword
@@ -502,6 +592,7 @@ export class UserService {
         id,
         email,
         fullName,
+        iin,
         phone,
         role: input.role,
         emailVerified: input.emailVerified === true,
@@ -515,7 +606,7 @@ export class UserService {
           updatedAt: createdAt,
         });
       }
-      return toUserDto(user);
+      return toUserDto(user, true);
     });
   }
 
@@ -526,6 +617,7 @@ export class UserService {
     actorSessionVersion: number,
   ): Promise<UserDto> {
     const fullName = requireName(input.fullName);
+    const iin = normalizeIin(input.iin);
     const phone = normalizePhone(input.phone);
     const initialPassword = normalizeInitialPassword(input.initialPassword);
     const passwordHash = initialPassword
@@ -584,6 +676,7 @@ export class UserService {
       const updated = await users.update({
         id,
         fullName,
+        iin,
         phone,
         role: input.role,
         emailVerified: input.emailVerified,
@@ -594,7 +687,7 @@ export class UserService {
       if (!updated) {
         throw new ApplicationError("conflict", "user_version_conflict");
       }
-      return toUserDto(updated);
+      return toUserDto(updated, true);
     });
   }
 
@@ -667,11 +760,12 @@ function currentAccount(user: UserRecord): CurrentAccount {
   };
 }
 
-function toUserDto(user: UserRecord): UserDto {
+function toUserDto(user: UserRecord, revealIin = false): UserDto {
   return {
     id: user.id,
     code: user.code,
     fullName: user.fullName,
+    iin: revealIin ? (user.iin ?? null) : maskIin(user.iin ?? null),
     email: user.email,
     phone: user.phone,
     role: user.role,
@@ -680,6 +774,20 @@ function toUserDto(user: UserRecord): UserDto {
     version: user.version,
     addedAt: user.createdAt.toISOString(),
   };
+}
+
+function normalizeIin(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === "") return null;
+  const iin = value.trim();
+  if (!/^[0-9]{12}$/.test(iin)) {
+    throw new ApplicationError("validation", "invalid_iin");
+  }
+  return iin;
+}
+
+function maskIin(iin: string | null): string | null {
+  return iin ? `******${iin.slice(-6)}` : null;
 }
 
 export function normalizeUserEmail(value: string): string {

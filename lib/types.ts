@@ -60,6 +60,7 @@ export interface AppUser {
   id: string;
   code: string;
   fullName: string;
+  iin?: string | null;
   role: UserRole;
   email: string;
   phone: string;
