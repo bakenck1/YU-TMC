@@ -20,7 +20,7 @@ const ACTOR_ID = "11111111-1111-4111-8111-111111111111";
 
 test("recipient search is normalized, active-only, self-excluding, minimal and bounded", () => {
   const users = [
-    user(ACTOR_ID, "Demo User 6", "self@example.com", "employee"),
+    user(ACTOR_ID, "Demo User 6", "self@example.test", "employee"),
     user("22222222-2222-4222-8222-222222222222", "  Demo User 5  ", "demo-user-5@example.test", "admin"),
     user("33333333-3333-4333-8333-333333333333", "Бек Али", "LOGIN@EXAMPLE.COM", "warehouse"),
     { ...user("44444444-4444-4444-8444-444444444444", "Али Inactive", "inactive@example.com", "employee"), active: false },

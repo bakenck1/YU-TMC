@@ -40,8 +40,8 @@ const serviceRequest: ServiceRequestDto = {
 
 const request: TmcTransferRequestCardView = {
   id: "request-1",
-  initiator: { fullName: "Demo User 2", email: "user@example.test" },
-  recipient: { fullName: "Demo User 1", email: "admin@example.test" },
+    initiator: { fullName: "Demo User 2", email: "demo-user-2@example.test" },
+    recipient: { fullName: "Demo User 1", email: "demo-user-1@example.test" },
   status: "pending",
   comment: "Передача рабочего места",
   createdAt: "2026-08-12T09:00:00.000Z",
@@ -95,4 +95,4 @@ export const TmcRequestItemResultBadgeStory: Story = { name: "TmcRequestItemResu
 export const TmcRequestMetaStory: Story = { name: "TmcRequestMeta", render: () => <TmcRequestMeta label="Получатель" value="Demo User 1" /> };
 export const TmcRequestStatusBadgeStory: Story = { name: "TmcRequestStatusBadge", render: () => <TmcRequestStatusBadge status="pending" /> };
 export const TmcTransferRequestCardStory: Story = { name: "TmcTransferRequestCard", render: () => <TmcTransferRequestCard request={request} canDecide showOverdue requiresAdministrativeReason={false} /> };
-export const TmcUserPickerStory: Story = { name: "TmcUserPicker", render: () => <TmcUserPicker value={{ id: "user-1", fullName: "Demo User 1", email: "admin@example.test", role: "admin" }} onChange={() => undefined} /> };
+export const TmcUserPickerStory: Story = { name: "TmcUserPicker", render: () => <TmcUserPicker value={{ id: "user-1", fullName: "Demo User 1", email: "demo-user-1@example.test", role: "admin" }} onChange={() => undefined} /> };

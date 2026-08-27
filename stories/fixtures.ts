@@ -29,7 +29,7 @@ export const USERS: AppUser[] = [
     id: "user-employee",
     code: "USR-003",
     fullName: "Demo User 2",
-    email: "user@example.test",
+    email: "employee@example.test",
     phone: "+0 000 000 00 03",
     role: "employee",
     active: false,
