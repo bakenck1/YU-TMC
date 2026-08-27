@@ -6,6 +6,7 @@ import { closeDatabase } from "@/lib/db/client";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
+import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
 import { createPostgresWebPushRepositories } from "@/lib/server/persistence/postgres/postgres-web-push-repositories";
 import type { Pool } from "pg";
@@ -261,6 +262,82 @@ describe("PostgreSQL TMC operation repositories", () => {
     expect(new Map(aggregate?.items.map((item) => [item.itemId, { result: item.result, version: item.version }]))).toEqual(new Map([[itemIds[0]!, { result: "accepted", version: 2 }], [itemIds[1]!, { result: "rejected", version: 2 }]]));
     const owners = await database.query<{ item_id: string; responsible_user_id: string }>(`select item_id, responsible_user_id from "yu_inventory"."responsibility_periods" where item_id = any($1::uuid[]) and ended_at is null order by item_id`, [itemIds]);
     expect(new Map(owners.rows.map((row) => [row.item_id, row.responsible_user_id]))).toEqual(new Map([[itemIds[0]!, recipientId], [itemIds[1]!, initiatorId]]));
+  });
+
+  it("hard deletes an item together with its TMC responsibility snapshot", async () => {
+    const initiatorId = randomUUID();
+    const recipientId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    const itemId = randomUUID();
+    const periodId = randomUUID();
+    const requestId = randomUUID();
+    const createdAt = new Date("2026-08-27T05:00:00.000Z");
+
+    await seedUsers(initiatorId, recipientId);
+    await seedLocation(buildingId, roomId, initiatorId);
+    await seedItemAndResponsibility({
+      itemId,
+      periodId,
+      roomId,
+      responsibleId: initiatorId,
+      ordinal: 100,
+    });
+
+    const transferRequests =
+      createPostgresTmcOperationRepositories(database).transferRequests;
+    await transferRequests.insertRequest({
+      id: requestId,
+      initiatorId,
+      recipientId,
+      comment: null,
+      createdAt,
+      expiresAt: new Date(createdAt.getTime() + 86_400_000),
+    });
+    await transferRequests.insertRequestItem({
+      id: randomUUID(),
+      requestId,
+      itemId,
+      expectedItemVersion: 1,
+      responsibilityPeriodIdAtRequest: periodId,
+      currentResponsibleIdAtRequest: initiatorId,
+      createdAt,
+    });
+    const auditId = randomUUID();
+    await database.query(
+      `insert into "yu_inventory"."audit_records"
+         (id, actor_id, actor_role_snapshot, subject_kind, subject_id,
+          subject_revision, action, before_values, after_values, occurred_at)
+       values ($1, $2, 'employee', 'item', $3, 1, 'item.created',
+               null, $4, $5)`,
+      [auditId, initiatorId, itemId, { name: "Repository Item 100" }, createdAt],
+    );
+
+    const deletedIds =
+      await createPostgresInventoryItemRepositories(database).items.deleteItems([
+        itemId,
+      ]);
+
+    expect(deletedIds).toEqual([itemId]);
+    await expect(
+      database.query(
+        `select id from "yu_inventory"."items" where id = $1`,
+        [itemId],
+      ),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      database.query(
+        `select id from "yu_inventory"."tmc_transfer_request_items"
+          where item_id = $1`,
+        [itemId],
+      ),
+    ).resolves.toMatchObject({ rowCount: 0 });
+    await expect(
+      database.query(
+        `select id from "yu_inventory"."audit_records" where id = $1`,
+        [auditId],
+      ),
+    ).resolves.toMatchObject({ rowCount: 1 });
   });
 
   it("persists participant history, immutable audit, unread delivery, and read receipt", async () => {

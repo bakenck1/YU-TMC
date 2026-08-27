@@ -149,6 +149,35 @@ describe("TmcBulkActions", () => {
     expect(screen.getByRole("menuitem", { name: "tmc.operation.issue" })).not.toBeNull();
   });
 
+  it("deletes selected items and refreshes the list", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    render(<TmcBulkActions
+      items={[ITEM]}
+      actorUserId={ITEM.responsibleId}
+      actorRole="admin"
+      buildings={[]}
+      rooms={[]}
+      onComplete={onComplete}
+      onClear={onClear}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "items.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "items.delete" }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/inventory/items/bulk-delete",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ itemIds: [ITEM.id] });
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "items.deleteTitle" })).toBeNull();
+  });
+
   it("removes an item from the operation and submits only the remaining rows", async () => {
     const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002" };
     vi.mocked(fetch).mockResolvedValue({

@@ -733,16 +733,6 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async deleteItems(ids: readonly string[]): Promise<string[]> {
     if (!ids.length) return [];
-    await this.source.query(
-      `delete from ${AUDIT}
-       where (subject_kind in ('item', 'responsibility')
-              and subject_id = any($1::uuid[]))
-          or (subject_kind = 'transfer' and subject_id in (
-                select id from "yu_inventory"."transfers"
-                 where item_id = any($1::uuid[])
-              ))`,
-      [ids],
-    );
     const result = await this.source.query<{ id: string }>(
       `delete from ${ITEMS}
        where id = any($1::uuid[])
