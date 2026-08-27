@@ -21,9 +21,9 @@ const ACTOR_ID = "11111111-1111-4111-8111-111111111111";
 test("recipient search is normalized, active-only, self-excluding, minimal and bounded", () => {
   const users = [
     user(ACTOR_ID, "Demo User 6", "self@example.test", "employee"),
-    user("22222222-2222-4222-8222-222222222222", "  Demo User 5  ", "demo-user-5@example.test", "admin"),
-    user("33333333-3333-4333-8333-333333333333", "Бек Али", "LOGIN@EXAMPLE.COM", "warehouse"),
-    { ...user("44444444-4444-4444-8444-444444444444", "Али Inactive", "inactive@example.com", "employee"), active: false },
+    user("22222222-2222-4222-8222-222222222222", "  Demo Әли 5  ", "demo-ali-5@example.test", "admin"),
+    user("33333333-3333-4333-8333-333333333333", "Demo Warehouse", "LOGIN@EXAMPLE.COM", "warehouse"),
+    { ...user("44444444-4444-4444-8444-444444444444", "Demo Inactive", "inactive@example.com", "employee"), active: false },
   ];
   for (let index = 0; index < 25; index += 1) {
     users.push(user(uuid(index + 10), `Ali ${String(index).padStart(2, "0")}`, `ali${index}@example.com`, "employee"));
@@ -36,10 +36,10 @@ test("recipient search is normalized, active-only, self-excluding, minimal and b
   assert.deepEqual(Object.keys(byName[0]).sort(), ["email", "fullName", "id", "role"]);
   assert.equal("phone" in byName[0], false);
   assert.equal("code" in byName[0], false);
-  assert.equal(byName[0].fullName, "Demo User 5");
+  assert.equal(byName[0].fullName, "Demo Әли 5");
   assert.deepEqual(
     searchEligibleTmcRecipients(users, ACTOR_ID, "  ӘЛИ  ").map(({ email }) => email),
-    ["demo-user-5@example.test"],
+    ["demo-ali-5@example.test"],
   );
 
   assert.deepEqual(
