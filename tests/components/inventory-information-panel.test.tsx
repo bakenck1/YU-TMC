@@ -27,7 +27,7 @@ describe("legacy inventory information panel", () => {
 
     expect(screen.getByText(/Demo User 1/)).toBeTruthy();
     expect(screen.getByText("itemDetails.auditCreated")).toBeTruthy();
-    expect(screen.queryByText(/demo-user\.demo-user/i)).toBeNull();
+    expect(screen.queryByText(/legacy-user@example\.test/i)).toBeNull();
   });
 
   it("shows an explicit empty state when no operations are available", () => {
