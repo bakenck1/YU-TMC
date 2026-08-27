@@ -36,6 +36,9 @@ interface UserRow extends QueryResultRow {
   email: string;
   full_name: string;
   iin: string | null;
+  org_unit: string | null;
+  position: string | null;
+  tutor_id: string | null;
   role: UserRecord["role"];
   phone: string | null;
   email_verified: boolean;
@@ -147,20 +150,33 @@ class PostgresUserRepository implements UserRepository {
     return result.rows[0] ? mapUser(result.rows[0]) : null;
   }
 
+  async findByIinForUpdate(iin: string): Promise<UserRecord | null> {
+    const result = await this.source.query<UserRow>(
+      `select *
+       from ${USERS}
+       where iin = $1
+         and deleted_at is null
+       for update`,
+      [iin],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  }
+
   async insert(input: InsertUserRecord): Promise<UserRecord> {
     try {
       const result = await this.source.query<UserRow>(
         `insert into ${USERS}
-           (id, code, email, full_name, iin, role, phone, email_verified,
+           (id, code, email, full_name, iin, org_unit, "position", tutor_id,
+            role, phone, email_verified,
             is_active, created_at, updated_at, deactivated_at)
          values (
            $1,
            'USR-' || lpad(nextval('${CODE_SEQUENCE}')::text, 6, '0'),
-           $2, $3, $4, $5, $6::varchar, $7::boolean, $8::boolean,
-           $9::timestamptz, $9::timestamptz,
+           $2, $3, $4, $5, $6, $7, $8, $9::varchar, $10::boolean, $11::boolean,
+           $12::timestamptz, $12::timestamptz,
            case
-             when $8::boolean then null
-             else $9::timestamptz
+             when $11::boolean then null
+             else $12::timestamptz
            end
          )
          returning *`,
@@ -169,6 +185,9 @@ class PostgresUserRepository implements UserRepository {
           input.email,
           input.fullName,
           input.iin ?? null,
+          input.orgUnit ?? null,
+          input.position ?? null,
+          input.tutorId ?? null,
           input.role,
           input.phone,
           input.emailVerified,
@@ -204,24 +223,30 @@ class PostgresUserRepository implements UserRepository {
       `update ${USERS}
        set full_name = $2,
            iin = coalesce($3, iin),
-           role = $4,
-           phone = $5,
-           email_verified = $6,
-           is_active = $7,
-           updated_at = $8,
+           org_unit = coalesce($4, org_unit),
+           "position" = coalesce($5, "position"),
+           tutor_id = coalesce($6, tutor_id),
+           role = $7,
+           phone = $8,
+           email_verified = $9,
+           is_active = $10,
+           updated_at = $11,
            deactivated_at = case
-             when $7 then null
-             else coalesce(deactivated_at, $8)
+             when $10 then null
+             else coalesce(deactivated_at, $11)
            end,
            version = version + 1
        where id = $1
-         and version = $9
+         and version = $12
          and deleted_at is null
        returning *`,
       [
         input.id,
         input.fullName,
         input.iin ?? null,
+        input.orgUnit ?? null,
+        input.position ?? null,
+        input.tutorId ?? null,
         input.role,
         input.phone,
         input.emailVerified,
@@ -287,10 +312,12 @@ class PostgresExternalIdentityRepository
     provider: ExternalIdentityRecord["provider"],
     subject: string,
     email: string,
+    iin?: string | null,
   ): Promise<void> {
     const keys = [
       `external-identity:${provider}:subject:${subject}`,
       `external-identity:${provider}:email:${email}`,
+      ...(iin ? [`external-identity:${provider}:iin:${iin}`] : []),
     ].sort();
     for (const key of keys) {
       await this.source.query(
@@ -310,7 +337,8 @@ class PostgresExternalIdentityRepository
        inner join ${EXTERNAL_IDENTITIES} as identities
          on identities.user_id = users.id
        where identities.provider = $1
-         and identities.subject = $2`,
+         and identities.subject = $2
+       for update of users`,
       [provider, subject],
     );
     return result.rows[0] ? mapUser(result.rows[0]) : null;
@@ -477,6 +505,9 @@ function mapUser(row: UserRow): UserRecord {
     email: row.email,
     fullName: row.full_name,
     iin: row.iin,
+    orgUnit: row.org_unit,
+    position: row.position,
+    tutorId: row.tutor_id,
     role: row.role,
     phone: row.phone,
     emailVerified: row.email_verified,

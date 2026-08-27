@@ -114,6 +114,13 @@ class MemoryUserRepository implements UserRepository {
     return this.findByNormalizedEmail(email);
   }
 
+  async findByIinForUpdate(iin: string): Promise<UserRecord | null> {
+    const user = [...this.state.users.values()].find(
+      (candidate) => !candidate.deletedAt && candidate.iin === iin,
+    );
+    return user ? cloneUser(user) : null;
+  }
+
   async insert(input: InsertUserRecord): Promise<UserRecord> {
     if (
       [...this.state.users.values()].some(
@@ -135,6 +142,9 @@ class MemoryUserRepository implements UserRepository {
     const user: UserRecord = {
       ...input,
       iin: input.iin ?? null,
+      orgUnit: input.orgUnit ?? null,
+      position: input.position ?? null,
+      tutorId: input.tutorId ?? null,
       code,
       version: 1,
       updatedAt: input.createdAt,
@@ -158,6 +168,9 @@ class MemoryUserRepository implements UserRepository {
       ...current,
       fullName: input.fullName,
       iin: input.iin ?? current.iin,
+      orgUnit: input.orgUnit ?? current.orgUnit ?? null,
+      position: input.position ?? current.position ?? null,
+      tutorId: input.tutorId ?? current.tutorId ?? null,
       role: input.role,
       phone: input.phone,
       emailVerified: input.emailVerified,

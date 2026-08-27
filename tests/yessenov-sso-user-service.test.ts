@@ -28,6 +28,10 @@ test("Yessenov ID creates a first-login employee and binds the provider subject"
     email: " Employee@YU.EDU.KZ ",
     name: "Employee Name",
     iin: "123456789012",
+    phoneNumber: "+7 700 123 45 67",
+    tutorId: "1204",
+    orgUnit: "Information Technology",
+    position: "Engineer",
   });
   assert.deepEqual(first, {
     status: "authenticated",
@@ -38,16 +42,50 @@ test("Yessenov ID creates a first-login employee and binds the provider subject"
       role: "employee",
     },
   });
-  assert.equal((await service.listUsers()).length, 1);
-  assert.equal((await service.listUsers())[0]?.iin, null);
+  const created = (await service.listUsers())[0];
+  assert.equal(created?.iin, "******789012");
+  assert.equal(created?.phone, "+7 700 123 45 67");
+  assert.equal(created?.orgUnit, "Information Technology");
+  assert.equal(created?.position, "Engineer");
 
   const later = await service.authenticateYessenovIdentity({
     subject: "personnel-123",
     email: "renamed@yu.edu.kz",
     name: "Renamed Employee",
+    phoneNumber: "+7 701 000 00 00",
+    orgUnit: "Digital Development",
+    position: "Senior Engineer",
   });
   assert.equal(later.status, "authenticated");
-  assert.equal((await service.listUsers()).length, 1);
+  const synchronized = await service.listUsers();
+  assert.equal(synchronized.length, 1);
+  assert.equal(synchronized[0]?.fullName, "Renamed Employee");
+  assert.equal(synchronized[0]?.phone, "+7 701 000 00 00");
+  assert.equal(synchronized[0]?.orgUnit, "Digital Development");
+  assert.equal(synchronized[0]?.position, "Senior Engineer");
+});
+
+test("a duplicated Yessenov IIN never blocks login or overwrites its owner", async () => {
+  const service = createService();
+  const sharedIin = "123456789012";
+  const outcomes = [];
+  for (const index of [1, 2]) {
+    outcomes.push(
+      await service.authenticateYessenovIdentity({
+        subject: `personnel-${index}`,
+        email: `personnel-${index}@yu.edu.kz`,
+        name: `Personnel ${index}`,
+        iin: sharedIin,
+      }),
+    );
+  }
+  assert.deepEqual(outcomes.map((outcome) => outcome.status), [
+    "authenticated",
+    "authenticated",
+  ]);
+  const users = await service.listUsers();
+  assert.equal(users.filter((user) => user.iin === "******789012").length, 1);
+  assert.equal(users.filter((user) => user.iin === null).length, 1);
 });
 
 test("concurrent Yessenov first logins create only one employee", async () => {

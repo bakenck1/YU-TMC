@@ -198,6 +198,10 @@ export class UserService {
     email: string;
     name: string;
     iin?: string | null;
+    phoneNumber?: string | null;
+    tutorId?: string | null;
+    orgUnit?: string | null;
+    position?: string | null;
   }): Promise<AuthenticationResult> {
     let email: string;
     let fullName: string;
@@ -208,13 +212,23 @@ export class UserService {
       return { status: "invalid" };
     }
     const subject = input.subject.trim();
+    const claimedIin = normalizeYessenovIin(input.iin);
+    const phone = normalizeYessenovPhone(input.phoneNumber);
+    const tutorId = normalizeYessenovText(input.tutorId, 64);
+    const orgUnit = normalizeYessenovText(input.orgUnit, 255);
+    const position = normalizeYessenovText(input.position, 255);
     if (!isWorkspaceEmail(email) || !subject || subject.length > 255) {
       return { status: "invalid" };
     }
 
     return this.unitOfWork.transaction(
       async ({ users, externalIdentities }) => {
-        await externalIdentities.lockProvisioning("yessenov", subject, email);
+        await externalIdentities.lockProvisioning(
+          "yessenov",
+          subject,
+          email,
+          claimedIin,
+        );
         let user = await externalIdentities.findUserBySubject(
           "yessenov",
           subject,
@@ -224,15 +238,19 @@ export class UserService {
           user = await users.findByNormalizedEmailForUpdate(email);
           if (!user) {
             const createdAt = this.clock.now();
+            const iinOwner = claimedIin
+              ? await users.findByIinForUpdate(claimedIin)
+              : null;
             user = await users.insert({
               id: this.ids.create(),
               email,
               fullName,
-              // IIN is filled by the reviewed personnel import or an admin.
-              // A login callback must not guess ownership of a duplicated IIN.
-              iin: null,
+              iin: iinOwner ? null : claimedIin,
+              orgUnit,
+              position,
+              tutorId,
               role: "employee",
-              phone: null,
+              phone,
               emailVerified: true,
               active: true,
               createdAt,
@@ -272,6 +290,44 @@ export class UserService {
 
         if (user.deletedAt) return { status: "invalid" };
         if (!user.active) return { status: "blocked" };
+        let safeClaimedIin = user.iin ?? null;
+        if (!safeClaimedIin && claimedIin) {
+          const iinOwner = await users.findByIinForUpdate(claimedIin);
+          if (!iinOwner || iinOwner.id === user.id) {
+            safeClaimedIin = claimedIin;
+          }
+        }
+        const nextProfile = {
+          fullName,
+          iin: safeClaimedIin,
+          orgUnit: orgUnit ?? user.orgUnit ?? null,
+          position: position ?? user.position ?? null,
+          tutorId: tutorId ?? user.tutorId ?? null,
+          phone: phone ?? user.phone,
+        };
+        if (
+          user.fullName !== nextProfile.fullName ||
+          (user.iin ?? null) !== nextProfile.iin ||
+          (user.orgUnit ?? null) !== nextProfile.orgUnit ||
+          (user.position ?? null) !== nextProfile.position ||
+          (user.tutorId ?? null) !== nextProfile.tutorId ||
+          user.phone !== nextProfile.phone ||
+          !user.emailVerified
+        ) {
+          const synchronized = await users.update({
+            id: user.id,
+            ...nextProfile,
+            role: user.role,
+            emailVerified: true,
+            active: user.active,
+            expectedVersion: user.version,
+            updatedAt: this.clock.now(),
+          });
+          if (!synchronized) {
+            throw new ApplicationError("conflict", "user_version_conflict");
+          }
+          user = synchronized;
+        }
         return {
           status: "authenticated",
           user: authenticatedAccount(user),
@@ -766,6 +822,9 @@ function toUserDto(user: UserRecord, revealIin = false): UserDto {
     code: user.code,
     fullName: user.fullName,
     iin: revealIin ? (user.iin ?? null) : maskIin(user.iin ?? null),
+    orgUnit: user.orgUnit ?? null,
+    position: user.position ?? null,
+    tutorId: revealIin ? (user.tutorId ?? null) : undefined,
     email: user.email,
     phone: user.phone,
     role: user.role,
@@ -784,6 +843,28 @@ function normalizeIin(value: string | null | undefined): string | null | undefin
     throw new ApplicationError("validation", "invalid_iin");
   }
   return iin;
+}
+
+function normalizeYessenovIin(value: string | null | undefined): string | null {
+  const iin = value?.trim() ?? "";
+  return /^[0-9]{12}$/.test(iin) ? iin : null;
+}
+
+function normalizeYessenovPhone(
+  value: string | null | undefined,
+): string | null {
+  const phone = normalizeYessenovText(value, 32);
+  return phone && /^[+0-9()\- .]+$/u.test(phone) ? phone : null;
+}
+
+function normalizeYessenovText(
+  value: string | null | undefined,
+  maxLength: number,
+): string | null {
+  const normalized = value?.trim().replace(/\s+/gu, " ") ?? "";
+  return normalized && Array.from(normalized).length <= maxLength
+    ? normalized
+    : null;
 }
 
 function maskIin(iin: string | null): string | null {

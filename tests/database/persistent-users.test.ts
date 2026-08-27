@@ -95,6 +95,60 @@ describe("persistent PostgreSQL users", () => {
     ).rejects.toMatchObject({ publicCode: "email_already_exists" });
   });
 
+  it("persists and refreshes Yessenov personnel claims without granting a role", async () => {
+    await expect(
+      service.authenticateYessenovIdentity({
+        subject: "database-personnel-subject",
+        email: "database-personnel@yu.edu.kz",
+        name: "Database Personnel",
+        iin: "950101450123",
+        phoneNumber: "+7 700 111 22 33",
+        tutorId: "1204",
+        orgUnit: "Information Technology",
+        position: "Engineer",
+      }),
+    ).resolves.toMatchObject({
+      status: "authenticated",
+      user: { role: "employee" },
+    });
+
+    const created = (await service.listUsers()).find(
+      (user) => user.email === "database-personnel@yu.edu.kz",
+    );
+    expect(created).toMatchObject({
+      iin: "******450123",
+      phone: "+7 700 111 22 33",
+      orgUnit: "Information Technology",
+      position: "Engineer",
+      role: "employee",
+    });
+
+    const refreshed = await service.authenticateYessenovIdentity({
+      subject: "database-personnel-subject",
+      email: "database-personnel@yu.edu.kz",
+      name: "Database Personnel",
+      iin: "950101450123",
+      phoneNumber: "+7 701 999 88 77",
+      tutorId: "1204",
+      orgUnit: "Digital Development",
+      position: "Senior Engineer",
+    });
+    expect(refreshed).toMatchObject({
+      status: "authenticated",
+      user: { role: "employee" },
+    });
+    expect(
+      (await service.listUsers()).find(
+        (user) => user.email === "database-personnel@yu.edu.kz",
+      ),
+    ).toMatchObject({
+      phone: "+7 701 999 88 77",
+      orgUnit: "Digital Development",
+      position: "Senior Engineer",
+      role: "employee",
+    });
+  });
+
   it("keeps at least one active admin under concurrent deactivation", async () => {
     const second = await service.createUser({
       email: "another-admin@example.com",

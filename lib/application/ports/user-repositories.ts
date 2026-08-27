@@ -6,6 +6,9 @@ export interface UserRecord {
   email: string;
   fullName: string;
   iin?: string | null;
+  orgUnit?: string | null;
+  position?: string | null;
+  tutorId?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -36,6 +39,9 @@ export interface InsertUserRecord {
   email: string;
   fullName: string;
   iin?: string | null;
+  orgUnit?: string | null;
+  position?: string | null;
+  tutorId?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -47,6 +53,9 @@ export interface UpdateUserRecord {
   id: string;
   fullName: string;
   iin?: string | null;
+  orgUnit?: string | null;
+  position?: string | null;
+  tutorId?: string | null;
   role: UserRole;
   phone: string | null;
   emailVerified: boolean;
@@ -73,6 +82,7 @@ export interface UserRepository {
   findByIdForUpdate(id: string): Promise<UserRecord | null>;
   findByNormalizedEmail(email: string): Promise<UserRecord | null>;
   findByNormalizedEmailForUpdate(email: string): Promise<UserRecord | null>;
+  findByIinForUpdate(iin: string): Promise<UserRecord | null>;
   insert(input: InsertUserRecord): Promise<UserRecord>;
   update(input: UpdateUserRecord): Promise<UserRecord | null>;
   softDelete(
@@ -98,6 +108,7 @@ export interface ExternalIdentityRepository {
     provider: ExternalIdentityProvider,
     subject: string,
     email: string,
+    iin?: string | null,
   ): Promise<void>;
   findUserBySubject(
     provider: ExternalIdentityProvider,

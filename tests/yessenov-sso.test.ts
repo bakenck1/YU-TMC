@@ -75,6 +75,10 @@ test("Yessenov ID token accepts only signed, verified personnel identities", asy
     name: "Employee Name",
     is_personnel: true,
     iin: "123456789012",
+    phone_number: "+7 700 123 45 67",
+    tutor_id: 1204,
+    orgunit: "Information Technology",
+    position: "Engineer",
     iat: now - 10,
     exp: now + 300,
   };
@@ -90,6 +94,10 @@ test("Yessenov ID token accepts only signed, verified personnel identities", asy
       email: "employee@yu.edu.kz",
       name: "Employee Name",
       iin: "123456789012",
+      phoneNumber: "+7 700 123 45 67",
+      tutorId: "1204",
+      orgUnit: "Information Technology",
+      position: "Engineer",
     },
   );
   for (const invalidClaims of [

@@ -101,6 +101,10 @@
       {
         "tag": "20260827170000_yessenov_sso",
         "reason": "The forward-only constraint update adds Yessenov ID as an allowed external identity provider without changing the existing table shape."
+      },
+      {
+        "tag": "20260827180000_yessenov_profile_claims",
+        "reason": "The forward-only nullable profile columns store optional Yessenov ID personnel claims without requiring backfill or rewriting existing users."
       }
     ]
   },

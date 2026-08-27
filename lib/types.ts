@@ -61,6 +61,9 @@ export interface AppUser {
   code: string;
   fullName: string;
   iin?: string | null;
+  orgUnit?: string | null;
+  position?: string | null;
+  tutorId?: string | null;
   role: UserRole;
   email: string;
   phone: string;

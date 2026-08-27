@@ -27,6 +27,10 @@ YESSENOV_OIDC_REDIRECT_URI=https://<inventory-host>/api/auth/yessenov/callback
 The callback accepts only verified `@yu.edu.kz` employee identities. It links
 an existing local profile by normalized email, then permanently identifies the
 account by the provider's `sub` value. A deactivated local user remains blocked.
+On each successful login, verified `phone_number`, `orgunit`, `position`, and
+`tutor_id` claims refresh the local personnel profile. A valid IIN is filled
+only when no other active user owns it. Provider claims never change the local
+application role.
 
 ## Personnel JSON import
 

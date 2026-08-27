@@ -52,6 +52,10 @@ export interface YessenovIdentity {
   email: string;
   name: string;
   iin: string | null;
+  phoneNumber: string | null;
+  tutorId: string | null;
+  orgUnit: string | null;
+  position: string | null;
 }
 
 interface IdTokenHeader {
@@ -75,6 +79,10 @@ interface IdTokenClaims {
   middle_name?: unknown;
   is_personnel?: unknown;
   iin?: unknown;
+  phone_number?: unknown;
+  tutor_id?: unknown;
+  orgunit?: unknown;
+  position?: unknown;
 }
 
 interface JwkSet {
@@ -285,10 +293,20 @@ export async function verifyYessenovIdToken(
   if (name.length < 2 || name.length > 120) {
     throw new Error("Invalid Yessenov ID profile");
   }
-  const iin = typeof claims.iin === "string" && /^[0-9]{12}$/.test(claims.iin)
-    ? claims.iin
+  const rawIin = typeof claims.iin === "string" ? claims.iin.trim() : "";
+  const iin = /^[0-9]{12}$/.test(rawIin)
+    ? rawIin
     : null;
-  return { subject, email, name, iin };
+  return {
+    subject,
+    email,
+    name,
+    iin,
+    phoneNumber: identityPhoneNumber(claims.phone_number),
+    tutorId: identityTutorId(claims.tutor_id),
+    orgUnit: identityProfileText(claims.orgunit, 255),
+    position: identityProfileText(claims.position, 255),
+  };
 }
 
 async function yessenovSigningKey(kid: string, fetcher: typeof fetch) {
@@ -341,6 +359,30 @@ function identityName(claims: IdTokenClaims): string {
     .filter(Boolean)
     .join(" ")
     .replace(/\s+/gu, " ");
+}
+
+function identityPhoneNumber(value: unknown): string | null {
+  const phone = identityProfileText(value, 32);
+  return phone && /^[+0-9()\- .]+$/u.test(phone) ? phone : null;
+}
+
+function identityTutorId(value: unknown): string | null {
+  if (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+  ) {
+    return String(value);
+  }
+  return identityProfileText(value, 64);
+}
+
+function identityProfileText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/\s+/gu, " ");
+  return normalized && Array.from(normalized).length <= maxLength
+    ? normalized
+    : null;
 }
 
 function cacheLifetimeMs(cacheControl: string | null) {

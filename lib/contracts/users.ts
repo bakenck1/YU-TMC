@@ -12,6 +12,10 @@ export interface UserDto {
   fullName: string;
   /** Full value is returned only by authenticated administrator-management APIs. */
   iin?: string | null;
+  orgUnit?: string | null;
+  position?: string | null;
+  /** Provider-side personnel identifier, exposed only by management APIs. */
+  tutorId?: string | null;
   email: string;
   phone: string | null;
   role: UserRole;

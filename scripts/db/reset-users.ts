@@ -51,7 +51,11 @@ async function main() {
         `update "yu_inventory"."users"
             set email = 'deleted-' || id::text || '@deleted.local',
                 full_name = 'Deleted account',
+                iin = null,
                 phone = null,
+                org_unit = null,
+                position = null,
+                tutor_id = null,
                 email_verified = false,
                 is_active = false,
                 deactivated_at = coalesce(deactivated_at, now()),

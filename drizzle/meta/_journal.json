@@ -197,6 +197,13 @@
       "when": 1787842800000,
       "tag": "20260827170000_yessenov_sso",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787846400000,
+      "tag": "20260827180000_yessenov_profile_claims",
+      "breakpoints": true
     }
   ]
 }
