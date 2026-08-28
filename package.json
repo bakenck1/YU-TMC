@@ -22,7 +22,7 @@
     "test:database:local": "node scripts/test-database-local.mjs",
     "security:check": "node scripts/security-check.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
-    "dockflow:key": "node --conditions=react-server --import tsx scripts/manage-dockflow-key.ts",
+    "dockflow:key:register": "node --conditions=react-server --import tsx scripts/manage-dockflow-key.ts",
     "worker:tmc-push": "node --conditions=react-server --import tsx scripts/process-tmc-push-outbox.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",

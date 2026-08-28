@@ -111,9 +111,9 @@ export default function DockflowIntegrationSettings() {
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-5 text-sky-900">
-        Секретные ключи не передаются в браузер. Выпуск и ротация выполняются
-        только администратором сервера через команду <code>npm run dockflow:key</code>;
-        здесь отображаются только безопасные метаданные.
+        Исходный ключ создаётся и хранится только в секрет-хранилище backend Докфлоу.
+        YU Inventory получает только SHA-256-хеш; здесь отображаются только безопасные
+        метаданные, а сам ключ недоступен даже администратору приложения.
       </div>
 
       <div className="rounded-xl bg-zinc-50 p-4 text-sm">

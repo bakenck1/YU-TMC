@@ -42,24 +42,29 @@ Every response is UTF-8 JSON, contains `requestId`, and includes `Cache-Control:
 
 ## Key lifecycle and operations
 
-An administrator issues, rotates or revokes the single active key under **Settings → API integrations → Dockflow**. A generated key contains at least 256 bits of entropy and is shown once. PostgreSQL stores only its visible prefix and SHA-256 digest. Rotation revokes the previous key in the same transaction.
-
-For initial deployment only, `DOCKFLOW_API_KEY` may provide a secret from the deployment secret store. Remove it after the database-backed key has been securely delivered.
-
-Raw database-backed keys never pass through the Inventory browser UI. Issue the
-first key from a trusted SSH session (or use `--action=rotate` later):
+The raw key is generated with at least 256 bits of entropy and stored only in
+the Dockflow backend secret store. It must never be sent to YU Inventory,
+placed in either application's browser code, or shown to an application
+administrator. Dockflow's deployment automation computes the SHA-256 digest
+and the non-secret 16-character display prefix inside the secret-store runtime.
+Only those two derived values are registered in Inventory:
 
 ```bash
-npm run dockflow:key -- \
+npm run dockflow:key:register -- \
   --target=production \
   --actor-email=administrator@yu.edu.kz \
-  --action=create
+  --key-sha256=<64-hex-character-digest> \
+  --key-prefix=<16-character-df_live_prefix>
 ```
 
-The command prints the key once. Put it only in the Dockflow backend secret
-store and send it in the server-to-server `X-API-Key` header. Inventory stores
-only its SHA-256 hash and display prefix. Do not put it in browser code,
-`NEXT_PUBLIC_*`, Git, screenshots, chat, or client-side environment files.
+The digest and prefix are not secrets and may be transported by deployment
+automation. The registration command never accepts or prints the raw key. It
+atomically revokes any previous active digest. PostgreSQL stores only the
+SHA-256 digest and display prefix. The Dockflow backend reads the raw value from
+its secret store and sends it only in the server-to-server `X-API-Key` header.
+Do not put the raw value in `NEXT_PUBLIC_*`, Git, screenshots, chat, shell
+history, logs, or client-side environment files. An Inventory administrator may
+view safe metadata and revoke the active digest, but cannot retrieve the key.
 
 The Nginx production configuration disables access logging for the exact employee endpoint because the agreed GET contract places personal data in the query string. Application audit rows contain only the request ID, time, key identifier/prefix, result, HTTP status and duration. An administrator configures retention (1–3650 days) and whether the visible key prefix is included under the Dockflow settings panel; the internal key ID remains available when the prefix is disabled. Expired rows are deleted automatically while new requests are journaled.
 

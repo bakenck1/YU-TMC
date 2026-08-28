@@ -62,24 +62,28 @@ test("Dockflow persistence never stores the clear API key", async () => {
   assert.match(migration, /"key_hash" bytea NOT NULL/);
   assert.doesNotMatch(migration, /key_secret|clear_?text|plaintext/i);
   assert.match(service, /createHash\("sha256"\)/);
-  assert.match(service, /randomBytes\(32\)/);
+  assert.match(service, /registerKeyHash/);
+  assert.doesNotMatch(service, /process\.env\.DOCKFLOW_API_KEY/);
   assert.match(service, /timingSafeEqual/);
 });
 
-test("Dockflow raw keys are issued only by the server CLI", async () => {
-  const [route, component, script, packageJson] = await Promise.all([
+test("Dockflow raw keys are never issued by Inventory or its browser UI", async () => {
+  const [route, component, script, packageJson, environmentExample] = await Promise.all([
     readFile(new URL("../app/api/admin/integrations/dockflow/key/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/DockflowIntegrationSettings.tsx", import.meta.url), "utf8"),
     readFile(new URL("../scripts/manage-dockflow-key.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(route, /export async function POST/);
   assert.doesNotMatch(
     component,
     /setSecret|clipboard\.writeText|payload\.key(?:\W|$)/,
   );
-  assert.match(script, /process\.stdout\.write\(`\$\{result\.key\}\\n`\)/);
-  assert.match(packageJson, /"dockflow:key"/);
+  assert.match(script, /registerKeyHash/);
+  assert.doesNotMatch(script, /process\.stdout|randomBytes|result\.key/);
+  assert.match(packageJson, /"dockflow:key:register"/);
+  assert.doesNotMatch(environmentExample, /DOCKFLOW_API_KEY/);
 });
 
 test("production Nginx does not log the personal-data query string", async () => {

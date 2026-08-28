@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
@@ -30,24 +30,26 @@ describe("Dockflow PostgreSQL integration", () => {
   });
 
   it("stores only the key digest and revokes rotations immediately", async () => {
-    const first = await dockflow.createKey(adminId);
-    await expect(dockflow.authorize(first.key)).resolves.toMatchObject({
-      apiKeyId: first.metadata.id,
+    const firstKey = `df_live_${"a".repeat(43)}`;
+    const first = await dockflow.registerKeyHash(adminId, keyRegistration(firstKey));
+    await expect(dockflow.authorize(firstKey)).resolves.toMatchObject({
+      apiKeyId: first.id,
     });
     const persisted = await getDatabasePool().query<{
       key_hash: Buffer;
     }>(
       `select key_hash from "yu_inventory"."dockflow_api_keys" where id = $1`,
-      [first.metadata.id],
+      [first.id],
     );
     expect(persisted.rows[0]!.key_hash).toHaveLength(32);
-    expect(persisted.rows[0]!.key_hash.equals(Buffer.from(first.key))).toBe(false);
+    expect(persisted.rows[0]!.key_hash.equals(Buffer.from(firstKey))).toBe(false);
 
-    const second = await dockflow.rotateKey(adminId);
-    await expect(dockflow.authorize(first.key)).resolves.toBeNull();
-    const authorization = await dockflow.authorize(second.key);
+    const secondKey = `df_live_${"b".repeat(43)}`;
+    const second = await dockflow.registerKeyHash(adminId, keyRegistration(secondKey));
+    await expect(dockflow.authorize(firstKey)).resolves.toBeNull();
+    const authorization = await dockflow.authorize(secondKey);
     expect(authorization).toMatchObject({
-      apiKeyId: second.metadata.id,
+      apiKeyId: second.id,
     });
     await expect(dockflow.getAuditSettings()).resolves.toEqual({
       retentionDays: 90,
@@ -83,7 +85,7 @@ describe("Dockflow PostgreSQL integration", () => {
     );
     expect(logs.rows).toEqual([{ request_id: requestId, key_prefix: null }]);
     await expect(dockflow.revokeActiveKey(adminId)).resolves.toBe(true);
-    await expect(dockflow.authorize(second.key)).resolves.toBeNull();
+    await expect(dockflow.authorize(secondKey)).resolves.toBeNull();
   });
 
   it("moves clearance from assigned through loss review to clear", async () => {
@@ -143,6 +145,13 @@ describe("Dockflow PostgreSQL integration", () => {
     });
   });
 });
+
+function keyRegistration(key: string) {
+  return {
+    keyHashSha256: createHash("sha256").update(key, "utf8").digest("hex"),
+    keyPrefix: key.slice(0, 16),
+  };
+}
 
 async function seedClearanceFixture() {
   const pool = getDatabasePool();

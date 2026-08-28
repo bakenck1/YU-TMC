@@ -2,7 +2,6 @@ import "server-only";
 
 import {
   createHash,
-  randomBytes,
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
@@ -103,17 +102,6 @@ export class DockflowService {
       return { apiKeyId: record.id, keyPrefix: record.key_prefix };
     }
 
-    const environmentKey = process.env.DOCKFLOW_API_KEY?.trim();
-    const hasManagedKey = environmentKey
-      ? (await getDatabasePool().query(`select 1 from ${TABLES.keys} limit 1`)).rowCount !== 0
-      : false;
-    if (
-      environmentKey &&
-      !hasManagedKey &&
-      safeEqual(candidateHash, hashKey(environmentKey))
-    ) {
-      return { apiKeyId: null, keyPrefix: displayPrefix(environmentKey) };
-    }
     return null;
   }
 
@@ -217,12 +205,21 @@ export class DockflowService {
     };
   }
 
-  async createKey(actorId: string): Promise<{ key: string; metadata: DockflowApiKeyMetadata }> {
-    return this.replaceKey(actorId, false);
-  }
-
-  async rotateKey(actorId: string): Promise<{ key: string; metadata: DockflowApiKeyMetadata }> {
-    return this.replaceKey(actorId, true);
+  async registerKeyHash(
+    actorId: string,
+    input: { keyHashSha256: string; keyPrefix: string },
+  ): Promise<DockflowApiKeyMetadata> {
+    if (
+      !/^[a-f0-9]{64}$/iu.test(input.keyHashSha256) ||
+      !/^df_live_[A-Za-z0-9_-]{8}$/u.test(input.keyPrefix)
+    ) {
+      throw new DockflowValidationError();
+    }
+    return this.replaceKeyHash(
+      actorId,
+      Buffer.from(input.keyHashSha256, "hex"),
+      input.keyPrefix,
+    );
   }
 
   async revokeActiveKey(actorId: string): Promise<boolean> {
@@ -307,11 +304,11 @@ export class DockflowService {
     }
   }
 
-  private async replaceKey(
+  private async replaceKeyHash(
     actorId: string,
-    rotate: boolean,
-  ): Promise<{ key: string; metadata: DockflowApiKeyMetadata }> {
-    const key = `df_live_${randomBytes(32).toString("base64url")}`;
+    keyHash: Buffer,
+    keyPrefix: string,
+  ): Promise<DockflowApiKeyMetadata> {
     const id = randomUUID();
     const client = await getDatabasePool().connect();
     try {
@@ -320,8 +317,7 @@ export class DockflowService {
         `select id, name, key_prefix, key_hash, status, created_at, last_used_at, revoked_at
            from ${TABLES.keys} where status = 'active' for update`,
       );
-      if (!rotate && active.rows[0]) throw new DockflowKeyConflictError();
-      if (rotate && active.rows[0]) {
+      if (active.rows[0]) {
         await client.query(
           `update ${TABLES.keys}
               set status = 'revoked', revoked_at = now(), revoked_by = $2
@@ -334,15 +330,15 @@ export class DockflowService {
           (id, name, key_prefix, key_hash, status, created_by)
          values ($1, 'Dockflow', $2, $3, 'active', $4)
          returning id, name, key_prefix, key_hash, status, created_at, last_used_at, revoked_at`,
-        [id, displayPrefix(key), hashKey(key), actorId],
+        [id, keyPrefix, keyHash, actorId],
       );
       await client.query(
         `insert into ${TABLES.keyEvents} (id, api_key_id, action, actor_id)
          values ($1, $2, $3, $4)`,
-        [randomUUID(), id, rotate ? "rotated" : "created", actorId],
+        [randomUUID(), id, active.rows[0] ? "rotated" : "created", actorId],
       );
       await client.query("COMMIT");
-      return { key, metadata: toKeyMetadata(inserted.rows[0]!) };
+      return toKeyMetadata(inserted.rows[0]!);
     } catch (error) {
       await rollbackQuietly(client);
       throw error;
@@ -353,7 +349,6 @@ export class DockflowService {
 }
 
 export class DockflowValidationError extends Error {}
-export class DockflowKeyConflictError extends Error {}
 
 async function readClearanceSnapshot(
   client: PoolClient,
@@ -500,10 +495,6 @@ function hashKey(value: string): Buffer {
 
 function safeEqual(first: Uint8Array, second: Uint8Array): boolean {
   return first.byteLength === second.byteLength && timingSafeEqual(first, second);
-}
-
-function displayPrefix(key: string): string {
-  return key.slice(0, 16);
 }
 
 function moneyToCents(value: string): bigint {

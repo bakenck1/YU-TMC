@@ -2,7 +2,10 @@ import "server-only";
 
 import { formatDatabaseCommandError, loadTargetEnvironment } from "@/lib/db/cli";
 import { closeDatabase, getDatabasePool } from "@/lib/db/client";
-import { parseDockflowKeyCommandArguments } from "@/lib/security/dockflow-key-command";
+import {
+  DockflowKeyCommandError,
+  parseDockflowKeyRegistrationCommandArguments,
+} from "@/lib/security/dockflow-key-command";
 import { DockflowService } from "@/lib/server/dockflow-service";
 
 interface AdministratorRow {
@@ -10,7 +13,7 @@ interface AdministratorRow {
 }
 
 async function main() {
-  const command = parseDockflowKeyCommandArguments(process.argv.slice(2));
+  const command = parseDockflowKeyRegistrationCommandArguments(process.argv.slice(2));
   loadTargetEnvironment(command.target);
 
   const administrator = await getDatabasePool().query<AdministratorRow>(
@@ -23,23 +26,28 @@ async function main() {
     [command.actorEmail],
   );
   if (administrator.rowCount !== 1 || !administrator.rows[0]) {
-    throw new Error("The exact active administrator account was not found.");
+    throw new DockflowKeyCommandError(
+      "The exact active administrator account was not found.",
+    );
   }
 
   const dockflow = new DockflowService();
-  const result = command.action === "rotate"
-    ? await dockflow.rotateKey(administrator.rows[0].id)
-    : await dockflow.createKey(administrator.rows[0].id);
+  const metadata = await dockflow.registerKeyHash(administrator.rows[0].id, {
+    keyHashSha256: command.keyHashSha256,
+    keyPrefix: command.keyPrefix,
+  });
 
   process.stderr.write(
-    "Dockflow key issued. Store the next stdout line in the Dockflow backend secret store; it cannot be recovered later.\n",
+    `Dockflow key digest registered (${metadata.keyPrefix}..., ${metadata.status}). The raw key never entered YU Inventory.\n`,
   );
-  process.stdout.write(`${result.key}\n`);
 }
 
 main()
   .catch((error: unknown) => {
-    process.stderr.write(`${formatDatabaseCommandError(error)}\n`);
+    const message = error instanceof DockflowKeyCommandError
+      ? error.message
+      : formatDatabaseCommandError(error);
+    process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   })
   .finally(async () => {
