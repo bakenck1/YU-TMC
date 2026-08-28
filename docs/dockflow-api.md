@@ -46,6 +46,21 @@ An administrator issues, rotates or revokes the single active key under **Settin
 
 For initial deployment only, `DOCKFLOW_API_KEY` may provide a secret from the deployment secret store. Remove it after the database-backed key has been securely delivered.
 
+Raw database-backed keys never pass through the Inventory browser UI. Issue the
+first key from a trusted SSH session (or use `--action=rotate` later):
+
+```bash
+npm run dockflow:key -- \
+  --target=production \
+  --actor-email=administrator@yu.edu.kz \
+  --action=create
+```
+
+The command prints the key once. Put it only in the Dockflow backend secret
+store and send it in the server-to-server `X-API-Key` header. Inventory stores
+only its SHA-256 hash and display prefix. Do not put it in browser code,
+`NEXT_PUBLIC_*`, Git, screenshots, chat, or client-side environment files.
+
 The Nginx production configuration disables access logging for the exact employee endpoint because the agreed GET contract places personal data in the query string. Application audit rows contain only the request ID, time, key identifier/prefix, result, HTTP status and duration. An administrator configures retention (1–3650 days) and whether the visible key prefix is included under the Dockflow settings panel; the internal key ID remains available when the prefix is disabled. Expired rows are deleted automatically while new requests are journaled.
 
 Before go-live, Dockflow must confirm that calls originate from its backend. If a browser flow is later requested, agree an explicit HTTPS origin allowlist and replace the long-lived browser-visible credential design before enabling CORS.

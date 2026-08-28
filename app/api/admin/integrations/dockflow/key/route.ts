@@ -1,6 +1,5 @@
 import { getApplicationServices } from "@/lib/server/application";
 import {
-  DockflowKeyConflictError,
   DockflowValidationError,
 } from "@/lib/server/dockflow-service";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -65,38 +64,6 @@ export async function PATCH(request: Request): Promise<Response> {
         ? new ApplicationError("validation", "invalid_request")
         : error,
     );
-  }
-}
-
-export async function POST(request: Request): Promise<Response> {
-  try {
-    const actor = await requirePermission(request, "legacy.settings.manage");
-    const input = await readLimitedJson(request, 1024);
-    if (
-      typeof input !== "object" ||
-      input === null ||
-      Array.isArray(input) ||
-      Object.keys(input).some((key) => key !== "rotate") ||
-      ("rotate" in input && typeof input.rotate !== "boolean")
-    ) {
-      throw new ApplicationError("validation", "invalid_request");
-    }
-    const body = input as { rotate?: boolean };
-    const result = body.rotate === true
-      ? await getApplicationServices().dockflow.rotateKey(actor.userId)
-      : await getApplicationServices().dockflow.createKey(actor.userId);
-    return Response.json(result, {
-      status: 201,
-      headers: PRIVATE_NO_STORE_HEADERS,
-    });
-  } catch (error) {
-    if (error instanceof DockflowKeyConflictError) {
-      return Response.json(
-        { error: { code: "ACTIVE_KEY_EXISTS", message: "Действующий ключ уже существует" } },
-        { status: 409, headers: PRIVATE_NO_STORE_HEADERS },
-      );
-    }
-    return adminErrorResponse(error);
   }
 }
 

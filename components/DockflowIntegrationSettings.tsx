@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, KeyRound, RefreshCw, ShieldOff } from "lucide-react";
+import { KeyRound, ShieldOff } from "lucide-react";
 
 import type {
   DockflowApiKeyMetadata,
@@ -15,10 +15,8 @@ const KEY_ENDPOINT = "/api/admin/integrations/dockflow/key";
 
 export default function DockflowIntegrationSettings() {
   const [keys, setKeys] = useState<DockflowApiKeyMetadata[]>([]);
-  const [secret, setSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [action, setAction] = useState<"create" | "rotate" | "revoke" | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retentionDays, setRetentionDays] = useState("90");
   const [includeKeyPrefix, setIncludeKeyPrefix] = useState(true);
@@ -53,39 +51,9 @@ export default function DockflowIntegrationSettings() {
     };
   }, []);
 
-  async function issue(rotate: boolean) {
-    setAction(rotate ? "rotate" : "create");
-    setError(null);
-    setSecret(null);
-    try {
-      const response = await fetch(KEY_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rotate }),
-      });
-      const payload = await response.json() as {
-        key?: string;
-        metadata?: DockflowApiKeyMetadata;
-        error?: { message?: string };
-      };
-      if (!response.ok || !payload.key || !payload.metadata) {
-        throw new Error(payload.error?.message ?? "Не удалось выпустить ключ");
-      }
-      setSecret(payload.key);
-      setKeys((current) => [payload.metadata!, ...current.map((key) =>
-        key.status === "active" ? { ...key, status: "revoked" as const } : key,
-      )]);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось выпустить ключ");
-    } finally {
-      setAction(null);
-    }
-  }
-
   async function revoke() {
-    setAction("revoke");
+    setRevoking(true);
     setError(null);
-    setSecret(null);
     try {
       const response = await fetch(KEY_ENDPOINT, { method: "DELETE" });
       if (!response.ok) throw new Error("Не удалось отозвать ключ");
@@ -96,15 +64,8 @@ export default function DockflowIntegrationSettings() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось отозвать ключ");
     } finally {
-      setAction(null);
+      setRevoking(false);
     }
-  }
-
-  async function copySecret() {
-    if (!secret) return;
-    await navigator.clipboard.writeText(secret);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
   }
 
   async function saveAuditSettings() {
@@ -149,15 +110,11 @@ export default function DockflowIntegrationSettings() {
 
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-      {secret ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">Скопируйте ключ сейчас — повторно он не показывается.</p>
-          <div className="mt-3 flex gap-2">
-            <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-white px-3 py-2 text-sm text-zinc-800">{secret}</code>
-            <Button onClick={() => void copySecret()}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Скопировано" : "Копировать"}</Button>
-          </div>
-        </div>
-      ) : null}
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-5 text-sky-900">
+        Секретные ключи не передаются в браузер. Выпуск и ротация выполняются
+        только администратором сервера через команду <code>npm run dockflow:key</code>;
+        здесь отображаются только безопасные метаданные.
+      </div>
 
       <div className="rounded-xl bg-zinc-50 p-4 text-sm">
         {loading ? <p className="text-zinc-500">Загрузка…</p> : active ? (
@@ -171,12 +128,7 @@ export default function DockflowIntegrationSettings() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {!active ? <Button variant="primary" loading={action === "create"} onClick={() => void issue(false)}><KeyRound className="h-4 w-4" />Создать ключ</Button> : (
-          <>
-            <Button variant="primary" loading={action === "rotate"} onClick={() => void issue(true)}><RefreshCw className="h-4 w-4" />Перевыпустить</Button>
-            <Button loading={action === "revoke"} onClick={() => void revoke()}><ShieldOff className="h-4 w-4" />Отозвать</Button>
-          </>
-        )}
+        {active ? <Button loading={revoking} onClick={() => void revoke()}><ShieldOff className="h-4 w-4" />Отозвать</Button> : null}
       </div>
 
       <div className="space-y-4 border-t border-black/5 pt-5">

@@ -66,6 +66,22 @@ test("Dockflow persistence never stores the clear API key", async () => {
   assert.match(service, /timingSafeEqual/);
 });
 
+test("Dockflow raw keys are issued only by the server CLI", async () => {
+  const [route, component, script, packageJson] = await Promise.all([
+    readFile(new URL("../app/api/admin/integrations/dockflow/key/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/DockflowIntegrationSettings.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/manage-dockflow-key.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(route, /export async function POST/);
+  assert.doesNotMatch(
+    component,
+    /setSecret|clipboard\.writeText|payload\.key(?:\W|$)/,
+  );
+  assert.match(script, /process\.stdout\.write\(`\$\{result\.key\}\\n`\)/);
+  assert.match(packageJson, /"dockflow:key"/);
+});
+
 test("production Nginx does not log the personal-data query string", async () => {
   const nginx = await readFile(new URL("../deploy/nginx/yu-inventory.conf", import.meta.url), "utf8");
   assert.match(
