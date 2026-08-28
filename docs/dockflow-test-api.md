@@ -45,8 +45,12 @@ unassigned remainder. The fixture values are examples, not a fixed 7/3 rule.
 
    ```powershell
    npm ci
-   npm run dev
+   npm run dev:next
    ```
+
+   `dev:next` достаточно для тестового API, потому что его фейковые данные не
+   читаются из PostgreSQL. Для запуска всего приложения вместе с локальной БД
+   используется `npm run dev`.
 
 3. Открыть в браузере `http://localhost:3000/api`.
 4. Нажать **Authorize**, вставить `dockflow-local-test-key` без слова
@@ -83,16 +87,26 @@ GitHub и запустит проверки, но сам по себе productio
 3. Дождаться зелёного workflow **Reliable test suite**.
 4. На тестовом сервере получить эту версию репозитория, задать секрет
    `DOCKFLOW_TEST_API_KEY` и остальные обязательные production-переменные.
-5. Пересобрать и запустить приложение:
+5. На сервере обновить код, пересобрать приложение и выполнить штатные
+   production-проверки:
 
    ```bash
-   docker compose --env-file /secure/path/yu-inventory.env \
-     -f docker-compose.production.yml up --build -d
+   cd /opt/yu-inventory/current
+   git pull origin master
+   npm ci
+   npm run build
+   npm run db:migrate -- --target=production
+   npm run db:import-settings -- --target=production
+   npm run db:smoke -- --target=production
+   sudo systemctl restart yu-inventory yu-inventory-push-worker
    ```
 
-6. Убедиться, что внешний HTTPS reverse proxy направляет домен на
-   `127.0.0.1:3000`. Production Compose намеренно не публикует порт напрямую в
-   интернет.
+6. Убедиться, что systemd-сервисы работают, а внешний Nginx направляет HTTPS-
+   домен на `127.0.0.1:3000`:
+
+   ```bash
+   sudo systemctl status yu-inventory yu-inventory-push-worker
+   ```
 7. Проверить снаружи:
 
    ```bash
