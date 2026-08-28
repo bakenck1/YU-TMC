@@ -19,8 +19,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
     "/reset-password",
   ].includes(pathname);
   const isPublicRoomQr = pathname.startsWith("/rooms/qr/");
+  const isPublicApiDocumentation = pathname === "/api";
 
-  if (isAuthPage || (isPublicRoomQr && (loading || !user))) {
+  if (
+    isAuthPage ||
+    isPublicApiDocumentation ||
+    (isPublicRoomQr && (loading || !user))
+  ) {
     return <div className="min-h-screen bg-background">{children}</div>;
   }
 
