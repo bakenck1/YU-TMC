@@ -1,4 +1,5 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -13,6 +14,34 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// SECURITY: allowlist of permitted attachment MIME types.
+// Arbitrary client-supplied types (e.g. "text/html") are rejected to prevent
+// stored-XSS / content-sniffing attacks if the Content-Type header is ever
+// reflected back to browsers.
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+const MAX_FILE_NAME_LENGTH = 255;
+
+function sanitizeFileName(raw: string): string {
+  // Strip path separators and control characters; collapse to a safe basename.
+  return raw
+    .replace(/[/\\]/g, "_")          // path traversal chars
+    .replace(/[\x00-\x1f\x7f]/g, "") // control characters
+    .slice(0, MAX_FILE_NAME_LENGTH)
+    || "attachment";
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -20,6 +49,8 @@ export async function GET(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
+    // SECURITY: validate UUID format before passing to domain layer.
+    if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
     const comments = await getApplicationServices().items.listComments(
       id,
       authorizationActor(user),
@@ -37,6 +68,8 @@ export async function POST(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
+    // SECURITY: validate UUID format before passing to domain layer.
+    if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
     const contentType = request.headers.get("content-type") ?? "";
     let message: unknown;
     let attachment:
@@ -48,8 +81,11 @@ export async function POST(
       const file = form.get("attachment");
       if (file instanceof File && file.size > 0) {
         if (file.size > 2 * 1024 * 1024) throw invalidAttachment();
+        // SECURITY: reject MIME types not on the allowlist. The client controls
+        // the file.type value in multipart, so we must not trust it blindly.
+        if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) throw invalidAttachment();
         attachment = {
-          fileName: file.name,
+          fileName: sanitizeFileName(file.name),
           mediaType: file.type,
           binaryData: new Uint8Array(await file.arrayBuffer()),
         };

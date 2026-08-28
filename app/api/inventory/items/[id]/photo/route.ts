@@ -91,13 +91,28 @@ function parsePhoto(value: unknown): UpdateInventoryItemPhotoInput {
   ) {
     throw invalidRequest();
   }
+  // TypeScript does not narrow body[key] after the guard above, so we extract
+  // the already-verified string into a typed local before the prefix check.
+  const imageDataUrl: string = body.imageDataUrl;
+  // SECURITY: reject data URIs that are not well-formed image data URLs.
+  // Prevents arbitrary string payloads from reaching the image processing
+  // pipeline and reduces the attack surface for content injection.
+  const ALLOWED_DATA_URL_PREFIXES = [
+    "data:image/jpeg;base64,",
+    "data:image/png;base64,",
+    "data:image/webp;base64,",
+  ];
+  if (!ALLOWED_DATA_URL_PREFIXES.some((prefix) => imageDataUrl.startsWith(prefix))) {
+    throw invalidRequest();
+  }
   return {
     version: body.version as number,
-    imageDataUrl: body.imageDataUrl,
+    imageDataUrl,
     width: body.width as number,
     height: body.height as number,
   };
 }
+
 
 function assertId(id: string) {
   if (!isUuid(id)) {

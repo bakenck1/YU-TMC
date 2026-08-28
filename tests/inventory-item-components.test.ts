@@ -125,6 +125,22 @@ test("employee sees every linked item because all staff can view the full regist
   assert.deepEqual(result.map((value) => value.id), [IDS[1], other.id]);
 });
 
+test("item reads hide an inaccessible existing item as not found", async () => {
+  const service = createService({
+    findItemById: async () => item(IDS[0], "employee-2"),
+  });
+
+  await assert.rejects(
+    service.findItem(IDS[0], { userId: "employee-1", role: "employee" }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "kind" in error &&
+      error.kind === "not_found" &&
+      "publicCode" in error &&
+      error.publicCode === "item_not_found",
+  );
+});
+
 test("removes the canonical relation and records before-value audits", async () => {
   const records = [item(IDS[0]), item(IDS[1])];
   let deleted: Record<string, unknown> | undefined;

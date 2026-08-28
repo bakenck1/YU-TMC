@@ -7,7 +7,10 @@ import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { validationError } from "@/lib/domain/application-error";
-import { requirePermission } from "@/lib/server/security/request-user";
+import {
+  requireCurrentUser,
+  requirePermission,
+} from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +21,10 @@ export async function GET(request: Request) {
 
   const headers = rateLimitHeaders(apiLimit);
   try {
+    // SECURITY: settings endpoint requires an authenticated session.
+    // Previously this GET was unauthenticated — any request could read
+    // system configuration (integration keys, SMTP, feature flags).
+    await requireCurrentUser(request);
     return Response.json(await getApplicationServices().settings.get(), {
       headers,
     });

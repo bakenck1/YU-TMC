@@ -137,7 +137,10 @@ export class InventoryItemService {
             value.roomResponsibleId === actor.userId)
         )
       ) {
-        throw forbidden();
+        // Do not reveal whether an item ID exists to a caller outside its
+        // visibility scope. Item detail reads use the same public result for
+        // missing and inaccessible resources.
+        throw itemNotFound();
       }
       return value;
     });
@@ -1549,8 +1552,14 @@ function assertItemReadable(
         item.roomResponsibleId === actor.userId)
     )
   ) {
-    throw forbidden();
+    // Read-only item subresources (comments, components, operations and
+    // attachments) must not turn an existing foreign item into an oracle.
+    throw itemNotFound();
   }
+}
+
+function itemNotFound() {
+  return new ApplicationError("not_found", "item_not_found");
 }
 
 async function appendComponentAudits(

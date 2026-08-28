@@ -23,7 +23,7 @@ const OTHER_ATTACHMENT_ID = "66666666-6666-4666-8666-666666666666";
 const EMPLOYEE_ID = "77777777-7777-4777-8777-777777777777";
 const OTHER_EMPLOYEE_ID = "88888888-8888-4888-8888-888888888888";
 
-test("an employee cannot download a known attachment from an unassigned parent item", async () => {
+test("an employee cannot discover a known attachment below an unassigned parent item", async () => {
   let attachmentLookups = 0;
   const service = createService({
     findItemById: async () => inventoryItem({ responsibleId: OTHER_EMPLOYEE_ID }),
@@ -38,7 +38,7 @@ test("an employee cannot download a known attachment from an unassigned parent i
       userId: EMPLOYEE_ID,
       role: "employee",
     }),
-    forbidden,
+    itemNotFound,
   );
   assert.equal(
     attachmentLookups,
@@ -280,8 +280,8 @@ function applicationError(
     (publicCode === undefined || error.publicCode === publicCode);
 }
 
-const forbidden = (error: unknown) =>
-  applicationError(error, "forbidden", "forbidden");
+const itemNotFound = (error: unknown) =>
+  applicationError(error, "not_found", "item_not_found");
 const attachmentNotFound = (error: unknown) =>
   applicationError(error, "not_found", "attachment_not_found");
 const validationError = (error: unknown) =>

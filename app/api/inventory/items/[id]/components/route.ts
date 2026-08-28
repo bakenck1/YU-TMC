@@ -1,4 +1,5 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
@@ -17,6 +18,8 @@ export async function GET(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
+    // SECURITY: validate UUID format before passing to domain layer.
+    if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
     const components = await getApplicationServices().items.listComponents(
       id,
       authorizationActor(user),
@@ -49,6 +52,8 @@ async function mutateComponents(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
+    // SECURITY: validate UUID format before passing to domain layer.
+    if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
     const body = await readLimitedJson(request);
     if (
       !body ||

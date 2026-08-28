@@ -81,6 +81,15 @@ function parseCreate(
     !Number.isInteger(photo.width) ||
     !Number.isInteger(photo.height)
   )) throw invalidRequest();
+  // SECURITY: reject data URIs that are not well-formed image data URLs.
+  const ALLOWED_DATA_URL_PREFIXES = [
+    "data:image/jpeg;base64,",
+    "data:image/png;base64,",
+    "data:image/webp;base64,",
+  ];
+  if (photo && !ALLOWED_DATA_URL_PREFIXES.some((prefix) => (photo.imageDataUrl as string).startsWith(prefix))) {
+    throw invalidRequest();
+  }
   return {
     name: body.name,
     category: body.category as "electronics" | "furniture",

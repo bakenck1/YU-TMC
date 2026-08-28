@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 
 import { ApplicationError } from "@/lib/domain/application-error";
+import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -20,6 +21,11 @@ export async function GET(
   try {
     const user = await requireCurrentUser(request);
     const { id, commentId, attachmentId } = await context.params;
+    // SECURITY: validate all three UUID path params before passing to domain
+    // layer to prevent unexpected inputs reaching the database.
+    if (!isUuid(id) || !isUuid(commentId) || !isUuid(attachmentId)) {
+      throw new ApplicationError("validation", "invalid_id");
+    }
     const attachment = await getApplicationServices().items.findCommentAttachment(
       id,
       commentId,
@@ -31,6 +37,8 @@ export async function GET(
         "cache-control": "private, no-store",
         "content-disposition": attachmentDisposition(attachment.fileName),
         "content-length": String(attachment.sizeBytes),
+        // Always serve as octet-stream — never reflect the stored mediaType
+        // back to the browser to prevent content-type sniffing attacks.
         "content-type": "application/octet-stream",
         "x-content-type-options": "nosniff",
       },
