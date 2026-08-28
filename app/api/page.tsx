@@ -8,9 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function DockflowApiPage() {
-  return (
-    <main className="min-h-screen bg-white">
-      <DockflowSwaggerUi />
-    </main>
-  );
+  return <DockflowSwaggerUi />;
 }
