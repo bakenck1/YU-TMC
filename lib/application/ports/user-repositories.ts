@@ -11,6 +11,7 @@ export interface UserRecord {
   tutorId?: string | null;
   role: UserRole;
   phone: string | null;
+  defaultRoomId?: string | null;
   emailVerified: boolean;
   active: boolean;
   version: number;
@@ -44,6 +45,7 @@ export interface InsertUserRecord {
   tutorId?: string | null;
   role: UserRole;
   phone: string | null;
+  defaultRoomId?: string | null;
   emailVerified: boolean;
   active: boolean;
   createdAt: Date;
@@ -58,6 +60,7 @@ export interface UpdateUserRecord {
   tutorId?: string | null;
   role: UserRole;
   phone: string | null;
+  defaultRoomId?: string | null;
   emailVerified: boolean;
   active: boolean;
   expectedVersion: number;
@@ -91,6 +94,7 @@ export interface UserRepository {
     deletedAt: Date,
   ): Promise<UserRecord | null>;
   countActiveAdminsForUpdate(): Promise<number>;
+  isActiveRoom(id: string): Promise<boolean>;
 }
 
 export type ExternalIdentityProvider = "google" | "yessenov";

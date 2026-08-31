@@ -624,6 +624,7 @@ export class UserService {
     const fullName = requireName(input.fullName);
     const iin = normalizeIin(input.iin);
     const phone = normalizePhone(input.phone);
+    const defaultRoomId = normalizeDefaultRoomId(input.defaultRoomId);
     const initialPassword = normalizeInitialPassword(input.initialPassword);
     const passwordHash = initialPassword
       ? await this.passwordHasher.hash(initialPassword)
@@ -641,6 +642,9 @@ export class UserService {
       if (!canManageUser(actor.role, { nextRole: input.role })) {
         throw new ApplicationError("forbidden", "forbidden");
       }
+      if (defaultRoomId && !(await users.isActiveRoom(defaultRoomId))) {
+        throw new ApplicationError("validation", "invalid_default_room");
+      }
       if (await users.findByNormalizedEmail(email)) {
         throw new ApplicationError("conflict", "email_already_exists");
       }
@@ -650,6 +654,7 @@ export class UserService {
         fullName,
         iin,
         phone,
+        defaultRoomId,
         role: input.role,
         emailVerified: input.emailVerified === true,
         active: input.active === true,
@@ -675,6 +680,10 @@ export class UserService {
     const fullName = requireName(input.fullName);
     const iin = normalizeIin(input.iin);
     const phone = normalizePhone(input.phone);
+    const defaultRoomId =
+      input.defaultRoomId === undefined
+        ? undefined
+        : normalizeDefaultRoomId(input.defaultRoomId);
     const initialPassword = normalizeInitialPassword(input.initialPassword);
     const passwordHash = initialPassword
       ? await this.passwordHasher.hash(initialPassword)
@@ -691,6 +700,8 @@ export class UserService {
       if (!current || current.deletedAt) {
         throw new ApplicationError("not_found", "user_not_found");
       }
+      const nextDefaultRoomId =
+        defaultRoomId === undefined ? (current.defaultRoomId ?? null) : defaultRoomId;
       if (
         !canManageUser(actor.role, {
           currentRole: current.role,
@@ -698,6 +709,9 @@ export class UserService {
         })
       ) {
         throw new ApplicationError("forbidden", "forbidden");
+      }
+      if (nextDefaultRoomId && !(await users.isActiveRoom(nextDefaultRoomId))) {
+        throw new ApplicationError("validation", "invalid_default_room");
       }
       if (
         current.role === "admin" &&
@@ -734,6 +748,7 @@ export class UserService {
         fullName,
         iin,
         phone,
+        defaultRoomId: nextDefaultRoomId,
         role: input.role,
         emailVerified: input.emailVerified,
         active: input.active,
@@ -827,6 +842,7 @@ function toUserDto(user: UserRecord, revealIin = false): UserDto {
     tutorId: revealIin ? (user.tutorId ?? null) : undefined,
     email: user.email,
     phone: user.phone,
+    defaultRoomId: user.defaultRoomId ?? null,
     role: user.role,
     emailVerified: user.emailVerified,
     active: user.active,
@@ -843,6 +859,15 @@ function normalizeIin(value: string | null | undefined): string | null | undefin
     throw new ApplicationError("validation", "invalid_iin");
   }
   return iin;
+}
+
+function normalizeDefaultRoomId(value: string | null | undefined): string | null {
+  if (value === undefined || value === null || value.trim() === "") return null;
+  const id = value.trim().toLowerCase();
+  if (!isUuid(id)) {
+    throw new ApplicationError("validation", "invalid_default_room");
+  }
+  return id;
 }
 
 function normalizeYessenovIin(value: string | null | undefined): string | null {

@@ -27,6 +27,11 @@ export function classifyTmcQrResolution(
   if (resolution.target.kind !== "item") {
     return { kind: "error", reason: "not_item" };
   }
+  // Local groups have their own quantity-aware transfer workflow. Treating a
+  // local label as the whole 1C item would move more stock than was scanned.
+  if (resolution.target.localGroup) {
+    return { kind: "error", reason: "invalid_code" };
+  }
   if (resolution.target.status !== "active") {
     return { kind: "error", reason: "item_unavailable" };
   }

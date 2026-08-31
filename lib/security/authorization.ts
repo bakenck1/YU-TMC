@@ -30,6 +30,7 @@ const ROUTE_PERMISSIONS = [
   ["/settings", "legacy.settings.manage"],
   ["/profile", "legacy.dashboard.read"],
   ["/users", "legacy.users.read"],
+  ["/local-barcodes", "legacy.items.read"],
   ["/items", "legacy.items.read"],
   ["/transfers", "inventory.transfer.request_self"],
   ["/tmc", "inventory.tmc.transfer_request.create"],

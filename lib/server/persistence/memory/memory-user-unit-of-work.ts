@@ -211,6 +211,10 @@ class MemoryUserRepository implements UserRepository {
       (user) => user.role === "admin" && user.active && !user.deletedAt,
     ).length;
   }
+
+  async isActiveRoom(): Promise<boolean> {
+    return true;
+  }
 }
 
 class MemoryExternalIdentityRepository implements ExternalIdentityRepository {

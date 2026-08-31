@@ -58,6 +58,9 @@ function parseCreateUser(value: unknown): CreateUserInput {
     (input.phone !== undefined &&
       input.phone !== null &&
       typeof input.phone !== "string") ||
+    (input.defaultRoomId !== undefined &&
+      input.defaultRoomId !== null &&
+      typeof input.defaultRoomId !== "string") ||
     (input.emailVerified !== undefined &&
       typeof input.emailVerified !== "boolean") ||
     (input.active !== undefined && typeof input.active !== "boolean") ||
@@ -72,6 +75,7 @@ function parseCreateUser(value: unknown): CreateUserInput {
     email: input.email,
     role: input.role as CreateUserInput["role"],
     phone: input.phone as string | null | undefined,
+    defaultRoomId: input.defaultRoomId as string | null | undefined,
     emailVerified: input.emailVerified as boolean | undefined,
     active: input.active as boolean | undefined,
     initialPassword: input.initialPassword as string | undefined,

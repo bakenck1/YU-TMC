@@ -41,6 +41,7 @@ interface UserRow extends QueryResultRow {
   tutor_id: string | null;
   role: UserRecord["role"];
   phone: string | null;
+  default_room_id: string | null;
   email_verified: boolean;
   is_active: boolean;
   version: number;
@@ -167,16 +168,16 @@ class PostgresUserRepository implements UserRepository {
       const result = await this.source.query<UserRow>(
         `insert into ${USERS}
            (id, code, email, full_name, iin, org_unit, "position", tutor_id,
-            role, phone, email_verified,
+            role, phone, default_room_id, email_verified,
             is_active, created_at, updated_at, deactivated_at)
          values (
            $1,
            'USR-' || lpad(nextval('${CODE_SEQUENCE}')::text, 6, '0'),
-           $2, $3, $4, $5, $6, $7, $8, $9::varchar, $10::boolean, $11::boolean,
-           $12::timestamptz, $12::timestamptz,
+           $2, $3, $4, $5, $6, $7, $8, $9::varchar, $10::uuid, $11::boolean, $12::boolean,
+           $13::timestamptz, $13::timestamptz,
            case
-             when $11::boolean then null
-             else $12::timestamptz
+             when $12::boolean then null
+             else $13::timestamptz
            end
          )
          returning *`,
@@ -190,6 +191,7 @@ class PostgresUserRepository implements UserRepository {
           input.tutorId ?? null,
           input.role,
           input.phone,
+          input.defaultRoomId ?? null,
           input.emailVerified,
           input.active,
           input.createdAt,
@@ -228,16 +230,17 @@ class PostgresUserRepository implements UserRepository {
            tutor_id = coalesce($6, tutor_id),
            role = $7,
            phone = $8,
-           email_verified = $9,
-           is_active = $10,
-           updated_at = $11,
+           default_room_id = $9,
+           email_verified = $10,
+           is_active = $11,
+           updated_at = $12,
            deactivated_at = case
-             when $10 then null
-             else coalesce(deactivated_at, $11)
+             when $11 then null
+             else coalesce(deactivated_at, $12)
            end,
            version = version + 1
        where id = $1
-         and version = $12
+         and version = $13
          and deleted_at is null
        returning *`,
       [
@@ -249,6 +252,7 @@ class PostgresUserRepository implements UserRepository {
         input.tutorId ?? null,
         input.role,
         input.phone,
+        input.defaultRoomId ?? null,
         input.emailVerified,
         input.active,
         input.updatedAt,
@@ -300,6 +304,14 @@ class PostgresUserRepository implements UserRepository {
        for update`,
     );
     return result.rowCount ?? result.rows.length;
+  }
+
+  async isActiveRoom(id: string): Promise<boolean> {
+    const result = await this.source.query(
+      `select 1 from "yu_inventory"."rooms" where id = $1 and status = 'active'`,
+      [id],
+    );
+    return (result.rowCount ?? 0) === 1;
   }
 }
 
@@ -510,6 +522,7 @@ function mapUser(row: UserRow): UserRecord {
     tutorId: row.tutor_id,
     role: row.role,
     phone: row.phone,
+    defaultRoomId: row.default_room_id,
     emailVerified: row.email_verified,
     active: row.is_active,
     version: row.version,

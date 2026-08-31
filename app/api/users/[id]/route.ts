@@ -67,6 +67,9 @@ function parseUpdateUser(value: unknown): UpdateUserInput {
     (input.phone !== undefined &&
       input.phone !== null &&
       typeof input.phone !== "string") ||
+    (input.defaultRoomId !== undefined &&
+      input.defaultRoomId !== null &&
+      typeof input.defaultRoomId !== "string") ||
     typeof input.emailVerified !== "boolean" ||
     typeof input.active !== "boolean" ||
     typeof input.version !== "number" ||
@@ -82,6 +85,7 @@ function parseUpdateUser(value: unknown): UpdateUserInput {
     iin: input.iin as string | null | undefined,
     role: input.role as UpdateUserInput["role"],
     phone: input.phone as string | null | undefined,
+    defaultRoomId: input.defaultRoomId as string | null | undefined,
     emailVerified: input.emailVerified,
     active: input.active,
     version: input.version,

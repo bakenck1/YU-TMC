@@ -76,6 +76,8 @@ export default async function ItemPage({
         rooms={rooms}
         initialComponents={components}
         canManageComponents={canManageComponents}
+        actorId={user.userId}
+        actorRole={user.role}
       />
       {user.role === "admin" || user.role === "employee" ? (
         <Wrapper width="full" responsive={{ at: "md", display: "inline-flex", width: "auto" }}>

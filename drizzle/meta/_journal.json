@@ -211,6 +211,13 @@
       "when": 1788177600000,
       "tag": "20260831120000_remove_dockflow_integration",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788181200000,
+      "tag": "20260831130000_local_item_barcodes",
+      "breakpoints": true
     }
   ]
 }

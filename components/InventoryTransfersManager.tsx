@@ -62,6 +62,10 @@ export default function InventoryTransfersManager() {
       if (!response.ok || body.resolution?.status !== "resolved" || body.resolution.target?.kind !== "item") {
         throw new Error(body.error ?? "item_not_found");
       }
+      if (body.resolution.target.localGroup) {
+        router.push(`/local-barcodes/${body.resolution.target.localGroup.id}`);
+        return;
+      }
       setScanResult(body.resolution.target);
     } catch {
       setMessage(t("transfers.itemCodeUnavailable"));

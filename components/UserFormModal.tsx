@@ -33,7 +33,13 @@ export interface UserFormModalProps {
   onSave: (values: UserFormValues) => Promise<void>;
 }
 
-export default function UserFormModal({ user, roleOptions, suggestedCode, onClose, onSave }: UserFormModalProps) {
+export default function UserFormModal({
+  user,
+  roleOptions,
+  suggestedCode,
+  onClose,
+  onSave,
+}: UserFormModalProps) {
   const { t } = useAppSettings();
   const [saving, setSaving] = useState(false);
   const [values, setValues] = useState<UserFormValues>({
@@ -69,8 +75,12 @@ export default function UserFormModal({ user, roleOptions, suggestedCode, onClos
     <Dialog labelledBy="user-form-title" onDismiss={onClose} size="lg">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white px-5 py-4 sm:px-6">
         <div>
-          <h2 id="user-form-title" className="text-lg font-semibold text-zinc-900">{user ? t("users.editTitle") : t("users.createTitle")}</h2>
-          <p className="mt-0.5 text-sm text-zinc-400">{user ? t("users.editSubtitle") : t("users.createSubtitle")}</p>
+          <h2 id="user-form-title" className="text-lg font-semibold text-zinc-900">
+            {user ? t("users.editTitle") : t("users.createTitle")}
+          </h2>
+          <p className="mt-0.5 text-sm text-zinc-400">
+            {user ? t("users.editSubtitle") : t("users.createSubtitle")}
+          </p>
         </div>
         <IconButton label={t("common.close")} icon={X} onClick={onClose} />
       </header>
@@ -93,6 +103,7 @@ export default function UserFormModal({ user, roleOptions, suggestedCode, onClos
             options={roleOptions.map((role) => ({ value: role, label: t(USER_ROLE_LABEL_KEYS[role]) }))}
           />
         </Wrapper>
+
         <Wrapper display="block" margin={{ top: "md" }}>
           <TextField
             type="password"

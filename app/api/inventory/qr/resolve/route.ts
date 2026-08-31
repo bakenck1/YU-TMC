@@ -21,12 +21,58 @@ export async function GET(request: Request) {
     const targetInput = url.searchParams.get("target");
     const target =
       targetInput === "item" || targetInput === "room" ? targetInput : "any";
+    if (kind !== "qr" && target !== "room") {
+      const localGroup = await getApplicationServices().localBarcodes.resolveBarcode(
+        value,
+        authorizationActor(user),
+      );
+      if (localGroup) {
+        return Response.json({
+          resolution: {
+            status: localGroup.status === "cancelled" ? "cancelled" : "resolved",
+            canonicalKey: localGroup.localBarcode,
+            format: "legacy_raw",
+            qrStatus: localGroup.status === "cancelled" ? "revoked" : "active",
+            target: {
+              kind: "item",
+              id: localGroup.itemId,
+              status: "active",
+              title: localGroup.itemName,
+              buildingName: localGroup.location.buildingName,
+              roomDesignation: localGroup.location.roomDesignation,
+              inventoryNumber: localGroup.originalBarcode,
+              responsibleName: localGroup.responsible.fullName,
+              isAssigned: true,
+              isCurrentUserResponsible: localGroup.responsible.id === user.userId,
+              localGroup: {
+                id: localGroup.id,
+                localBarcode: localGroup.localBarcode,
+                originalBarcode: localGroup.originalBarcode,
+                quantity: localGroup.quantity,
+                transferredAt: localGroup.transferredAt,
+                status: localGroup.status,
+              },
+            },
+          },
+        });
+      }
+    }
     const resolution = await getApplicationServices().qr.resolve(
       value,
       authorizationActor(user),
       kind,
       target,
     );
+    if (resolution.status === "resolved" && resolution.target?.kind === "item") {
+      try {
+        resolution.distribution = await getApplicationServices().localBarcodes.getDistribution(
+          resolution.target.id,
+          authorizationActor(user),
+        );
+      } catch (error) {
+        if (!(error instanceof ApplicationError && (error.kind === "not_found" || error.kind === "forbidden"))) throw error;
+      }
+    }
     return Response.json({ resolution });
   } catch (error) {
     return error instanceof ApplicationError

@@ -67,6 +67,7 @@ export interface AppUser {
   role: UserRole;
   email: string;
   phone: string;
+  defaultRoomId?: string | null;
   addedAt: string;
   emailVerified: boolean;
   active: boolean;

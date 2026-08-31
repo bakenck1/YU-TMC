@@ -145,6 +145,7 @@ function parseResolutionBody(body: unknown): QrResolutionDto | null {
       "resolved",
       "revoked",
       "unissued_system_code",
+      "cancelled",
       "unknown",
     ]) ||
     typeof resolution.canonicalKey !== "string" ||

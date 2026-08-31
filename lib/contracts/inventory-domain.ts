@@ -214,6 +214,7 @@ export const AUDIT_SUBJECT_KINDS = [
   "deviation_decision",
   "notification",
   "service_request",
+  "local_item_group",
 ] as const;
 export type AuditSubjectKind = (typeof AUDIT_SUBJECT_KINDS)[number];
 

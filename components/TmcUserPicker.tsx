@@ -24,9 +24,11 @@ const ROLE_LABEL_KEYS = {
 export default function TmcUserPicker({
   value,
   onChange,
+  employeeOnly = false,
 }: {
   value: TmcOperationUserDto | null;
   onChange: (user: TmcOperationUserDto | null) => void;
+  employeeOnly?: boolean;
 }) {
   const { t } = useAppSettings();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -55,17 +57,22 @@ export default function TmcUserPicker({
         onState: (state) => {
           setSearchState(state);
           setActiveIndex(
-            state.status === "ready" && state.users.length > 0 ? 0 : -1,
+            state.status === "ready" &&
+              state.users.some((user) => !employeeOnly || user.role === "employee")
+              ? 0
+              : -1,
           );
         },
       }),
-    [],
+    [employeeOnly],
   );
   useEffect(() => {
     if (open) controllerRef.current?.search(query);
     else controllerRef.current?.reset();
   }, [open, query]);
-  const users = searchState.status === "ready" ? searchState.users : [];
+  const users = searchState.status === "ready"
+    ? searchState.users.filter((user) => !employeeOnly || user.role === "employee")
+    : [];
   const activeUser = activeIndex >= 0 ? users[activeIndex] : undefined;
   const activeOptionId = open && activeUser
     ? `${listboxId}-${activeUser.id}`

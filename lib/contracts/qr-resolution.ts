@@ -10,6 +10,7 @@ export type QrResolutionStatus =
   | "resolved"
   | "revoked"
   | "unissued_system_code"
+  | "cancelled"
   | "unknown";
 
 export interface QrResolutionDto {
@@ -28,5 +29,14 @@ export interface QrResolutionDto {
       responsibleName?: string | null;
       isAssigned: boolean;
       isCurrentUserResponsible?: boolean;
+      localGroup?: {
+        id: string;
+        localBarcode: string;
+        originalBarcode: string;
+        quantity: number;
+        transferredAt: string;
+        status: "active" | "cancelled";
+      };
   } | null;
+  distribution?: import("@/lib/contracts/local-barcodes").LocalBarcodeDistributionDto;
 }

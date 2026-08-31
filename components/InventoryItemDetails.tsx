@@ -39,6 +39,7 @@ import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog"
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
 import InventoryOverviewRow from "@/components/InventoryOverviewRow";
+import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
 import {
   localizeItemError,
   operationDetail,
@@ -46,6 +47,7 @@ import {
   responseErrorCode,
 } from "@/components/InventoryItemDetailsPresentation";
 import { translateCampusBuilding } from "@/lib/i18n";
+import type { UserRole } from "@/lib/contracts/users";
 
 export default function InventoryItemDetails({
   initialItem,
@@ -60,6 +62,8 @@ export default function InventoryItemDetails({
   rooms,
   initialComponents,
   canManageComponents,
+  actorId,
+  actorRole,
 }: {
   initialItem: InventoryItemDto;
   canEditContent: boolean;
@@ -73,6 +77,8 @@ export default function InventoryItemDetails({
   rooms: Array<RoomDto & { buildingName: string }>;
   initialComponents: InventoryItemDto[];
   canManageComponents: boolean;
+  actorId: string;
+  actorRole: UserRole;
 }) {
   const { language, locale, t } = useAppSettings();
   const router = useRouter();
@@ -1019,6 +1025,12 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
           </dl>
         </section>
+
+        <LocalBarcodeDistributionPanel
+          itemId={item.id}
+          actorId={actorId}
+          actorRole={actorRole}
+        />
 
         <InventoryItemComposition
           key={item.id}

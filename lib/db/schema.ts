@@ -18,6 +18,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import type { AppSettings } from "@/lib/app-settings";
 
@@ -201,6 +202,11 @@ export const passwordResetGenerationSequence = inventorySchema.sequence(
   { startWith: 1, increment: 1, minValue: 1, cache: 1 },
 );
 
+export const localBarcodeSequence = inventorySchema.sequence(
+  "local_barcode_sequence",
+  { startWith: 1, increment: 1, minValue: 1, cache: 1 },
+);
+
 export const settingsTable = inventorySchema.table(
   "settings",
   {
@@ -228,6 +234,10 @@ export const usersTable = inventorySchema.table(
     orgUnit: varchar({ length: 255 }),
     position: varchar({ length: 255 }),
     tutorId: varchar({ length: 64 }),
+    defaultRoomId: uuid().references((): AnyPgColumn => roomsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
     role: authRoleEnum().notNull(),
     phone: varchar({ length: 32 }),
     emailVerified: boolean().notNull().default(false),
@@ -1079,6 +1089,178 @@ export const qrIdentifiersTable = inventorySchema.table(
       table.status,
     ),
     index("qr_identifiers_created_by_idx").on(table.createdBy),
+  ],
+);
+
+export const barcodeRegistryTable = inventorySchema.table(
+  "barcode_registry",
+  {
+    canonicalKey: text().primaryKey(),
+    originalValue: varchar({ length: 128 }).notNull(),
+    kind: varchar({ length: 16 }).notNull(),
+    itemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "cascade",
+        onUpdate: "restrict",
+      }),
+    localGroupId: uuid().unique().references(
+      (): AnyPgColumn => localItemGroupsTable.id,
+      { onDelete: "restrict", onUpdate: "restrict" },
+    ),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "barcode_registry_values_check",
+      sql`btrim(${table.canonicalKey}) <> ''
+          AND btrim(${table.originalValue}) <> ''
+          AND ${table.kind} in ('official', 'local')
+          AND ((${table.kind} = 'official' AND ${table.localGroupId} IS NULL)
+            OR (${table.kind} = 'local' AND ${table.localGroupId} IS NOT NULL))`,
+    ),
+    index("barcode_registry_item_idx").on(table.itemId),
+  ],
+);
+
+export const localItemGroupsTable = inventorySchema.table(
+  "local_item_groups",
+  {
+    id: uuid().primaryKey(),
+    itemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    parentGroupId: uuid().references(
+      (): AnyPgColumn => localItemGroupsTable.id,
+      { onDelete: "restrict", onUpdate: "restrict" },
+    ),
+    sequenceNumber: bigint({ mode: "bigint" }).notNull().unique(),
+    barcodeValue: varchar({ length: 128 }).notNull(),
+    barcodeKey: text().notNull().unique(),
+    quantity: integer().notNull(),
+    responsibleUserId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    roomId: uuid()
+      .notNull()
+      .references(() => roomsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    previousResponsibleUserId: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    previousRoomId: uuid().references(() => roomsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    createdBy: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    createdAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    transferredAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    status: varchar({ length: 16 }).notNull().default("active"),
+    cancelledBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    cancelledAt: timestamp({ withTimezone: true, mode: "date" }),
+    cancellationReason: varchar({ length: 1000 }),
+    version: integer().notNull().default(1),
+  },
+  (table) => [
+    check("local_item_groups_quantity_check", sql`${table.quantity} > 0`),
+    check("local_item_groups_sequence_check", sql`${table.sequenceNumber} > 0`),
+    check("local_item_groups_version_check", sql`${table.version} > 0`),
+    check(
+      "local_item_groups_barcode_check",
+      sql`btrim(${table.barcodeValue}) <> '' AND btrim(${table.barcodeKey}) <> ''`,
+    ),
+    check(
+      "local_item_groups_cancellation_check",
+      sql`(${table.status} = 'active'
+          AND ${table.cancelledBy} IS NULL
+          AND ${table.cancelledAt} IS NULL
+          AND ${table.cancellationReason} IS NULL)
+        OR (${table.status} = 'cancelled'
+          AND ${table.cancelledBy} IS NOT NULL
+          AND ${table.cancelledAt} IS NOT NULL
+          AND ${table.cancellationReason} IS NOT NULL
+          AND btrim(${table.cancellationReason}) <> '')`,
+    ),
+    index("local_item_groups_item_status_idx").on(table.itemId, table.status),
+    index("local_item_groups_responsible_status_idx").on(
+      table.responsibleUserId,
+      table.status,
+    ),
+    index("local_item_groups_parent_idx").on(table.parentGroupId),
+  ],
+);
+
+export const localItemGroupEventsTable = inventorySchema.table(
+  "local_item_group_events",
+  {
+    id: uuid().primaryKey(),
+    groupId: uuid()
+      .notNull()
+      .references(() => localItemGroupsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    eventType: varchar({ length: 16 }).notNull(),
+    actorId: uuid()
+      .notNull()
+      .references(() => usersTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    fromResponsibleUserId: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    toResponsibleUserId: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    quantity: integer().notNull(),
+    roomId: uuid()
+      .notNull()
+      .references(() => roomsTable.id, {
+        onDelete: "restrict",
+        onUpdate: "restrict",
+      }),
+    reason: varchar({ length: 1000 }),
+    occurredAt: timestamp({ withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "local_item_group_events_values_check",
+      sql`${table.eventType} in ('created', 'transferred', 'split', 'cancelled')
+          AND ${table.quantity} > 0
+          AND (${table.reason} IS NULL OR btrim(${table.reason}) <> '')`,
+    ),
+    index("local_item_group_events_group_time_idx").on(
+      table.groupId,
+      table.occurredAt,
+    ),
   ],
 );
 

@@ -13,6 +13,7 @@ import { WebPushService } from "@/lib/application/services/web-push-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
+import { LocalBarcodeService } from "@/lib/application/services/local-barcode-service";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { PostgresSettingsRepository } from "@/lib/server/persistence/postgres/postgres-settings-repository";
@@ -27,6 +28,7 @@ import { createPostgresInventoryInspectionRepositories } from "@/lib/server/pers
 import { createPostgresWebPushRepositories } from "@/lib/server/persistence/postgres/postgres-web-push-repositories";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
 import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
+import { createPostgresLocalBarcodeRepositories } from "@/lib/server/persistence/postgres/postgres-local-barcode-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
 import { AssetLossService } from "@/lib/server/asset-loss-service";
 import {
@@ -47,6 +49,7 @@ export interface ApplicationServices {
   readonly tmcTransferRequests: TmcTransferRequestService;
   readonly users: UserService;
   readonly assetLosses: AssetLossService;
+  readonly localBarcodes: LocalBarcodeService;
 }
 
 const globalApplication = globalThis as typeof globalThis & {
@@ -142,6 +145,11 @@ function createApplicationServices(): ApplicationServices {
       { create: () => randomUUID() },
     ),
     assetLosses: new AssetLossService(),
+    localBarcodes: new LocalBarcodeService(
+      createPostgresUnitOfWork(createPostgresLocalBarcodeRepositories),
+      { now: () => new Date() },
+      { create: () => randomUUID() },
+    ),
   };
 }
 

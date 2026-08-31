@@ -741,6 +741,7 @@ const RESOLUTION_STATUS_KEYS: Record<
   TranslationKey
 > = {
   revoked: "inspections.resolution.revoked",
+  cancelled: "inspections.resolution.revoked",
   unissued_system_code: "inspections.resolution.unissued_system_code",
   unknown: "inspections.resolution.unknown",
 };

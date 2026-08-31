@@ -90,7 +90,7 @@ export function parseCode39ScanInput(input: unknown): ParsedCode39Scan {
     rawValue.length > 2 && rawValue.startsWith("*") && rawValue.endsWith("*")
       ? rawValue.slice(1, -1)
       : rawValue;
-  if (!value || value.length > 64 || !CODE_39_DATA_PATTERN.test(value)) {
+  if (!value || value.length > 128 || !CODE_39_DATA_PATTERN.test(value)) {
     return { ok: false };
   }
   const fallbackKey = value.match(/^YUI-([0-9A-F]{16})$/)?.[1] ?? null;
@@ -111,11 +111,13 @@ export function renderCode39Svg(
     barHeight = 72,
     includeText = true,
     heading,
+    footerLines = [],
   }: {
     moduleWidth?: number;
     barHeight?: number;
     includeText?: boolean;
     heading?: string;
+    footerLines?: readonly string[];
   } = {},
 ): string {
   const normalized = value.normalize("NFKC").trim().toUpperCase();
@@ -153,7 +155,8 @@ export function renderCode39Svg(
   const width = (cursor + quietZone) * moduleWidth;
   const headingHeight = heading ? 26 : 0;
   const textHeight = includeText ? 24 : 0;
-  const height = headingHeight + barHeight + textHeight;
+  const footerHeight = footerLines.length * 22 + (footerLines.length ? 10 : 0);
+  const height = headingHeight + barHeight + textHeight + footerHeight;
   const label = escapeXml(normalized);
   const headingText = heading ? escapeXml(heading) : "";
   return [
@@ -166,6 +169,9 @@ export function renderCode39Svg(
     includeText
       ? `<text x="${width / 2}" y="${headingHeight + barHeight + 18}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#000" shape-rendering="geometricPrecision">*${label}*</text>`
       : "",
+    ...footerLines.map((line, index) =>
+      `<text x="${width / 2}" y="${headingHeight + barHeight + textHeight + 20 + index * 22}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#000" shape-rendering="geometricPrecision">${escapeXml(line)}</text>`,
+    ),
     "</svg>",
   ].join("");
 }

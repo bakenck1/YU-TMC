@@ -18,6 +18,7 @@ export interface UserDto {
   tutorId?: string | null;
   email: string;
   phone: string | null;
+  defaultRoomId?: string | null;
   role: UserRole;
   emailVerified: boolean;
   active: boolean;
@@ -30,6 +31,7 @@ export interface CreateUserInput {
   iin?: string | null;
   email: string;
   phone?: string | null;
+  defaultRoomId?: string | null;
   role: UserRole;
   emailVerified?: boolean;
   active?: boolean;
@@ -40,6 +42,7 @@ export interface UpdateUserInput {
   fullName: string;
   iin?: string | null;
   phone?: string | null;
+  defaultRoomId?: string | null;
   role: UserRole;
   emailVerified: boolean;
   active: boolean;
