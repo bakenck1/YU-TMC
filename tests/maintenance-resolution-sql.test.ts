@@ -15,4 +15,8 @@ test("casts the resolving user id to UUID when archiving a maintenance item", ()
     source,
     /archived_by = case when \$2 = 'decommissioned' then \$3::uuid else null end/,
   );
+  assert.match(
+    source,
+    /when \$2 = 'decommissioned' then \$4::timestamptz/,
+  );
 });

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import {
   Building2,
+  ChevronDown,
   DoorOpen,
   Download,
+  Layers3,
   MapPin,
   Plus,
   QrCode,
@@ -23,6 +25,7 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
+import { groupInventoryRoomsByFloor } from "@/lib/inventory-room-floors";
 import InventoryBuildingFormModal from "./InventoryBuildingFormModal";
 import InventoryRoomFormModal from "./InventoryRoomFormModal";
 
@@ -38,6 +41,9 @@ export default function InventoryBuildingsManager({
   const [editing, setEditing] = useState<BuildingDto | "create" | null>(null);
   const [rooms, setRooms] = useState<Record<string, RoomDto[]>>({});
   const [roomsLoading, setRoomsLoading] = useState<string | null>(null);
+  const [openBuildingIds, setOpenBuildingIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [roomEditor, setRoomEditor] = useState<{
     building: BuildingDto;
     room: RoomDto | null;
@@ -77,10 +83,25 @@ export default function InventoryBuildingsManager({
         | null;
       if (response.ok && body?.rooms) {
         setRooms((current) => ({ ...current, [buildingId]: body.rooms! }));
+      } else {
+        setActionError(t("building.saveError"));
       }
+    } catch {
+      setActionError(t("building.saveError"));
     } finally {
       setRoomsLoading(null);
     }
+  }
+
+  function toggleRooms(buildingId: string) {
+    setActionError(null);
+    setOpenBuildingIds((current) => {
+      const next = new Set(current);
+      if (next.has(buildingId)) next.delete(buildingId);
+      else next.add(buildingId);
+      return next;
+    });
+    if (!rooms[buildingId]) void loadRooms(buildingId);
   }
 
   function saveRoom(room: RoomDto) {
@@ -99,6 +120,7 @@ export default function InventoryBuildingsManager({
       };
     });
     setRoomEditor(null);
+    setOpenBuildingIds((current) => new Set(current).add(room.buildingId));
   }
 
   async function archiveBuilding(building: BuildingDto) {
@@ -236,7 +258,9 @@ export default function InventoryBuildingsManager({
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/5 pt-4">
                 <button
                   type="button"
-                  onClick={() => void loadRooms(building.id)}
+                  onClick={() => toggleRooms(building.id)}
+                  aria-expanded={openBuildingIds.has(building.id)}
+                  aria-controls={`building-floors-${building.id}`}
                   className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
                 >
                   <DoorOpen className="h-4 w-4" />
@@ -245,12 +269,21 @@ export default function InventoryBuildingsManager({
                     : `${t("inventory.roomsCount")}: ${
                         rooms[building.id]?.length ?? building.roomCount
                       }`}
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      openBuildingIds.has(building.id) ? "rotate-180" : ""
+                    }`}
+                    aria-hidden="true"
+                  />
                 </button>
                 {canCreate ? (
                   <button
                     type="button"
                     onClick={() => {
                       void loadRooms(building.id);
+                      setOpenBuildingIds((current) =>
+                        new Set(current).add(building.id),
+                      );
                       setRoomEditor({ building, room: null });
                     }}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-accent-light px-3 text-xs font-semibold text-accent-dark hover:bg-emerald-100"
@@ -272,9 +305,30 @@ export default function InventoryBuildingsManager({
                 ) : null}
               </div>
 
-              {rooms[building.id] ? (
-                <div className="mt-3 space-y-2">
-                  {rooms[building.id].map((room) => (
+              {openBuildingIds.has(building.id) && rooms[building.id] ? (
+                <div
+                  id={`building-floors-${building.id}`}
+                  className="mt-3 space-y-2"
+                >
+                  {groupInventoryRoomsByFloor(rooms[building.id]).map((floor) => (
+                    <details
+                      key={floor.floorNumber}
+                      className="group overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50"
+                    >
+                      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Layers3 className="h-4 w-4 shrink-0 text-emerald-600" />
+                          <span className="truncate">
+                            {floor.label || `${floor.floorNumber} ${t("inventory.floorShort")}`}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-zinc-500">
+                          {t("inventory.roomsCount")}: {floor.rooms.length}
+                          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                        </span>
+                      </summary>
+                      <div className="space-y-2 border-t border-zinc-200 bg-white p-2">
+                      {floor.rooms.map((room) => (
                     <div
                       key={room.id}
                       className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
@@ -317,6 +371,9 @@ export default function InventoryBuildingsManager({
                         </div>
                       ) : null}
                     </div>
+                      ))}
+                      </div>
+                    </details>
                   ))}
                   {!rooms[building.id].length ? (
                     <p className="px-1 text-xs text-zinc-400">

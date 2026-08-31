@@ -769,7 +769,10 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       `update ${ITEMS}
        set status = $2::"yu_inventory"."item_status",
            archived_by = case when $2 = 'decommissioned' then $3::uuid else null end,
-           archived_at = case when $2 = 'decommissioned' then $4 else null end,
+           archived_at = case
+             when $2 = 'decommissioned' then $4::timestamptz
+             else null
+           end,
            updated_by = $3, updated_at = $4, version = version + 1
        where id = $1 and version = $5 and status = 'maintenance' and archived_at is null`,
       [input.id, input.status, input.actorId, input.occurredAt, input.expectedVersion],
