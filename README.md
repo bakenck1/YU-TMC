@@ -107,12 +107,12 @@ failures are logged. The durable TMC outbox is processed by:
 npm run worker:tmc-push
 ```
 
-## Production deployment without Docker
+## Production deployment
 
 Production uses a regular Node.js process managed by systemd, with Nginx in
-front and PostgreSQL as an external or local system service. Docker is not
-required. Ready-to-use unit files, an Nginx virtual host and the deployment
-procedure are in [deploy/README.md](deploy/README.md).
+front and PostgreSQL as an external or local system service. Ready-to-use unit
+files, an Nginx virtual host and the deployment procedure are in
+[deploy/README.md](deploy/README.md).
 
 ## Database and release operations
 
