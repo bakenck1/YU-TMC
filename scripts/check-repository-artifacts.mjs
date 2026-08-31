@@ -113,7 +113,7 @@ async function assertReports(manifest, source) {
     if (!hasScopeHeading(reportSource)) {
       problems.push(`${report.path}: explicit scope section is required`);
     }
-    if (!/(?:npm|next|git|docker)\s+(?:run|audit|build|test|diff|compose)/i.test(reportSource)) {
+    if (!/(?:npm|next|git)\s+(?:run|audit|build|test|diff)/i.test(reportSource)) {
       problems.push(`${report.path}: validation commands are missing from the report`);
     }
     if (!source.includes(report.path) || !source.includes(report.commit)) {

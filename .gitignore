@@ -18,6 +18,15 @@
 /build
 /storybook-static/
 
+# Container runtimes are intentionally not part of this project.
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+docker-compose.yaml
+compose.yml
+compose.yaml
+.dockerignore
+
 # misc
 .DS_Store
 *.pem

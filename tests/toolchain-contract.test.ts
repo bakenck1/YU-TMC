@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -28,7 +29,19 @@ test("direct production deployment uses lockfile installation and systemd servic
   assert.match(guide, /npm run build/);
   assert.match(appService, /Restart=on-failure/);
   assert.match(workerService, /Restart=on-failure/);
-  assert.doesNotMatch(workflow, /docker (?:compose|build|run|exec)/);
+  assert.doesNotMatch(workflow, /docker (?:compose|build|run|exec)/i);
+});
+
+test("the tracked application source remains container-runtime free", () => {
+  const trackedFiles = execFileSync("git", ["ls-files"], { encoding: "utf8" })
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((file) => !file.startsWith("_audit/"));
+  const forbiddenArtifacts = /(?:^|\/)(?:Dockerfile(?:\.[^/]*)?|docker-compose(?:\.[^/]*)?|compose\.ya?ml|\.dockerignore)$/i;
+
+  for (const file of trackedFiles) {
+    assert.doesNotMatch(file, forbiddenArtifacts, `container artifact is tracked: ${file}`);
+  }
 });
 
 test("production layout does not require a network request for fonts", async () => {

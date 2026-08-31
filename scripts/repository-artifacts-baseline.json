@@ -55,8 +55,7 @@
         "npm run db:check",
         "npm run ui:check",
         "npm audit --omit=dev --audit-level=high --prefer-offline",
-        "git diff --check",
-        "docker compose -f docker-compose.mobile.yml config --quiet"
+        "git diff --check"
       ]
     },
     {

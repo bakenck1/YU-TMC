@@ -1,4 +1,4 @@
-# Развёртывание YU Inventory без Docker
+# Развёртывание YU Inventory
 
 Эта инструкция рассчитана на Ubuntu Server 22.04/24.04, Node.js 24.15.x, PostgreSQL
 16+ и Nginx. Приложение запускается как два systemd-сервиса: web-приложение и

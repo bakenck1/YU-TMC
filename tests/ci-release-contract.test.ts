@@ -26,7 +26,6 @@ test("CI validates the documented release gates in dependency order", async () =
   assert.match(workflow, /bash -n deploy\/backup-postgres\.sh/);
   assert.match(workflow, /bash -n deploy\/enable-https\.sh/);
   assert.match(workflow, /node --check deploy\/backup-postgres-connection\.mjs/);
-  assert.match(workflow, /bash scripts\/test-deployment-runtime\.sh/);
 });
 
 test("direct deployment performs migration, settings import, and smoke checks before services start", async () => {
@@ -57,7 +56,6 @@ test("production deployment protects HTTPS activation and database backups", asy
   const httpsConfig = await readFile("deploy/nginx/yu-inventory.conf", "utf8");
   const backupService = await readFile("deploy/systemd/yu-inventory-backup.service", "utf8");
   const backupTimer = await readFile("deploy/systemd/yu-inventory-backup.timer", "utf8");
-  const deploymentSmokeTest = await readFile("scripts/test-deployment-runtime.sh", "utf8");
   const workflow = await readFile(".github/workflows/tests.yml", "utf8");
 
   assert.match(guide, /yu-inventory-backup\.timer/);
@@ -129,10 +127,6 @@ test("production deployment protects HTTPS activation and database backups", asy
   assert.match(backupService, /ReadWritePaths=\/var\/backups\/yu-inventory \/run\/lock/);
   assert.match(backupService, /TimeoutStartSec=30min/);
   assert.match(backupTimer, /Persistent=true/);
-  assert.match(workflow, /bash scripts\/test-deployment-runtime\.sh/);
-  assert.match(deploymentSmokeTest, /docker run --rm/);
-  assert.match(deploymentSmokeTest, /schema deployment mismatch was accepted/);
-  assert.match(deploymentSmokeTest, /Nginx reload failure was accepted/);
 });
 
 test("photo limits stay aligned across the implementation and product artifacts", async () => {
