@@ -6,6 +6,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/security/session-constants";
 import { configuredPublicOrigin } from "@/lib/security/public-origin";
 
 const PUBLIC_PAGES = new Set([
+  "/api",
   "/login",
   "/register",
   "/forgot-password",
@@ -70,5 +71,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: [
+    "/api",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+  ],
 };

@@ -44,11 +44,14 @@ test("Dockflow item statuses match the public per-item contract", () => {
 });
 
 test("Dockflow endpoint is isolated from cookie proxy and emits no-store responses", async () => {
-  const [proxy, route] = await Promise.all([
+  const [proxy, route, swaggerPage] = await Promise.all([
     readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/integrations/dockflow/employee/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/page.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(proxy, /matcher:\s*\["\/\(\(\?!api\|/);
+  assert.match(proxy, /matcher:\s*\[\s*"\/api",\s*"\/\(\(\?!api\|/);
+  assert.match(proxy, /PUBLIC_PAGES = new Set\(\[\s*"\/api",/);
+  assert.match(swaggerPage, /await connection\(\)/);
   assert.match(route, /request\.headers\.get\("x-api-key"\)/);
   assert.match(route, /"Cache-Control": "no-store, max-age=0"/);
   assert.doesNotMatch(route, /requireCurrentUser|cookies\(|SESSION_COOKIE/);
