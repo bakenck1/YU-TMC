@@ -105,6 +105,10 @@
       {
         "tag": "20260827180000_yessenov_profile_claims",
         "reason": "The forward-only nullable profile columns store optional Yessenov ID personnel claims without requiring backfill or rewriting existing users."
+      },
+      {
+        "tag": "20260831120000_remove_dockflow_integration",
+        "reason": "The forward-only raw SQL migration removes the retired production integration tables from already-deployed databases."
       }
     ]
   },

@@ -1,6 +1,5 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import SettingsForm from "@/components/SettingsForm";
-import DockflowIntegrationSettings from "@/components/DockflowIntegrationSettings";
 import Wrapper from "@/components/Wrapper";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 
@@ -9,7 +8,6 @@ export default async function SettingsPage() {
   return (
     <Wrapper display="flex" direction="column" gap="lg">
       <SettingsForm />
-      <DockflowIntegrationSettings />
     </Wrapper>
   );
 }
