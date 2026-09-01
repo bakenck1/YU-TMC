@@ -29,6 +29,12 @@ export interface LocalBarcodeGroupRecord {
   itemId: string;
   itemName: string;
   originalBarcode: string;
+  itemType: string;
+  itemBrand: string | null;
+  itemModel: string | null;
+  itemDescription: string | null;
+  unitPrice: number;
+  itemPhotoId: string | null;
   parentGroupId: string | null;
   sequenceNumber: bigint;
   barcodeValue: string;
@@ -41,6 +47,7 @@ export interface LocalBarcodeGroupRecord {
   buildingId: string;
   buildingName: string;
   previousResponsibleUserId: string | null;
+  previousResponsibleName: string | null;
   previousRoomId: string | null;
   createdBy: string;
   createdAt: Date;
@@ -81,6 +88,11 @@ export interface LocalBarcodeEventRecord {
   occurredAt: Date;
 }
 
+export interface LocalBarcodeStoredPhoto {
+  bytes: Uint8Array;
+  mimeType: "image/jpeg";
+}
+
 export interface InsertLocalBarcodeGroup {
   id: string;
   itemId: string;
@@ -105,7 +117,9 @@ export interface LocalBarcodeRepository {
   findGroupForUpdate(id: string): Promise<LocalBarcodeGroupRecord | null>;
   findGroup(id: string): Promise<LocalBarcodeGroupRecord | null>;
   findGroupByBarcodeKey(key: string): Promise<LocalBarcodeGroupRecord | null>;
+  findGroupPhoto(groupId: string): Promise<LocalBarcodeStoredPhoto | null>;
   listGroups(itemId: string): Promise<LocalBarcodeGroupRecord[]>;
+  listActiveGroupsAssignedTo(userId: string): Promise<LocalBarcodeGroupRecord[]>;
   listEvents(groupId: string): Promise<LocalBarcodeEventRecord[]>;
   allocatedQuantity(itemId: string): Promise<number>;
   isBarcodeRegistered(key: string): Promise<boolean>;

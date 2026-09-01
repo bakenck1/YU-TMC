@@ -10,7 +10,10 @@ import type {
   LocalBarcodeRepository,
 } from "../lib/application/ports/local-barcode-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
-import { LocalBarcodeService } from "../lib/application/services/local-barcode-service";
+import {
+  applyApprovedLocalBarcodeTransfer,
+  LocalBarcodeService,
+} from "../lib/application/services/local-barcode-service";
 import { parseCode39ScanInput, renderCode39Svg } from "../lib/domain/code39";
 import {
   buildLocalBarcode,
@@ -59,6 +62,7 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
     [USER_C_ID, actor(USER_C_ID, "employee")],
   ]);
   const recipients = new Map([
+    [OWNER_ID, recipient(OWNER_ID, "Owner", ROOM_A_ID)],
     [USER_B_ID, recipient(USER_B_ID, "Сотрудник Б", ROOM_B_ID)],
     [USER_C_ID, recipient(USER_C_ID, "Сотрудник В", ROOM_C_ID)],
   ]);
@@ -89,8 +93,13 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
     findGroup: async (id) => groups.get(id) ?? null,
     findGroupByBarcodeKey: async (key) =>
       [...groups.values()].find((group) => group.barcodeKey === key) ?? null,
+    findGroupPhoto: async () => null,
     listGroups: async (itemId) =>
       [...groups.values()].filter((group) => group.itemId === itemId),
+    listActiveGroupsAssignedTo: async (userId) =>
+      [...groups.values()].filter(
+        (group) => group.responsibleUserId === userId && group.status === "active",
+      ),
     listEvents: async (groupId) => events.filter((event) => event.id.startsWith(groupId)),
     allocatedQuantity: async () =>
       [...groups.values()]
@@ -190,17 +199,37 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
       recipientUserId: USER_B_ID,
       quantity: 5,
       sourceVersion: 1,
+      comment: "  Передача стульев  ",
     },
     { userId: OWNER_ID, role: "employee", sessionVersion: 1 },
   );
   assert.equal(first.group.localBarcode, "1234/5678-0001");
   assert.equal(first.createdNewCode, true);
+  assert.equal(events[0]?.reason, "Передача стульев");
+
+  await assert.rejects(
+    service.transfer(
+      {
+        itemId: ITEM_ID,
+        sourceGroupId: first.group.id,
+        recipientUserId: USER_C_ID,
+        quantity: 2,
+        sourceVersion: first.group.version,
+      },
+      { userId: USER_B_ID, role: "employee", sessionVersion: 1 },
+    ),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "publicCode" in error &&
+      error.publicCode === "local_group_return_only",
+  );
 
   const second = await service.transfer(
     {
       itemId: ITEM_ID,
       sourceGroupId: first.group.id,
-      recipientUserId: USER_C_ID,
+      recipientUserId: OWNER_ID,
       quantity: 2,
       sourceVersion: first.group.version,
     },
@@ -217,7 +246,7 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
       quantity: 2,
       sourceVersion: second.group.version,
     },
-    { userId: USER_C_ID, role: "employee", sessionVersion: 1 },
+    { userId: OWNER_ID, role: "employee", sessionVersion: 1 },
   );
   assert.equal(movedWhole.createdNewCode, false);
   assert.equal(movedWhole.group.localBarcode, second.group.localBarcode);
@@ -258,6 +287,33 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
   });
   assert.equal(restored.originalRemainder, 10);
   assert.equal(restored.originalVersion, 3);
+
+  const approved = await applyApprovedLocalBarcodeTransfer(repository, {
+    itemId: ITEM_ID,
+    sourceGroupId: null,
+    recipientUserId: USER_B_ID,
+    quantity: 2,
+    sourceVersion: restored.originalVersion,
+    comment: "Получатель подтвердил заявку",
+    initiator: { id: OWNER_ID, role: "employee" },
+    occurredAt: new Date("2026-08-31T13:00:00.000Z"),
+  }, {
+    create: () =>
+      `10000000-0000-4000-8000-${String(++idCounter).padStart(12, "0")}`,
+  });
+  assert.equal(approved.group.localBarcode, "1234/5678-0003");
+  assert.equal(approved.group.quantity, 2);
+  assert.equal(approved.group.responsible.id, USER_B_ID);
+  assert.equal(item.version, 4);
+
+  const assignedToRecipient = await service.listActiveGroupsAssignedTo({
+    userId: USER_B_ID,
+    role: "employee",
+  });
+  assert.deepEqual(
+    assignedToRecipient.map((group) => [group.localBarcode, group.quantity]),
+    [["1234/5678-0003", 2]],
+  );
 });
 
 test("migration reserves a global namespace, preserves cancelled codes and defers quantity checks", async () => {
@@ -302,6 +358,12 @@ function groupFromInsert(
     itemId: input.itemId,
     itemName: "Стул",
     originalBarcode: "1234/5678",
+    itemType: "furniture",
+    itemBrand: null,
+    itemModel: null,
+    itemDescription: null,
+    unitPrice: 100,
+    itemPhotoId: null,
     parentGroupId: input.parentGroupId,
     sequenceNumber: input.sequenceNumber,
     barcodeValue: input.barcodeValue,
@@ -314,6 +376,9 @@ function groupFromInsert(
     buildingId: "10000000-0000-4000-8000-000000000009",
     buildingName: "Корпус",
     previousResponsibleUserId: input.previousResponsibleUserId,
+    previousResponsibleName: input.previousResponsibleUserId
+      ? recipients.get(input.previousResponsibleUserId)?.fullName ?? null
+      : null,
     previousRoomId: input.previousRoomId,
     createdBy: input.createdBy,
     createdAt: input.occurredAt,

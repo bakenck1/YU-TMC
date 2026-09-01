@@ -15,7 +15,10 @@ import type {
   LocalBarcodeDistributionDto,
   LocalBarcodeGroupDto,
 } from "@/lib/contracts/local-barcodes";
-import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+import type {
+  CreateTmcTransferRequestResultDto,
+  TmcOperationUserDto,
+} from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 
 type Source = {
@@ -23,6 +26,7 @@ type Source = {
   label: string;
   available: number;
   version: number;
+  returnRecipient: LocalBarcodeGroupDto["previousResponsible"];
 };
 
 export default function LocalBarcodeDistributionPanel({
@@ -43,6 +47,7 @@ export default function LocalBarcodeDistributionPanel({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [created, setCreated] = useState<LocalBarcodeGroupDto | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const attemptKey = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -72,11 +77,13 @@ export default function LocalBarcodeDistributionPanel({
     setQuantity(String(Math.min(1, next.available)));
     setMessage("");
     setCreated(null);
+    setRequestId(null);
     attemptKey.current = null;
   }
 
   async function submit() {
-    if (!source || !recipient) return;
+    const recipientId = source?.returnRecipient?.id ?? recipient?.id;
+    if (!source || !recipientId) return;
     const parsedQuantity = Number(quantity);
     if (
       !Number.isSafeInteger(parsedQuantity) ||
@@ -91,33 +98,61 @@ export default function LocalBarcodeDistributionPanel({
     setMessage("");
     attemptKey.current ??= `local-transfer:${crypto.randomUUID()}`;
     try {
-      const response = await fetch("/api/inventory/local-barcodes", {
+      const response = await fetch(actorRole === "admin"
+        ? "/api/inventory/local-barcodes"
+        : "/api/inventory/transfer-requests", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "content-type": "application/json",
           "idempotency-key": attemptKey.current,
         },
-        body: JSON.stringify({
+        body: JSON.stringify(actorRole === "admin" ? {
           itemId,
           sourceGroupId: source.groupId,
-          recipientUserId: recipient.id,
+          recipientUserId: recipientId,
           quantity: parsedQuantity,
           sourceVersion: source.version,
+        } : {
+          recipientId,
+          itemIds: [itemId],
+          quantityTransfers: [{
+            itemId,
+            sourceLocalGroupId: source.groupId,
+            sourceVersion: source.version,
+            quantity: parsedQuantity,
+          }],
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
-        result?: {
+        result?: ({
           group: LocalBarcodeGroupDto;
           createdNewCode: boolean;
-        };
+        } | CreateTmcTransferRequestResultDto);
         error?: string;
       };
       if (!response.ok || !body.result) throw new Error(localError(body.error));
 
-      setCreated(body.result.createdNewCode ? body.result.group : null);
+      if (actorRole !== "admin") {
+        const requestResult = body.result as CreateTmcTransferRequestResultDto;
+        if (!requestResult.request || requestResult.included < 1) {
+          throw new Error("Не удалось создать заявку на передачу.");
+        }
+        setRequestId(requestResult.request.id);
+        setCreated(null);
+        setMessage("Заявка отправлена получателю. Товар перейдёт к нему только после принятия.");
+        attemptKey.current = null;
+        setSource(null);
+        return;
+      }
+
+      const localResult = body.result as {
+        group: LocalBarcodeGroupDto;
+        createdNewCode: boolean;
+      };
+      setCreated(localResult.createdNewCode ? localResult.group : null);
       setMessage(
-        body.result.createdNewCode
+        localResult.createdNewCode
           ? "Локальный штрихкод создан. Этикетка готова к печати."
           : "Группа передана. Локальный штрихкод сохранён.",
       );
@@ -221,10 +256,19 @@ export default function LocalBarcodeDistributionPanel({
         </p>
       ) : null}
 
-      {/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode) ? (
-        <p role="alert" className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          У товара указан временный номер, а не исходный штрихкод 1С. Сначала укажите код 1С в карточке товара — локальный код будет сгенерирован как «исходный код-0001».
+      {requestId ? (
+        <p className="mt-3 text-sm">
+          <a className="font-semibold text-emerald-800 underline" href={`/tmc/transfer-requests/${requestId}`}>
+            Открыть заявку
+          </a>
         </p>
+      ) : null}
+
+      {/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode) ? (
+        <div role="alert" className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong className="block">Штрихкод отсутствует</strong>
+          Товар можно учитывать без штрихкода. Для распределения количества администратору нужно открыть редактирование карточки и указать исходный штрихкод 1С. После сохранения локальный код будет создан в формате «исходный код-0001».
+        </div>
       ) : null}
 
       {created ? (
@@ -252,7 +296,9 @@ export default function LocalBarcodeDistributionPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-mono text-sm font-semibold">
-                {distribution.originalBarcode}
+                {/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode)
+                  ? "Штрихкод отсутствует"
+                  : distribution.originalBarcode}
               </p>
               <p className="mt-1 text-sm text-zinc-600">
                 Остаток: {distribution.originalRemainder} ·{" "}
@@ -273,6 +319,7 @@ export default function LocalBarcodeDistributionPanel({
                     label: distribution.originalBarcode,
                     available: distribution.originalRemainder,
                     version: distribution.originalVersion,
+                    returnRecipient: null,
                   })
                 }
                 className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white"
@@ -315,7 +362,7 @@ export default function LocalBarcodeDistributionPanel({
                 ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
-                {group.status === "active" && group.responsible.id === actorId ? (
+                {group.status === "active" && group.responsible.id === actorId && group.previousResponsible ? (
                   <button
                     type="button"
                     onClick={() =>
@@ -324,11 +371,12 @@ export default function LocalBarcodeDistributionPanel({
                         label: group.localBarcode,
                         available: group.quantity,
                         version: group.version,
+                        returnRecipient: group.previousResponsible,
                       })
                     }
                     className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
                   >
-                    Передать
+                    Вернуть
                   </button>
                 ) : null}
                 {group.status === "active" && actorRole === "admin" ? (
@@ -361,14 +409,20 @@ export default function LocalBarcodeDistributionPanel({
             <p className="mt-1 text-sm text-zinc-500">
               Доступно: {source.available}
             </p>
-            <TmcUserPicker
-              value={recipient}
-              employeeOnly
-              onChange={(value) => {
-                setRecipient(value);
-                attemptKey.current = null;
-              }}
-            />
+            {source.returnRecipient ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                Вернуть можно только прежнему ответственному: {source.returnRecipient.fullName}
+              </div>
+            ) : (
+              <TmcUserPicker
+                value={recipient}
+                employeeOnly
+                onChange={(value) => {
+                  setRecipient(value);
+                  attemptKey.current = null;
+                }}
+              />
+            )}
             <label className="mt-4 block text-sm font-semibold">
               Количество
               <input
@@ -394,7 +448,7 @@ export default function LocalBarcodeDistributionPanel({
               </button>
               <button
                 type="button"
-                disabled={busy || !recipient}
+                disabled={busy || (!recipient && !source.returnRecipient)}
                 onClick={() => void submit()}
                 className="rounded-xl bg-emerald-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
               >

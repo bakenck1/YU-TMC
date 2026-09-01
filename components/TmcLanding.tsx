@@ -101,6 +101,13 @@ export default function TmcLanding({
                       <div className="min-w-0">
                         <p className="font-semibold text-zinc-900">{request.initiator.fullName}</p>
                         <p className="mt-1 text-sm text-zinc-600">{t("tmc.incoming.pendingCount", { pending: request.summary.pending, total: request.summary.total })}</p>
+                        <ul className="mt-3 space-y-1 text-sm text-zinc-700">
+                          {request.items.filter((item) => item.result === "pending").map((item) => (
+                            <li key={item.id}>
+                              <strong>{item.item.name}</strong> · Штрих-код: <span className="font-mono">{item.item.inventoryNumber}</span> · Количество: {item.requestedQuantity ?? item.item.quantity}
+                            </li>
+                          ))}
+                        </ul>
                         {request.comment ? <p className="mt-2 line-clamp-2 text-sm text-zinc-500">{request.comment}</p> : null}
                       </div>
                       <Link href={`/tmc/transfer-requests/${request.id}`} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">

@@ -289,6 +289,9 @@ test("insertRequest and insertRequestItem persist the responsibility snapshot", 
     "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     createdAt,
+    null,
+    null,
+    null,
   ]);
   assert.equal(item.result, "pending");
   assert.equal(item.version, 1);

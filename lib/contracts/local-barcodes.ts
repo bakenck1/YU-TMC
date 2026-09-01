@@ -17,10 +17,17 @@ export interface LocalBarcodeGroupDto {
   itemId: string;
   itemName: string;
   originalBarcode: string;
+  itemType: string;
+  brand: string | null;
+  model: string | null;
+  description: string | null;
+  unitPrice: number;
+  photoUrl: string | null;
   localBarcode: string;
   parentGroupId: string | null;
   quantity: number;
   responsible: LocalBarcodeResponsibleDto;
+  previousResponsible: LocalBarcodeResponsibleDto | null;
   location: LocalBarcodeLocationDto;
   transferredAt: string;
   status: LocalBarcodeStatus;
@@ -62,6 +69,7 @@ export interface CreateLocalBarcodeTransferInput {
   recipientUserId: string;
   quantity: number;
   sourceVersion: number;
+  comment?: string | null;
 }
 
 export interface CancelLocalBarcodeInput {

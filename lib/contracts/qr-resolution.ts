@@ -34,8 +34,13 @@ export interface QrResolutionDto {
         localBarcode: string;
         originalBarcode: string;
         quantity: number;
+        version: number;
         transferredAt: string;
         status: "active" | "cancelled";
+        previousResponsible: {
+          id: string;
+          fullName: string;
+        } | null;
       };
   } | null;
   distribution?: import("@/lib/contracts/local-barcodes").LocalBarcodeDistributionDto;

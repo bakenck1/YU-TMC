@@ -214,6 +214,58 @@ describe("TmcBulkActions", () => {
     expect(JSON.parse(String(init.body)).itemIds).toEqual([second.id]);
   });
 
+  it("asks for quantity for a grouped item and shows its generated barcode", async () => {
+    const groupedItem = {
+      ...ITEM,
+      name: "Chair",
+      inventoryNumber: "4897/4897",
+      quantity: 5,
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(groupedDistributionResponse())
+      .mockResolvedValueOnce(groupedTransferResponse());
+    const onComplete = vi.fn();
+
+    render(<TmcBulkActions
+      items={[groupedItem]}
+      actorUserId={ITEM.responsibleId}
+      actorRole="admin"
+      buildings={[]}
+      rooms={[]}
+      onComplete={onComplete}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" }));
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    const quantity = await screen.findByRole("spinbutton", {
+      name: /tmc\.localBarcode\.quantityQuestion/,
+    });
+    expect(quantity.getAttribute("min")).toBe("1");
+    expect(quantity.getAttribute("max")).toBe("5");
+    fireEvent.change(quantity, { target: { value: "2" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "tmc.localBarcode.comment" }), {
+      target: { value: "Two chairs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "tmc.localBarcode.submit" }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/inventory/local-barcodes",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const init = vi.mocked(fetch).mock.calls.at(-1)?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      itemId: ITEM.id,
+      sourceGroupId: null,
+      recipientUserId: "22222222-2222-4222-8222-222222222222",
+      quantity: 2,
+      sourceVersion: 3,
+      comment: "Two chairs",
+    });
+    expect(await screen.findByText("4897/4897-0001")).not.toBeNull();
+  });
+
   it("offers admin-only location change and submits item versions with a directory room", async () => {
     const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002", version: 7 };
     vi.mocked(fetch).mockResolvedValue({
@@ -297,3 +349,64 @@ describe("TmcBulkActions", () => {
     });
   });
 });
+
+function groupedDistributionResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      distribution: {
+        itemId: ITEM.id,
+        itemName: "Chair",
+        originalBarcode: "4897/4897",
+        originalQuantity: 5,
+        originalVersion: 3,
+        originalRemainder: 5,
+        originalResponsible: {
+          id: ITEM.responsibleId,
+          fullName: ITEM.responsible,
+        },
+        originalLocation: {
+          roomId: ITEM.roomId,
+          roomDesignation: ITEM.room,
+          buildingId: ITEM.buildingId,
+          buildingName: ITEM.building,
+        },
+        groups: [],
+      },
+    }),
+  } as Response;
+}
+
+function groupedTransferResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      result: {
+        createdNewCode: true,
+        group: {
+          id: "99999999-9999-4999-8999-999999999999",
+          itemId: ITEM.id,
+          itemName: "Chair",
+          originalBarcode: "4897/4897",
+          localBarcode: "4897/4897-0001",
+          parentGroupId: null,
+          quantity: 2,
+          responsible: {
+            id: "22222222-2222-4222-8222-222222222222",
+            fullName: "Recipient User",
+          },
+          location: {
+            roomId: ITEM.roomId,
+            roomDesignation: ITEM.room,
+            buildingId: ITEM.buildingId,
+            buildingName: ITEM.building,
+          },
+          transferredAt: "2026-09-01T00:00:00.000Z",
+          status: "active",
+          version: 1,
+          cancellation: null,
+        },
+      },
+    }),
+  } as Response;
+}

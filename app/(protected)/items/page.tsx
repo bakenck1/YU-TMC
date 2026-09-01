@@ -5,6 +5,7 @@ import InventorySummaryAccordions from "@/components/InventorySummaryAccordions"
 import Wrapper from "@/components/Wrapper";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
+import { toLocalBarcodeInventoryItem } from "@/lib/local-barcode-item-view";
 import { getApplicationServices } from "@/lib/server/application";
 import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -14,8 +15,30 @@ import { isInventoryBuildingName } from "@/lib/campus-directory";
 export default async function ItemsPage() {
   const user = await requireAuthorizedPage("/items");
   const actor = authorizationActor(user);
-  const serverItems = await getApplicationServices().items.listItems(actor);
-  const items = serverItems.map(toInventoryItemView);
+  const services = getApplicationServices();
+  const [serverItems, localGroups] = await Promise.all([
+    services.items.listItems(actor),
+    user.role === "employee"
+      ? services.localBarcodes.listActiveGroupsAssignedTo(actor)
+      : Promise.resolve([]),
+  ]);
+  const originalRemainders = user.role === "employee"
+    ? new Map(
+        (await Promise.all(
+          serverItems.map(async (item) => {
+            const distribution = await services.localBarcodes.getDistribution(item.id, actor);
+            return [item.id, distribution.originalRemainder] as const;
+          }),
+        )),
+      )
+    : new Map<string, number>();
+  const items = [
+    ...serverItems.map((item) => ({
+      ...toInventoryItemView(item),
+      quantity: originalRemainders.get(item.id) ?? item.quantity,
+    })),
+    ...localGroups.map(toLocalBarcodeInventoryItem),
+  ];
   const canCreate = hasPermission(user.role, "inventory.item.create");
   const canExport = hasPermission(user.role, "inventory.report.export");
   let buildings: BuildingDto[] = [];

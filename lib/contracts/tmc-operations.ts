@@ -91,6 +91,8 @@ export interface TmcTransferRequestItemBaseDto {
   currentResponsibleIdAtRequest: string | null;
   /** Current profile of the user captured by currentResponsibleIdAtRequest. */
   responsibleUserProfile: TmcOperationUserDto | null;
+  requestedQuantity?: number | null;
+  sourceLocalGroupId?: string | null;
   createdAt: string;
   version: number;
 }
@@ -154,6 +156,12 @@ export type TmcTransferRequestDto =
 export interface CreateTmcTransferRequestInput {
   recipientId: string;
   itemIds: readonly string[];
+  quantityTransfers?: readonly {
+    itemId: string;
+    sourceLocalGroupId: string | null;
+    sourceVersion: number;
+    quantity: number;
+  }[];
   comment?: string | null;
 }
 
@@ -320,6 +328,8 @@ const requestItemSchema = z.object({
   responsibilityPeriodIdAtRequest: uuidSchema.nullable(),
   currentResponsibleIdAtRequest: uuidSchema.nullable(),
   responsibleUserProfile: operationUserSchema.nullable(),
+  requestedQuantity: z.number().int().positive().nullable().optional(),
+  sourceLocalGroupId: uuidSchema.nullable().optional(),
   result: z.enum(TMC_TRANSFER_ITEM_RESULTS),
   invalidReason: z.string().nullable(),
   createdAt: timestampSchema,

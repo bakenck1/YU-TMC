@@ -93,6 +93,10 @@ export default function InventorySummaryAccordions({
     return `${number.format(summary[kind])} ${t("common.unitShort")}`;
   }
 
+  function itemHref(item: InventoryItem) {
+    return item.localGroupId ? `/local-barcodes/${item.localGroupId}` : `/items/${item.id}`;
+  }
+
   return (
     <section aria-label={t("items.summaryAria")} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -180,12 +184,12 @@ export default function InventorySummaryAccordions({
                   {openItems.map((item) => (
                     <tr
                       key={item.id}
-                      onClick={() => router.push(`/items/${item.id}`)}
+                      onClick={() => router.push(itemHref(item))}
                       className="cursor-pointer border-t border-black/5 transition-colors first:border-t-0 hover:bg-zinc-50/80"
                     >
                       <td className="px-4 py-3 font-medium text-zinc-800">
                         <Link
-                          href={`/items/${item.id}`}
+                          href={itemHref(item)}
                           onClick={(event) => event.stopPropagation()}
                           className="hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >

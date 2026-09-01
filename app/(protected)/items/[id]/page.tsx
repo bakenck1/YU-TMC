@@ -37,12 +37,13 @@ export default async function ItemPage({
       "inventory.item.manage_components",
     );
     const canComment = hasPermission(user.role, "inventory.item.comment");
-    const [components, operations, comments] = await readHiddenPageResource(
+    const [components, operations, comments, localDistribution] = await readHiddenPageResource(
       () =>
         Promise.all([
           services.items.listComponents(id, actor),
           services.items.listOperations(id, actor),
           services.items.listComments(id, actor),
+          services.localBarcodes.getDistribution(id, actor),
         ]),
       notFound,
     );
@@ -75,6 +76,7 @@ export default async function ItemPage({
         canManageProtected={canManageProtected}
         rooms={rooms}
         initialComponents={components}
+        localGroups={localDistribution.groups}
         canManageComponents={canManageComponents}
         actorId={user.userId}
         actorRole={user.role}

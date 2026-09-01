@@ -10,6 +10,7 @@ import type {
   LocalBarcodeRecipientRecord,
   LocalBarcodeRepositories,
   LocalBarcodeRepository,
+  LocalBarcodeStoredPhoto,
 } from "@/lib/application/ports/local-barcode-repositories";
 import { PostgresIdempotencyRequestRepository } from "@/lib/server/persistence/postgres/postgres-inventory-concurrency-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
@@ -36,6 +37,12 @@ type GroupRow = QueryResultRow & {
   item_id: string;
   item_name: string;
   original_barcode: string;
+  item_type: string;
+  item_brand: string | null;
+  item_model: string | null;
+  item_description: string | null;
+  unit_price: string | number;
+  item_photo_id: string | null;
   parent_group_id: string | null;
   sequence_number: string;
   barcode_value: string;
@@ -48,6 +55,7 @@ type GroupRow = QueryResultRow & {
   building_id: string;
   building_name: string;
   previous_responsible_user_id: string | null;
+  previous_responsible_name: string | null;
   previous_room_id: string | null;
   created_by: string;
   created_at: Date;
@@ -133,10 +141,28 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   async findGroup(id: string) { return this.queryGroup("g.id = $1", id, false); }
   async findGroupByBarcodeKey(key: string) { return this.queryGroup("g.barcode_key = $1", key, false); }
 
+  async findGroupPhoto(groupId: string): Promise<LocalBarcodeStoredPhoto | null> {
+    const result = await this.source.query<QueryResultRow & { binary_data: Buffer | null; trusted_mime_type: string | null }>(
+      `select photo.binary_data, photo.trusted_mime_type
+         from ${S}."local_item_groups" g
+         join ${S}."photos" photo on photo.item_id = g.item_id
+        where g.id = $1 and photo.purpose = 'item' and photo.status = 'attached'
+        order by photo.attached_at desc nulls last
+        limit 1`,
+      [groupId],
+    );
+    const row = result.rows[0];
+    if (!row?.binary_data || row.trusted_mime_type !== "image/jpeg") return null;
+    return { bytes: row.binary_data, mimeType: "image/jpeg" };
+  }
+
   private async queryGroup(predicate: string, value: string, lock: boolean): Promise<LocalBarcodeGroupRecord | null> {
     const result = await this.source.query<GroupRow>(
       `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
+              previous.full_name as previous_responsible_name,
               r.designation as room_designation, b.id as building_id, b.name as building_name
          from ${S}."local_item_groups" g
          join ${S}."items" i on i.id = g.item_id
@@ -144,6 +170,13 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
          join ${S}."rooms" r on r.id = g.room_id
          join ${S}."buildings" b on b.id = r.building_id
          left join ${S}."users" cancelled on cancelled.id = g.cancelled_by
+         left join ${S}."users" previous on previous.id = g.previous_responsible_user_id
+         left join lateral (
+           select id from ${S}."photos"
+            where item_id = i.id and purpose = 'item' and status = 'attached'
+            order by attached_at desc nulls last
+            limit 1
+         ) photo on true
         where ${predicate} ${lock ? "for update of g" : ""} limit 1`, [value]);
     return result.rows[0] ? mapGroup(result.rows[0]) : null;
   }
@@ -151,7 +184,10 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   async listGroups(itemId: string): Promise<LocalBarcodeGroupRecord[]> {
     const result = await this.source.query<GroupRow>(
       `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
+              previous.full_name as previous_responsible_name,
               r.designation as room_designation, b.id as building_id, b.name as building_name
          from ${S}."local_item_groups" g
          join ${S}."items" i on i.id = g.item_id
@@ -159,7 +195,42 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
          join ${S}."rooms" r on r.id = g.room_id
          join ${S}."buildings" b on b.id = r.building_id
          left join ${S}."users" cancelled on cancelled.id = g.cancelled_by
+         left join ${S}."users" previous on previous.id = g.previous_responsible_user_id
+         left join lateral (
+           select id from ${S}."photos"
+            where item_id = i.id and purpose = 'item' and status = 'attached'
+            order by attached_at desc nulls last
+            limit 1
+         ) photo on true
         where g.item_id = $1 order by g.created_at, g.id`, [itemId]);
+    return result.rows.map(mapGroup);
+  }
+
+  async listActiveGroupsAssignedTo(userId: string): Promise<LocalBarcodeGroupRecord[]> {
+    const result = await this.source.query<GroupRow>(
+      `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.unit_price, photo.id as item_photo_id,
+              responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
+              previous.full_name as previous_responsible_name,
+              r.designation as room_designation, b.id as building_id, b.name as building_name
+         from ${S}."local_item_groups" g
+         join ${S}."items" i on i.id = g.item_id
+         join ${S}."users" responsible on responsible.id = g.responsible_user_id
+         join ${S}."rooms" r on r.id = g.room_id
+         join ${S}."buildings" b on b.id = r.building_id
+         left join ${S}."users" cancelled on cancelled.id = g.cancelled_by
+         left join ${S}."users" previous on previous.id = g.previous_responsible_user_id
+         left join lateral (
+           select id from ${S}."photos"
+            where item_id = i.id and purpose = 'item' and status = 'attached'
+            order by attached_at desc nulls last
+            limit 1
+         ) photo on true
+        where g.responsible_user_id = $1 and g.status = 'active'
+        order by g.transferred_at desc, g.id`,
+      [userId],
+    );
     return result.rows.map(mapGroup);
   }
 
@@ -232,5 +303,5 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
 }
 
 function mapGroup(row: GroupRow): LocalBarcodeGroupRecord {
-  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version) };
+  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, itemType: row.item_type, itemBrand: row.item_brand, itemModel: row.item_model, itemDescription: row.item_description, unitPrice: Number(row.unit_price), itemPhotoId: row.item_photo_id, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousResponsibleName: row.previous_responsible_name, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version) };
 }

@@ -48,6 +48,7 @@ import {
 } from "@/components/InventoryItemDetailsPresentation";
 import { translateCampusBuilding } from "@/lib/i18n";
 import type { UserRole } from "@/lib/contracts/users";
+import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 
 export default function InventoryItemDetails({
   initialItem,
@@ -61,9 +62,14 @@ export default function InventoryItemDetails({
   canManageProtected,
   rooms,
   initialComponents,
+  localGroups,
   canManageComponents,
   actorId,
   actorRole,
+  localBarcodeInfo,
+  localBarcodeItemId,
+  hideComposition = false,
+  commentItemId,
 }: {
   initialItem: InventoryItemDto;
   canEditContent: boolean;
@@ -76,9 +82,16 @@ export default function InventoryItemDetails({
   canManageProtected: boolean;
   rooms: Array<RoomDto & { buildingName: string }>;
   initialComponents: InventoryItemDto[];
+  localGroups?: LocalBarcodeGroupDto[];
   canManageComponents: boolean;
   actorId: string;
   actorRole: UserRole;
+  localBarcodeInfo?: { originalBarcode: string; transferredAt: string };
+  /** Source item used for the local-barcode distribution panel. */
+  localBarcodeItemId?: string;
+  hideComposition?: boolean;
+  /** Local groups share the source item's comment thread. */
+  commentItemId?: string;
 }) {
   const { language, locale, t } = useAppSettings();
   const router = useRouter();
@@ -551,7 +564,7 @@ export default function InventoryItemDetails({
       const formData = new FormData();
       formData.set("message", comment);
       if (commentAttachment) formData.set("attachment", commentAttachment);
-      const response = await fetch(`/api/inventory/items/${item.id}/comments`, {
+      const response = await fetch(`/api/inventory/items/${commentItemId ?? item.id}/comments`, {
         method: "POST",
         body: formData,
       });
@@ -1019,6 +1032,9 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
+            {localBarcodeInfo ? <InventoryOverviewRow label="Штрих-код" value={item.inventoryNumber} /> : null}
+            {localBarcodeInfo ? <InventoryOverviewRow label="Исходный штрих-код 1С" value={localBarcodeInfo.originalBarcode} /> : null}
+            {localBarcodeInfo ? <InventoryOverviewRow label="Дата передачи" value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
             <InventoryOverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
             <InventoryOverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
             <InventoryOverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
@@ -1027,17 +1043,18 @@ export default function InventoryItemDetails({
         </section>
 
         <LocalBarcodeDistributionPanel
-          itemId={item.id}
+          itemId={localBarcodeItemId ?? item.id}
           actorId={actorId}
           actorRole={actorRole}
         />
 
-        <InventoryItemComposition
+        {!hideComposition ? <InventoryItemComposition
           key={item.id}
           itemId={item.id}
           initialComponents={initialComponents}
+          localGroups={localGroups}
           canManage={canManageComponents}
-        />
+        /> : null}
         {canManageCode && item.servicePhotoUrl ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
             <h2 className="font-semibold text-amber-950">{t("service.evidence")}</h2>

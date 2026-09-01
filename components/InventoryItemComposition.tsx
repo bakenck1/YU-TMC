@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Link2, Plus, Search, Trash2, X } from "lucide-react";
+import { Barcode, Boxes, Link2, Plus, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,14 +13,18 @@ import {
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
+import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 
 export default function InventoryItemComposition({
   itemId,
   initialComponents,
+  localGroups = [],
   canManage,
 }: {
   itemId: string;
   initialComponents: InventoryItemDto[];
+  /** Parts created by a local-barcode transfer are linked to the source item automatically. */
+  localGroups?: LocalBarcodeGroupDto[];
   canManage: boolean;
 }) {
   const { t } = useAppSettings();
@@ -44,6 +48,8 @@ export default function InventoryItemComposition({
     () => candidates.filter((candidate) => !linkedIds.has(candidate.id)),
     [candidates, linkedIds],
   );
+  const hasLinkedParts = localGroups.length > 0;
+  const hasAnyRelatedItems = components.length > 0 || hasLinkedParts;
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -176,7 +182,7 @@ export default function InventoryItemComposition({
             {t("itemComposition.hint")}
           </p>
         </div>
-        {components.length ? addButton() : null}
+        {hasAnyRelatedItems ? addButton() : null}
       </div>
 
       {error ? (
@@ -185,14 +191,57 @@ export default function InventoryItemComposition({
         </p>
       ) : null}
 
+      {hasLinkedParts ? (
+        <div className="mt-5">
+          <p className="font-semibold text-zinc-700">Локальные части</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Части, переданные из этой ТМЦ, связываются автоматически.
+          </p>
+          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            {localGroups.map((group) => (
+              <li
+                key={group.id}
+                className={`rounded-xl border transition ${
+                  group.status === "cancelled"
+                    ? "border-red-200 bg-red-50/50"
+                    : "border-emerald-100 bg-emerald-50/40 hover:border-emerald-300"
+                }`}
+              >
+                <Link
+                  href={`/local-barcodes/${group.id}`}
+                  className="flex min-h-28 items-start gap-3 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+                >
+                  <Barcode className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-zinc-800">
+                      {group.itemName}
+                    </span>
+                    <span className="mt-1 block font-mono text-sm font-semibold text-emerald-800">
+                      {group.localBarcode}
+                    </span>
+                    <span className="mt-1 block text-sm text-zinc-600">
+                      Количество: {group.quantity} · {group.responsible.fullName}
+                    </span>
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      {group.location.buildingName} · {group.location.roomDesignation}
+                    </span>
+                    {group.status === "cancelled" ? (
+                      <span className="mt-2 block text-xs font-semibold text-red-700">
+                        Отменён: {group.cancellation?.reason ?? "без причины"}
+                      </span>
+                    ) : null}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {components.length ? (
         <div className="mt-5">
-          <p className="font-semibold text-zinc-700">
-            {t("itemComposition.installed")}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            {t("itemComposition.installedHint")}
-          </p>
+          <p className="font-semibold text-zinc-700">{t("itemComposition.installed")}</p>
+          <p className="mt-1 text-sm text-zinc-500">{t("itemComposition.installedHint")}</p>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {components.map((component) => (
               <li key={component.id} className="group relative rounded-xl border border-black/5 bg-slate-50 transition hover:border-emerald-200 hover:bg-emerald-50/40">
@@ -231,7 +280,7 @@ export default function InventoryItemComposition({
             ))}
           </ul>
         </div>
-      ) : (
+      ) : !hasAnyRelatedItems ? (
         <div className="mt-5 flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 px-5 text-center">
           <Boxes className="h-10 w-10 text-emerald-300" />
           <p className="mt-3 font-semibold text-zinc-700">
@@ -242,7 +291,7 @@ export default function InventoryItemComposition({
           </p>
           {addButton(true)}
         </div>
-      )}
+      ) : null}
 
       {modalOpen ? (
         <div

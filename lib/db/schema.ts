@@ -1584,6 +1584,12 @@ export const tmcTransferRequestItemsTable = inventorySchema.table(
         onDelete: "restrict",
         onUpdate: "restrict",
       }),
+    requestedQuantity: integer(),
+    sourceLocalGroupId: uuid().references(() => localItemGroupsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
+    sourceVersion: integer(),
     result: tmcTransferItemResultEnum().notNull().default("pending"),
     invalidReason: varchar({ length: 1000 }),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
@@ -1615,6 +1621,14 @@ export const tmcTransferRequestItemsTable = inventorySchema.table(
     check(
       "tmc_transfer_request_items_responsibility_snapshot_check",
       sql`(${table.responsibilityPeriodIdAtRequest} IS NULL) = (${table.currentResponsibleIdAtRequest} IS NULL)`,
+    ),
+    check(
+      "tmc_transfer_request_items_quantity_transfer_check",
+      sql`(
+        (${table.requestedQuantity} IS NULL AND ${table.sourceLocalGroupId} IS NULL AND ${table.sourceVersion} IS NULL)
+        OR
+        (${table.requestedQuantity} > 0 AND ${table.sourceVersion} > 0)
+      )`,
     ),
     check(
       "tmc_transfer_request_items_state_check",

@@ -118,8 +118,9 @@ test("transfer request card projection keeps only rendered and mutation-required
           roomDesignation: "101",
         },
       },
-      responsibleUserProfile: { fullName: "Owner" },
-      result: "pending",
+        responsibleUserProfile: { fullName: "Owner" },
+        requestedQuantity: null,
+        result: "pending",
       version: 4,
     }],
   });

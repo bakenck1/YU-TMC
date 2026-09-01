@@ -7,6 +7,7 @@ import type { TmcOperationProblemCode } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 import type { IdempotencyRequestRepository } from "@/lib/application/ports/inventory-concurrency-repositories";
 import type { NotificationEventType } from "@/lib/contracts/inventory-domain";
+import type { LocalBarcodeRepository } from "@/lib/application/ports/local-barcode-repositories";
 
 export interface TmcOperationUserRecord {
   id: string;
@@ -63,6 +64,9 @@ export interface TmcTransferRequestItemRecord {
   responsibilityPeriodIdAtRequest: string | null;
   currentResponsibleIdAtRequest: string | null;
   responsibleUserProfile: TmcOperationUserRecord | null;
+  requestedQuantity: number | null;
+  sourceLocalGroupId: string | null;
+  sourceVersion: number | null;
   result: TmcTransferItemResult;
   invalidReason: string | null;
   createdAt: Date;
@@ -103,6 +107,9 @@ export interface InsertTmcTransferRequestItemRecord {
   expectedItemVersion: number;
   responsibilityPeriodIdAtRequest: string | null;
   currentResponsibleIdAtRequest: string | null;
+  requestedQuantity?: number | null;
+  sourceLocalGroupId?: string | null;
+  sourceVersion?: number | null;
   createdAt: Date;
 }
 
@@ -112,6 +119,9 @@ export interface InsertedTmcTransferRequestItemRecord {
   itemId: string;
   responsibilityPeriodIdAtRequest: string | null;
   currentResponsibleIdAtRequest: string | null;
+  requestedQuantity: number | null;
+  sourceLocalGroupId: string | null;
+  sourceVersion: number | null;
   result: TmcTransferItemResult;
   invalidReason: string | null;
   createdAt: Date;
@@ -290,6 +300,16 @@ export interface TmcTransferRequestRepository {
   decideItem(
     input: DecideTmcTransferRequestItemRecord,
   ): Promise<"accepted" | "rejected" | "invalidated">;
+  decideQuantityItem?(input: {
+    requestId: string;
+    requestItemId: string;
+    itemId: string;
+    expectedVersion: number;
+    result: "accepted" | "rejected" | "invalidated";
+    invalidReason: string | null;
+    decidedBy: string;
+    decidedAt: Date;
+  }): Promise<"accepted" | "rejected" | "invalidated">;
   closeRequest(input: CloseTmcTransferRequestRecord): Promise<boolean>;
   cancelRequest(input: CancelTmcTransferRequestRecord): Promise<boolean>;
   insertRequest(input: InsertTmcTransferRequestRecord): Promise<void>;
@@ -302,4 +322,5 @@ export interface TmcOperationRepositories {
   idempotency: IdempotencyRequestRepository;
   transferRequests: TmcTransferRequestRepository;
   stageFour: TmcStageFourRepository;
+  localBarcodes?: LocalBarcodeRepository;
 }

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 import ItemsTable from "@/components/ItemsTable";
+import LocalBarcodeTransferResult from "@/components/LocalBarcodeTransferResult";
 import TmcUserPicker from "@/components/TmcUserPicker";
+import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 import {
   parseCreateTmcTransferRequestResult,
   type TmcOperationUserDto,
@@ -46,11 +48,12 @@ export default function TmcItemQrFlow({
   const [scannerOpen, setScannerOpen] = useState(true);
   const [flowState, setFlowState] = useState<TmcQrFlowState>({ status: "idle" });
   const [recipient, setRecipient] = useState<TmcOperationUserDto | null>(null);
+  const [quantity, setQuantity] = useState("1");
   const [comment, setComment] = useState("");
   const [submission, setSubmission] = useState<
     | { status: "idle" }
     | { status: "submitting" }
-    | { status: "success"; requestId?: string }
+    | { status: "success"; requestId?: string; localGroups?: LocalBarcodeGroupDto[] }
     | { status: "error" }
   >({ status: "idle" });
   const scanButtonRef = useRef<HTMLButtonElement>(null);
@@ -66,7 +69,12 @@ export default function TmcItemQrFlow({
   useEffect(() =>
     installTmcQrResolverController(resolverRef, {
       fetcher: (url, init) => fetch(url, init),
-      onState: setFlowState,
+      onState: (state) => {
+        if (state.status === "selected") {
+          setQuantity(String(state.item.localGroup?.quantity ?? 1));
+        }
+        setFlowState(state);
+      },
     }), []);
   useEffect(() => {
     if (!scannerOpen && flowState.status === "idle") {
@@ -86,6 +94,7 @@ export default function TmcItemQrFlow({
   function scanAgain() {
     resolverRef.current?.reset();
     setRecipient(null);
+    setQuantity("1");
     setComment("");
     resetSubmission();
     createAttempt.current = null;
@@ -95,6 +104,7 @@ export default function TmcItemQrFlow({
   function removeItem() {
     resolverRef.current?.reset();
     setRecipient(null);
+    setQuantity("1");
     setComment("");
     resetSubmission();
     createAttempt.current = null;
@@ -115,10 +125,18 @@ export default function TmcItemQrFlow({
     commentText: string,
     sequence: number,
     controller: AbortController,
+    quantityTransfer?: {
+      sourceLocalGroupId: string | null;
+      sourceVersion: number;
+      quantity: number;
+    },
   ) {
     const payload = {
       recipientId,
       itemIds: [itemId],
+      ...(quantityTransfer
+        ? { quantityTransfers: [{ itemId, ...quantityTransfer }] }
+        : {}),
       ...(commentText.trim() ? { comment: commentText } : {}),
     };
     const fingerprint = JSON.stringify(payload);
@@ -177,10 +195,68 @@ export default function TmcItemQrFlow({
     }
   }
 
+  async function doCreateLocalTransfer(
+    recipientId: string,
+    itemId: string,
+    sourceVersion: number,
+    transferQuantity: number,
+    commentText: string,
+    sequence: number,
+    controller: AbortController,
+  ) {
+    const payload = {
+      itemId,
+      sourceGroupId: null,
+      recipientUserId: recipientId,
+      quantity: transferQuantity,
+      sourceVersion,
+      comment: commentText.trim() || null,
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (
+      !createAttempt.current ||
+      createAttempt.current.fingerprint !== fingerprint
+    ) {
+      createAttempt.current = {
+        fingerprint,
+        key: `tmc-local:${crypto.randomUUID()}`,
+      };
+    }
+    const response = await fetch("/api/inventory/local-barcodes", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": createAttempt.current.key,
+      },
+      body: fingerprint,
+      signal: controller.signal,
+    });
+    const body = (await response.json().catch(() => ({}))) as {
+      result?: { group: LocalBarcodeGroupDto; createdNewCode: boolean };
+      error?: string;
+    };
+    if (!response.ok || !body.result) {
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        createAttempt.current = null;
+      }
+      throw new Error(body.error ?? "local_barcode_transfer_failed");
+    }
+    if (sequence === submissionSequence.current) {
+      createAttempt.current = null;
+      setSubmission({ status: "success", localGroups: [body.result.group] });
+    }
+  }
+
   async function submitOperation() {
     const item = flowState.status === "selected" ? flowState.item : null;
     if (!item || submissionInFlight.current) return;
-    if (operation.id !== "receive" && !recipient) return;
+    if (
+      operation.id !== "receive" &&
+      !recipient &&
+      !item.localGroup?.previousResponsible
+    ) return;
 
     submissionInFlight.current = true;
     const sequence = ++submissionSequence.current;
@@ -190,6 +266,32 @@ export default function TmcItemQrFlow({
     setSubmission({ status: "submitting" });
 
     try {
+      if (item.localGroup) {
+        if (operation.id !== "issue" || !item.localGroup.previousResponsible) {
+          throw new Error("local_group_not_returnable");
+        }
+        const localQuantity = Number(quantity);
+        if (
+          !Number.isSafeInteger(localQuantity) ||
+          localQuantity < 1 ||
+          localQuantity > item.localGroup.quantity
+        ) {
+          throw new Error("invalid_local_quantity");
+        }
+        await doCreateRequest(
+          item.localGroup.previousResponsible.id,
+          item.id,
+          comment,
+          sequence,
+          controller,
+          {
+            sourceLocalGroupId: item.localGroup.id,
+            sourceVersion: item.localGroup.version,
+            quantity: localQuantity,
+          },
+        );
+        return;
+      }
       if (operation.id === "receive") {
         const response = await fetch(
           `/api/inventory/items/${encodeURIComponent(item.id)}/responsibility/accept`,
@@ -203,6 +305,42 @@ export default function TmcItemQrFlow({
         if (!response.ok) throw new Error("tmc_receive_failed");
         if (sequence === submissionSequence.current)
           setSubmission({ status: "success" });
+        return;
+      }
+      const distribution = item.distribution;
+      if (distribution && distribution.originalRemainder >= 2) {
+        const parsedQuantity = Number(quantity);
+        if (
+          !Number.isSafeInteger(parsedQuantity) ||
+          parsedQuantity < 1 ||
+          parsedQuantity > distribution.originalRemainder
+        ) {
+          throw new Error("invalid_local_quantity");
+        }
+        if (actorRole === "admin") {
+          await doCreateLocalTransfer(
+            recipient!.id,
+            item.id,
+            distribution.originalVersion,
+            parsedQuantity,
+            comment,
+            sequence,
+            controller,
+          );
+        } else {
+          await doCreateRequest(
+            recipient!.id,
+            item.id,
+            comment,
+            sequence,
+            controller,
+            {
+              sourceLocalGroupId: null,
+              sourceVersion: distribution.originalVersion,
+              quantity: parsedQuantity,
+            },
+          );
+        }
         return;
       }
       await doCreateRequest(recipient!.id, item.id, comment, sequence, controller);
@@ -267,6 +405,22 @@ export default function TmcItemQrFlow({
     item?.isAssigned === true;
   const responsibleNameHidden =
     item?.isAssigned === true && !item.responsibleName?.trim();
+  const localDistribution = item?.distribution;
+  const scannedLocalGroup = item?.localGroup;
+  const localReturnRecipient = scannedLocalGroup?.previousResponsible ?? null;
+  const quantityTransferAvailable =
+    operation.id === "issue" &&
+    Boolean(
+      scannedLocalGroup ||
+        (localDistribution && localDistribution.originalRemainder >= 2),
+    );
+  const quantityLimit = scannedLocalGroup?.quantity ?? localDistribution?.originalRemainder ?? 0;
+  const parsedQuantity = Number(quantity);
+  const quantityValid =
+    !quantityTransferAvailable ||
+    Number.isSafeInteger(parsedQuantity) &&
+    parsedQuantity >= 1 &&
+    parsedQuantity <= quantityLimit;
 
   return (
     <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm sm:p-6">
@@ -340,15 +494,51 @@ export default function TmcItemQrFlow({
         </div>
       ) : null}
 
-      {item && operation.id !== "receive" ? (
+      {item && operation.id !== "receive" && !scannedLocalGroup ? (
         <TmcUserPicker value={recipient} onChange={setRecipient} />
+      ) : null}
+
+      {item && scannedLocalGroup ? (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+          <p><strong>Локальный штрих-код:</strong> {scannedLocalGroup.localBarcode}</p>
+          <p className="mt-1"><strong>Исходный штрих-код 1С:</strong> {scannedLocalGroup.originalBarcode}</p>
+          {localReturnRecipient ? (
+            <p className="mt-2">Вернуть можно только прежнему ответственному: {localReturnRecipient.fullName}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {item && quantityTransferAvailable ? (
+        <label className="mt-4 block text-sm font-semibold text-zinc-800">
+          {t("tmc.localBarcode.quantityQuestion")}
+          <input
+            type="number"
+            min={1}
+            max={quantityLimit}
+            step={1}
+            value={quantity}
+            onChange={(event) => {
+              setQuantity(event.target.value);
+              createAttempt.current = null;
+            }}
+            className="mt-2 min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 outline-none focus:border-emerald-500"
+          />
+          <span className="mt-2 block font-normal text-zinc-500">
+            {t("tmc.localBarcode.available", { count: quantityLimit })}. {scannedLocalGroup ? "При возврате сохранится существующий штрих-код." : t("tmc.localBarcode.willCreate")}
+          </span>
+          {!quantityValid ? (
+            <span className="mt-1 block font-normal text-red-700">
+              {t("tmc.localBarcode.invalidQuantity", { count: quantityLimit })}
+            </span>
+          ) : null}
+        </label>
       ) : null}
 
       {item && submission.status !== "success" && !receiveAlreadyAssigned && !receiveUnavailable ? (
         <div aria-busy={submission.status === "submitting"} className="mt-5 space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
           {operation.id !== "receive" ? (
             <label className="block text-sm font-semibold text-zinc-800">
-              {t("tmc.operation.comment")}
+              {t(quantityTransferAvailable ? "tmc.localBarcode.comment" : "tmc.operation.comment")}
               <textarea
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
@@ -360,19 +550,23 @@ export default function TmcItemQrFlow({
           ) : null}
           <button
             type="button"
-            disabled={submission.status === "submitting" || (operation.id !== "receive" && !recipient)}
+            disabled={submission.status === "submitting" || (operation.id !== "receive" && (!recipient && !localReturnRecipient || !quantityValid))}
             onClick={() => void submitOperation()}
             className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             {submission.status === "submitting"
               ? t("tmc.operation.submitting")
-              : t(operation.id === "receive" ? "tmc.operation.acceptItem" : "tmc.operation.sendRequest")}
+              : scannedLocalGroup
+                ? "Отправить заявку на возврат"
+                : t(operation.id === "receive" ? "tmc.operation.acceptItem" : quantityTransferAvailable && actorRole === "admin" ? "tmc.localBarcode.submit" : "tmc.operation.sendRequest")}
           </button>
         </div>
       ) : null}
 
       {submission.status === "success" || receiveAlreadyAssigned ? (
-        submission.status === "success" && submission.requestId ? (
+        submission.status === "success" && submission.localGroups ? (
+          <LocalBarcodeTransferResult groups={submission.localGroups} />
+        ) : submission.status === "success" && submission.requestId ? (
           <p role="status" className="mt-5 rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">
             <a href={`/tmc/transfer-requests/${encodeURIComponent(submission.requestId)}`} className="underline">{t("tmc.operation.requestSuccess")}</a>
           </p>

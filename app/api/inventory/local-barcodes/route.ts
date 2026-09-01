@@ -53,6 +53,7 @@ function parseTransfer(value: unknown): CreateLocalBarcodeTransferInput {
     "recipientUserId",
     "quantity",
     "sourceVersion",
+    "comment",
   ]);
   if (
     Object.keys(input).some((key) => !allowed.has(key)) ||
@@ -60,7 +61,12 @@ function parseTransfer(value: unknown): CreateLocalBarcodeTransferInput {
     (input.sourceGroupId !== null && typeof input.sourceGroupId !== "string") ||
     typeof input.recipientUserId !== "string" ||
     typeof input.quantity !== "number" ||
-    typeof input.sourceVersion !== "number"
+    typeof input.sourceVersion !== "number" ||
+    !(
+      input.comment === undefined ||
+      input.comment === null ||
+      typeof input.comment === "string"
+    )
   ) {
     throw new ApplicationError("validation", "invalid_local_transfer");
   }
@@ -70,5 +76,6 @@ function parseTransfer(value: unknown): CreateLocalBarcodeTransferInput {
     recipientUserId: input.recipientUserId,
     quantity: input.quantity,
     sourceVersion: input.sourceVersion,
+    comment: input.comment ?? null,
   };
 }

@@ -180,10 +180,10 @@ export default function InventoryItemCreateForm({
               ) : null}
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
               {!restricted && (
-                <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span className="text-red-600">({t("createItem.required")})</span></span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")}</span></label>
+                <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span>({t("createItem.optional")})</span></span><input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")} {t("createItem.barcodeOptionalHint")}</span></label>
               )}
               <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4">
-                <p className="text-base font-medium text-zinc-800">{t("items.photo")} {!restricted && <span className="text-red-600">({t("createItem.required")})</span>}</p>
+                <p className="text-base font-medium text-zinc-800">{t("items.photo")} <span className="text-red-600">({t("createItem.required")})</span></p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => setCameraOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800"><Camera className="h-4 w-4" />{t("camera.open")}</button>
                   <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 text-center text-sm font-semibold text-emerald-800">{t("service.attachPhoto")}<input type="file" accept="image/jpeg" className="sr-only" onChange={(event) => void readJpeg(event.target.files?.[0]).then(setPhoto).catch(() => setError(t("common.error")))} /></label>
@@ -193,7 +193,7 @@ export default function InventoryItemCreateForm({
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !category || !roomId || (!restricted && (!barcode.trim() || !photo))} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
+              <button type="button" onClick={() => void submit()} disabled={saving || !name.trim() || !category || !roomId || !photo} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("createItem.creating") : t("createItem.create")}</button>
             </div>
 
             {codeScannerOpen ? (

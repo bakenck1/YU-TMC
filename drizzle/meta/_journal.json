@@ -218,6 +218,13 @@
       "when": 1788181200000,
       "tag": "20260831130000_local_item_barcodes",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788265800000,
+      "tag": "20260901123000_tmc_quantity_transfer_requests",
+      "breakpoints": true
     }
   ]
 }

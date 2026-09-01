@@ -10,6 +10,8 @@ import type {
 } from "@/lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import { executeIdempotentCommand } from "@/lib/application/services/idempotent-command-service";
+import { applyApprovedLocalBarcodeTransfer } from "@/lib/application/services/local-barcode-service";
+import type { LocalBarcodeRepository } from "@/lib/application/ports/local-barcode-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
   CancelTmcTransferRequestInput,
@@ -307,7 +309,7 @@ export class TmcTransferRequestService {
   ): Promise<TmcTransferRequestDto> {
     const normalized = normalizeDecisionInput(requestId, input, actor);
     try {
-      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
+      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour, localBarcodes }) => {
       const request = await transferRequests.findByIdForUpdate(normalized.requestId);
       if (!request) throw requestNotFound();
       const actorId = normalized.actorId;
@@ -357,6 +359,43 @@ export class TmcTransferRequestService {
       const results: Array<"accepted" | "rejected" | "invalidated"> = [];
       for (const item of [...pending].sort((left, right) => left.itemId.localeCompare(right.itemId))) {
         const decision = decisions.get(item.itemId)!;
+        if (item.requestedQuantity != null) {
+          if (!transferRequests.decideQuantityItem || !localBarcodes) {
+            throw new Error("tmc_quantity_transfer_repository_missing");
+          }
+          let result: "accepted" | "rejected" | "invalidated" =
+            decision.decision === "accept" ? "accepted" : "rejected";
+          let invalidReason: string | null = null;
+          if (result === "accepted") {
+            try {
+              await applyApprovedLocalBarcodeTransfer(localBarcodes, {
+                itemId: item.itemId,
+                sourceGroupId: item.sourceLocalGroupId,
+                recipientUserId: request.recipient.id,
+                quantity: item.requestedQuantity,
+                sourceVersion: item.sourceVersion!,
+                comment: request.comment,
+                initiator: { id: request.initiator.id, role: request.initiator.role },
+                occurredAt: decidedAt,
+              }, this.ids);
+            } catch (error) {
+              if (!(error instanceof ApplicationError)) throw error;
+              result = "invalidated";
+              invalidReason = error.publicCode;
+            }
+          }
+          results.push(await transferRequests.decideQuantityItem({
+            requestId: request.id,
+            requestItemId: item.id,
+            itemId: item.itemId,
+            expectedVersion: item.version,
+            result,
+            invalidReason,
+            decidedBy: actorId,
+            decidedAt,
+          }));
+          continue;
+        }
         results.push(await transferRequests.decideItem({
           requestId: request.id,
           requestItemId: item.id,
@@ -620,7 +659,7 @@ export class TmcTransferRequestService {
     const normalized = normalizeCreateInput(input);
 
     try {
-      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour }) => {
+      return await this.unitOfWork.transaction(async ({ transferRequests, stageFour, localBarcodes }) => {
       const users = new Map<string, TmcTransferUserRecord>();
       for (const userId of [...new Set([
         actorId,
@@ -658,12 +697,34 @@ export class TmcTransferRequestService {
       const candidates = await transferRequests.findCandidates(
         normalized.itemIds,
       );
-      const classified = classifyItems(
+      let classified = classifyItems(
         normalized.itemIds,
         candidates,
         recipient.id,
         authorizedActor,
       );
+      if (normalized.quantityTransfers.length > 0) {
+        if (!localBarcodes) throw new Error("tmc_quantity_transfer_repository_missing");
+        const candidatesById = new Map(candidates.map((candidate) => [candidate.itemId, candidate]));
+        const overrides = new Map<string, ClassifiedItem>();
+        for (const transfer of normalized.quantityTransfers) {
+          const candidate = candidatesById.get(transfer.itemId);
+          const issue = await quantityTransferProblem(
+            localBarcodes,
+            transfer,
+            candidate,
+            recipient.id,
+            authorizedActor,
+          );
+          overrides.set(
+            transfer.itemId,
+            issue || !candidate
+              ? problem(transfer.itemId, issue ?? "item_unavailable")
+              : { itemId: transfer.itemId, outcome: "candidate", candidate },
+          );
+        }
+        classified = classified.map((item) => overrides.get(item.itemId) ?? item);
+      }
       const included = classified.filter(
         (item): item is Extract<ClassifiedItem, { outcome: "candidate" }> =>
           item.outcome === "candidate",
@@ -703,6 +764,9 @@ export class TmcTransferRequestService {
         string,
         InsertedTmcTransferRequestItemRecord
       >();
+      const quantityByItemId = new Map(
+        normalized.quantityTransfers.map((transfer) => [transfer.itemId, transfer]),
+      );
       const lateProblemsByItemId = new Map<string, TmcOperationProblemCode>();
       for (const item of included) {
         try {
@@ -717,6 +781,10 @@ export class TmcTransferRequestService {
                   item.candidate.responsibilityPeriodId,
                 currentResponsibleIdAtRequest:
                   item.candidate.responsibleUser?.id ?? null,
+                requestedQuantity: quantityByItemId.get(item.itemId)?.quantity ?? null,
+                sourceLocalGroupId:
+                  quantityByItemId.get(item.itemId)?.sourceLocalGroupId ?? null,
+                sourceVersion: quantityByItemId.get(item.itemId)?.sourceVersion ?? null,
                 createdAt,
               }),
           );
@@ -788,6 +856,33 @@ export class TmcTransferRequestService {
         let hasAccepted = false;
         for (const item of [...persisted.items].sort((left, right) =>
           left.itemId.localeCompare(right.itemId))) {
+          if (item.requestedQuantity != null) {
+            if (!localBarcodes || !transferRequests.decideQuantityItem) {
+              throw new Error("tmc_quantity_transfer_repository_missing");
+            }
+            await applyApprovedLocalBarcodeTransfer(localBarcodes, {
+              itemId: item.itemId,
+              sourceGroupId: item.sourceLocalGroupId,
+              recipientUserId: persisted.recipient.id,
+              quantity: item.requestedQuantity,
+              sourceVersion: item.sourceVersion!,
+              comment: persisted.comment,
+              initiator: { id: currentActor.id, role: currentActor.role },
+              occurredAt: createdAt,
+            }, this.ids);
+            const result = await transferRequests.decideQuantityItem({
+              requestId: persisted.id,
+              requestItemId: item.id,
+              itemId: item.itemId,
+              expectedVersion: item.version,
+              result: "accepted",
+              invalidReason: null,
+              decidedBy: currentActor.id,
+              decidedAt: createdAt,
+            });
+            hasAccepted ||= result === "accepted";
+            continue;
+          }
           const result = await transferRequests.decideItem({
             requestId: persisted.id,
             requestItemId: item.id,
@@ -1427,9 +1522,41 @@ function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
   if (!input.itemIds.every((itemId) => isUuid(itemId))) {
     throw validation("invalid_item_ids");
   }
+  const normalizedItemIds = input.itemIds.map((itemId) => itemId.toLowerCase());
+  const itemIdSet = new Set(normalizedItemIds);
+  if (itemIdSet.size !== normalizedItemIds.length) {
+    // Preserve the existing per-item duplicate result instead of accepting
+    // ambiguous quantity metadata.
+    if (input.quantityTransfers?.length) throw validation("invalid_quantity_transfers");
+  }
+  const quantityTransfers = input.quantityTransfers ?? [];
+  if (!Array.isArray(quantityTransfers) || quantityTransfers.length > normalizedItemIds.length) {
+    throw validation("invalid_quantity_transfers");
+  }
+  const seenQuantityItems = new Set<string>();
+  const normalizedQuantityTransfers = quantityTransfers.map((entry) => {
+    if (
+      !entry || typeof entry !== "object" || !isUuid(entry.itemId) ||
+      (entry.sourceLocalGroupId !== null && !isUuid(entry.sourceLocalGroupId)) ||
+      !Number.isSafeInteger(entry.sourceVersion) || entry.sourceVersion < 1 ||
+      !Number.isSafeInteger(entry.quantity) || entry.quantity < 1
+    ) throw validation("invalid_quantity_transfers");
+    const itemId = entry.itemId.toLowerCase();
+    if (!itemIdSet.has(itemId) || seenQuantityItems.has(itemId)) {
+      throw validation("invalid_quantity_transfers");
+    }
+    seenQuantityItems.add(itemId);
+    return {
+      itemId,
+      sourceLocalGroupId: entry.sourceLocalGroupId?.toLowerCase() ?? null,
+      sourceVersion: entry.sourceVersion,
+      quantity: entry.quantity,
+    };
+  });
   return {
     recipientId: input.recipientId.toLowerCase(),
-    itemIds: input.itemIds.map((itemId) => itemId.toLowerCase()),
+    itemIds: normalizedItemIds,
+    quantityTransfers: normalizedQuantityTransfers,
     comment: normalizeComment(input.comment),
   };
 }
@@ -1690,6 +1817,8 @@ function toRequestItemDto(
     responsibleUserProfile: record.responsibleUserProfile
       ? toUserDto(record.responsibleUserProfile, includeContactEmails)
       : null,
+    requestedQuantity: record.requestedQuantity,
+    sourceLocalGroupId: record.sourceLocalGroupId,
     createdAt: record.createdAt.toISOString(),
     version: record.version,
   };
@@ -1852,6 +1981,46 @@ function normalizeAdministrativeReason(
   if (required && !normalized) throw validation("administrative_reason_required");
   if (!required && normalized) throw validation("administrative_reason_not_allowed");
   return required ? normalized : null;
+}
+
+async function quantityTransferProblem(
+  localBarcodes: LocalBarcodeRepository,
+  transfer: {
+    itemId: string;
+    sourceLocalGroupId: string | null;
+    sourceVersion: number;
+    quantity: number;
+  },
+  candidate: TmcTransferCandidateRecord | undefined,
+  recipientId: string,
+  actor: AuthorizationActor,
+): Promise<TmcOperationProblemCode | null> {
+  if (!candidate) return "item_unavailable";
+  if (candidate.itemStatus !== "active" || candidate.archivedAt) return "item_inactive";
+  if (candidate.hasActiveTransfer) return "active_transfer_exists";
+  const item = await localBarcodes.findItemForUpdate(transfer.itemId);
+  if (!item || /^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
+    return "item_unavailable";
+  }
+  if (transfer.sourceLocalGroupId) {
+    const source = await localBarcodes.findGroupForUpdate(transfer.sourceLocalGroupId);
+    if (!source || source.itemId !== item.id || source.status !== "active") {
+      return "item_unavailable";
+    }
+    if (source.version !== transfer.sourceVersion) return "version_conflict";
+    if (source.responsibleUserId !== actor.userId) return "item_unavailable";
+    if (source.responsibleUserId === recipientId) return "already_responsible";
+    if (transfer.quantity > source.quantity) return "version_conflict";
+    return null;
+  }
+  if (item.version !== transfer.sourceVersion) return "version_conflict";
+  if (
+    item.responsibleUserId !== actor.userId &&
+    !(actor.role === "admin" && item.responsibleUserId === null)
+  ) return item.responsibleUserId ? "item_unavailable" : "item_unassigned";
+  if (item.responsibleUserId === recipientId) return "already_responsible";
+  const available = item.quantity - await localBarcodes.allocatedQuantity(item.id);
+  return transfer.quantity <= available ? null : "version_conflict";
 }
 
 function publicCreationProblem(

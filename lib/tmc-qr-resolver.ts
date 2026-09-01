@@ -184,6 +184,9 @@ function parseResolutionBody(body: unknown): QrResolutionDto | null {
   ) {
     return null;
   }
+  if (target.localGroup !== undefined && !isLocalGroup(target.localGroup)) {
+    return null;
+  }
   return resolution as unknown as QrResolutionDto;
 }
 
@@ -208,6 +211,23 @@ function optionalNullableString(value: unknown): boolean {
 
 function optionalBoolean(value: unknown): boolean {
   return value === undefined || typeof value === "boolean";
+}
+
+function isLocalGroup(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.localBarcode === "string" &&
+    typeof value.originalBarcode === "string" &&
+    typeof value.quantity === "number" && Number.isSafeInteger(value.quantity) && value.quantity > 0 &&
+    typeof value.version === "number" && Number.isSafeInteger(value.version) && value.version > 0 &&
+    typeof value.transferredAt === "string" &&
+    (value.status === "active" || value.status === "cancelled") &&
+    (value.previousResponsible === null ||
+      (isObject(value.previousResponsible) &&
+        typeof value.previousResponsible.id === "string" &&
+        typeof value.previousResponsible.fullName === "string"))
+  );
 }
 
 function isAbortError(error: unknown): boolean {

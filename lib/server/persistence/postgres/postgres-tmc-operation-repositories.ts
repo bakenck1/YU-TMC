@@ -113,6 +113,9 @@ interface RequestItemRow extends QueryResultRow {
   current_responsible_full_name: string | null;
   current_responsible_email: string | null;
   current_responsible_role: TmcOperationUserRecord["role"] | null;
+  requested_quantity: number | string | null;
+  source_local_group_id: string | null;
+  source_version: number | string | null;
   result: TmcTransferRequestItemRecord["result"];
   invalid_reason: string | null;
   request_item_created_at: Date;
@@ -140,6 +143,9 @@ interface InsertedRequestItemRow extends QueryResultRow {
   item_id: string;
   responsibility_period_id_at_request: string | null;
   current_responsible_id_at_request: string | null;
+  requested_quantity: number | string | null;
+  source_local_group_id: string | null;
+  source_version: number | string | null;
   result: InsertedTmcTransferRequestItemRecord["result"];
   invalid_reason: string | null;
   created_at: Date;
@@ -154,6 +160,9 @@ interface AtomicInsertRequestItemRow extends QueryResultRow {
   item_id: string | null;
   responsibility_period_id_at_request: string | null;
   current_responsible_id_at_request: string | null;
+  requested_quantity: number | string | null;
+  source_local_group_id: string | null;
+  source_version: number | string | null;
   result: InsertedTmcTransferRequestItemRecord["result"] | null;
   invalid_reason: string | null;
   created_at: Date | null;
@@ -381,6 +390,33 @@ class PostgresTmcTransferRequestRepository
     return result;
   }
 
+  async decideQuantityItem(input: {
+    requestId: string;
+    requestItemId: string;
+    itemId: string;
+    expectedVersion: number;
+    result: "accepted" | "rejected" | "invalidated";
+    invalidReason: string | null;
+    decidedBy: string;
+    decidedAt: Date;
+  }) {
+    const updated = await this.source.query(
+      `update ${REQUEST_ITEMS}
+          set result = $4, invalid_reason = $5, decided_at = $6,
+              decided_by = $7, version = version + 1
+        where id = $1 and request_id = $2 and item_id = $3
+          and version = $8 and result = 'pending'`,
+      [input.requestItemId, input.requestId, input.itemId, input.result,
+       input.invalidReason, input.decidedAt, input.decidedBy, input.expectedVersion],
+    );
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new TmcOperationRepositoryConflictError("version_conflict", {
+        reason: "request_quantity_item_update_conflict",
+      });
+    }
+    return input.result;
+  }
+
   async closeRequest(input: CloseTmcTransferRequestRecord): Promise<boolean> {
     const result = await this.source.query(
       `update ${REQUESTS} request
@@ -505,8 +541,9 @@ class PostgresTmcTransferRequestRepository
          ), inserted as (
            insert into ${REQUEST_ITEMS}
              (id, request_id, item_id, responsibility_period_id_at_request,
-              current_responsible_id_at_request, created_at)
-           select $1, $2, item.id, $5, $6, $7
+              current_responsible_id_at_request, requested_quantity,
+              source_local_group_id, source_version, created_at)
+           select $1, $2, item.id, $5, $6, $8, $9, $10, $7
              from locked_item item
              left join locked_period period on true
             where item.version = $4
@@ -522,12 +559,15 @@ class PostgresTmcTransferRequestRepository
               )
            returning id, request_id, item_id,
              responsibility_period_id_at_request,
-             current_responsible_id_at_request, result, invalid_reason,
+             current_responsible_id_at_request, requested_quantity,
+             source_local_group_id, source_version, result, invalid_reason,
              created_at, decided_at, decided_by, version
          )
          select inserted.id, inserted.request_id, inserted.item_id,
                 inserted.responsibility_period_id_at_request,
                 inserted.current_responsible_id_at_request,
+                inserted.requested_quantity, inserted.source_local_group_id,
+                inserted.source_version,
                 inserted.result, inserted.invalid_reason,
                 inserted.created_at, inserted.decided_at,
                 inserted.decided_by, inserted.version,
@@ -544,6 +584,9 @@ class PostgresTmcTransferRequestRepository
           input.responsibilityPeriodIdAtRequest,
           input.currentResponsibleIdAtRequest,
           input.createdAt,
+          input.requestedQuantity ?? null,
+          input.sourceLocalGroupId ?? null,
+          input.sourceVersion ?? null,
         ],
       );
       const row = result.rows[0];
@@ -564,6 +607,9 @@ class PostgresTmcTransferRequestRepository
           row.responsibility_period_id_at_request,
         current_responsible_id_at_request:
           row.current_responsible_id_at_request,
+        requested_quantity: row.requested_quantity,
+        source_local_group_id: row.source_local_group_id,
+        source_version: row.source_version,
         result: required(row.result),
         invalid_reason: row.invalid_reason,
         created_at: required(row.created_at),
@@ -1006,6 +1052,9 @@ function requestAggregateSelect() {
            request_item.id as request_item_id, request_item.item_id,
            request_item.responsibility_period_id_at_request,
            request_item.current_responsible_id_at_request,
+           request_item.requested_quantity,
+           request_item.source_local_group_id,
+           request_item.source_version,
            captured.full_name as current_responsible_full_name,
            captured.email as current_responsible_email,
            captured.role as current_responsible_role,
@@ -1145,6 +1194,11 @@ function mapRequestItem(row: RequestItemRow): TmcTransferRequestItemRecord {
           required(row.current_responsible_role),
         )
       : null,
+    requestedQuantity: row.requested_quantity == null
+      ? null
+      : Number(row.requested_quantity),
+    sourceLocalGroupId: row.source_local_group_id,
+    sourceVersion: row.source_version == null ? null : Number(row.source_version),
     result: row.result,
     invalidReason: row.invalid_reason,
     createdAt: new Date(row.request_item_created_at),
@@ -1172,6 +1226,11 @@ function mapInsertedRequestItem(
       row.responsibility_period_id_at_request,
     currentResponsibleIdAtRequest:
       row.current_responsible_id_at_request,
+    requestedQuantity: row.requested_quantity == null
+      ? null
+      : Number(row.requested_quantity),
+    sourceLocalGroupId: row.source_local_group_id,
+    sourceVersion: row.source_version == null ? null : Number(row.source_version),
     result: row.result,
     invalidReason: row.invalid_reason,
     createdAt: new Date(row.created_at),

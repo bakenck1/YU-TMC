@@ -10,7 +10,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 const MAXIMUM_BODY_BYTES = 16 * 1024;
-const INPUT_FIELDS = new Set(["recipientId", "itemIds", "comment"]);
+const INPUT_FIELDS = new Set(["recipientId", "itemIds", "quantityTransfers", "comment"]);
 
 export interface TmcTransferRequestPostDependencies {
   authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
@@ -139,6 +139,9 @@ function parseInput(value: unknown): CreateTmcTransferRequestInput {
     typeof body.recipientId !== "string" ||
     !Array.isArray(body.itemIds) ||
     body.itemIds.some((itemId) => typeof itemId !== "string") ||
+    (body.quantityTransfers !== undefined &&
+      (!Array.isArray(body.quantityTransfers) ||
+        body.quantityTransfers.some((entry) => !isQuantityTransfer(entry)))) ||
     (body.comment !== undefined &&
       body.comment !== null &&
       typeof body.comment !== "string")
@@ -148,8 +151,25 @@ function parseInput(value: unknown): CreateTmcTransferRequestInput {
   return {
     recipientId: body.recipientId,
     itemIds: body.itemIds,
+    ...(body.quantityTransfers !== undefined
+      ? { quantityTransfers: body.quantityTransfers as CreateTmcTransferRequestInput["quantityTransfers"] }
+      : {}),
     ...(body.comment !== undefined ? { comment: body.comment as string | null } : {}),
   };
+}
+
+function isQuantityTransfer(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    Object.keys(entry).every((field) =>
+      ["itemId", "sourceLocalGroupId", "sourceVersion", "quantity"].includes(field),
+    ) &&
+    typeof entry.itemId === "string" &&
+    (entry.sourceLocalGroupId === null || typeof entry.sourceLocalGroupId === "string") &&
+    typeof entry.sourceVersion === "number" &&
+    typeof entry.quantity === "number"
+  );
 }
 
 function responseHeaders(replayed: boolean): HeadersInit {

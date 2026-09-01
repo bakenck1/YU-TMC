@@ -23,6 +23,148 @@ const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
 type AuthenticatedActor = AuthorizationActor & { sessionVersion: number };
 
+export interface ApprovedLocalBarcodeTransferInput {
+  itemId: string;
+  sourceGroupId: string | null;
+  recipientUserId: string;
+  quantity: number;
+  sourceVersion: number;
+  comment: string | null;
+  initiator: { id: string; role: AuthorizationActor["role"] };
+  occurredAt: Date;
+}
+
+/** Applies a recipient-approved quantity transfer inside the caller transaction. */
+export async function applyApprovedLocalBarcodeTransfer(
+  localBarcodes: LocalBarcodeRepositories["localBarcodes"],
+  input: ApprovedLocalBarcodeTransferInput,
+  ids: { create(): string },
+): Promise<LocalBarcodeTransferResultDto> {
+  const recipient = await localBarcodes.findRecipientForUpdate(input.recipientUserId);
+  if (!recipient || !recipient.active || recipient.deletedAt || recipient.role !== "employee") {
+    throw validation("recipient_unavailable");
+  }
+  const item = await localBarcodes.findItemForUpdate(input.itemId);
+  if (!item) throw notFound("item_not_found");
+  if (item.status !== "active") throw conflict("item_not_available");
+  if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
+    throw validation("source_barcode_required");
+  }
+
+  if (input.sourceGroupId) {
+    const source = await localBarcodes.findGroupForUpdate(input.sourceGroupId);
+    if (!source || source.itemId !== item.id) throw notFound("local_group_not_found");
+    if (source.status !== "active") throw conflict("local_group_cancelled");
+    if (source.version !== input.sourceVersion) throw conflict("version_conflict");
+    if (source.responsibleUserId !== input.initiator.id) throw forbidden();
+    if (!source.previousResponsibleUserId || source.previousResponsibleUserId !== recipient.id) {
+      throw conflict("local_group_return_only");
+    }
+    if (source.responsibleUserId === recipient.id) throw conflict("already_responsible");
+    if (input.quantity > source.quantity) throw conflict("quantity_exceeds_available");
+    if (input.quantity === source.quantity) {
+      const roomId = recipient.defaultRoomId && recipient.roomActive
+        ? recipient.defaultRoomId
+        : source.roomId;
+      const updated = await localBarcodes.transferWholeGroup({
+        id: source.id,
+        version: source.version,
+        responsibleUserId: recipient.id,
+        roomId,
+        transferredAt: input.occurredAt,
+      });
+      if (!updated) throw conflict("version_conflict");
+      await localBarcodes.insertEvent({
+        id: ids.create(), groupId: source.id, eventType: "transferred",
+        actorId: input.initiator.id,
+        fromResponsibleUserId: source.responsibleUserId,
+        toResponsibleUserId: recipient.id, quantity: source.quantity,
+        roomId, reason: input.comment, occurredAt: input.occurredAt,
+      });
+      await localBarcodes.appendAudit({
+        id: ids.create(), actorId: input.initiator.id,
+        actorRole: input.initiator.role, groupId: source.id,
+        revision: source.version + 1, action: "local_barcode.transferred",
+        beforeValues: { responsibleUserId: source.responsibleUserId, roomId: source.roomId, quantity: source.quantity },
+        afterValues: { responsibleUserId: recipient.id, roomId, quantity: source.quantity },
+        reason: input.comment, administrative: false, occurredAt: input.occurredAt,
+      });
+      return { group: toDto((await localBarcodes.findGroup(source.id))!), createdNewCode: false };
+    }
+    if (!(await localBarcodes.reduceGroupQuantity(source.id, source.version, input.quantity))) {
+      throw conflict("version_conflict");
+    }
+    return createApprovedSplit(localBarcodes, item, source, recipient, input, ids);
+  }
+
+  if (item.version !== input.sourceVersion) throw conflict("version_conflict");
+  const available = item.quantity - await localBarcodes.allocatedQuantity(item.id);
+  if (input.quantity > available) throw conflict("quantity_exceeds_available");
+  if (
+    item.responsibleUserId !== input.initiator.id &&
+    !(input.initiator.role === "admin" && item.responsibleUserId === null)
+  ) throw forbidden();
+  if (item.responsibleUserId === recipient.id) throw conflict("already_responsible");
+  if (!(await localBarcodes.advanceItemVersion(item.id, item.version))) {
+    throw conflict("version_conflict");
+  }
+  return createApprovedSplit(localBarcodes, item, null, recipient, input, ids);
+}
+
+async function createApprovedSplit(
+  localBarcodes: LocalBarcodeRepositories["localBarcodes"],
+  item: LocalBarcodeItemRecord,
+  source: LocalBarcodeGroupRecord | null,
+  recipient: { id: string; defaultRoomId: string | null; roomActive: boolean },
+  input: ApprovedLocalBarcodeTransferInput,
+  ids: { create(): string },
+): Promise<LocalBarcodeTransferResultDto> {
+  const roomId = recipient.defaultRoomId && recipient.roomActive
+    ? recipient.defaultRoomId
+    : (source?.roomId ?? item.roomId);
+  let sequence: bigint | null = null;
+  let barcodeValue = "";
+  let barcodeKey = "";
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    sequence = await localBarcodes.nextSequence();
+    try {
+      barcodeValue = buildLocalBarcode(item.inventoryNumber, sequence);
+    } catch (error) {
+      if (error instanceof RangeError) throw validation("source_barcode_not_code39");
+      throw error;
+    }
+    barcodeKey = localBarcodeComparisonKey(barcodeValue);
+    if (!(await localBarcodes.isBarcodeRegistered(barcodeKey))) break;
+    sequence = null;
+  }
+  if (sequence === null) throw conflict("local_barcode_namespace_exhausted");
+  const id = ids.create();
+  await localBarcodes.insertGroup({
+    id, itemId: item.id, parentGroupId: source?.id ?? null, sequenceNumber: sequence,
+    barcodeValue, barcodeKey, quantity: input.quantity,
+    responsibleUserId: recipient.id, roomId,
+    previousResponsibleUserId: source?.responsibleUserId ?? item.responsibleUserId,
+    previousRoomId: source?.roomId ?? item.roomId,
+    createdBy: input.initiator.id, occurredAt: input.occurredAt,
+  });
+  await localBarcodes.insertEvent({
+    id: ids.create(), groupId: id, eventType: source ? "split" : "created",
+    actorId: input.initiator.id,
+    fromResponsibleUserId: source?.responsibleUserId ?? item.responsibleUserId,
+    toResponsibleUserId: recipient.id, quantity: input.quantity, roomId,
+    reason: input.comment, occurredAt: input.occurredAt,
+  });
+  await localBarcodes.appendAudit({
+    id: ids.create(), actorId: input.initiator.id, actorRole: input.initiator.role,
+    groupId: id, revision: 1,
+    action: source ? "local_barcode.split" : "local_barcode.created",
+    beforeValues: { sourceGroupId: source?.id ?? null, sourceQuantity: source?.quantity ?? item.quantity },
+    afterValues: { barcodeValue, quantity: input.quantity, responsibleUserId: recipient.id, roomId },
+    reason: input.comment, administrative: false, occurredAt: input.occurredAt,
+  });
+  return { group: toDto((await localBarcodes.findGroup(id))!), createdNewCode: true };
+}
+
 export class LocalBarcodeService {
   constructor(
     private readonly unitOfWork: UnitOfWork<LocalBarcodeRepositories>,
@@ -66,18 +208,21 @@ export class LocalBarcodeService {
         if (source.status !== "active") throw conflict("local_group_cancelled");
         if (source.version !== normalized.sourceVersion) throw conflict("version_conflict");
         if (source.responsibleUserId !== currentActor.id) throw forbidden();
+        if (!source.previousResponsibleUserId || source.previousResponsibleUserId !== recipient.id) {
+          throw conflict("local_group_return_only");
+        }
         if (source.responsibleUserId === recipient.id) throw conflict("already_responsible");
         if (normalized.quantity > source.quantity) throw conflict("quantity_exceeds_available");
         if (normalized.quantity === source.quantity) {
           const roomId = recipient.defaultRoomId && recipient.roomActive ? recipient.defaultRoomId : source.roomId;
           const updated = await localBarcodes.transferWholeGroup({ id: source.id, version: source.version, responsibleUserId: recipient.id, roomId, transferredAt: occurredAt });
           if (!updated) throw conflict("version_conflict");
-          await localBarcodes.insertEvent({ id: this.ids.create(), groupId: source.id, eventType: "transferred", actorId: currentActor.id, fromResponsibleUserId: source.responsibleUserId, toResponsibleUserId: recipient.id, quantity: source.quantity, roomId, reason: null, occurredAt });
-          await localBarcodes.appendAudit({ id: this.ids.create(), actorId: currentActor.id, actorRole: currentActor.role, groupId: source.id, revision: source.version + 1, action: "local_barcode.transferred", beforeValues: { responsibleUserId: source.responsibleUserId, roomId: source.roomId, quantity: source.quantity }, afterValues: { responsibleUserId: recipient.id, roomId, quantity: source.quantity }, reason: null, administrative: false, occurredAt });
+          await localBarcodes.insertEvent({ id: this.ids.create(), groupId: source.id, eventType: "transferred", actorId: currentActor.id, fromResponsibleUserId: source.responsibleUserId, toResponsibleUserId: recipient.id, quantity: source.quantity, roomId, reason: normalized.comment ?? null, occurredAt });
+          await localBarcodes.appendAudit({ id: this.ids.create(), actorId: currentActor.id, actorRole: currentActor.role, groupId: source.id, revision: source.version + 1, action: "local_barcode.transferred", beforeValues: { responsibleUserId: source.responsibleUserId, roomId: source.roomId, quantity: source.quantity }, afterValues: { responsibleUserId: recipient.id, roomId, quantity: source.quantity }, reason: normalized.comment ?? null, administrative: false, occurredAt });
           return { group: toDto((await localBarcodes.findGroup(source.id))!), createdNewCode: false };
         }
         if (!(await localBarcodes.reduceGroupQuantity(source.id, source.version, normalized.quantity))) throw conflict("version_conflict");
-        return this.createSplit(localBarcodes, item, source, recipient, normalized.quantity, currentActor, occurredAt);
+        return this.createSplit(localBarcodes, item, source, recipient, normalized.quantity, normalized.comment ?? null, currentActor, occurredAt);
       }
 
       if (item.version !== normalized.sourceVersion) throw conflict("version_conflict");
@@ -87,11 +232,11 @@ export class LocalBarcodeService {
       if (item.responsibleUserId !== currentActor.id && !(currentActor.role === "admin" && item.responsibleUserId === null)) throw forbidden();
       if (item.responsibleUserId === recipient.id) throw conflict("already_responsible");
       if (!(await localBarcodes.advanceItemVersion(item.id, item.version))) throw conflict("version_conflict");
-      return this.createSplit(localBarcodes, item, null, recipient, normalized.quantity, currentActor, occurredAt);
+      return this.createSplit(localBarcodes, item, null, recipient, normalized.quantity, normalized.comment ?? null, currentActor, occurredAt);
     }, { isolation: "serializable", maxAttempts: 3 });
   }
 
-  private async createSplit(localBarcodes: LocalBarcodeRepositories["localBarcodes"], item: LocalBarcodeItemRecord, source: LocalBarcodeGroupRecord | null, recipient: { id: string; defaultRoomId: string | null; roomActive: boolean }, quantity: number, actor: { id: string; role: AuthenticatedActor["role"] }, occurredAt: Date): Promise<LocalBarcodeTransferResultDto> {
+  private async createSplit(localBarcodes: LocalBarcodeRepositories["localBarcodes"], item: LocalBarcodeItemRecord, source: LocalBarcodeGroupRecord | null, recipient: { id: string; defaultRoomId: string | null; roomActive: boolean }, quantity: number, comment: string | null, actor: { id: string; role: AuthenticatedActor["role"] }, occurredAt: Date): Promise<LocalBarcodeTransferResultDto> {
     const roomId = recipient.defaultRoomId && recipient.roomActive ? recipient.defaultRoomId : (source?.roomId ?? item.roomId);
     let sequence: bigint | null = null;
     let barcodeValue = "";
@@ -113,8 +258,8 @@ export class LocalBarcodeService {
     if (sequence === null) throw conflict("local_barcode_namespace_exhausted");
     const id = this.ids.create();
     await localBarcodes.insertGroup({ id, itemId: item.id, parentGroupId: source?.id ?? null, sequenceNumber: sequence, barcodeValue, barcodeKey, quantity, responsibleUserId: recipient.id, roomId, previousResponsibleUserId: source?.responsibleUserId ?? item.responsibleUserId, previousRoomId: source?.roomId ?? item.roomId, createdBy: actor.id, occurredAt });
-    await localBarcodes.insertEvent({ id: this.ids.create(), groupId: id, eventType: source ? "split" : "created", actorId: actor.id, fromResponsibleUserId: source?.responsibleUserId ?? item.responsibleUserId, toResponsibleUserId: recipient.id, quantity, roomId, reason: null, occurredAt });
-    await localBarcodes.appendAudit({ id: this.ids.create(), actorId: actor.id, actorRole: actor.role, groupId: id, revision: 1, action: source ? "local_barcode.split" : "local_barcode.created", beforeValues: { sourceGroupId: source?.id ?? null, sourceQuantity: source?.quantity ?? item.quantity }, afterValues: { barcodeValue, quantity, responsibleUserId: recipient.id, roomId }, reason: null, administrative: false, occurredAt });
+    await localBarcodes.insertEvent({ id: this.ids.create(), groupId: id, eventType: source ? "split" : "created", actorId: actor.id, fromResponsibleUserId: source?.responsibleUserId ?? item.responsibleUserId, toResponsibleUserId: recipient.id, quantity, roomId, reason: comment, occurredAt });
+    await localBarcodes.appendAudit({ id: this.ids.create(), actorId: actor.id, actorRole: actor.role, groupId: id, revision: 1, action: source ? "local_barcode.split" : "local_barcode.created", beforeValues: { sourceGroupId: source?.id ?? null, sourceQuantity: source?.quantity ?? item.quantity }, afterValues: { barcodeValue, quantity, responsibleUserId: recipient.id, roomId }, reason: comment, administrative: false, occurredAt });
     return { group: toDto((await localBarcodes.findGroup(id))!), createdNewCode: true };
   }
 
@@ -165,6 +310,19 @@ export class LocalBarcodeService {
     });
   }
 
+  async getGroupPhoto(id: string, actor: AuthorizationActor) {
+    if (!isUuid(id)) throw notFound("local_group_not_found");
+    return this.unitOfWork.read(async ({ localBarcodes }) => {
+      const group = await localBarcodes.findGroup(id.toLowerCase());
+      if (!group || !canRead(actor, group.responsibleUserId)) {
+        throw notFound("local_group_not_found");
+      }
+      const photo = await localBarcodes.findGroupPhoto(group.id);
+      if (!photo) throw notFound("item_photo_not_found");
+      return photo;
+    });
+  }
+
   async resolveBarcode(value: unknown, actor: AuthorizationActor): Promise<LocalBarcodeGroupDto | null> {
     let key: string;
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
@@ -172,6 +330,15 @@ export class LocalBarcodeService {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
       return group && canRead(actor, group.responsibleUserId) ? toDto(group) : null;
     });
+  }
+
+  async listActiveGroupsAssignedTo(actor: AuthorizationActor): Promise<LocalBarcodeGroupDto[]> {
+    if (!hasPermission(actor.role, "inventory.local_barcode.read_assigned")) {
+      throw forbidden();
+    }
+    return this.unitOfWork.read(async ({ localBarcodes }) =>
+      (await localBarcodes.listActiveGroupsAssignedTo(actor.userId)).map(toDto),
+    );
   }
 
   async getDistribution(itemId: string, actor: AuthorizationActor): Promise<LocalBarcodeDistributionDto> {
@@ -193,12 +360,12 @@ export class LocalBarcodeService {
 }
 
 function toDto(group: LocalBarcodeGroupRecord): LocalBarcodeGroupDto {
-  return { id: group.id, itemId: group.itemId, itemName: group.itemName, originalBarcode: group.originalBarcode, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
+  return { id: group.id, itemId: group.itemId, itemName: group.itemName, originalBarcode: group.originalBarcode, itemType: group.itemType, brand: group.itemBrand, model: group.itemModel, description: group.itemDescription, unitPrice: group.unitPrice, photoUrl: group.itemPhotoId ? `/api/inventory/local-barcodes/${group.id}/photo?v=${group.version}` : null, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, previousResponsible: group.previousResponsibleUserId ? { id: group.previousResponsibleUserId, fullName: group.previousResponsibleName ?? "" } : null, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
 }
 
 function canRead(actor: AuthorizationActor, responsibleId: string) { return hasPermission(actor.role, "inventory.local_barcode.read_all") || (actor.userId === responsibleId && hasPermission(actor.role, "inventory.local_barcode.read_assigned")); }
 async function requireLiveActor(repo: LocalBarcodeRepositories["localBarcodes"], actor: AuthenticatedActor) { const current = await repo.findActorForUpdate(actor.userId); if (!current || !current.active || current.deletedAt || current.role !== actor.role || current.version !== actor.sessionVersion) throw forbidden(); return current; }
-function normalizeTransfer(input: CreateLocalBarcodeTransferInput): CreateLocalBarcodeTransferInput { if (!input || typeof input !== "object" || !isUuid(input.itemId) || (input.sourceGroupId !== null && !isUuid(input.sourceGroupId)) || !isUuid(input.recipientUserId) || !Number.isSafeInteger(input.quantity) || input.quantity < 1 || !Number.isSafeInteger(input.sourceVersion) || input.sourceVersion < 1) throw validation("invalid_local_transfer"); return { itemId: input.itemId.toLowerCase(), sourceGroupId: input.sourceGroupId?.toLowerCase() ?? null, recipientUserId: input.recipientUserId.toLowerCase(), quantity: input.quantity, sourceVersion: input.sourceVersion }; }
+function normalizeTransfer(input: CreateLocalBarcodeTransferInput): CreateLocalBarcodeTransferInput { const comment = typeof input?.comment === "string" ? input.comment.normalize("NFKC").trim() : ""; if (!input || typeof input !== "object" || !isUuid(input.itemId) || (input.sourceGroupId !== null && !isUuid(input.sourceGroupId)) || !isUuid(input.recipientUserId) || !Number.isSafeInteger(input.quantity) || input.quantity < 1 || !Number.isSafeInteger(input.sourceVersion) || input.sourceVersion < 1 || [...comment].length > 1000) throw validation("invalid_local_transfer"); return { itemId: input.itemId.toLowerCase(), sourceGroupId: input.sourceGroupId?.toLowerCase() ?? null, recipientUserId: input.recipientUserId.toLowerCase(), quantity: input.quantity, sourceVersion: input.sourceVersion, comment: comment || null }; }
 function normalizeCancel(groupId: string, input: CancelLocalBarcodeInput) { const reason = typeof input?.reason === "string" ? input.reason.normalize("NFKC").trim() : ""; if (!isUuid(groupId) || !Number.isSafeInteger(input?.version) || input.version < 1 || !reason || [...reason].length > 1000) throw validation("invalid_local_cancellation"); return { groupId: groupId.toLowerCase(), version: input.version, reason }; }
 function normalizeKey(value: unknown) { if (typeof value !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(value)) throw validation("idempotency_key_invalid"); return value; }
 async function sha256Hex(value: unknown) { const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value))); return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }

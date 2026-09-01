@@ -76,6 +76,12 @@ test("POST transfer-requests forwards only authenticated server identity and exa
   const response = await handler(jsonRequest({
     recipientId: RECIPIENT_ID,
     itemIds: [ITEM_ID, ITEM_ID],
+    quantityTransfers: [{
+      itemId: ITEM_ID,
+      sourceLocalGroupId: null,
+      sourceVersion: 3,
+      quantity: 2,
+    }],
     comment: "  Передача  ",
   }));
 
@@ -86,6 +92,12 @@ test("POST transfer-requests forwards only authenticated server identity and exa
   assert.deepEqual(calls, [[{
     recipientId: RECIPIENT_ID,
     itemIds: [ITEM_ID, ITEM_ID],
+    quantityTransfers: [{
+      itemId: ITEM_ID,
+      sourceLocalGroupId: null,
+      sourceVersion: 3,
+      quantity: 2,
+    }],
     comment: "  Передача  ",
   }, ACTOR, IDEMPOTENCY_KEY]]);
 });

@@ -19,6 +19,8 @@ export interface TmcTransferRequestCardItemView {
     };
   };
   responsibleUserProfile: { fullName: string } | null;
+  requestedQuantity?: number | null;
+  sourceLocalGroupId?: string | null;
   result: TmcTransferItemResult;
   version: number;
 }
@@ -80,6 +82,8 @@ export function toTmcTransferRequestCardView(
       responsibleUserProfile: entry.responsibleUserProfile
         ? { fullName: entry.responsibleUserProfile.fullName }
         : null,
+      requestedQuantity: entry.requestedQuantity ?? null,
+      sourceLocalGroupId: entry.sourceLocalGroupId ?? null,
       result: entry.result,
       version: entry.version,
     })),

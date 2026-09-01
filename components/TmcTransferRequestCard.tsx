@@ -253,15 +253,22 @@ export default function TmcTransferRequestCard({
                 <div className="min-w-0 flex-1">
                   <h2 className="break-words font-semibold text-zinc-900">{index + 1}. {item.item.name}</h2>
                   <TmcRequestItemResultBadge result={item.result} />
-                  <p className="mt-1 break-all text-sm text-zinc-500">{item.item.inventoryNumber}</p>
+                  <p className="mt-1 break-all text-sm text-zinc-500"><span className="font-medium text-zinc-700">Штрих-код 1С:</span> {item.item.inventoryNumber}</p>
+                  {item.requestedQuantity != null ? (
+                    <p className="mt-1 text-sm text-emerald-800">
+                      {item.sourceLocalGroupId
+                        ? "Возврат локальной группы: существующий штрих-код сохранится после принятия."
+                        : "После принятия будет создан новый локальный штрих-код для указанного количества."}
+                    </p>
+                  ) : null}
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{item.item.location.buildingName} · {item.item.location.roomDesignation}</p>
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><UserRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span className="break-words">{t("tmc.request.currentResponsible")}: {item.responsibleUserProfile?.fullName ?? t("common.notAssigned")}</span></p>
                 </div>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 text-sm sm:grid-cols-3">
-                <TmcRequestMeta label={t("tmc.request.quantity")} value={String(item.item.quantity)} />
+                <TmcRequestMeta label={t("tmc.request.quantity")} value={String(item.requestedQuantity ?? item.item.quantity)} />
                 <TmcRequestMeta label={t("tmc.request.unitPrice")} value={money.format(item.item.unitPrice)} />
-                <TmcRequestMeta label={t("tmc.request.totalPrice")} value={money.format(item.item.quantity * item.item.unitPrice)} />
+                <TmcRequestMeta label={t("tmc.request.totalPrice")} value={money.format((item.requestedQuantity ?? item.item.quantity) * item.item.unitPrice)} />
               </dl>
             </article>
           );

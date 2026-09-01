@@ -134,7 +134,10 @@ function createApplicationServices(): ApplicationServices {
     push,
     settings: new SettingsService(new PostgresSettingsRepository()),
     tmcTransferRequests: new TmcTransferRequestService(
-      createPostgresUnitOfWork(createPostgresTmcOperationRepositories),
+      createPostgresUnitOfWork((source) => ({
+        ...createPostgresTmcOperationRepositories(source),
+        localBarcodes: createPostgresLocalBarcodeRepositories(source).localBarcodes,
+      })),
       { now: () => new Date() },
       { create: () => randomUUID() },
     ),

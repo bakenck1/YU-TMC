@@ -73,8 +73,14 @@ function itemDetails(item: InventoryItem) {
 }
 
 function itemLinkLabel(item: InventoryItem) {
-  const identifier = item.inventoryNumber !== "-" ? item.inventoryNumber : `ID ${item.id}`;
+  const identifier = item.inventoryNumber !== "-" && !isTemporaryBarcode(item.inventoryNumber)
+    ? item.inventoryNumber
+    : `ID ${item.id}`;
   return `${item.name} вЂ” ${identifier}`;
+}
+
+function itemHref(item: InventoryItem) {
+  return item.localGroupId ? `/local-barcodes/${item.localGroupId}` : `/items/${item.id}`;
 }
 
 const EMPTY_TABLE_FILTERS = {
@@ -112,7 +118,13 @@ function categoryLabel(
 }
 
 function barcodeValue(item: InventoryItem) {
+  if (item.localGroupId) return item.inventoryNumber;
+  if (isTemporaryBarcode(item.inventoryNumber)) return null;
   return code39PayloadForItem(item.inventoryNumber, item.id);
+}
+
+function isTemporaryBarcode(value: string) {
+  return /^TMP-\d{4}-\d{6}$/i.test(value);
 }
 
 export default function ItemsTable({
@@ -236,10 +248,11 @@ export default function ItemsTable({
     to: lastRecord,
   } = pagination;
 
+  const selectablePageItems = pageItems.filter((item) => !item.localGroupId);
   const allVisibleSelected =
-    pageItems.length > 0 && pageItems.every((item) => selected.has(item.id));
-  const someVisibleSelected = pageItems.some((item) => selected.has(item.id));
-  const selectedItems = items.filter((item) => selected.has(item.id));
+    selectablePageItems.length > 0 && selectablePageItems.every((item) => selected.has(item.id));
+  const someVisibleSelected = selectablePageItems.some((item) => selected.has(item.id));
+  const selectedItems = items.filter((item) => !item.localGroupId && selected.has(item.id));
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -321,8 +334,8 @@ export default function ItemsTable({
   function toggleAllVisible() {
     setSelected((current) => {
       const next = new Set(current);
-      if (allVisibleSelected) pageItems.forEach((item) => next.delete(item.id));
-      else pageItems.forEach((item) => next.add(item.id));
+      if (allVisibleSelected) selectablePageItems.forEach((item) => next.delete(item.id));
+      else selectablePageItems.forEach((item) => next.add(item.id));
       return next;
     });
   }
@@ -540,13 +553,13 @@ export default function ItemsTable({
               return (
                 <tr
                   key={item.id}
-                  onClick={() => router.push(`/items/${item.id}`)}
+                  onClick={() => router.push(itemHref(item))}
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
-                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></td>
+                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={Boolean(item.localGroupId)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
-                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item)}</td> : null}
-                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
+                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
+                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
                   {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
@@ -577,17 +590,17 @@ export default function ItemsTable({
       <div className="space-y-3 md:hidden">
         {pageItems.map((item) => {
           return (
-            <article key={item.id} onClick={() => router.push(`/items/${item.id}`)} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
+            <article key={item.id} onClick={() => router.push(itemHref(item))} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
                 <label onClick={(event) => event.stopPropagation()} className="-ml-2 -mt-2 inline-flex min-h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl active:bg-zinc-100">
-                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600" />
+                  <input type="checkbox" disabled={Boolean(item.localGroupId)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
                 </label>
                 {visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">
-                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={`/items/${item.id}`} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
+                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
                   {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{categoryLabel(item.category, t)}</p> : null}
                   {visibleColumns.brandModel ? <p className="mt-1 text-xs text-zinc-500">{item.brandModel ?? "—"}</p> : null}
-                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item)}</p> : null}
+                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item) ?? t("items.barcodeMissing")}</p> : null}
                   {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "вЂ”"}</p> : null}
                 </div>
                 {visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} /> : null}

@@ -117,6 +117,47 @@ describe("TmcItemQrFlow", () => {
       .toBe("/tmc/transfer-requests/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   });
 
+  it("asks for quantity from a grouped item and sends an employee approval request", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(responseForGroupedItem())
+      .mockResolvedValueOnce(createdRequestResponse());
+
+    render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
+    await screen.findByRole("heading", { name: "Chair" });
+    fireEvent.click(screen.getByTestId("recipient-picker"));
+
+    const quantity = screen.getByRole("spinbutton", {
+      name: /tmc\.localBarcode\.quantityQuestion/,
+    });
+    expect(quantity.getAttribute("min")).toBe("1");
+    expect(quantity.getAttribute("max")).toBe("5");
+    fireEvent.change(quantity, { target: { value: "2" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "tmc.localBarcode.comment" }), {
+      target: { value: "Two chairs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "tmc.operation.sendRequest" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(
+      "/api/inventory/transfer-requests",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const init = vi.mocked(fetch).mock.calls.at(-1)?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      recipientId: "22222222-2222-4222-8222-222222222222",
+      itemIds: ["33333333-3333-4333-8333-333333333333"],
+      quantityTransfers: [{
+        itemId: "33333333-3333-4333-8333-333333333333",
+        sourceLocalGroupId: null,
+        sourceVersion: 3,
+        quantity: 2,
+      }],
+      comment: "Two chairs",
+    });
+    expect((await screen.findByRole("link", { name: "tmc.operation.requestSuccess" })).getAttribute("href"))
+      .toBe("/tmc/transfer-requests/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  });
+
   it("coalesces a double confirmation and aborts its receive request when the selected item is reset", async () => {
     let resolveAcceptance!: (value: Response) => void;
     vi.mocked(fetch)
@@ -264,6 +305,85 @@ function createdRequestResponse() {
   return {
     ok: true,
     json: async () => ({ result: createdRequestResult() }),
+  } as Response;
+}
+
+function responseForGroupedItem() {
+  return {
+    ok: true,
+    json: async () => ({
+      resolution: {
+        status: "resolved",
+        canonicalKey: "4897/4897",
+        format: "legacy_raw",
+        qrStatus: "active",
+        target: {
+          kind: "item",
+          id: "33333333-3333-4333-8333-333333333333",
+          status: "active",
+          title: "Chair",
+          inventoryNumber: "4897/4897",
+          buildingName: "A",
+          roomDesignation: "101",
+          responsibleName: "Current owner",
+          isAssigned: true,
+          isCurrentUserResponsible: true,
+        },
+        distribution: {
+          itemId: "33333333-3333-4333-8333-333333333333",
+          itemName: "Chair",
+          originalBarcode: "4897/4897",
+          originalQuantity: 5,
+          originalVersion: 3,
+          originalRemainder: 5,
+          originalResponsible: {
+            id: "11111111-1111-4111-8111-111111111111",
+            fullName: "Current owner",
+          },
+          originalLocation: {
+            roomId: "77777777-7777-4777-8777-777777777777",
+            roomDesignation: "101",
+            buildingId: "66666666-6666-4666-8666-666666666666",
+            buildingName: "A",
+          },
+          groups: [],
+        },
+      },
+    }),
+  } as Response;
+}
+
+function localBarcodeResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      result: {
+        createdNewCode: true,
+        group: {
+          id: "99999999-9999-4999-8999-999999999999",
+          itemId: "33333333-3333-4333-8333-333333333333",
+          itemName: "Chair",
+          originalBarcode: "4897/4897",
+          localBarcode: "4897/4897-0001",
+          parentGroupId: null,
+          quantity: 2,
+          responsible: {
+            id: "22222222-2222-4222-8222-222222222222",
+            fullName: "New owner",
+          },
+          location: {
+            roomId: "77777777-7777-4777-8777-777777777777",
+            roomDesignation: "101",
+            buildingId: "66666666-6666-4666-8666-666666666666",
+            buildingName: "A",
+          },
+          transferredAt: "2026-09-01T00:00:00.000Z",
+          status: "active",
+          version: 1,
+          cancellation: null,
+        },
+      },
+    }),
   } as Response;
 }
 

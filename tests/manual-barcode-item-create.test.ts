@@ -14,7 +14,7 @@ import { parseCode39ScanInput } from "../lib/domain/code39";
 
 const ROOT = new URL("../", import.meta.url);
 
-test("manual barcode input is sent to the item creation API", async () => {
+test("manual barcode input is optional and sent to the item creation API when provided", async () => {
   const form = await readFile(
     new URL("components/InventoryItemCreateForm.tsx", ROOT),
     "utf8",
@@ -27,7 +27,8 @@ test("manual barcode input is sent to the item creation API", async () => {
   assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);
-  assert.match(form, /!barcode\.trim\(\)/);
+  assert.match(form, /t\("createItem\.barcodeOptionalHint"\)/);
+  assert.doesNotMatch(form, /!barcode\.trim\(\)/);
   assert.match(form, /setBarcode\(value\)/);
   assert.doesNotMatch(form, /if \(rooms\.length === 0\) return null/);
   assert.match(form, /t\("createItem\.noRooms"\)/);

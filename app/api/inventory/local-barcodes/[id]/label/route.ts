@@ -23,11 +23,6 @@ export async function GET(
     );
     const svg = renderCode39Svg(group.localBarcode, {
       heading: "YESSENOV UNIVERSITY",
-      footerLines: [
-        group.itemName,
-        `Количество: ${group.quantity}`,
-        `Ответственный: ${group.responsible.fullName}`,
-      ],
     });
     const download = new URL(request.url).searchParams.get("download") === "1";
     return new Response(svg, {

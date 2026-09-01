@@ -4,6 +4,8 @@ export type ItemCategory = import("@/lib/inventory-categories").InventoryItemCat
 
 export interface InventoryItem {
   id: string;
+  /** A locally distributed portion; it opens its local-barcode card. */
+  localGroupId?: string;
   name: string;
   inventoryNumber: string;
   category: ItemCategory;

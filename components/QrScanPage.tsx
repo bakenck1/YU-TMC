@@ -62,7 +62,7 @@ export default function QrScanPage() {
           <div>
             <h1 className="text-xl font-bold">Сканирование</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              Выберите тип кода. Для штрихкода доступен Code 39 и ручной ввод.
+              Выберите штрих-код ТМЦ или QR-код кабинета.
             </p>
           </div>
         </div>
@@ -81,7 +81,7 @@ export default function QrScanPage() {
             className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 font-semibold text-emerald-900 disabled:opacity-50"
           >
             <Barcode className="h-8 w-8" />
-            Штрихкод ТМЦ
+            Штрих-код ТМЦ
           </button>
           <button
             type="button"
@@ -90,7 +90,7 @@ export default function QrScanPage() {
             className="flex min-h-32 flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 font-semibold text-zinc-800 disabled:opacity-50"
           >
             <MapPinned className="h-8 w-8" />
-            QR-код помещения
+            QR-код кабинета
           </button>
         </div>
         {busy ? <p className="mt-4 text-center text-sm text-zinc-500">Поиск ТМЦ…</p> : null}
