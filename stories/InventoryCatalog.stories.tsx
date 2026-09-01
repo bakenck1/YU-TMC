@@ -37,6 +37,7 @@ import LocationsTree from "@/components/LocationsTree";
 import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
 import LocalBarcodeGroupDetails from "@/components/LocalBarcodeGroupDetails";
 import LocalBarcodeLabelView from "@/components/LocalBarcodeLabelView";
+import LocalBarcodeTransferResult from "@/components/LocalBarcodeTransferResult";
 import MaintenanceItemsPanel from "@/components/MaintenanceItemsPanel";
 import OriginalBarcodeDistributionView from "@/components/OriginalBarcodeDistributionView";
 import ProblemReportButton from "@/components/ProblemReportButton";
@@ -125,6 +126,7 @@ export const LocationsTreeStory: Story = { name: "LocationsTree", render: () => 
 export const LocalBarcodeDistributionPanelStory: Story = { name: "LocalBarcodeDistributionPanel", render: () => <LocalBarcodeDistributionPanel itemId={STORY_ITEM_DTO.id} actorId="user-1" actorRole="admin" /> };
 export const LocalBarcodeGroupDetailsStory: Story = { name: "LocalBarcodeGroupDetails", render: () => <LocalBarcodeGroupDetails group={localBarcodeGroup} history={[]} actorId="user-1" actorRole="admin" /> };
 export const LocalBarcodeLabelViewStory: Story = { name: "LocalBarcodeLabelView", render: () => <LocalBarcodeLabelView group={localBarcodeGroup} /> };
+export const LocalBarcodeTransferResultStory: Story = { name: "LocalBarcodeTransferResult", render: () => <LocalBarcodeTransferResult groups={[localBarcodeGroup]} /> };
 export const MaintenanceItemsPanelStory: Story = { name: "MaintenanceItemsPanel", render: () => <MaintenanceItemsPanel initialItems={[{ ...STORY_ITEM_DTO, status: "maintenance" }]} canManage /> };
 export const OriginalBarcodeDistributionViewStory: Story = { name: "OriginalBarcodeDistributionView", render: () => <OriginalBarcodeDistributionView distribution={localBarcodeDistribution} actorId="user-1" actorRole="admin" /> };
 export const ProblemReportButtonStory: Story = { name: "ProblemReportButton", render: () => <ProblemReportButton items={roomItems} initialItemId={STORY_ITEM_DTO.id} /> };
