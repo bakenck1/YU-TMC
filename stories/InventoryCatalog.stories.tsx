@@ -34,7 +34,11 @@ import ItemsTable from "@/components/ItemsTable";
 import LocationBuildingCard from "@/components/LocationBuildingCard";
 import LocationFloorAccordion from "@/components/LocationFloorAccordion";
 import LocationsTree from "@/components/LocationsTree";
+import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
+import LocalBarcodeGroupDetails from "@/components/LocalBarcodeGroupDetails";
+import LocalBarcodeLabelView from "@/components/LocalBarcodeLabelView";
 import MaintenanceItemsPanel from "@/components/MaintenanceItemsPanel";
+import OriginalBarcodeDistributionView from "@/components/OriginalBarcodeDistributionView";
 import ProblemReportButton from "@/components/ProblemReportButton";
 import QrScanPage from "@/components/QrScanPage";
 import ReportMetric from "@/components/ReportMetric";
@@ -45,6 +49,37 @@ import { STORY_BUILDING, STORY_INSPECTION, STORY_ITEM_DTO, STORY_ROOM, STORY_TRA
 
 const item = items[0];
 const roomItems = [{ id: STORY_ITEM_DTO.id, name: STORY_ITEM_DTO.name, inventoryNumber: STORY_ITEM_DTO.inventoryNumber }];
+const localBarcodeGroup = {
+  id: "30000000-0000-4000-8000-000000000001",
+  itemId: STORY_ITEM_DTO.id,
+  itemName: STORY_ITEM_DTO.name,
+  originalBarcode: "YU-ORIGINAL-001",
+  localBarcode: "YU-LOCAL-001",
+  parentGroupId: null,
+  quantity: 7,
+  responsible: { id: "user-1", fullName: "Тестовый сотрудник" },
+  location: {
+    roomId: STORY_ROOM.id,
+    roomDesignation: STORY_ROOM.designation,
+    buildingId: STORY_BUILDING.id,
+    buildingName: STORY_BUILDING.name,
+  },
+  transferredAt: "2026-08-31T10:00:00.000Z",
+  status: "active" as const,
+  version: 1,
+  cancellation: null,
+};
+const localBarcodeDistribution = {
+  itemId: STORY_ITEM_DTO.id,
+  itemName: STORY_ITEM_DTO.name,
+  originalBarcode: "YU-ORIGINAL-001",
+  originalQuantity: 10,
+  originalVersion: 1,
+  originalRemainder: 3,
+  originalResponsible: { id: "user-1", fullName: "Тестовый сотрудник" },
+  originalLocation: localBarcodeGroup.location,
+  groups: [localBarcodeGroup],
+};
 
 const meta = { title: "Catalog/Inventory", parameters: { layout: "fullscreen" } } satisfies Meta;
 export default meta;
@@ -87,7 +122,11 @@ export const ItemsTableStory: Story = { name: "ItemsTable", render: () => <Items
 export const LocationBuildingCardStory: Story = { name: "LocationBuildingCard", render: () => <LocationBuildingCard building={buildings[0]} /> };
 export const LocationFloorAccordionStory: Story = { name: "LocationFloorAccordion", render: () => <LocationFloorAccordion floor={buildings[0].floors[0]} /> };
 export const LocationsTreeStory: Story = { name: "LocationsTree", render: () => <LocationsTree buildings={buildings} /> };
+export const LocalBarcodeDistributionPanelStory: Story = { name: "LocalBarcodeDistributionPanel", render: () => <LocalBarcodeDistributionPanel itemId={STORY_ITEM_DTO.id} actorId="user-1" actorRole="admin" /> };
+export const LocalBarcodeGroupDetailsStory: Story = { name: "LocalBarcodeGroupDetails", render: () => <LocalBarcodeGroupDetails group={localBarcodeGroup} history={[]} actorId="user-1" actorRole="admin" /> };
+export const LocalBarcodeLabelViewStory: Story = { name: "LocalBarcodeLabelView", render: () => <LocalBarcodeLabelView group={localBarcodeGroup} /> };
 export const MaintenanceItemsPanelStory: Story = { name: "MaintenanceItemsPanel", render: () => <MaintenanceItemsPanel initialItems={[{ ...STORY_ITEM_DTO, status: "maintenance" }]} canManage /> };
+export const OriginalBarcodeDistributionViewStory: Story = { name: "OriginalBarcodeDistributionView", render: () => <OriginalBarcodeDistributionView distribution={localBarcodeDistribution} actorId="user-1" actorRole="admin" /> };
 export const ProblemReportButtonStory: Story = { name: "ProblemReportButton", render: () => <ProblemReportButton items={roomItems} initialItemId={STORY_ITEM_DTO.id} /> };
 export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage /> };
 export const ReportMetricStory: Story = { name: "ReportMetric", render: () => <ReportMetric label="Проверено" value={24} /> };
