@@ -67,7 +67,7 @@ jobs:
           bash -n deploy/enable-https.sh
           node --check deploy/backup-postgres-connection.mjs
       - name: Run isolated deployment smoke tests
-        run: bash scripts/test-deployment-runtime.sh
+        run: sudo env "PATH=$PATH" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash scripts/test-deployment-runtime.sh
       - name: Apply test migrations
         run: npm run db:migrate -- --target=test
       - name: Verify test database contract
