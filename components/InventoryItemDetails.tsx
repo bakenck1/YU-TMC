@@ -1032,9 +1032,9 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
-            {localBarcodeInfo ? <InventoryOverviewRow label="Штрих-код" value={item.inventoryNumber} /> : null}
-            {localBarcodeInfo ? <InventoryOverviewRow label="Исходный штрих-код 1С" value={localBarcodeInfo.originalBarcode} /> : null}
-            {localBarcodeInfo ? <InventoryOverviewRow label="Дата передачи" value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
+            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
+            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
+            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
             <InventoryOverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
             <InventoryOverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
             <InventoryOverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />

@@ -253,12 +253,12 @@ export default function TmcTransferRequestCard({
                 <div className="min-w-0 flex-1">
                   <h2 className="break-words font-semibold text-zinc-900">{index + 1}. {item.item.name}</h2>
                   <TmcRequestItemResultBadge result={item.result} />
-                  <p className="mt-1 break-all text-sm text-zinc-500"><span className="font-medium text-zinc-700">Штрих-код 1С:</span> {item.item.inventoryNumber}</p>
+                  <p className="mt-1 break-all text-sm text-zinc-500"><span className="font-medium text-zinc-700">{t("tmc.request.originalBarcode")}:</span> {item.item.inventoryNumber}</p>
                   {item.requestedQuantity != null ? (
                     <p className="mt-1 text-sm text-emerald-800">
                       {item.sourceLocalGroupId
-                        ? "Возврат локальной группы: существующий штрих-код сохранится после принятия."
-                        : "После принятия будет создан новый локальный штрих-код для указанного количества."}
+                        ? t("tmc.request.localGroupReturn")
+                        : t("tmc.request.localGroupCreate")}
                     </p>
                   ) : null}
                   <p className="mt-2 flex items-start gap-2 text-sm text-zinc-700"><MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{item.item.location.buildingName} · {item.item.location.roomDesignation}</p>

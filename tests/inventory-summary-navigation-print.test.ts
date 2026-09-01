@@ -14,7 +14,8 @@ test("every user role can open an item card from the summary", () => {
     new URL("../components/InventorySummaryAccordions.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /onClick=\{\(\) => router\.push\(`\/items\/\$\{item\.id\}`\)\}/);
+  assert.match(source, /onClick=\{\(\) => router\.push\(itemHref\(item\)\)\}/);
+  assert.match(source, /item\.localGroupId \? `\/local-barcodes\/\$\{item\.localGroupId\}` : `\/items\/\$\{item\.id\}`/);
   assert.match(source, /cursor-pointer[^"]*hover:bg-zinc-50\/80/);
 });
 

@@ -120,6 +120,7 @@ test("transfer request card projection keeps only rendered and mutation-required
       },
         responsibleUserProfile: { fullName: "Owner" },
         requestedQuantity: null,
+        sourceLocalGroupId: null,
         result: "pending",
       version: 4,
     }],
