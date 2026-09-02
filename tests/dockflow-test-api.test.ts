@@ -17,8 +17,8 @@ function request(path: string, key = API_KEY) {
 }
 
 const repository: DockflowDataRepository = {
-  async listEmployees() { return [{ iin: "010703000173", fullName: "Еркин Суюнов", phone: "+77000000000", login: "erkin.suyunov@yu.edu.kz", itemCount: 1 }]; },
-  async findEmployee(iin) { return iin === "010703000173" ? { iin, fullName: "Еркин Суюнов", phone: "+77000000000", login: "erkin.suyunov@yu.edu.kz" } : null; },
+  async listEmployees() { return [{ iin: "000000000000", fullName: "Сотрудник интеграции", phone: "+77000000000", login: "employee@example.test", itemCount: 1 }]; },
+  async findEmployee(iin) { return iin === "000000000000" ? { iin, fullName: "Сотрудник интеграции", phone: "+77000000000", login: "employee@example.test" } : null; },
   async itemsForEmployee() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", assignedAt: "2026-08-28T10:00:00.000Z", cost: 45000, markingType: "batch" as const, issueHistory: [] }]; },
   async listItems() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, availableQuantity: 0, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", cost: 45000, markingType: "batch" as const, assignments: [{ employeeIin: "010703000173", quantity: 38, assignedAt: "2026-08-28T10:00:00.000Z" }], issueHistory: [] }]; },
 };
@@ -35,12 +35,12 @@ test("checks the Bearer API key without caching the response", async () => {
 });
 
 test("returns registered employees and their current TMC by real IIN", async () => {
-  const response = await findDockflowEmployee(request("/api/v1/employees/010703000173"), "010703000173", repository);
+  const response = await findDockflowEmployee(request("/api/v1/employees/000000000000"), "000000000000", repository);
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.employee.login, "erkin.suyunov@yu.edu.kz");
+  assert.equal(body.employee.login, "employee@example.test");
   assert.equal(body.items[0].quantity, 38);
-  assert.equal((await findDockflowEmployeeItems(request("/api/v1/employees/010703000173/items"), "010703000173", repository)).status, 200);
+  assert.equal((await findDockflowEmployeeItems(request("/api/v1/employees/000000000000/items"), "000000000000", repository)).status, 200);
 });
 
 test("validates IIN and hides non-registered people", async () => {
@@ -50,7 +50,7 @@ test("validates IIN and hides non-registered people", async () => {
 
 test("protects real employee and inventory collections", async () => {
   assert.equal((await (await listDockflowEmployees(request("/api/v1/employees"), repository)).json()).employees[0].itemCount, 1);
-  assert.equal((await (await listDockflowItems(request("/api/v1/items"), repository)).json()).items[0].assignments[0].employeeIin, "010703000173");
+  assert.equal((await (await listDockflowItems(request("/api/v1/items"), repository)).json()).items[0].assignments[0].employeeIin, "000000000000");
 });
 
 test("publishes an OpenAPI contract for bearer authorization", async () => {
