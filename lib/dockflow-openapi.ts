@@ -1,5 +1,5 @@
 const employeeExample = {
-  iin: "010703000173",
+  iin: "000000000000",
   fullName: "Зарегистрированный сотрудник",
   phone: "+77000000000",
   login: "employee@yu.edu.kz",
@@ -245,7 +245,7 @@ export const dockflowOpenApiDocument = {
         required: true,
         description: "ИИН зарегистрированного активного сотрудника: ровно 12 цифр.",
         schema: { type: "string", pattern: "^[0-9]{12}$" },
-        example: "010703000173",
+        example: "000000000000",
       },
     },
     schemas: {
