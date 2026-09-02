@@ -1,8 +1,8 @@
 const employeeExample = {
-  iin: "990101123456",
-  fullName: "Тестовый сотрудник",
-  phone: "+77001234567",
-  login: "dockflow.test",
+  iin: "010703000173",
+  fullName: "Зарегистрированный сотрудник",
+  phone: "+77000000000",
+  login: "employee@yu.edu.kz",
 };
 
 const assignedItemExample = {
@@ -47,13 +47,13 @@ const errorResponses = {
     },
   },
   "503": {
-    description: "Тестовый API не настроен на сервере",
+    description: "API не настроен на сервере",
     content: {
       "application/json": {
         schema: { $ref: "#/components/schemas/Error" },
         example: {
           error: "API_NOT_CONFIGURED",
-          message: "Тестовый API Dockflow не настроен.",
+          message: "API Dockflow не настроен.",
         },
       },
     },
@@ -64,15 +64,15 @@ export const dockflowOpenApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "Dockflow API",
-    version: "1.0.0-test",
+  version: "1.0.0",
     description:
-      "Тестовый API интеграции Dockflow. Все сотрудники, телефоны и ТМЦ являются фейковыми тестовыми данными. В Authorize введите только значение TEST_API_KEY — префикс Bearer Swagger добавит автоматически.",
+      "API интеграции Dockflow. Возвращает только активных зарегистрированных пользователей с ИИН и их текущие закреплённые ТМЦ. В Authorize введите выданный ключ; префикс Bearer Swagger добавит автоматически.",
   },
   servers: [{ url: "/", description: "Текущий сервер" }],
   tags: [
-    { name: "Authentication", description: "Проверка тестового API-ключа" },
-    { name: "Employees", description: "Тестовые сотрудники и их ТМЦ" },
-    { name: "Inventory", description: "Тестовые карточки ТМЦ" },
+    { name: "Authentication", description: "Проверка API-ключа Dockflow" },
+    { name: "Employees", description: "Зарегистрированные сотрудники и их ТМЦ" },
+    { name: "Inventory", description: "Текущие карточки ТМЦ" },
   ],
   paths: {
     "/api/v1/auth/check": {
@@ -172,11 +172,11 @@ export const dockflowOpenApiDocument = {
     "/api/v1/employees": {
       get: {
         tags: ["Employees"],
-        summary: "Получить список тестовых сотрудников",
+        summary: "Получить список зарегистрированных сотрудников",
         security: bearerSecurity,
         responses: {
           "200": {
-            description: "Список тестовых сотрудников",
+            description: "Список активных зарегистрированных сотрудников с ИИН",
             content: {
               "application/json": {
                 schema: {
@@ -201,13 +201,13 @@ export const dockflowOpenApiDocument = {
     "/api/v1/items": {
       get: {
         tags: ["Inventory"],
-        summary: "Получить полный список тестовых ТМЦ",
+        summary: "Получить полный список ТМЦ",
         description:
           "Партия представлена одной карточкой. Количество партии может быть любым, assignments содержит произвольные частичные выдачи нескольким получателям, а availableQuantity — оставшийся свободный остаток.",
         security: bearerSecurity,
         responses: {
           "200": {
-            description: "Полный список тестовых карточек ТМЦ",
+            description: "Полный список текущих карточек ТМЦ",
             content: {
               "application/json": {
                 schema: {
@@ -234,8 +234,8 @@ export const dockflowOpenApiDocument = {
       bearerAuth: {
         type: "http",
         scheme: "bearer",
-        bearerFormat: "TEST_API_KEY",
-        description: "Общий ключ только для фейковых тестовых данных.",
+        bearerFormat: "API_KEY",
+        description: "Ключ интеграции Dockflow для доступа к зарегистрированным сотрудникам и ТМЦ.",
       },
     },
     parameters: {
@@ -243,9 +243,9 @@ export const dockflowOpenApiDocument = {
         name: "iin",
         in: "path",
         required: true,
-        description: "Фейковый ИИН тестового сотрудника: ровно 12 цифр.",
+        description: "ИИН зарегистрированного активного сотрудника: ровно 12 цифр.",
         schema: { type: "string", pattern: "^[0-9]{12}$" },
-        example: "990101123456",
+        example: "010703000173",
       },
     },
     schemas: {
