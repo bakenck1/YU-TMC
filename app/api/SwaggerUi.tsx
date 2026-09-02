@@ -12,8 +12,6 @@ export default function DockflowSwaggerUi() {
         displayRequestDuration
         docExpansion="none"
         filter
-        defaultModelExpandDepth={1}
-        defaultModelsExpandDepth={-1}
         validatorUrl={null}
       />
     </main>
