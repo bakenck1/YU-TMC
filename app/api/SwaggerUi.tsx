@@ -10,9 +10,11 @@ export default function DockflowSwaggerUi() {
         url="/api/openapi.json"
         deepLinking
         displayRequestDuration
-        docExpansion="list"
+        docExpansion="none"
         filter
-        tryItOutEnabled
+        defaultModelExpandDepth={1}
+        defaultModelsExpandDepth={-1}
+        validatorUrl={null}
       />
     </main>
   );
