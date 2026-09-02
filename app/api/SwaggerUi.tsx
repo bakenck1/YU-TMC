@@ -1,18 +1,28 @@
 "use client";
 
-import SwaggerUI from "swagger-ui-react";
-import "swagger-ui-react/swagger-ui.css";
+import { FormEvent, useState } from "react";
+
+type Op = { group: string; path: string; title: string; help: string; iin?: boolean };
+const ops: Op[] = [
+  { group: "Authentication", path: "/api/v1/auth/check", title: "Проверить API-ключ", help: "Проверяет ключ интеграции Dockflow." },
+  { group: "Employees", path: "/api/v1/employees/{iin}", title: "Получить сотрудника и закреплённые ТМЦ", help: "Основной запрос: поиск активного зарегистрированного сотрудника по ИИН.", iin: true },
+  { group: "Employees", path: "/api/v1/employees/{iin}/items", title: "Получить только ТМЦ сотрудника", help: "Возвращает текущие ТМЦ сотрудника.", iin: true },
+  { group: "Employees", path: "/api/v1/employees", title: "Получить список зарегистрированных сотрудников", help: "Возвращает активных пользователей с ИИН." },
+  { group: "Inventory", path: "/api/v1/items", title: "Получить полный список ТМЦ", help: "Возвращает карточки ТМЦ и назначения." },
+];
 
 export default function DockflowSwaggerUi() {
-  return (
-    <main className="min-h-screen bg-white">
-      <SwaggerUI
-        url="/api/openapi.json"
-        deepLinking
-        displayRequestDuration
-        docExpansion="none"
-        filter
-      />
-    </main>
-  );
+  const [key, setKey] = useState(""); const [auth, setAuth] = useState(false); const [open, setOpen] = useState<string | null>(null); const [iin, setIin] = useState(""); const [busy, setBusy] = useState<string | null>(null); const [answer, setAnswer] = useState<{ code: number; text: string } | null>(null);
+  async function run(event: FormEvent, op: Op) {
+    event.preventDefault(); const value = iin.trim();
+    if (op.iin && !/^\d{12}$/.test(value)) { setAnswer({ code: 400, text: JSON.stringify({ error: "INVALID_IIN", message: "Введите ИИН: ровно 12 цифр." }, null, 2) }); return; }
+    if (!key.trim()) { setAnswer({ code: 401, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Сначала введите API-ключ в Authorize." }, null, 2) }); return; }
+    setBusy(op.path); setAnswer(null);
+    try { const response = await fetch(op.iin ? op.path.replace("{iin}", value) : op.path, { headers: { Authorization: `Bearer ${key.trim()}`, Accept: "application/json" }, cache: "no-store" }); const raw = await response.text(); let text = raw; try { text = JSON.stringify(JSON.parse(raw), null, 2); } catch {} setAnswer({ code: response.status, text }); } catch { setAnswer({ code: 0, text: JSON.stringify({ error: "NETWORK_ERROR", message: "Не удалось подключиться к API." }, null, 2) }); } finally { setBusy(null); }
+  }
+  return <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-8"><div className="mx-auto max-w-5xl">
+    <header className="mb-7 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200"><div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-3xl font-bold">Dockflow API</h1><p className="mt-2 text-slate-600">Интерактивный доступ к зарегистрированным сотрудникам и их ТМЦ по ИИН.</p><a className="mt-3 inline-block text-blue-700 underline" href="/api/openapi.json" target="_blank" rel="noreferrer">Открыть OpenAPI 3.1</a></div><button type="button" onClick={() => setAuth(!auth)} className="rounded-md bg-emerald-600 px-5 py-2.5 font-semibold text-white">{auth ? "Закрыть Authorize" : "Authorize"}</button></div>{auth && <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4"><label className="font-semibold" htmlFor="api-key">API key</label><input id="api-key" type="password" value={key} onChange={e => setKey(e.target.value)} placeholder="Только ключ, без Bearer" className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2" autoComplete="off" /><p className="mt-2 text-sm text-slate-600">Заголовок отправляется автоматически: Authorization: Bearer &lt;ключ&gt;.</p></div>}</header>
+    {["Authentication", "Employees", "Inventory"].map(group => <section key={group} className="mb-7"><h2 className="mb-3 text-2xl font-semibold">{group}</h2><div className="space-y-3">{ops.filter(op => op.group === group).map(op => { const expanded = open === op.path; return <article key={op.path} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200"><button type="button" onClick={() => setOpen(expanded ? null : op.path)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-50"><span className="rounded bg-blue-600 px-3 py-1 font-mono text-sm font-bold text-white">GET</span><span className="font-mono font-semibold">{op.path}</span><span className="hidden text-sm text-slate-600 sm:inline">{op.title}</span><span className="ml-auto">{expanded ? "⌃" : "⌄"}</span></button>{expanded && <div className="border-t border-slate-200 p-5"><h3 className="font-semibold">{op.title}</h3><p className="mt-1 text-sm text-slate-600">{op.help}</p>{op.iin && <p className="mt-3 text-sm text-slate-600">Параметр <code>iin</code>: ровно 12 цифр, например <code>040410655165</code>.</p>}<p className="mt-2 text-sm text-slate-600">Ошибки: 401 — ключ неверен; 404 — сотрудник не найден; 400 — неверный ИИН.</p><form className="mt-4" onSubmit={e => run(e, op)}>{op.iin && <input value={iin} onChange={e => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))} inputMode="numeric" placeholder="ИИН сотрудника" className="mb-3 block w-full rounded-md border border-slate-300 px-3 py-2" />}<button type="submit" disabled={busy === op.path} className="rounded-md bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:bg-blue-300">{busy === op.path ? "Выполняется…" : "Try it out / Execute"}</button></form></div>}</article>; })}</div></section>)}
+    {answer && <section className="sticky bottom-4 rounded-xl bg-slate-900 p-5 text-white shadow-xl"><div className="mb-2 font-semibold">Ответ: {answer.code || "ошибка сети"}</div><pre className="max-h-80 overflow-auto whitespace-pre-wrap text-sm">{answer.text}</pre></section>}
+  </div></main>;
 }
