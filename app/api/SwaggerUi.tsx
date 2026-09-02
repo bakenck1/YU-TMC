@@ -12,7 +12,6 @@ export default function DockflowSwaggerUi() {
         displayRequestDuration
         docExpansion="none"
         filter
-        validatorUrl={null}
       />
     </main>
   );
