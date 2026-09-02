@@ -1,4 +1,4 @@
-import { dockflowAuthCheck } from "@/lib/dockflow-test-api";
+import { dockflowAuthCheck } from "@/lib/dockflow-api";
 
 export const dynamic = "force-dynamic";
 
