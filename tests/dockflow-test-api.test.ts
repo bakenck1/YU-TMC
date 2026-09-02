@@ -20,7 +20,7 @@ const repository: DockflowDataRepository = {
   async listEmployees() { return [{ iin: "000000000000", fullName: "Сотрудник интеграции", phone: "+77000000000", login: "employee@example.test", itemCount: 1 }]; },
   async findEmployee(iin) { return iin === "000000000000" ? { iin, fullName: "Сотрудник интеграции", phone: "+77000000000", login: "employee@example.test" } : null; },
   async itemsForEmployee() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", assignedAt: "2026-08-28T10:00:00.000Z", cost: 45000, markingType: "batch" as const, issueHistory: [] }]; },
-  async listItems() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, availableQuantity: 0, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", cost: 45000, markingType: "batch" as const, assignments: [{ employeeIin: "010703000173", quantity: 38, assignedAt: "2026-08-28T10:00:00.000Z" }], issueHistory: [] }]; },
+  async listItems() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, availableQuantity: 0, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", cost: 45000, markingType: "batch" as const, assignments: [{ employeeIin: "000000000000", quantity: 38, assignedAt: "2026-08-28T10:00:00.000Z" }], issueHistory: [] }]; },
 };
 
 test.beforeEach(() => { process.env.DOCKFLOW_API_KEY = API_KEY; });
