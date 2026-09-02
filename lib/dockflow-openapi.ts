@@ -228,6 +228,23 @@ export const dockflowOpenApiDocument = {
         },
       },
     },
+    "/api/v1/items/{id}/photo": {
+      get: {
+        tags: ["Inventory"],
+        summary: "Получить фото ТМЦ",
+        description: "Используйте тот же Bearer API-ключ, что и для поиска по ИИН.",
+        security: bearerSecurity,
+        parameters: [{
+          name: "id", in: "path", required: true,
+          schema: { type: "string", format: "uuid" },
+        }],
+        responses: {
+          "200": { description: "Фото ТМЦ", content: { "image/jpeg": { schema: { type: "string", format: "binary" } } } },
+          "401": errorResponses["401"],
+          "404": { description: "Фото или ТМЦ не найдено" },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -260,13 +277,16 @@ export const dockflowOpenApiDocument = {
       },
       Employee: {
         type: "object",
-        required: ["iin", "fullName", "phone", "login"],
+        required: ["iin", "fullName", "phone", "login", "email", "role", "createdAt"],
         additionalProperties: false,
         properties: {
           iin: { type: "string", pattern: "^[0-9]{12}$" },
           fullName: { type: "string" },
           phone: { type: "string" },
           login: { type: "string" },
+          email: { type: "string", format: "email" },
+          role: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
         },
       },
       EmployeeListEntry: {
@@ -301,6 +321,13 @@ export const dockflowOpenApiDocument = {
           "assignedAt",
           "cost",
           "markingType",
+          "photoUrl",
+          "itemType",
+          "brand",
+          "model",
+          "inventoryStatus",
+          "responsible",
+          "updatedAt",
           "issueHistory",
         ],
         properties: {
@@ -314,6 +341,13 @@ export const dockflowOpenApiDocument = {
           assignedAt: { type: "string", format: "date-time" },
           cost: { type: "number", minimum: 0, description: "Стоимость единицы в KZT" },
           markingType: { $ref: "#/components/schemas/MarkingType" },
+          photoUrl: { type: ["string", "null"], description: "Защищённый URL фото; передайте Bearer-ключ." },
+          itemType: { type: "string" },
+          brand: { type: ["string", "null"] },
+          model: { type: ["string", "null"] },
+          inventoryStatus: { type: "string" },
+          responsible: { $ref: "#/components/schemas/Responsible" },
+          updatedAt: { type: "string", format: "date-time" },
           issueHistory: {
             type: "array",
             items: { $ref: "#/components/schemas/IssueHistoryEntry" },
@@ -346,6 +380,13 @@ export const dockflowOpenApiDocument = {
           assignedAt: { type: "string", format: "date-time" },
         },
       },
+      Responsible: {
+        type: ["object", "null"],
+        properties: {
+          iin: { type: "string", pattern: "^[0-9]{12}$" },
+          fullName: { type: "string" },
+        },
+      },
       InventoryItem: {
         type: "object",
         required: [
@@ -359,6 +400,13 @@ export const dockflowOpenApiDocument = {
           "storageLocation",
           "cost",
           "markingType",
+          "photoUrl",
+          "itemType",
+          "brand",
+          "model",
+          "inventoryStatus",
+          "responsible",
+          "updatedAt",
           "assignments",
           "issueHistory",
         ],
@@ -373,6 +421,13 @@ export const dockflowOpenApiDocument = {
           storageLocation: { type: "string" },
           cost: { type: "number", minimum: 0 },
           markingType: { $ref: "#/components/schemas/MarkingType" },
+          photoUrl: { type: ["string", "null"] },
+          itemType: { type: "string" },
+          brand: { type: ["string", "null"] },
+          model: { type: ["string", "null"] },
+          inventoryStatus: { type: "string" },
+          responsible: { $ref: "#/components/schemas/Responsible" },
+          updatedAt: { type: "string", format: "date-time" },
           assignments: {
             type: "array",
             items: { $ref: "#/components/schemas/Assignment" },
