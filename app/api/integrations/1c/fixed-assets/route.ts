@@ -3,6 +3,19 @@ import { ingestOneCFixedAssets, authorizeOneCRequest, parseOneCFixedAssets } fro
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+export function GET() {
+  return Response.json(
+    {
+      service: "1c-fixed-assets",
+      status: "ready",
+      method: "POST",
+      authentication: "Bearer token required",
+      contentType: ["application/xml", "text/xml"],
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 export async function POST(request: Request) {
   const unauthorized = authorizeOneCRequest(request);
   if (unauthorized) return unauthorized;
