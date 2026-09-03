@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 
+import { GET } from "@/app/api/integrations/1c/fixed-assets/route";
 import { parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 
 describe("1C fixed assets XML", () => {
+  it("returns browser-friendly endpoint information", async () => {
+    const response = GET();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      service: "1c-fixed-assets",
+      status: "ready",
+      method: "POST",
+      authentication: "Bearer token required",
+      contentType: ["application/xml", "text/xml"],
+    });
+  });
+
   it("parses the agreed canonical payload", () => {
     const assets = parseOneCFixedAssets(`<?xml version="1.0" encoding="UTF-8"?>
       <FixedAssetsExport>
