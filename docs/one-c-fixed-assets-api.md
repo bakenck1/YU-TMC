@@ -8,28 +8,22 @@ Authorization: Bearer <ONE_C_FIXED_ASSETS_API_KEY>
 Content-Type: application/xml; charset=utf-8
 ```
 
-Тело запроса — UTF-8 XML. Каждая запись должна содержать постоянный GUID объекта 1С и название:
+Тело запроса — UTF-8 XML. Каждая запись должна содержать постоянный GUID объекта 1С и код. Название можно передавать полем `Name`; если его нет, сервис временно использует `Code` как техническое название до последующего обогащения карточки:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<FixedAssetsExport>
+<FixedAssets>
   <FixedAsset>
-    <ExternalId>eba5b834-db3b-11f0-a26e-7cc25579bdd7</ExternalId>
+    <GUID>eba5b834-db3b-11f0-a26e-7cc25579bdd7</GUID>
     <Code>000009352</Code>
-    <InventoryNumber>000009352</InventoryNumber>
     <Barcode>4870000123456</Barcode>
-    <Name>Основное средство</Name>
-    <Category>Библиотечные фонды</Category>
+    <ResidualValue>12544.50</ResidualValue>
+    <Status>Принят к учету</Status>
     <Location>АУП</Location>
-    <Status>Принято к учёту</Status>
-    <ResponsibleName>Иванов Иван Иванович</ResponsibleName>
-    <ResponsibleExternalId>82f98532-723c-11ee-8100-00155d010100</ResponsibleExternalId>
-    <Quantity>1</Quantity>
-    <ResidualCost>12544.50</ResidualCost>
-    <AcceptedAt>2025-11-20</AcceptedAt>
-    <UpdatedAt>2026-09-03T10:30:00+05:00</UpdatedAt>
+    <Responsible>Иванов Иван Иванович</Responsible>
+    <ResponsibleGUID>82f98532-723c-11ee-8100-00155d010100</ResponsibleGUID>
   </FixedAsset>
-</FixedAssetsExport>
+</FixedAssets>
 ```
 
 Повторная отправка записи с тем же GUID и теми же значениями считается неизменённой. Ответ:
