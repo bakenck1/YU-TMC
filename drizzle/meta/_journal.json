@@ -225,6 +225,13 @@
       "when": 1788265800000,
       "tag": "20260901123000_tmc_quantity_transfer_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788436800000,
+      "tag": "20260903120000_one_c_fixed_asset_inbox",
+      "breakpoints": true
     }
   ]
 }
