@@ -35,4 +35,30 @@ describe("1C fixed assets XML", () => {
     expect(() => parseOneCFixedAssets("<FixedAssetsExport><FixedAsset><Name>Без GUID</Name></FixedAsset></FixedAssetsExport>"))
       .toThrow("invalid_external_id");
   });
+
+  it("accepts the XML field names supplied by 1C", () => {
+    const assets = parseOneCFixedAssets(`<?xml version="1.0" encoding="UTF-8"?>
+      <FixedAssets>
+        <FixedAsset>
+          <GUID>03572fab-9e95-11ea-9a1b-002590861d2e</GUID>
+          <Code>000004969</Code>
+          <Barcode/>
+          <ResidualValue>101 486,48</ResidualValue>
+          <Status>Принят к учету</Status>
+          <Location>ППС</Location>
+          <Responsible>Әбжами Ақмарал Ақтанқызы</Responsible>
+          <ResponsibleGUID/>
+        </FixedAsset>
+      </FixedAssets>`);
+
+    expect(assets[0]).toEqual(expect.objectContaining({
+      externalId: "03572fab-9e95-11ea-9a1b-002590861d2e",
+      code: "000004969",
+      barcode: null,
+      residualCost: 101486.48,
+      status: "Принят к учету",
+      location: "ППС",
+      responsibleName: "Әбжами Ақмарал Ақтанқызы",
+    }));
+  });
 });

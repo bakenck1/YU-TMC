@@ -115,22 +115,25 @@ function findAssetRecords(value: unknown): Array<Record<string, unknown>> {
 
 function normalizeAsset(record: Record<string, unknown>, index: number): OneCFixedAsset {
   const externalId = text(record, "ExternalId", "GUID", "Guid", "GUIDОС", "Идентификатор");
-  const name = text(record, "Name", "Наименование", "ОсновноеСредство");
+  const code = text(record, "Code", "Код");
+  const inventoryNumber = text(record, "InventoryNumber", "ИнвентарныйНомер");
+  const name = text(record, "Name", "Наименование", "ОсновноеСредство")
+    ?? (code ? `Основное средство ${code}` : null);
   if (!externalId || !UUID.test(externalId)) throw new Error(`row_${index + 1}: invalid_external_id`);
   if (!name) throw new Error(`row_${index + 1}: name_required`);
   return {
     externalId,
-    code: text(record, "Code", "Код"),
-    inventoryNumber: text(record, "InventoryNumber", "ИнвентарныйНомер"),
+    code,
+    inventoryNumber,
     barcode: text(record, "Barcode", "Штрихкод"),
     name,
     category: text(record, "Category", "Тип", "ГруппаУчетаОС"),
     location: text(record, "Location", "Локация", "Подразделение", "Местонахождение"),
     status: text(record, "Status", "Статус"),
-    responsibleName: text(record, "ResponsibleName", "МОЛ", "Ответственный", "МатериальноОтветственноеЛицо"),
-    responsibleExternalId: text(record, "ResponsibleExternalId", "ResponsibleGuid", "GUIDМОЛ"),
+    responsibleName: text(record, "ResponsibleName", "Responsible", "МОЛ", "Ответственный", "МатериальноОтветственноеЛицо"),
+    responsibleExternalId: text(record, "ResponsibleExternalId", "ResponsibleGUID", "ResponsibleGuid", "GUIDМОЛ"),
     quantity: numberValue(record, "Quantity", "КолВо", "Количество") ?? 1,
-    residualCost: numberValue(record, "ResidualCost", "ЦенаОстаточная", "ОстаточнаяСтоимость", "Цена"),
+    residualCost: numberValue(record, "ResidualCost", "ResidualValue", "ЦенаОстаточная", "ОстаточнаяСтоимость", "Цена"),
     acceptedAt: dateValue(record, "AcceptedAt", "AcceptanceDate", "ДатаПринятияКУчёту", "ДатаПринятия"),
     updatedAt: dateValue(record, "UpdatedAt", "ДатаИзменения", "Изменено"),
   };
