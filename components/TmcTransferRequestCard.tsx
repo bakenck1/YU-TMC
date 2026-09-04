@@ -68,6 +68,7 @@ export default function TmcTransferRequestCard({
     timeZone: "Asia/Qyzylorda",
   }).format(new Date(request.createdAt));
   const pendingItems = request.items.filter((item) => item.result === "pending");
+  const isClaim = request.kind === "claim";
 
   async function cancelRequest() {
     if (inFlight.current) return;
@@ -211,8 +212,8 @@ export default function TmcTransferRequestCard({
         </div>
         {canCancel && request.status === "pending" ? <button type="button" disabled={submitting} onClick={() => void cancelRequest()} className="mt-4 min-h-11 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.cancel")}</button> : null}
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-          <TmcRequestMeta label={t("tmc.request.initiator")} value={formatContact(request.initiator)} />
-          <TmcRequestMeta label={t("tmc.request.recipient")} value={formatContact(request.recipient)} />
+          <TmcRequestMeta label={t(isClaim ? "tmc.request.claimRequester" : "tmc.request.initiator")} value={formatContact(request.initiator)} />
+          <TmcRequestMeta label={t(isClaim ? "tmc.request.claimOwner" : "tmc.request.recipient")} value={formatContact(request.recipient)} />
           <div><dt className="font-medium text-zinc-500">{t("tmc.request.createdAt")}</dt><dd className="mt-1 text-zinc-900"><time dateTime={request.createdAt}>{createdAt}</time></dd></div>
           <TmcRequestMeta label={t("tmc.request.summary")} value={`${request.summary.pending} / ${request.summary.total}`} />
         </dl>
@@ -296,10 +297,10 @@ export default function TmcTransferRequestCard({
               {feedback?.kind === "error" && feedback.message === "tmc.request.administrativeReasonRequired" ? <span id="tmc-administrative-reason-error" role="alert" className="mt-1 block font-normal text-red-700">{t(feedback.message)}</span> : null}
             </label>
           ) : null}
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-14 rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white disabled:opacity-50">{t("tmc.request.acceptAll")}</button>
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-14 rounded-xl border border-emerald-700 bg-white px-5 text-base font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button>
-            <button type="button" disabled={submitting} onClick={() => void submitDecision("reject")} className="min-h-14 rounded-xl border border-red-300 bg-red-50 px-5 text-base font-semibold text-red-700 disabled:opacity-50">{t("tmc.request.rejectAll")}</button>
+          <div className={`mt-3 grid gap-2 ${isClaim ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("all")} className="min-h-14 rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white disabled:opacity-50">{isClaim ? t("tmc.request.approveClaim", { name: request.initiator.fullName }) : t("tmc.request.acceptAll")}</button>
+            {!isClaim ? <button type="button" disabled={submitting} onClick={() => void submitDecision("selected")} className="min-h-14 rounded-xl border border-emerald-700 bg-white px-5 text-base font-semibold text-emerald-800 disabled:opacity-50">{t("tmc.request.acceptSelected")}</button> : null}
+            <button type="button" disabled={submitting} onClick={() => void submitDecision("reject")} className="min-h-14 rounded-xl border border-red-300 bg-red-50 px-5 text-base font-semibold text-red-700 disabled:opacity-50">{t(isClaim ? "tmc.request.rejectClaim" : "tmc.request.rejectAll")}</button>
           </div>
         </div>
       ) : null}

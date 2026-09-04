@@ -77,13 +77,44 @@ export function createTmcNotificationReadPostHandler(dependencies: {
   return async (request: Request, notificationId: string) => {
     try {
       const actor = await dependencies.authenticate(request);
-      if (request.body !== null) throw invalid();
+      await requireEmptyBody(request);
       await dependencies.markRead(notificationId, actor);
       return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
     } catch (error) {
       return applicationErrorResponse(error, { "cache-control": "no-store" });
     }
   };
+}
+
+export function createTmcNotificationsReadAllPostHandler(dependencies: {
+  authenticate(request: Request): Promise<Actor>;
+  markAllRead(actor: Actor): Promise<void>;
+}) {
+  return async (request: Request) => {
+    try {
+      const actor = await dependencies.authenticate(request);
+      await requireEmptyBody(request);
+      await dependencies.markAllRead(actor);
+      return new Response(null, {
+        status: 204,
+        headers: { "cache-control": "no-store" },
+      });
+    } catch (error) {
+      return applicationErrorResponse(error, { "cache-control": "no-store" });
+    }
+  };
+}
+
+async function requireEmptyBody(request: Request) {
+  if (request.body === null) return;
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength === "0") return;
+  if (declaredLength !== null) throw invalid();
+  const reader = request.body.getReader();
+  const firstChunk = await reader.read();
+  if (firstChunk.done) return;
+  await reader.cancel().catch(() => undefined);
+  throw invalid();
 }
 
 function invalid() { return new ApplicationError("validation", "invalid_request"); }

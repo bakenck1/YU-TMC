@@ -40,14 +40,22 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
   // click handler closure, preventing a double-navigation on rapid clicks.
   const openingIdRef = useRef<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const markingAllRef = useRef(false);
+  const [markingAll, setMarkingAll] = useState(false);
+  const feedRevisionRef = useRef(0);
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const load = () => fetch("/api/inventory/notifications?limit=10", { cache: "no-store", signal: controller.signal })
+    const load = () => {
+      const revision = feedRevisionRef.current;
+      return fetch("/api/inventory/notifications?limit=10", { cache: "no-store", signal: controller.signal })
         .then((response) => response.ok ? response.json() as Promise<TmcNotificationFeedDto> : Promise.reject())
-        .then((value) => { if (active) setFeed(value); })
+        .then((value) => {
+          if (active && revision === feedRevisionRef.current) setFeed(value);
+        })
         .catch(() => { if (active) setFeed((current) => current ?? { notifications: [], unreadCount: 0 }); });
+    };
     const refreshOnFocus = () => { void load(); };
     void load();
     const interval = window.setInterval(() => { void load(); }, 15_000);
@@ -76,6 +84,7 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
           cache: "no-store",
         });
         if (response.ok) {
+          feedRevisionRef.current += 1;
           const readAt = new Date().toISOString();
           setFeed((current) => current ? {
             unreadCount: Math.max(0, current.unreadCount - 1),
@@ -92,6 +101,34 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
     router.push(`/tmc/transfer-requests/${notification.requestId}`);
   }
 
+  async function markAllRead() {
+    if (markingAllRef.current || !feed?.unreadCount) return;
+    markingAllRef.current = true;
+    setMarkingAll(true);
+    try {
+      const response = await fetch("/api/inventory/notifications/read-all", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      feedRevisionRef.current += 1;
+      const readAt = new Date().toISOString();
+      setFeed((current) => current ? {
+        unreadCount: 0,
+        notifications: current.notifications.map((notification) => ({
+          ...notification,
+          readAt: notification.readAt ?? readAt,
+        })),
+      } : current);
+    } catch {
+      // Keep the unread state visible so the user can retry safely.
+    } finally {
+      markingAllRef.current = false;
+      setMarkingAll(false);
+    }
+  }
+
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-label={compact ? t("tmc.notifications.title") : undefined} className={`relative inline-flex items-center gap-2 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 ${compact ? "min-h-11 min-w-11 justify-center" : "min-h-11 px-4"}`} aria-expanded={open}>
@@ -99,17 +136,32 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
         {(feed?.unreadCount ?? 0) > 0 && <span className={`${compact ? "absolute -right-1 -top-1" : ""} inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white ring-2 ring-white`} aria-label={t("tmc.notifications.unread")}>{feed!.unreadCount}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
-          {feed?.notifications.length ? feed.notifications.map((notification) => (
-            <Link key={notification.id} href={`/tmc/transfer-requests/${notification.requestId}`} onClick={(event) => void openNotification(event, notification)} aria-busy={openingId === notification.id} className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-50 ${notification.readAt ? "text-zinc-500" : "font-semibold text-zinc-900"} ${openingId === notification.id ? "pointer-events-none opacity-60" : ""}`}>
-              <span>{notification.type === "tmc_transfer.completed"
-                ? t(completedLabel(notification.safePayload))
-                : t(NOTIFICATION_LABEL[notification.type] ?? "tmc.notifications.completed")}</span>
-              {notification.readAt
-                ? <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-500">{t("tmc.notifications.read")}</span>
-                : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />}
-            </Link>
-          )) : <p className="px-3 py-4 text-sm text-zinc-500">{t("tmc.notifications.empty")}</p>}
+        <div className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
+          <div className="flex min-h-12 items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2">
+            <p className="font-semibold text-zinc-900">{t("tmc.notifications.title")}</p>
+            {(feed?.unreadCount ?? 0) > 0 ? (
+              <button
+                type="button"
+                disabled={markingAll}
+                onClick={() => void markAllRead()}
+                className="min-h-9 rounded-lg px-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              >
+                {t("tmc.notifications.markAllRead")}
+              </button>
+            ) : null}
+          </div>
+          <div className="max-h-96 overflow-y-auto p-2">
+            {feed?.notifications.length ? feed.notifications.map((notification) => (
+              <Link key={notification.id} href={`/tmc/transfer-requests/${notification.requestId}`} onClick={(event) => void openNotification(event, notification)} aria-busy={openingId === notification.id} className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-zinc-50 ${notification.readAt ? "text-zinc-500" : "bg-emerald-50/60 font-semibold text-zinc-900"} ${openingId === notification.id ? "pointer-events-none opacity-60" : ""}`}>
+                <span>{notification.type === "tmc_transfer.completed"
+                  ? t(completedLabel(notification.safePayload))
+                  : t(NOTIFICATION_LABEL[notification.type] ?? "tmc.notifications.completed")}</span>
+                {notification.readAt
+                  ? <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-500">{t("tmc.notifications.read")}</span>
+                  : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />}
+              </Link>
+            )) : <p className="px-3 py-4 text-sm text-zinc-500">{t("tmc.notifications.empty")}</p>}
+          </div>
         </div>
       )}
     </div>

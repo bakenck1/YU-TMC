@@ -6,7 +6,7 @@ Tracked repository содержит substantial `_audit/` materials и боль�
 snapshots. Это полезная история, но она увеличивает clone/review noise и
 размывает границу product source, generated metadata и immutable evidence.
 
-Docker уже исключает audit/docs/tests из runtime context, поэтому проблема — не
+Runtime boundary уже исключает audit/docs/tests из production context, поэтому проблема — не
 runtime leak, а ownership, navigation, retention и provenance.
 
 ## Варианты решения
@@ -45,7 +45,7 @@ provenance. Любой перенос требует сохранённого ha
 ## Acceptance
 
 Владелец репозитория зафиксировал выбранную policy и дату пересмотра; audit evidence не теряется;
-generated snapshots остаются согласованными с migrations; Docker/security
+generated snapshots остаются согласованными с migrations; runtime/security
 checks подтверждают отсутствие лишних материалов в runtime.
 
 ## Status: Done
@@ -60,7 +60,7 @@ checks подтверждают отсутствие лишних материа
   отчёта, правилами нового audit report и критериями external archive.
 - Добавлены machine-readable baseline и `npm run artifacts:check`. Gate
   проверяет каталог reports, даты и SHA, pinned audit gitlink и `.gitmodules`,
-  90-дневное review window, CI/README/docs wiring, Docker context/runtime
+  90-дневное review window, CI/README/docs wiring, runtime boundary
   exclusions, tracked generated artifacts и SQL/journal/snapshot mapping.
 - Drizzle raw-SQL-only migration
   `20260808120000_security_resource_quotas` зафиксирована как единственное
@@ -83,7 +83,7 @@ checks подтверждают отсутствие лишних материа
 
 ### Осознанные границы
 
-- Docker image build и external archive restore требуют CI/staging environment;
+- External archive restore требует CI/staging environment;
   локально подтверждены context rules, production security gate и Next build.
 - Перенос `_audit/` не выполнялся: до измерения clone cost, проверки доступа,
   backup/restore и legal/security retention удаление tracked evidence было бы

@@ -671,6 +671,27 @@ test("stage-four direct notifications allocate a mailbox sequence before event a
   assert.match(source.calls[4]!.text, /tmc_web_push_outbox/i);
 });
 
+test("mark all notifications read updates the direct mailbox and administrator queue", async () => {
+  const source = new QueryQueue([
+    { rows: [], rowCount: 3 },
+    { rows: [], rowCount: 2 },
+  ]);
+  const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;
+  const readAt = new Date("2026-08-10T12:00:00Z");
+
+  await repository.markAllNotificationsRead({
+    actorId: uuid(1),
+    includeAdminQueue: true,
+    readAt,
+  });
+
+  assert.equal(source.calls.length, 2);
+  assert.match(source.calls[0]!.text, /update[\s\S]+notification_deliveries[\s\S]+recipient_id = \$1[\s\S]+read_at is null/i);
+  assert.match(source.calls[1]!.text, /insert into[\s\S]+notification_receipts[\s\S]+admin_queue[\s\S]+on conflict/i);
+  assert.deepEqual(source.calls[0]!.values, [uuid(1), readAt]);
+  assert.deepEqual(source.calls[1]!.values, [uuid(1), readAt]);
+});
+
 test("stage-four audit persists canonical administrator-exception metadata", async () => {
   const source = new QueryQueue([{ rows: [], rowCount: 1 }]);
   const repository = createPostgresTmcOperationRepositories(source.asSource()).stageFour;

@@ -1,8 +1,29 @@
 const employeeExample = {
+  id: 10001,
+  personnelId: 20001,
   iin: "000000000000",
-  fullName: "Зарегистрированный сотрудник",
-  phone: "+77000000000",
-  login: "employee@yu.edu.kz",
+  username: "test.employee",
+  login: "test.employee",
+  firstName: "Тест",
+  lastName: "Сотрудников",
+  middleName: "Тестович",
+  fullName: "Сотрудников Тест Тестович",
+  displayName: "Сотрудников Тест",
+  email: "test.employee@yu.edu.kz",
+  phone: "77000000000",
+  image: "https://api.yu.edu.kz/uploads/users/test.employee/profile.jpg",
+  isActive: true,
+  isSuperuser: true,
+  roles: ["admin", "personnel"],
+  role: "admin",
+  employedAt: "2025-07-24",
+  orgUnit: {
+    id: 24,
+    nameRu: "Управление информационных технологий",
+    nameKk: "Ақпараттық технологиялар басқармасы",
+    nameEn: "Department of Information Technologies",
+  },
+  position: { id: 379, name: "Frontend-разработчик" },
 };
 
 const assignedItemExample = {
@@ -46,8 +67,20 @@ const errorResponses = {
       },
     },
   },
+  "502": {
+    description: "Справочник сотрудников Yessenov ID недоступен или вернул некорректный ответ",
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/Error" },
+        example: {
+          error: "YESSENOV_DIRECTORY_UNAVAILABLE",
+          message: "Не удалось получить данные сотрудников из Yessenov ID.",
+        },
+      },
+    },
+  },
   "503": {
-    description: "API не настроен на сервере",
+    description: "API Dockflow или доступ к справочнику Yessenov ID не настроен на сервере",
     content: {
       "application/json": {
         schema: { $ref: "#/components/schemas/Error" },
@@ -66,12 +99,12 @@ export const dockflowOpenApiDocument = {
     title: "Dockflow API",
   version: "1.0.0",
     description:
-      "API интеграции Dockflow. Возвращает только активных зарегистрированных пользователей с ИИН и их текущие закреплённые ТМЦ. В Authorize введите выданный ключ; префикс Bearer Swagger добавит автоматически.",
+      "API интеграции Dockflow. Профили активных сотрудников с ИИН загружаются из Yessenov ID, а текущие закреплённые ТМЦ — из YU Inventory. В Authorize введите выданный ключ; префикс Bearer Swagger добавит автоматически.",
   },
   servers: [{ url: "/", description: "Текущий сервер" }],
   tags: [
     { name: "Authentication", description: "Проверка API-ключа Dockflow" },
-    { name: "Employees", description: "Зарегистрированные сотрудники и их ТМЦ" },
+    { name: "Employees", description: "Активные сотрудники Yessenov ID и их ТМЦ" },
     { name: "Inventory", description: "Текущие карточки ТМЦ" },
   ],
   paths: {
@@ -103,7 +136,7 @@ export const dockflowOpenApiDocument = {
       get: {
         tags: ["Employees"],
         summary: "Получить сотрудника и закреплённые ТМЦ",
-        description: "Основной сценарий интеграции Dockflow.",
+        description: "Профиль загружается из https://api.yu.edu.kz/api/v2/personnels/, ТМЦ — из YU Inventory.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/Iin" }],
         responses: {
@@ -172,11 +205,11 @@ export const dockflowOpenApiDocument = {
     "/api/v1/employees": {
       get: {
         tags: ["Employees"],
-        summary: "Получить список зарегистрированных сотрудников",
+        summary: "Получить список сотрудников Yessenov ID",
         security: bearerSecurity,
         responses: {
           "200": {
-            description: "Список активных зарегистрированных сотрудников с ИИН",
+            description: "Список активных сотрудников Yessenov ID с валидным ИИН",
             content: {
               "application/json": {
                 schema: {
@@ -194,6 +227,7 @@ export const dockflowOpenApiDocument = {
             },
           },
           "401": errorResponses["401"],
+          "502": errorResponses["502"],
           "503": errorResponses["503"],
         },
       },
@@ -277,16 +311,67 @@ export const dockflowOpenApiDocument = {
       },
       Employee: {
         type: "object",
-        required: ["iin", "fullName", "phone", "login", "email", "role", "createdAt"],
-        additionalProperties: false,
+        required: [
+          "id",
+          "personnelId",
+          "iin",
+          "username",
+          "login",
+          "firstName",
+          "lastName",
+          "middleName",
+          "fullName",
+          "displayName",
+          "email",
+          "phone",
+          "image",
+          "isActive",
+          "isSuperuser",
+          "roles",
+          "role",
+          "employedAt",
+          "orgUnit",
+          "position",
+        ],
         properties: {
+          id: { type: "integer", minimum: 0, description: "ID пользователя в Yessenov ID" },
+          personnelId: { type: "integer", minimum: 0, description: "ID personnel в Yessenov ID" },
           iin: { type: "string", pattern: "^[0-9]{12}$" },
-          fullName: { type: "string" },
-          phone: { type: "string" },
+          username: { type: "string" },
           login: { type: "string" },
+          firstName: { type: "string" },
+          lastName: { type: "string" },
+          middleName: { type: ["string", "null"] },
+          fullName: { type: "string" },
+          displayName: { type: "string" },
           email: { type: "string", format: "email" },
-          role: { type: "string" },
-          createdAt: { type: "string", format: "date-time" },
+          phone: { type: "string" },
+          image: { type: ["string", "null"], format: "uri" },
+          isActive: { type: "boolean" },
+          isSuperuser: { type: "boolean" },
+          roles: { type: "array", items: { type: "string" } },
+          role: { type: "string", description: "Первая роль для обратной совместимости" },
+          employedAt: { type: ["string", "null"], format: "date" },
+          orgUnit: { $ref: "#/components/schemas/OrgUnit" },
+          position: { $ref: "#/components/schemas/Position" },
+        },
+      },
+      OrgUnit: {
+        type: ["object", "null"],
+        required: ["id", "nameRu", "nameKk", "nameEn"],
+        properties: {
+          id: { type: "integer", minimum: 0 },
+          nameRu: { type: ["string", "null"] },
+          nameKk: { type: ["string", "null"] },
+          nameEn: { type: ["string", "null"] },
+        },
+      },
+      Position: {
+        type: ["object", "null"],
+        required: ["id", "name"],
+        properties: {
+          id: { type: "integer", minimum: 0 },
+          name: { type: "string" },
         },
       },
       EmployeeListEntry: {

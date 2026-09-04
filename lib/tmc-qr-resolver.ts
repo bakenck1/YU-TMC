@@ -1,4 +1,6 @@
 import {
+  CONNECTION_STATUSES,
+  ITEM_CONDITIONS,
   ITEM_STATUSES,
   QR_FORMATS,
   QR_STATUSES,
@@ -179,12 +181,16 @@ function parseResolutionBody(body: unknown): QrResolutionDto | null {
     !optionalString(target.roomDesignation) ||
     !optionalString(target.inventoryNumber) ||
     !optionalNullableString(target.responsibleName) ||
+    !optionalNullableString(target.responsibleId) ||
     typeof target.isAssigned !== "boolean" ||
     !optionalBoolean(target.isCurrentUserResponsible)
   ) {
     return null;
   }
   if (target.localGroup !== undefined && !isLocalGroup(target.localGroup)) {
+    return null;
+  }
+  if (target.itemDetails !== undefined && !isItemDetails(target.itemDetails)) {
     return null;
   }
   return resolution as unknown as QrResolutionDto;
@@ -211,6 +217,28 @@ function optionalNullableString(value: unknown): boolean {
 
 function optionalBoolean(value: unknown): boolean {
   return value === undefined || typeof value === "boolean";
+}
+
+function isItemDetails(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.itemType === "string" &&
+    value.itemType.length > 0 &&
+    optionalNullableString(value.brand) &&
+    optionalNullableString(value.model) &&
+    optionalNullableString(value.description) &&
+    typeof value.quantity === "number" &&
+    Number.isSafeInteger(value.quantity) &&
+    value.quantity > 0 &&
+    typeof value.unitPrice === "number" &&
+    Number.isFinite(value.unitPrice) &&
+    value.unitPrice >= 0 &&
+    isOneOf(value.condition, ITEM_CONDITIONS) &&
+    isOneOf(value.connectionStatus, CONNECTION_STATUSES) &&
+    (value.photoUrl === null || typeof value.photoUrl === "string") &&
+    typeof value.createdAt === "string" &&
+    value.createdAt.length > 0
+  );
 }
 
 function isLocalGroup(value: unknown): boolean {

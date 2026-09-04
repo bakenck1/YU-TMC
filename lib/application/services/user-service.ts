@@ -19,6 +19,10 @@ import type {
   UserRepositories,
 } from "@/lib/application/ports/user-repositories";
 import type { PasswordHasher } from "@/lib/application/ports/password-hasher";
+import type {
+  YessenovDirectoryClient,
+  YessenovDirectoryEmployee,
+} from "@/lib/yessenov-directory";
 import {
   canManageUser,
   hasPermission,
@@ -70,6 +74,10 @@ export class UserService {
     private readonly passwordHasher: PasswordHasher,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
+    private readonly personnelDirectory?: Pick<
+      YessenovDirectoryClient,
+      "listEmployees"
+    >,
   ) {}
 
   async isConfigured(): Promise<boolean> {
@@ -523,6 +531,7 @@ export class UserService {
 
   async listUsersForManagement(
     actor: AuthenticatedUserManagementActor,
+    options: { synchronizeDirectory?: boolean } = {},
   ): Promise<UserDto[]> {
     if (
       !isUuid(actor.userId) ||
@@ -534,6 +543,28 @@ export class UserService {
     }
 
     const actorUserId = actor.userId.toLowerCase();
+    if (this.personnelDirectory && options.synchronizeDirectory !== false) {
+      await this.unitOfWork.transaction(async ({ users }) => {
+        const currentActor = await requireCurrentActor(
+          users,
+          actorUserId,
+          actor.sessionVersion,
+        );
+        if (
+          currentActor.role !== actor.role ||
+          !hasPermission(currentActor.role, "legacy.users.read")
+        ) {
+          throw new ApplicationError("forbidden", "forbidden");
+        }
+      });
+      const directoryEmployees =
+        await this.personnelDirectory.listEmployees();
+      return this.synchronizeDirectoryUsers(
+        directoryEmployees,
+        actor,
+        actorUserId,
+      );
+    }
     return this.unitOfWork.transaction(async ({ users }) => {
       const currentActor = await requireCurrentActor(
         users,
@@ -549,6 +580,51 @@ export class UserService {
       return (await users.list())
         .filter((user) => !user.deletedAt)
         .map((user) => toUserDto(user, true));
+    });
+  }
+
+  private async synchronizeDirectoryUsers(
+    directoryEmployees: YessenovDirectoryEmployee[],
+    actor: AuthenticatedUserManagementActor,
+    actorUserId: string,
+  ): Promise<UserDto[]> {
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const currentActor = await requireCurrentActor(
+        users,
+        actorUserId,
+        actor.sessionVersion,
+      );
+      if (
+        currentActor.role !== actor.role ||
+        !hasPermission(currentActor.role, "legacy.users.read")
+      ) {
+        throw new ApplicationError("forbidden", "forbidden");
+      }
+
+      await users.lockDirectorySynchronization();
+      const profilesByUserId = new Map<string, YessenovDirectoryEmployee>();
+      for (const employee of directoryEmployees) {
+        const synchronized = await users.synchronizeDirectoryUser({
+          id: this.ids.create(),
+          email: employee.email,
+          fullName: employee.fullName,
+          iin: employee.iin,
+          orgUnit: directoryOrgUnitName(employee),
+          position: employee.position?.name ?? null,
+          personnelId: String(employee.personnelId),
+          phone: employee.phone || null,
+          synchronizedAt: this.clock.now(),
+        });
+        if (synchronized) {
+          profilesByUserId.set(synchronized.id, employee);
+        }
+      }
+
+      return (await users.list())
+        .filter((user) => !user.deletedAt)
+        .map((user) =>
+          toUserDto(user, true, profilesByUserId.get(user.id)),
+        );
     });
   }
 
@@ -831,17 +907,29 @@ function currentAccount(user: UserRecord): CurrentAccount {
   };
 }
 
-function toUserDto(user: UserRecord, revealIin = false): UserDto {
+function toUserDto(
+  user: UserRecord,
+  revealIin = false,
+  directoryEmployee?: YessenovDirectoryEmployee,
+): UserDto {
   return {
     id: user.id,
     code: user.code,
-    fullName: user.fullName,
-    iin: revealIin ? (user.iin ?? null) : maskIin(user.iin ?? null),
-    orgUnit: user.orgUnit ?? null,
-    position: user.position ?? null,
-    tutorId: revealIin ? (user.tutorId ?? null) : undefined,
-    email: user.email,
-    phone: user.phone,
+    fullName: directoryEmployee?.fullName ?? user.fullName,
+    iin: revealIin
+      ? (directoryEmployee?.iin ?? user.iin ?? null)
+      : maskIin(directoryEmployee?.iin ?? user.iin ?? null),
+    orgUnit: directoryEmployee
+      ? directoryOrgUnitName(directoryEmployee)
+      : (user.orgUnit ?? null),
+    position: directoryEmployee?.position?.name ?? user.position ?? null,
+    tutorId: revealIin
+      ? String(directoryEmployee?.personnelId ?? user.tutorId ?? "") || null
+      : undefined,
+    directoryRoles: directoryEmployee?.roles,
+    directoryManaged: Boolean(directoryEmployee),
+    email: directoryEmployee?.email ?? user.email,
+    phone: directoryEmployee?.phone || user.phone,
     defaultRoomId: user.defaultRoomId ?? null,
     role: user.role,
     emailVerified: user.emailVerified,
@@ -849,6 +937,13 @@ function toUserDto(user: UserRecord, revealIin = false): UserDto {
     version: user.version,
     addedAt: user.createdAt.toISOString(),
   };
+}
+
+function directoryOrgUnitName(employee: YessenovDirectoryEmployee) {
+  return employee.orgUnit?.nameRu ??
+    employee.orgUnit?.nameKk ??
+    employee.orgUnit?.nameEn ??
+    null;
 }
 
 function normalizeIin(value: string | null | undefined): string | null | undefined {

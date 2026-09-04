@@ -90,6 +90,7 @@ test("transfer request card projection keeps only rendered and mutation-required
 
   assert.deepEqual(toTmcTransferRequestCardView(request), {
     id: request.id,
+    kind: "handover",
     initiator: {
       fullName: "Initiator",
       email: "initiator@example.test",

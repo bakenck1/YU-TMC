@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTmcHistoryGetHandler, createTmcNotificationReadPostHandler, createTmcNotificationsGetHandler } from "../lib/server/http/tmc-stage-four-handlers";
+import { createTmcHistoryGetHandler, createTmcNotificationReadPostHandler, createTmcNotificationsGetHandler, createTmcNotificationsReadAllPostHandler } from "../lib/server/http/tmc-stage-four-handlers";
 
 const ACTOR = {
   userId: "11111111-1111-4111-8111-111111111111",
@@ -80,6 +80,16 @@ test("notification routes enforce bounded feed size and bodyless read command", 
     markRead: async () => { reads += 1; },
   });
   assert.equal((await post(new Request("https://inventory.example/read", { method: "POST" }), "33333333-3333-4333-8333-333333333333")).status, 204);
+  assert.equal((await post(new Request("https://inventory.example/read", { method: "POST", body: "" }), "33333333-3333-4333-8333-333333333333")).status, 204);
   assert.equal((await post(new Request("https://inventory.example/read", { method: "POST", body: "{}" }), "33333333-3333-4333-8333-333333333333")).status, 400);
-  assert.equal(reads, 1);
+  assert.equal(reads, 2);
+
+  const readAll = createTmcNotificationsReadAllPostHandler({
+    authenticate: async () => ACTOR,
+    markAllRead: async () => { reads += 1; },
+  });
+  assert.equal((await readAll(new Request("https://inventory.example/read-all", { method: "POST" }))).status, 204);
+  assert.equal((await readAll(new Request("https://inventory.example/read-all", { method: "POST", body: "" }))).status, 204);
+  assert.equal((await readAll(new Request("https://inventory.example/read-all", { method: "POST", body: "{}" }))).status, 400);
+  assert.equal(reads, 4);
 });

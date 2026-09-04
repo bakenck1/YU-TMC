@@ -226,7 +226,7 @@ test("an explicit room scope preserves the authenticated room scanner", async ()
   );
 });
 
-test("employee lookups cannot distinguish inaccessible records from absent codes", async () => {
+test("employee barcode scans show lifecycle status but QR lookups stay scope-safe", async () => {
   let record: QrResolutionRecord | null = null;
   const service = createService({
     async findByCanonicalKey() {
@@ -251,7 +251,9 @@ test("employee lookups cannot distinguish inaccessible records from absent codes
     "barcode",
     "item",
   );
-  assert.deepEqual(inaccessibleBarcode, absentBarcode);
+  assert.equal(inaccessibleBarcode.status, "resolved");
+  assert.equal(inaccessibleBarcode.target?.status, "maintenance");
+  assert.notDeepEqual(inaccessibleBarcode, absentBarcode);
 
   record = null;
   const absentQr = await service.resolve(
@@ -270,7 +272,7 @@ test("employee lookups cannot distinguish inaccessible records from absent codes
   assert.deepEqual(wrongTargetQr, absentQr);
 });
 
-test("employee resolution exposes assignment state without a foreign owner's name", async () => {
+test("employee resolution exposes assignment state and the responsible person after a scan", async () => {
   const foreignItem: QrResolutionRecord = {
     ...BARCODE_RECORD,
     responsibleName: "Foreign Owner",
@@ -291,7 +293,8 @@ test("employee resolution exposes assignment state without a foreign owner's nam
     "barcode",
     "item",
   );
-  assert.equal(employeeResult.target?.responsibleName, undefined);
+  assert.equal(employeeResult.target?.responsibleName, "Foreign Owner");
+  assert.equal(employeeResult.target?.responsibleId, "foreign-employee");
   assert.equal(employeeResult.target?.isAssigned, true);
   assert.equal(employeeResult.target?.isCurrentUserResponsible, false);
 
@@ -303,6 +306,50 @@ test("employee resolution exposes assignment state without a foreign owner's nam
   );
   assert.equal(warehouseResult.target?.responsibleName, "Foreign Owner");
   assert.equal(warehouseResult.target?.isAssigned, true);
+});
+
+test("scan-scoped item photos require a valid item barcode", async () => {
+  let record: QrResolutionRecord = BARCODE_RECORD;
+  let photoReads = 0;
+  const expectedBytes = new Uint8Array([0xff, 0xd8, 0xff]);
+  const service = createService({
+    async findByCanonicalKey() {
+      return record;
+    },
+    async findItemByBarcode() {
+      return record;
+    },
+    async findItemPhoto(itemId) {
+      photoReads += 1;
+      assert.equal(itemId, BARCODE_RECORD.targetId);
+      return { bytes: expectedBytes, mimeType: "image/jpeg" };
+    },
+  });
+  const employee = { userId: "employee", role: "employee" } as const;
+
+  const photo = await service.resolveItemPhoto("INV-42", employee, "barcode");
+  assert.deepEqual(photo.bytes, expectedBytes);
+  assert.equal(photo.mimeType, "image/jpeg");
+  assert.equal(photoReads, 1);
+
+  record = { ...BARCODE_RECORD, targetStatus: "maintenance" };
+  const maintenancePhoto = await service.resolveItemPhoto(
+    "INV-42",
+    employee,
+    "barcode",
+  );
+  assert.deepEqual(maintenancePhoto.bytes, expectedBytes);
+  assert.equal(photoReads, 2);
+
+  await assert.rejects(
+    service.resolveItemPhoto("INV-42", employee, "qr"),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "publicCode" in error &&
+      error.publicCode === "item_photo_not_found",
+  );
+  assert.equal(photoReads, 2);
 });
 
 function createService(

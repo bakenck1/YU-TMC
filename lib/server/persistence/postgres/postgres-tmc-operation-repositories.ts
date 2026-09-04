@@ -913,6 +913,40 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
     );
     return (admin.rowCount ?? 0) > 0;
   }
+
+  async markAllNotificationsRead(input: { actorId: string; includeAdminQueue: boolean; readAt: Date }) {
+    await this.source.query(
+      `update ${NOTIFICATION_DELIVERIES} delivery
+          set read_at = coalesce(delivery.read_at, $2)
+         from ${NOTIFICATION_EVENTS} event
+         join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+         join ${REQUESTS} request on request.id = tmc.request_id
+        where delivery.event_id = event.id
+          and delivery.recipient_id = $1
+          and delivery.read_at is null
+          and event.occurred_at <= $2
+          and (event.type <> 'tmc_transfer.overdue'
+               or (request.status = 'pending' and request.expires_at <= $2))`,
+      [input.actorId, input.readAt],
+    );
+    if (!input.includeAdminQueue) return;
+    await this.source.query(
+      `insert into ${NOTIFICATION_RECEIPTS} (event_id, user_id, read_at)
+       select event.id, $1, $2
+         from ${NOTIFICATION_EVENTS} event
+         join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+         join ${REQUESTS} request on request.id = tmc.request_id
+         left join ${NOTIFICATION_RECEIPTS} receipt
+           on receipt.event_id = event.id and receipt.user_id = $1
+        where event.audience_kind = 'admin_queue'
+          and receipt.event_id is null
+          and event.occurred_at <= $2
+          and (event.type <> 'tmc_transfer.overdue'
+               or (request.status = 'pending' and request.expires_at <= $2))
+       on conflict (event_id, user_id) do nothing`,
+      [input.actorId, input.readAt],
+    );
+  }
 }
 
 interface NotificationRow extends QueryResultRow {

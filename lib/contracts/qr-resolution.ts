@@ -1,4 +1,6 @@
 import type {
+  ConnectionStatus,
+  ItemCondition,
   QrFormat,
   QrStatus,
   QrTargetKind,
@@ -27,8 +29,21 @@ export interface QrResolutionDto {
     roomDesignation?: string;
       inventoryNumber?: string;
       responsibleName?: string | null;
+      responsibleId?: string | null;
       isAssigned: boolean;
       isCurrentUserResponsible?: boolean;
+      itemDetails?: {
+        itemType: string;
+        brand: string | null;
+        model: string | null;
+        description: string | null;
+        quantity: number;
+        unitPrice: number;
+        condition: ItemCondition;
+        connectionStatus: ConnectionStatus;
+        photoUrl: string | null;
+        createdAt: string;
+      };
       localGroup?: {
         id: string;
         localBarcode: string;

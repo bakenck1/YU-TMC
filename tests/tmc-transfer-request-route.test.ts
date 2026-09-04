@@ -76,6 +76,7 @@ test("POST transfer-requests forwards only authenticated server identity and exa
   const response = await handler(jsonRequest({
     recipientId: RECIPIENT_ID,
     itemIds: [ITEM_ID, ITEM_ID],
+    requestKind: "handover",
     quantityTransfers: [{
       itemId: ITEM_ID,
       sourceLocalGroupId: null,
@@ -92,6 +93,7 @@ test("POST transfer-requests forwards only authenticated server identity and exa
   assert.deepEqual(calls, [[{
     recipientId: RECIPIENT_ID,
     itemIds: [ITEM_ID, ITEM_ID],
+    requestKind: "handover",
     quantityTransfers: [{
       itemId: ITEM_ID,
       sourceLocalGroupId: null,
@@ -192,6 +194,7 @@ test("POST transfer-requests rejects malformed, ambiguous, and unsupported bodie
     ["array JSON", jsonRequest([]), 400, "invalid_request"],
     ["unknown identity field", jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID], actorId: ACTOR.userId }), 400, "invalid_request"],
     ["non-string item", jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [7] }), 400, "invalid_request"],
+    ["unknown request kind", jsonRequest({ recipientId: RECIPIENT_ID, itemIds: [ITEM_ID], requestKind: "steal" }), 400, "invalid_request"],
     ["wrong media type", rawRequest("{}", "text/plain"), 415, "unsupported_media_type"],
   ] as const) {
     await context.test(name, async () => {

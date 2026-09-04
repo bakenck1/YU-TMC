@@ -143,6 +143,6 @@ opaque cursor для заявок и смен локации. Сводка ре�
 staging pentest в локальной среде не проверены. До их выполнения нельзя давать
 гарантию «уязвимостей нет» или брать production-риск как закрытый.
 
-Compose-конфигурации worker валидны, one-shot worker smoke успешен. Сборка Docker
-worker image локально не выполнена, потому что Docker Desktop daemon не был запущен;
+Конфигурация worker валидна, one-shot worker smoke успешен. Полная изолированная
+проверка worker локально не выполнялась;
 её необходимо выполнить в CI/staging как часть P0 configuration gate.

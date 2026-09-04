@@ -83,6 +83,33 @@ describe("TMC stage four UI", () => {
     expect(screen.getByText("tmc.notifications.read")).not.toBeNull();
   });
 
+  it("marks every notification as read and clears the unread badge", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          unreadCount: 3,
+          notifications: [
+            { id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null },
+            { id: "88888888-8888-4888-8888-888888888888", type: "tmc_transfer.cancelled", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null },
+          ],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 204 } as Response);
+
+    render(<TmcNotifications />);
+    await waitFor(() => expect(screen.getByLabelText("tmc.notifications.unread").textContent).toBe("3"));
+    fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.markAllRead" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(
+      "/api/inventory/notifications/read-all",
+      { method: "POST", credentials: "same-origin", cache: "no-store" },
+    ));
+    await waitFor(() => expect(screen.queryByLabelText("tmc.notifications.unread")).toBeNull());
+    expect(screen.getAllByText("tmc.notifications.read")).toHaveLength(2);
+  });
+
   it("still opens the request if persisting the read receipt fails", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadCount: 1, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null }] }) } as Response)

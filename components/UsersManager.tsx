@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -51,6 +51,29 @@ export default function UsersManager({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/users", {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { users?: UserDto[] };
+        if (!Array.isArray(payload.users)) return;
+        setRecords(payload.users.map(normalizeUser));
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          // Keep the already persisted directory snapshot visible when a
+          // background refresh is temporarily unavailable.
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
   const selectedUser = records.find((user) => user.id === selectedId) ?? null;
   const formUser = formUserId === null ? null : records.find((user) => user.id === formUserId) ?? null;
   const roleOptions =
@@ -70,7 +93,18 @@ export default function UsersManager({
 
     return records
       .filter((user) => {
-        const searchable = [user.code, user.fullName, user.email, user.role, t(USER_ROLE_LABEL_KEYS[user.role]), user.iin, user.phone]
+        const searchable = [
+          user.code,
+          user.fullName,
+          user.email,
+          user.role,
+          t(USER_ROLE_LABEL_KEYS[user.role]),
+          user.directoryRoles?.join(" "),
+          user.position,
+          user.orgUnit,
+          user.iin,
+          user.phone,
+        ]
           .join(" ")
           .toLocaleLowerCase("ru-RU");
         const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
@@ -365,14 +399,16 @@ export default function UsersManager({
 
       <section className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[1420px] table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[24%]" />
-              <col className="w-[22%]" />
-              <col className="w-[16%]" />
+              <col className="w-[19%]" />
+              <col className="w-[17%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
               <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[12%]" />
+              <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50/50 text-xs uppercase tracking-wide">
@@ -385,6 +421,8 @@ export default function UsersManager({
                 <th className="px-4 py-4 font-medium">
                   <SortableTableHeader label={t("users.role")} sortKey="role" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
                 </th>
+                <th className="px-4 py-4 font-medium text-zinc-400">{t("users.yessenovRole")}</th>
+                <th className="px-4 py-4 font-medium text-zinc-400">{t("users.position")}</th>
                 <th className="px-4 py-4 font-medium text-zinc-400">{t("users.iin")}</th>
                 <th className="px-4 py-4 font-medium text-zinc-400">{t("users.phone")}</th>
                 <th className="px-4 py-4 font-medium">
@@ -421,6 +459,8 @@ export default function UsersManager({
                   <td className="px-4 py-3.5">
                     <UserRoleBadge role={user.role} />
                   </td>
+                  <td className="px-4 py-3.5 text-zinc-500">{user.directoryRoles?.join(", ") || "—"}</td>
+                  <td className="px-4 py-3.5 text-zinc-500">{user.position || "—"}</td>
                   <td className="px-4 py-3.5 font-mono text-xs text-zinc-500">{user.iin ?? "—"}</td>
                   <td className="px-4 py-3.5 text-zinc-500">{user.phone ?? "—"}</td>
                   <td className="px-4 py-3.5 text-zinc-500">{formatUserDate(user.addedAt, locale)}</td>
@@ -428,7 +468,7 @@ export default function UsersManager({
               ))}
               {visibleUsers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
+                  <td colSpan={8} className="px-6 py-16 text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
                       <UserRound className="h-5 w-5" />
                     </div>

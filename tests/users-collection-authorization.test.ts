@@ -55,6 +55,16 @@ test("users collection route carries the session proof into both service calls",
   assert.match(route, /private, no-store, max-age=0, must-revalidate/);
 });
 
+test("users page renders the persisted list before refreshing Yessenov in the background", () => {
+  const page = readFileSync("app/(protected)/users/page.tsx", "utf8");
+  const manager = readFileSync("components/UsersManager.tsx", "utf8");
+
+  assert.match(page, /synchronizeDirectory:\s*false/);
+  assert.match(manager, /useEffect\(\(\) =>/);
+  assert.match(manager, /fetch\("\/api\/users"/);
+  assert.match(manager, /setRecords\(payload\.users\.map\(normalizeUser\)\)/);
+});
+
 async function createFixture() {
   const ids = [ADMIN_ID, TARGET_ID, REJECTED_ID];
   const service = new UserService(

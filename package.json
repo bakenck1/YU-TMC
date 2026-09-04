@@ -39,7 +39,7 @@
     "@zxing/library": "^0.23.0",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
-    "fast-xml-parser": "^5.3.0",
+    "fast-xml-parser": "^5.11.1",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.25.0",
     "next": "16.2.11",

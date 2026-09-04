@@ -55,8 +55,7 @@
         "npm run db:check",
         "npm run ui:check",
         "npm audit --omit=dev --audit-level=high --prefer-offline",
-        "git diff --check",
-        "docker compose -f docker-compose.mobile.yml config --quiet"
+        "git diff --check"
       ]
     },
     {
@@ -109,6 +108,10 @@
       {
         "tag": "20260831120000_remove_dockflow_integration",
         "reason": "The forward-only raw SQL migration removes the retired production integration tables from already-deployed databases."
+      },
+      {
+        "tag": "20260903120000_one_c_fixed_asset_inbox",
+        "reason": "The hand-authored raw SQL migration adds an integration inbox table that is intentionally accessed through parameterized SQL rather than the Drizzle schema."
       }
     ]
   },

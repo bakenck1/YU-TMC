@@ -9,6 +9,7 @@ import type {
   InsertUserRecord,
   PasswordCredentialRecord,
   PasswordCredentialRepository,
+  SynchronizeDirectoryUserRecord,
   UpdateUserRecord,
   UserRecord,
   UserRepositories,
@@ -72,6 +73,8 @@ function createRepositories(state: MemoryState): UserRepositories {
 
 class MemoryUserRepository implements UserRepository {
   constructor(private readonly state: MemoryState) {}
+
+  async lockDirectorySynchronization(): Promise<void> {}
 
   async list(): Promise<UserRecord[]> {
     return [...this.state.users.values()]
@@ -183,6 +186,60 @@ class MemoryUserRepository implements UserRepository {
     };
     this.state.users.set(input.id, cloneUser(updated));
     return cloneUser(updated);
+  }
+
+  async synchronizeDirectoryUser(
+    input: SynchronizeDirectoryUserRecord,
+  ): Promise<UserRecord | null> {
+    const candidates = [...this.state.users.values()].filter(
+      (candidate) =>
+        candidate.email === input.email ||
+        (!candidate.deletedAt && candidate.iin === input.iin),
+    );
+    if (candidates.length > 1 || candidates[0]?.deletedAt) return null;
+    const current = candidates[0];
+    if (!current) {
+      return this.insert({
+        id: input.id,
+        email: input.email,
+        fullName: input.fullName,
+        iin: input.iin,
+        orgUnit: input.orgUnit,
+        position: input.position,
+        tutorId: input.personnelId,
+        role: "employee",
+        phone: input.phone,
+        emailVerified: true,
+        active: true,
+        createdAt: input.synchronizedAt,
+      });
+    }
+    // Match the production adapter: provider email and roles do not replace
+    // the local login identity or application authorization role.
+    if (
+      current.fullName === input.fullName &&
+      current.iin === input.iin &&
+      (current.orgUnit ?? null) === input.orgUnit &&
+      (current.position ?? null) === input.position &&
+      (current.tutorId ?? null) === input.personnelId &&
+      current.phone === input.phone &&
+      current.emailVerified
+    ) {
+      return cloneUser(current);
+    }
+    const synchronized: UserRecord = {
+      ...current,
+      fullName: input.fullName,
+      iin: input.iin,
+      orgUnit: input.orgUnit,
+      position: input.position,
+      tutorId: input.personnelId,
+      phone: input.phone,
+      emailVerified: true,
+      updatedAt: input.synchronizedAt,
+    };
+    this.state.users.set(current.id, cloneUser(synchronized));
+    return cloneUser(synchronized);
   }
 
   async softDelete(

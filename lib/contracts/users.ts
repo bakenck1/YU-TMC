@@ -16,6 +16,9 @@ export interface UserDto {
   position?: string | null;
   /** Provider-side personnel identifier, exposed only by management APIs. */
   tutorId?: string | null;
+  /** Informational Yessenov ID roles. These never grant application permissions. */
+  directoryRoles?: string[];
+  directoryManaged?: boolean;
   email: string;
   phone: string | null;
   defaultRoomId?: string | null;

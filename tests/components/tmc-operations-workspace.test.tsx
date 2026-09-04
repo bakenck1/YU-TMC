@@ -19,6 +19,7 @@ vi.mock("@/components/TmcOperationShell", () => ({
 
 const REQUEST: TmcTransferRequestCardView = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  kind: "handover",
   initiator: { fullName: "Sender User", email: "sender@example.test" },
   recipient: { fullName: "Recipient User", email: "recipient@example.test" },
   status: "pending",

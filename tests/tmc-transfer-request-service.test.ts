@@ -1151,6 +1151,53 @@ test("does not persist a parent for an all-foreign employee batch", async () => 
   assert.equal(harness.repository.insertedItems.length, 0);
 });
 
+test("a scanned-item claim goes to the current owner and acceptance assigns the requester", async () => {
+  const itemId = uuid(1);
+  const currentOwner = user({ id: RECIPIENT_ID, fullName: "Current Owner" });
+  const claimCandidate = candidate(itemId, {
+    responsibleUser: currentOwner,
+  });
+  const harness = createHarness({ candidates: [claimCandidate] });
+  harness.repository.aggregate = requestRecord([claimCandidate], {
+    initiator: operationUser(ACTOR.userId),
+    recipient: operationUser(currentOwner.id),
+  });
+
+  const created = await harness.service.create(
+    {
+      recipientId: currentOwner.id,
+      itemIds: [itemId],
+      requestKind: "claim",
+    },
+    ACTOR,
+  );
+
+  assert.equal(created.included, 1);
+  assert.equal(created.request?.recipient.id, currentOwner.id);
+  assert.equal(
+    (harness.unitOfWork.stageFour.notifications[0] as { recipientId?: string })
+      .recipientId,
+    currentOwner.id,
+  );
+
+  const decided = await harness.service.decide(
+    harness.repository.aggregate.id,
+    {
+      requestVersion: 1,
+      decisions: [{ itemId, itemVersion: 1, decision: "accept" }],
+    },
+    {
+      userId: currentOwner.id,
+      role: "employee",
+      sessionVersion: 1,
+    },
+  );
+
+  assert.equal(decided.status, "accepted");
+  assert.equal(harness.repository.decisionCalls[0]?.decidedBy, currentOwner.id);
+  assert.equal(harness.repository.decisionCalls[0]?.recipientId, ACTOR.userId);
+});
+
 test("an administrator immediately assigns grouped items and notifies the new responsible user", async () => {
   const admin = { userId: uuid(70), role: "admin" as const };
   const itemIds = [uuid(1), uuid(2)];

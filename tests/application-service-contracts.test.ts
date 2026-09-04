@@ -185,6 +185,16 @@ function qrRecord(overrides: Partial<QrResolutionRecord> = {}): QrResolutionReco
     inventoryNumber: "INV-1",
     responsibleName: "Alice Employee",
     responsibleUserId: EMPLOYEE.userId,
+    itemType: "electronics",
+    itemBrand: "Epson",
+    itemModel: "EB-1",
+    itemDescription: "Lecture projector",
+    itemQuantity: 1,
+    itemUnitPrice: 250000,
+    itemCondition: "good",
+    itemConnectionStatus: "connected",
+    itemHasPhoto: true,
+    itemCreatedAt: new Date("2026-08-01T00:00:00.000Z"),
     ...overrides,
   };
 }
@@ -215,7 +225,7 @@ function qrService(record: QrResolutionRecord | null) {
   };
 }
 
-test("QR resolution projects responsible data according to actor scope", async () => {
+test("QR resolution projects responsible and read-only item data after an authorized scan", async () => {
   const { service, queriedKeys } = qrService(qrRecord());
 
   const warehouseResult = await service.resolve(QR_KEY, WAREHOUSE);
@@ -227,7 +237,19 @@ test("QR resolution projects responsible data according to actor scope", async (
     userId: "employee-2",
     role: "employee",
   });
-  assert.equal(otherEmployeeResult.target?.responsibleName, undefined);
+  assert.equal(otherEmployeeResult.target?.responsibleName, "Alice Employee");
+  assert.deepEqual(otherEmployeeResult.target?.itemDetails, {
+    itemType: "electronics",
+    brand: "Epson",
+    model: "EB-1",
+    description: "Lecture projector",
+    quantity: 1,
+    unitPrice: 250000,
+    condition: "good",
+    connectionStatus: "connected",
+    photoUrl: `/api/inventory/qr/item-photo?value=${encodeURIComponent(QR_KEY)}&kind=qr`,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  });
 
   const ownerResult = await service.resolve(QR_KEY, EMPLOYEE);
   assert.equal(ownerResult.target?.responsibleName, "Alice Employee");

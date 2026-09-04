@@ -1,5 +1,9 @@
 import type { IdempotencyRequestRepository } from "@/lib/application/ports/inventory-concurrency-repositories";
 import type { UserRole } from "@/lib/contracts/users";
+import type {
+  ConnectionStatus,
+  ItemCondition,
+} from "@/lib/contracts/inventory-domain";
 
 export interface LocalBarcodeActorRecord {
   id: string;
@@ -34,6 +38,8 @@ export interface LocalBarcodeGroupRecord {
   itemModel: string | null;
   itemDescription: string | null;
   unitPrice: number;
+  itemCondition?: ItemCondition;
+  itemConnectionStatus?: ConnectionStatus;
   itemPhotoId: string | null;
   parentGroupId: string | null;
   sequenceNumber: bigint;

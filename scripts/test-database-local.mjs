@@ -86,6 +86,8 @@ try {
       path.join(root, "node_modules/vitest/vitest.mjs"),
       "run",
       databaseTest,
+      "--dir",
+      path.join("tests", "database"),
       "--exclude",
       "**/.claude/**",
       "--exclude",

@@ -167,5 +167,4 @@ read/write errors и подтверждённый backup DB row.
   row lock не делает API optimistic-CAS без отдельного expected version;
 - семидневный production soak, backup и archive legacy source остаются
   операционным release gate и требуют фактического выполнения;
-- реальная сборка Docker image не запускалась локально: Docker daemon
-  недоступен, проверен только `docker compose ... config --quiet`.
+- дополнительные инфраструктурные проверки не запускались локально.

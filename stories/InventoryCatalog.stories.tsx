@@ -44,8 +44,10 @@ import ProblemReportButton from "@/components/ProblemReportButton";
 import QrScanPage from "@/components/QrScanPage";
 import ReportMetric from "@/components/ReportMetric";
 import RoomQrBatchPrintView from "@/components/RoomQrBatchPrintView";
+import ScannedItemDetailsCard from "@/components/ScannedItemDetailsCard";
 import { DEFAULT_INVENTORY_COLUMNS } from "@/lib/inventory-columns";
 import { buildings, items } from "@/lib/data";
+import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
 import { STORY_BUILDING, STORY_INSPECTION, STORY_ITEM_DTO, STORY_ROOM, STORY_TRANSFER } from "./inventory-fixtures";
 
 const item = items[0];
@@ -88,6 +90,30 @@ const localBarcodeDistribution = {
   originalLocation: localBarcodeGroup.location,
   groups: [localBarcodeGroup],
 };
+const scannedItem = {
+  kind: "item",
+  id: STORY_ITEM_DTO.id,
+  status: STORY_ITEM_DTO.status,
+  title: STORY_ITEM_DTO.name,
+  buildingName: STORY_BUILDING.name,
+  roomDesignation: STORY_ROOM.designation,
+  inventoryNumber: STORY_ITEM_DTO.inventoryNumber,
+  responsibleName: STORY_ITEM_DTO.responsible?.name ?? null,
+  responsibleId: STORY_ITEM_DTO.responsible?.id ?? null,
+  isAssigned: Boolean(STORY_ITEM_DTO.responsible),
+  itemDetails: {
+    itemType: STORY_ITEM_DTO.itemType,
+    brand: STORY_ITEM_DTO.brand,
+    model: STORY_ITEM_DTO.model,
+    description: STORY_ITEM_DTO.description,
+    quantity: STORY_ITEM_DTO.quantity,
+    unitPrice: STORY_ITEM_DTO.unitPrice,
+    condition: STORY_ITEM_DTO.condition ?? "good",
+    connectionStatus: STORY_ITEM_DTO.connectionStatus ?? "not_applicable",
+    photoUrl: STORY_ITEM_DTO.photoUrl,
+    createdAt: STORY_ITEM_DTO.createdAt,
+  },
+} satisfies NonNullable<QrResolutionDto["target"]> & { kind: "item" };
 
 const meta = { title: "Catalog/Inventory", parameters: { layout: "fullscreen" } } satisfies Meta;
 export default meta;
@@ -137,6 +163,7 @@ export const LocalBarcodeTransferResultStory: Story = { name: "LocalBarcodeTrans
 export const MaintenanceItemsPanelStory: Story = { name: "MaintenanceItemsPanel", render: () => <MaintenanceItemsPanel initialItems={[{ ...STORY_ITEM_DTO, status: "maintenance" }]} canManage /> };
 export const OriginalBarcodeDistributionViewStory: Story = { name: "OriginalBarcodeDistributionView", render: () => <OriginalBarcodeDistributionView distribution={localBarcodeDistribution} actorId="user-1" actorRole="admin" /> };
 export const ProblemReportButtonStory: Story = { name: "ProblemReportButton", render: () => <ProblemReportButton items={roomItems} initialItemId={STORY_ITEM_DTO.id} /> };
-export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage /> };
+export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage actorRole="employee" /> };
 export const ReportMetricStory: Story = { name: "ReportMetric", render: () => <ReportMetric label="Проверено" value={24} /> };
 export const RoomQrBatchPrintViewStory: Story = { name: "RoomQrBatchPrintView", render: () => <RoomQrBatchPrintView rooms={[STORY_ROOM]} /> };
+export const ScannedItemDetailsCardStory: Story = { name: "ScannedItemDetailsCard", render: () => <ScannedItemDetailsCard item={scannedItem} /> };

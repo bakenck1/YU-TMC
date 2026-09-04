@@ -40,6 +40,7 @@ const serviceRequest: ServiceRequestDto = {
 
 const request: TmcTransferRequestCardView = {
   id: "request-1",
+  kind: "handover",
     initiator: { fullName: "Demo User 2", email: "demo-user-2@example.test" },
     recipient: { fullName: "Demo User 1", email: "demo-user-1@example.test" },
   status: "pending",

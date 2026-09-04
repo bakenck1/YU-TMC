@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 import { GET } from "@/app/api/integrations/1c/fixed-assets/route";
 import { parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
@@ -7,9 +8,9 @@ describe("1C fixed assets XML", () => {
   it("returns browser-friendly endpoint information", async () => {
     const response = GET();
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
       service: "1c-fixed-assets",
       status: "ready",
       method: "POST",
@@ -37,18 +38,26 @@ describe("1C fixed assets XML", () => {
         </FixedAsset>
       </FixedAssetsExport>`);
 
-    expect(assets).toEqual([expect.objectContaining({
+    assert.deepEqual(assets.map(({ externalId, barcode, name, residualCost, acceptedAt }) => ({
+      externalId,
+      barcode,
+      name,
+      residualCost,
+      acceptedAt,
+    })), [{
       externalId: "eba5b834-db3b-11f0-a26e-7cc25579bdd7",
       barcode: "4870000123456",
       name: "Тестовое основное средство",
       residualCost: 12544.5,
       acceptedAt: "2025-11-20",
-    })]);
+    }]);
   });
 
   it("rejects an asset without a stable 1C GUID", () => {
-    expect(() => parseOneCFixedAssets("<FixedAssetsExport><FixedAsset><Name>Без GUID</Name></FixedAsset></FixedAssetsExport>"))
-      .toThrow("invalid_external_id");
+    assert.throws(
+      () => parseOneCFixedAssets("<FixedAssetsExport><FixedAsset><Name>Без GUID</Name></FixedAsset></FixedAssetsExport>"),
+      /invalid_external_id/,
+    );
   });
 
   it("accepts the XML field names supplied by 1C", () => {
@@ -66,7 +75,15 @@ describe("1C fixed assets XML", () => {
         </FixedAsset>
       </FixedAssets>`);
 
-    expect(assets[0]).toEqual(expect.objectContaining({
+    assert.deepEqual(assets[0] && {
+      externalId: assets[0].externalId,
+      code: assets[0].code,
+      barcode: assets[0].barcode,
+      residualCost: assets[0].residualCost,
+      status: assets[0].status,
+      location: assets[0].location,
+      responsibleName: assets[0].responsibleName,
+    }, {
       externalId: "03572fab-9e95-11ea-9a1b-002590861d2e",
       code: "000004969",
       barcode: null,
@@ -74,6 +91,6 @@ describe("1C fixed assets XML", () => {
       status: "Принят к учету",
       location: "ППС",
       responsibleName: "Әбжами Ақмарал Ақтанқызы",
-    }));
+    });
   });
 });

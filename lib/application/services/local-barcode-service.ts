@@ -323,12 +323,30 @@ export class LocalBarcodeService {
     });
   }
 
+  async getScannedGroupPhoto(value: unknown, actor: AuthorizationActor) {
+    let key: string;
+    try { key = localBarcodeComparisonKey(value); } catch { return null; }
+    return this.unitOfWork.read(async ({ localBarcodes }) => {
+      const group = await localBarcodes.findGroupByBarcodeKey(key);
+      if (!group || group.status !== "active" || !canResolveScannedBarcode(actor)) {
+        return null;
+      }
+      const photo = await localBarcodes.findGroupPhoto(group.id);
+      if (!photo) throw notFound("item_photo_not_found");
+      return photo;
+    });
+  }
+
   async resolveBarcode(value: unknown, actor: AuthorizationActor): Promise<LocalBarcodeGroupDto | null> {
     let key: string;
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
-      return group && canRead(actor, group.responsibleUserId) ? toDto(group) : null;
+      return group &&
+        (canRead(actor, group.responsibleUserId) ||
+          (group.status === "active" && canResolveScannedBarcode(actor)))
+        ? toDto(group)
+        : null;
     });
   }
 
@@ -360,10 +378,11 @@ export class LocalBarcodeService {
 }
 
 function toDto(group: LocalBarcodeGroupRecord): LocalBarcodeGroupDto {
-  return { id: group.id, itemId: group.itemId, itemName: group.itemName, originalBarcode: group.originalBarcode, itemType: group.itemType, brand: group.itemBrand, model: group.itemModel, description: group.itemDescription, unitPrice: group.unitPrice, photoUrl: group.itemPhotoId ? `/api/inventory/local-barcodes/${group.id}/photo?v=${group.version}` : null, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, previousResponsible: group.previousResponsibleUserId ? { id: group.previousResponsibleUserId, fullName: group.previousResponsibleName ?? "" } : null, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
+  return { id: group.id, itemId: group.itemId, itemName: group.itemName, originalBarcode: group.originalBarcode, itemType: group.itemType, brand: group.itemBrand, model: group.itemModel, description: group.itemDescription, unitPrice: group.unitPrice, condition: group.itemCondition, connectionStatus: group.itemConnectionStatus, photoUrl: group.itemPhotoId ? `/api/inventory/local-barcodes/${group.id}/photo?v=${group.version}` : null, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, previousResponsible: group.previousResponsibleUserId ? { id: group.previousResponsibleUserId, fullName: group.previousResponsibleName ?? "" } : null, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
 }
 
 function canRead(actor: AuthorizationActor, responsibleId: string) { return hasPermission(actor.role, "inventory.local_barcode.read_all") || (actor.userId === responsibleId && hasPermission(actor.role, "inventory.local_barcode.read_assigned")); }
+function canResolveScannedBarcode(actor: AuthorizationActor) { return hasPermission(actor.role, "inventory.qr.resolve_full") || hasPermission(actor.role, "inventory.qr.resolve_item"); }
 async function requireLiveActor(repo: LocalBarcodeRepositories["localBarcodes"], actor: AuthenticatedActor) { const current = await repo.findActorForUpdate(actor.userId); if (!current || !current.active || current.deletedAt || current.role !== actor.role || current.version !== actor.sessionVersion) throw forbidden(); return current; }
 function normalizeTransfer(input: CreateLocalBarcodeTransferInput): CreateLocalBarcodeTransferInput { const comment = typeof input?.comment === "string" ? input.comment.normalize("NFKC").trim() : ""; if (!input || typeof input !== "object" || !isUuid(input.itemId) || (input.sourceGroupId !== null && !isUuid(input.sourceGroupId)) || !isUuid(input.recipientUserId) || !Number.isSafeInteger(input.quantity) || input.quantity < 1 || !Number.isSafeInteger(input.sourceVersion) || input.sourceVersion < 1 || [...comment].length > 1000) throw validation("invalid_local_transfer"); return { itemId: input.itemId.toLowerCase(), sourceGroupId: input.sourceGroupId?.toLowerCase() ?? null, recipientUserId: input.recipientUserId.toLowerCase(), quantity: input.quantity, sourceVersion: input.sourceVersion, comment: comment || null }; }
 function normalizeCancel(groupId: string, input: CancelLocalBarcodeInput) { const reason = typeof input?.reason === "string" ? input.reason.normalize("NFKC").trim() : ""; if (!isUuid(groupId) || !Number.isSafeInteger(input?.version) || input.version < 1 || !reason || [...reason].length > 1000) throw validation("invalid_local_cancellation"); return { groupId: groupId.toLowerCase(), version: input.version, reason }; }

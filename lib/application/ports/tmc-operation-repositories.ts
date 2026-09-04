@@ -261,6 +261,11 @@ export interface TmcStageFourRepository {
     includeAdminQueue: boolean;
     readAt: Date;
   }): Promise<boolean>;
+  markAllNotificationsRead(input: {
+    actorId: string;
+    includeAdminQueue: boolean;
+    readAt: Date;
+  }): Promise<void>;
 }
 
 export type TmcOperationRepositoryConflictProblem = Extract<

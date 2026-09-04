@@ -10,7 +10,13 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 const MAXIMUM_BODY_BYTES = 16 * 1024;
-const INPUT_FIELDS = new Set(["recipientId", "itemIds", "quantityTransfers", "comment"]);
+const INPUT_FIELDS = new Set([
+  "recipientId",
+  "itemIds",
+  "requestKind",
+  "quantityTransfers",
+  "comment",
+]);
 
 export interface TmcTransferRequestPostDependencies {
   authenticate(request: Request): Promise<{ userId: string; role: UserRole }>;
@@ -139,6 +145,9 @@ function parseInput(value: unknown): CreateTmcTransferRequestInput {
     typeof body.recipientId !== "string" ||
     !Array.isArray(body.itemIds) ||
     body.itemIds.some((itemId) => typeof itemId !== "string") ||
+    (body.requestKind !== undefined &&
+      body.requestKind !== "handover" &&
+      body.requestKind !== "claim") ||
     (body.quantityTransfers !== undefined &&
       (!Array.isArray(body.quantityTransfers) ||
         body.quantityTransfers.some((entry) => !isQuantityTransfer(entry)))) ||
@@ -151,6 +160,9 @@ function parseInput(value: unknown): CreateTmcTransferRequestInput {
   return {
     recipientId: body.recipientId,
     itemIds: body.itemIds,
+    ...(body.requestKind !== undefined
+      ? { requestKind: body.requestKind as "handover" | "claim" }
+      : {}),
     ...(body.quantityTransfers !== undefined
       ? { quantityTransfers: body.quantityTransfers as CreateTmcTransferRequestInput["quantityTransfers"] }
       : {}),

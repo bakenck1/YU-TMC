@@ -22,6 +22,8 @@ export interface LocalBarcodeGroupDto {
   model: string | null;
   description: string | null;
   unitPrice: number;
+  condition?: ItemCondition;
+  connectionStatus?: ConnectionStatus;
   photoUrl: string | null;
   localBarcode: string;
   parentGroupId: string | null;
@@ -81,3 +83,7 @@ export interface LocalBarcodeTransferResultDto {
   group: LocalBarcodeGroupDto;
   createdNewCode: boolean;
 }
+import type {
+  ConnectionStatus,
+  ItemCondition,
+} from "@/lib/contracts/inventory-domain";

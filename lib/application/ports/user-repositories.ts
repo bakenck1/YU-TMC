@@ -67,6 +67,18 @@ export interface UpdateUserRecord {
   updatedAt: Date;
 }
 
+export interface SynchronizeDirectoryUserRecord {
+  id: string;
+  email: string;
+  fullName: string;
+  iin: string;
+  orgUnit: string | null;
+  position: string | null;
+  personnelId: string;
+  phone: string | null;
+  synchronizedAt: Date;
+}
+
 export interface InsertPasswordCredential {
   userId: string;
   salt: string;
@@ -75,6 +87,7 @@ export interface InsertPasswordCredential {
 }
 
 export interface UserRepository {
+  lockDirectorySynchronization(): Promise<void>;
   list(): Promise<UserRecord[]>;
   searchActiveRecipients(
     query: string,
@@ -88,6 +101,9 @@ export interface UserRepository {
   findByIinForUpdate(iin: string): Promise<UserRecord | null>;
   insert(input: InsertUserRecord): Promise<UserRecord>;
   update(input: UpdateUserRecord): Promise<UserRecord | null>;
+  synchronizeDirectoryUser(
+    input: SynchronizeDirectoryUserRecord,
+  ): Promise<UserRecord | null>;
   softDelete(
     id: string,
     expectedVersion: number,

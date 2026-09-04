@@ -6,7 +6,11 @@ import { parseCreateTmcTransferRequestResult } from "@/lib/contracts/tmc-operati
 import { TMC_OPERATION_BY_ID } from "@/lib/tmc-navigation";
 
 vi.mock("@/components/AppSettingsProvider", () => ({
-  useAppSettings: () => ({ t: (key: string) => key }),
+  useAppSettings: () => ({
+    dataLabel: (value: string) => value,
+    locale: "ru-RU",
+    t: (key: string) => key,
+  }),
 }));
 vi.mock("@/components/InventoryItemCodeScanner", () => ({
   default: ({ onClose, onCodeSelected }: { onClose(): void; onCodeSelected(value: string): void }) => (
@@ -195,15 +199,47 @@ describe("TmcItemQrFlow", () => {
   });
 
   it("does not send a receive command for an item owned by another user", async () => {
-    vi.mocked(fetch).mockResolvedValue(responseForItem({ isAssigned: true }));
+    vi.mocked(fetch).mockResolvedValue(responseForItem({
+      isAssigned: true,
+      responsibleName: "Other owner",
+      responsibleId: "22222222-2222-4222-8222-222222222222",
+    }));
     render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.receive} />);
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
     expect(screen.queryByRole("button", { name: "tmc.operation.acceptItem" })).toBeNull();
     expect(screen.getByText("tmc.operation.occupiedHint")).not.toBeNull();
-    expect(screen.queryByText("Other owner")).toBeNull();
+    expect(screen.getByText(/Other owner/)).not.toBeNull();
     expect((screen.getByRole("button", { name: "tmc.operation.requestTransfer" }) as HTMLButtonElement).disabled).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a claim request to the current responsible employee", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(responseForItem({
+        isAssigned: true,
+        responsibleName: "Other owner",
+        responsibleId: "22222222-2222-4222-8222-222222222222",
+      }))
+      .mockResolvedValueOnce(createdRequestResponse());
+    render(
+      <TmcItemQrFlow
+        operation={TMC_OPERATION_BY_ID.receive}
+        actorUserId="11111111-1111-4111-8111-111111111111"
+        actorRole="employee"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
+    await screen.findByRole("heading", { name: "Laptop" });
+    fireEvent.click(screen.getByRole("button", { name: "tmc.operation.requestTransfer" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const init = vi.mocked(fetch).mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      recipientId: "22222222-2222-4222-8222-222222222222",
+      itemIds: ["33333333-3333-4333-8333-333333333333"],
+      requestKind: "claim",
+    });
   });
 
   it("retries uncertain transfer creation with one key but replaces it after a deterministic all-problem result", async () => {
@@ -285,17 +321,19 @@ function responseForItem({
   isAssigned = false,
   isCurrentUserResponsible = false,
   responsibleName = null,
+  responsibleId = null,
 }: {
   isAssigned?: boolean;
   isCurrentUserResponsible?: boolean;
   responsibleName?: string | null;
+  responsibleId?: string | null;
 } = {}) {
   return {
     ok: true,
     json: async () => ({
       resolution: {
         status: "resolved", canonicalKey: "qr-1", format: "generated_v1", qrStatus: "active",
-        target: { kind: "item", id: "33333333-3333-4333-8333-333333333333", status: "active", title: "Laptop", inventoryNumber: "INV-1", buildingName: "A", roomDesignation: "101", responsibleName, isAssigned, isCurrentUserResponsible },
+        target: { kind: "item", id: "33333333-3333-4333-8333-333333333333", status: "active", title: "Laptop", inventoryNumber: "INV-1", buildingName: "A", roomDesignation: "101", responsibleName, responsibleId, isAssigned, isCurrentUserResponsible },
       },
     }),
   } as Response;
@@ -347,40 +385,6 @@ function responseForGroupedItem() {
             buildingName: "A",
           },
           groups: [],
-        },
-      },
-    }),
-  } as Response;
-}
-
-function localBarcodeResponse() {
-  return {
-    ok: true,
-    json: async () => ({
-      result: {
-        createdNewCode: true,
-        group: {
-          id: "99999999-9999-4999-8999-999999999999",
-          itemId: "33333333-3333-4333-8333-333333333333",
-          itemName: "Chair",
-          originalBarcode: "4897/4897",
-          localBarcode: "4897/4897-0001",
-          parentGroupId: null,
-          quantity: 2,
-          responsible: {
-            id: "22222222-2222-4222-8222-222222222222",
-            fullName: "New owner",
-          },
-          location: {
-            roomId: "77777777-7777-4777-8777-777777777777",
-            roomDesignation: "101",
-            buildingId: "66666666-6666-4666-8666-666666666666",
-            buildingName: "A",
-          },
-          transferredAt: "2026-09-01T00:00:00.000Z",
-          status: "active",
-          version: 1,
-          cancellation: null,
         },
       },
     }),

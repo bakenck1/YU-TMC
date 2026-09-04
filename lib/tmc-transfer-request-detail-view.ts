@@ -27,6 +27,7 @@ export interface TmcTransferRequestCardItemView {
 
 export interface TmcTransferRequestCardView {
   id: string;
+  kind?: "handover" | "claim";
   initiator: { fullName: string; email: string | null };
   recipient: { fullName: string; email: string | null };
   status: TmcTransferRequestStatus;
@@ -45,8 +46,12 @@ export interface TmcTransferRequestCardView {
 export function toTmcTransferRequestCardView(
   request: TmcTransferRequestDto,
 ): TmcTransferRequestCardView {
+  const kind = request.items.length > 0 && request.items.every(
+    (item) => item.responsibleUserProfile?.id === request.recipient.id,
+  ) ? "claim" : "handover";
   return {
     id: request.id,
+    kind,
     initiator: {
       fullName: request.initiator.fullName,
       email: request.initiator.email,

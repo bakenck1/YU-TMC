@@ -156,6 +156,7 @@ export type TmcTransferRequestDto =
 export interface CreateTmcTransferRequestInput {
   recipientId: string;
   itemIds: readonly string[];
+  requestKind?: "handover" | "claim";
   quantityTransfers?: readonly {
     itemId: string;
     sourceLocalGroupId: string | null;
