@@ -8,6 +8,7 @@ import {
   dockflowAuthCheck,
   findDockflowEmployee,
   findDockflowEmployeeItems,
+  findDockflowItemPhoto,
   listDockflowEmployees,
   listDockflowItems,
 } from "../lib/dockflow-api";
@@ -46,6 +47,7 @@ const repository: DockflowDataRepository = {
   async findEmployee(iin) { return iin === employee.iin ? employee : null; },
   async itemsForEmployee() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", assignedAt: "2026-08-28T10:00:00.000Z", cost: 45000, markingType: "batch" as const, photoUrl: null, itemType: "furniture", brand: null, model: null, inventoryStatus: "active", responsible: { iin: "000000000000", fullName: "Устаревшее локальное имя" }, updatedAt: "2026-08-28T10:00:00.000Z", issueHistory: [] }]; },
   async listItems() { return [{ id: "00000000-0000-4000-8000-000000000001", name: "Стул офисный", barcode: "YU-000001", inventoryNumber: "INV-2026-001", quantity: 38, availableQuantity: 0, status: "assigned" as const, storageLocation: "Корпус A, кабинет 205", cost: 45000, markingType: "batch" as const, photoUrl: null, itemType: "furniture", brand: null, model: null, inventoryStatus: "active", responsible: { iin: "000000000000", fullName: "Сотрудник интеграции" }, updatedAt: "2026-08-28T10:00:00.000Z", assignments: [{ employeeIin: "000000000000", quantity: 38, assignedAt: "2026-08-28T10:00:00.000Z" }], issueHistory: [] }]; },
+  async findItemPhoto() { return { bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" as const }; },
 };
 
 test.beforeEach(() => { process.env.DOCKFLOW_API_KEY = API_KEY; });
@@ -80,6 +82,15 @@ test("protects real employee and inventory collections", async () => {
   assert.equal((await (await listDockflowItems(request("/api/v1/items"), repository)).json()).items[0].assignments[0].employeeIin, "000000000000");
 });
 
+test("serves item photos through the Dockflow application facade", async () => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  const response = await findDockflowItemPhoto(request(`/api/v1/items/${id}/photo`), id, repository);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/jpeg");
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([1, 2, 3]));
+  assert.equal((await findDockflowItemPhoto(request("/api/v1/items/invalid/photo"), "invalid", repository)).status, 404);
+});
+
 test("joins Yessenov directory profiles to local item counts by IIN", async () => {
   const joined = createPostgresDockflowRepository(
     {
@@ -90,6 +101,7 @@ test("joins Yessenov directory profiles to local item counts by IIN", async () =
       async itemCountsByIin() { return new Map([[employee.iin, 7]]); },
       async itemsForEmployee() { return []; },
       async listItems() { return []; },
+      async findItemPhoto() { return null; },
     },
   );
 

@@ -57,17 +57,24 @@ export interface DockflowInventoryItem extends Omit<DockflowEmployeeItem, "statu
   }>;
 }
 
+export interface DockflowItemPhoto {
+  bytes: Uint8Array;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+}
+
 export interface DockflowDataRepository {
   listEmployees(): Promise<Array<DockflowEmployee & { itemCount: number }>>;
   findEmployee(iin: string): Promise<DockflowEmployee | null>;
   itemsForEmployee(iin: string): Promise<DockflowEmployeeItem[]>;
   listItems(): Promise<DockflowInventoryItem[]>;
+  findItemPhoto(id: string): Promise<DockflowItemPhoto | null>;
 }
 
 interface DockflowInventoryRepository {
   itemCountsByIin(): Promise<Map<string, number>>;
   itemsForEmployee(iin: string): Promise<DockflowEmployeeItem[]>;
   listItems(): Promise<DockflowInventoryItem[]>;
+  findItemPhoto(id: string): Promise<DockflowItemPhoto | null>;
 }
 
 const JSON_HEADERS = {
@@ -129,6 +136,30 @@ export async function listDockflowEmployees(request: Request, repository = creat
 export async function listDockflowItems(request: Request, repository = createPostgresDockflowRepository()) {
   const unauthorized = authorizeDockflowRequest(request);
   return unauthorized ?? json({ items: await repository.listItems() });
+}
+
+export async function findDockflowItemPhoto(
+  request: Request,
+  id: string,
+  repository = createPostgresDockflowRepository(),
+) {
+  const unauthorized = authorizeDockflowRequest(request);
+  if (unauthorized) return unauthorized;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return errorResponse(404, "ITEM_NOT_FOUND", "ТМЦ не найдено.");
+  }
+
+  const photo = await repository.findItemPhoto(id);
+  if (!photo) {
+    return errorResponse(404, "ITEM_PHOTO_NOT_FOUND", "Фото ТМЦ не найдено.");
+  }
+  return new Response(Uint8Array.from(photo.bytes), {
+    headers: {
+      "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+      "Content-Type": photo.mimeType,
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
 
 export async function findDockflowEmployee(request: Request, iin: string, repository = createPostgresDockflowRepository()) {
@@ -235,6 +266,7 @@ export function createPostgresDockflowRepository(
     },
     itemsForEmployee: (iin) => inventory.itemsForEmployee(iin),
     listItems: () => inventory.listItems(),
+    findItemPhoto: (id) => inventory.findItemPhoto(id),
   };
 }
 
@@ -254,6 +286,26 @@ function createPostgresDockflowInventoryRepository(): DockflowInventoryRepositor
     async listItems() {
       const result = await pool.query<InventoryItemRow>(inventoryItemsSelect);
       return result.rows.map(mapInventoryItem);
+    },
+    async findItemPhoto(id) {
+      const result = await pool.query<{
+        binary_data: Uint8Array;
+        trusted_mime_type: DockflowItemPhoto["mimeType"];
+      }>(
+        `select p.binary_data, p.trusted_mime_type
+           from "yu_inventory"."photos" p
+           join "yu_inventory"."items" i on i.id = p.item_id
+          where p.item_id = $1 and p.purpose = 'item' and p.status = 'attached'
+            and p.binary_data is not null
+            and p.trusted_mime_type in ('image/jpeg', 'image/png', 'image/webp')
+            and i.archived_at is null and i.status <> 'decommissioned'
+          order by p.attached_at desc nulls last limit 1`,
+        [id],
+      );
+      const photo = result.rows[0];
+      return photo
+        ? { bytes: new Uint8Array(photo.binary_data), mimeType: photo.trusted_mime_type }
+        : null;
     },
   };
 }
