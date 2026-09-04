@@ -159,7 +159,7 @@ export default function ScannedItemDetailsCard({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+export function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3 sm:block">
       <dt className="text-zinc-500">{label}</dt>
