@@ -27,6 +27,7 @@ import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/
 import { createPostgresInventoryInspectionRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-inspection-repositories";
 import { createPostgresWebPushRepositories } from "@/lib/server/persistence/postgres/postgres-web-push-repositories";
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
+import { createYessenovDirectoryClient } from "@/lib/yessenov-directory";
 import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
 import { createPostgresLocalBarcodeRepositories } from "@/lib/server/persistence/postgres/postgres-local-barcode-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
@@ -146,6 +147,9 @@ function createApplicationServices(): ApplicationServices {
       new ScryptPasswordHasher(),
       { now: () => new Date() },
       { create: () => randomUUID() },
+      process.env.NODE_ENV === "test"
+        ? undefined
+        : createYessenovDirectoryClient(),
     ),
     assetLosses: new AssetLossService(),
     localBarcodes: new LocalBarcodeService(

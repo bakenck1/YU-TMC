@@ -1,12 +1,14 @@
-# Dockflow test API
+# Dockflow API
 
-The test-only integration is exposed by the application itself:
+The integration is exposed by the application itself:
 
 - Swagger UI: `GET /api`
 - OpenAPI 3.1: `GET /api/openapi.json`
 - API base path: `/api/v1`
 
-Set `DOCKFLOW_TEST_API_KEY` in both the local and test-server environments.
+Set `DOCKFLOW_API_KEY` in the application environment and obtain a read-only
+Yessenov ID service token for `GET https://id.yu.edu.kz/api/users/` as
+`YESSENOV_DIRECTORY_API_TOKEN`.
 Swagger's **Authorize** dialog expects the key value without the `Bearer` prefix.
 Direct HTTP clients send it as:
 
@@ -17,14 +19,15 @@ Authorization: Bearer <TEST_API_KEY>
 Example:
 
 ```bash
-curl -H "Authorization: Bearer $DOCKFLOW_TEST_API_KEY" \
-  http://localhost:3000/api/v1/employees/990101123456
+curl -H "Authorization: Bearer $DOCKFLOW_API_KEY" \
+  http://localhost:3000/api/v1/employees/000000000000
 ```
 
-All records returned by these routes are hard-coded fake fixtures and do not
-query the application's employee or inventory tables. If real personal or TMC
-data is connected, this shared-key API must be disabled and replaced by
-per-integration hashed keys plus an access journal.
+Employee profiles are loaded server-side from Yessenov ID and filtered to
+active personnel with a valid 12-digit `personnel.identify_code`. Current TMC,
+assignment and quantity data is read from PostgreSQL and joined by that IIN.
+The Yessenov service token is not accepted from Dockflow callers and is never
+returned to the browser.
 
 The fixture demonstrates the marking and quantity model: one batch card and
 one barcode cover 50 chairs. Assignments may contain any positive quantities
@@ -38,7 +41,8 @@ unassigned remainder. The fixture values are examples, not a fixed 7/3 rule.
 1. Добавить в локальный `.env.local` отдельную строку:
 
    ```env
-   DOCKFLOW_TEST_API_KEY=dockflow-local-test-key
+   DOCKFLOW_API_KEY=dockflow-local-key
+   YESSENOV_DIRECTORY_API_TOKEN=<issued-read-only-service-token>
    ```
 
 2. Установить зависимости и запустить приложение:
@@ -48,9 +52,8 @@ unassigned remainder. The fixture values are examples, not a fixed 7/3 rule.
    npm run dev:next
    ```
 
-   `dev:next` достаточно для тестового API, потому что его фейковые данные не
-   читаются из PostgreSQL. Для запуска всего приложения вместе с локальной БД
-   используется `npm run dev`.
+   Для API нужна PostgreSQL, поэтому используйте `npm run dev` либо отдельно
+   настройте `DATABASE_URL` перед `npm run dev:next`.
 
 3. Открыть в браузере `http://localhost:3000/api`.
 4. Нажать **Authorize**, вставить `dockflow-local-test-key` без слова
@@ -59,10 +62,10 @@ unassigned remainder. The fixture values are examples, not a fixed 7/3 rule.
 Проверка без Swagger:
 
 ```powershell
-$headers = @{ Authorization = "Bearer dockflow-local-test-key" }
+$headers = @{ Authorization = "Bearer dockflow-local-key" }
 Invoke-RestMethod `
   -Headers $headers `
-  -Uri "http://localhost:3000/api/v1/employees/990101123456"
+  -Uri "http://localhost:3000/api/v1/employees/000000000000"
 ```
 
 `GET /api/v1/auth/check` должен вернуть `{ "valid": true }`. Неизвестный
@@ -86,7 +89,8 @@ GitHub и запустит проверки, но сам по себе productio
 2. Закоммитить изменения и отправить их в согласованный GitHub remote/branch.
 3. Дождаться зелёного workflow **Reliable test suite**.
 4. На тестовом сервере получить эту версию репозитория, задать секрет
-   `DOCKFLOW_TEST_API_KEY` и остальные обязательные production-переменные.
+   `DOCKFLOW_API_KEY`, `YESSENOV_DIRECTORY_API_TOKEN` и остальные обязательные
+   production-переменные.
 5. На сервере обновить код, пересобрать приложение и выполнить штатные
    production-проверки:
 
@@ -110,10 +114,10 @@ GitHub и запустит проверки, но сам по себе productio
 7. Проверить снаружи:
 
    ```bash
-   curl -H "Authorization: Bearer $DOCKFLOW_TEST_API_KEY" \
+   curl -H "Authorization: Bearer $DOCKFLOW_API_KEY" \
      https://<домен>/api/v1/auth/check
    ```
 
-Сначала следует использовать тестовый сервер. Включать общий тестовый ключ на
-сервере с реальными персональными данными нельзя, хотя текущие `/api/v1`
-маршруты технически всё равно читают только встроенные фейковые фикстуры.
+Сначала следует использовать тестовый сервер. Для production выдайте Dockflow
+отдельный ключ, а Yessenov ID — отдельный read-only service token; не используйте
+для этих двух границ один и тот же секрет.

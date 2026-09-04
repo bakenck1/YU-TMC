@@ -3,20 +3,21 @@ import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { getDatabasePool } from "@/lib/db/client";
+import {
+  createYessenovDirectoryClient,
+  type YessenovDirectoryClient,
+  type YessenovDirectoryEmployee,
+  YessenovDirectoryError,
+} from "@/lib/yessenov-directory";
 
 export type DockflowMarkingType =
   | "individual"
   | "batch"
   | "package_or_storage";
 
-export interface DockflowEmployee {
-  iin: string;
-  fullName: string;
-  phone: string;
+export interface DockflowEmployee extends YessenovDirectoryEmployee {
   login: string;
-  email: string;
   role: string;
-  createdAt: string;
 }
 
 export interface DockflowIssueHistoryEntry {
@@ -59,6 +60,12 @@ export interface DockflowInventoryItem extends Omit<DockflowEmployeeItem, "statu
 export interface DockflowDataRepository {
   listEmployees(): Promise<Array<DockflowEmployee & { itemCount: number }>>;
   findEmployee(iin: string): Promise<DockflowEmployee | null>;
+  itemsForEmployee(iin: string): Promise<DockflowEmployeeItem[]>;
+  listItems(): Promise<DockflowInventoryItem[]>;
+}
+
+interface DockflowInventoryRepository {
+  itemCountsByIin(): Promise<Map<string, number>>;
   itemsForEmployee(iin: string): Promise<DockflowEmployeeItem[]>;
   listItems(): Promise<DockflowInventoryItem[]>;
 }
@@ -111,7 +118,12 @@ export function dockflowAuthCheck(request: Request) {
 
 export async function listDockflowEmployees(request: Request, repository = createPostgresDockflowRepository()) {
   const unauthorized = authorizeDockflowRequest(request);
-  return unauthorized ?? json({ employees: await repository.listEmployees() });
+  if (unauthorized) return unauthorized;
+  try {
+    return json({ employees: await repository.listEmployees() });
+  } catch (error) {
+    return directoryErrorResponse(error);
+  }
 }
 
 export async function listDockflowItems(request: Request, repository = createPostgresDockflowRepository()) {
@@ -125,9 +137,19 @@ export async function findDockflowEmployee(request: Request, iin: string, reposi
   const validationError = validateIin(iin);
   if (validationError) return validationError;
 
-  const employee = await repository.findEmployee(iin);
-  if (!employee) return employeeNotFound();
-  return json({ employee, items: await repository.itemsForEmployee(iin) });
+  try {
+    const employee = await repository.findEmployee(iin);
+    if (!employee) return employeeNotFound();
+    return json({
+      employee,
+      items: applyDirectoryEmployeeName(
+        await repository.itemsForEmployee(iin),
+        employee,
+      ),
+    });
+  } catch (error) {
+    return directoryErrorResponse(error);
+  }
 }
 
 export async function findDockflowEmployeeItems(request: Request, iin: string, repository = createPostgresDockflowRepository()) {
@@ -135,8 +157,18 @@ export async function findDockflowEmployeeItems(request: Request, iin: string, r
   if (unauthorized) return unauthorized;
   const validationError = validateIin(iin);
   if (validationError) return validationError;
-  if (!(await repository.findEmployee(iin))) return employeeNotFound();
-  return json({ items: await repository.itemsForEmployee(iin) });
+  try {
+    const employee = await repository.findEmployee(iin);
+    if (!employee) return employeeNotFound();
+    return json({
+      items: applyDirectoryEmployeeName(
+        await repository.itemsForEmployee(iin),
+        employee,
+      ),
+    });
+  } catch (error) {
+    return directoryErrorResponse(error);
+  }
 }
 
 function validateIin(iin: string) {
@@ -149,22 +181,71 @@ function employeeNotFound() {
   return errorResponse(404, "EMPLOYEE_NOT_FOUND", "Пользователь с указанным ИИН не найден.");
 }
 
+function directoryErrorResponse(error: unknown): Response {
+  if (!(error instanceof YessenovDirectoryError)) throw error;
+  return error.reason === "not_configured"
+    ? errorResponse(
+        503,
+        "YESSENOV_DIRECTORY_NOT_CONFIGURED",
+        "API справочника Yessenov ID не настроен.",
+      )
+    : errorResponse(
+        502,
+        "YESSENOV_DIRECTORY_UNAVAILABLE",
+        "Не удалось получить данные сотрудников из Yessenov ID.",
+      );
+}
+
+function applyDirectoryEmployeeName(
+  items: DockflowEmployeeItem[],
+  employee: DockflowEmployee,
+) {
+  return items.map((item) =>
+    item.responsible?.iin === employee.iin
+      ? {
+          ...item,
+          responsible: { iin: employee.iin, fullName: employee.fullName },
+        }
+      : item,
+  );
+}
+
 /**
- * The Dockflow boundary reads only live responsibility records. It deliberately
- * excludes deactivated/deleted accounts and decommissioned/archived inventory.
+ * Employee profiles come from Yessenov ID. PostgreSQL remains the source of
+ * inventory assignments and item counts, joined to directory users by IIN.
  */
-export function createPostgresDockflowRepository(): DockflowDataRepository {
-  const pool = getDatabasePool();
+export function createPostgresDockflowRepository(
+  directory: YessenovDirectoryClient = createYessenovDirectoryClient(),
+  inventory: DockflowInventoryRepository = createPostgresDockflowInventoryRepository(),
+): DockflowDataRepository {
   return {
     async listEmployees() {
-      const result = await pool.query<EmployeeListRow>(`${employeeSelect}
-        order by u.full_name, u.id`);
-      return result.rows.map(mapEmployeeList);
+      const [employees, itemCounts] = await Promise.all([
+        directory.listEmployees(),
+        inventory.itemCountsByIin(),
+      ]);
+      return employees.map((employee) => ({
+        ...mapDirectoryEmployee(employee),
+        itemCount: itemCounts.get(employee.iin) ?? 0,
+      }));
     },
     async findEmployee(iin) {
-      const result = await pool.query<EmployeeRow>(`${employeeBase}
-        and u.iin = $1`, [iin]);
-      return result.rows[0] ? mapEmployee(result.rows[0]) : null;
+      const employee = await directory.findEmployee(iin);
+      return employee ? mapDirectoryEmployee(employee) : null;
+    },
+    itemsForEmployee: (iin) => inventory.itemsForEmployee(iin),
+    listItems: () => inventory.listItems(),
+  };
+}
+
+function createPostgresDockflowInventoryRepository(): DockflowInventoryRepository {
+  const pool = getDatabasePool();
+  return {
+    async itemCountsByIin() {
+      const result = await pool.query<EmployeeItemCountRow>(employeeItemCounts);
+      return new Map(
+        result.rows.map((row) => [row.iin, Number(row.item_count)]),
+      );
     },
     async itemsForEmployee(iin) {
       const result = await pool.query<AssignedItemRow>(assignedItemsSelect("u.iin = $1"), [iin]);
@@ -177,13 +258,8 @@ export function createPostgresDockflowRepository(): DockflowDataRepository {
   };
 }
 
-const employeeBase = `
-  select u.iin, u.full_name, coalesce(u.phone, '') as phone, u.email, u.role::text as role, u.created_at
-    from "yu_inventory"."users" u
-   where u.is_active = true and u.deleted_at is null and u.iin is not null`;
-
-const employeeSelect = `
-  select u.iin, u.full_name, coalesce(u.phone, '') as phone, u.email, u.role::text as role, u.created_at,
+const employeeItemCounts = `
+  select u.iin,
          count(distinct coalesce(g.id, ri.id))::int as item_count
     from "yu_inventory"."users" u
     left join "yu_inventory"."responsibility_periods" rp
@@ -193,7 +269,7 @@ const employeeSelect = `
     left join "yu_inventory"."local_item_groups" g
       on g.responsible_user_id = u.id and g.status = 'active'
    where u.is_active = true and u.deleted_at is null and u.iin is not null
-   group by u.id, u.iin, u.full_name, u.phone, u.email, u.role, u.created_at`;
+   group by u.iin`;
 
 const assignedItemsSelect = (employeePredicate: string) => `
   select source_id as id, name, barcode, inventory_number, quantity,
@@ -330,15 +406,19 @@ const inventoryItemsSelect = `
    where g.status = 'active' and u.is_active = true and u.deleted_at is null and u.iin is not null
      and i.archived_at is null and i.status <> 'decommissioned'`;
 
-interface EmployeeRow { iin: string; full_name: string; phone: string; email: string; role: string; created_at: Date; }
-interface EmployeeListRow extends EmployeeRow { item_count: number; }
+interface EmployeeItemCountRow { iin: string; item_count: number; }
 interface AssignedItemRow { id: string; name: string; barcode: string; inventory_number: string; quantity: number; storage_location: string; assigned_at: Date; cost: string | number; marking_type: DockflowMarkingType; photo_url: string | null; item_type: string; brand: string | null; model: string | null; inventory_status: string; responsible_iin: string; responsible_name: string; updated_at: Date; }
 interface InventoryItemRow extends Omit<AssignedItemRow, "assigned_at" | "responsible_iin" | "responsible_name"> { available_quantity: number; status: "assigned" | "in_stock"; assignments: unknown; responsible_iin: string | null; responsible_name: string | null; }
 
-function mapEmployee(row: EmployeeRow): DockflowEmployee {
-  return { iin: row.iin, fullName: row.full_name, phone: row.phone, login: row.email, email: row.email, role: row.role, createdAt: new Date(row.created_at).toISOString() };
+function mapDirectoryEmployee(
+  employee: YessenovDirectoryEmployee,
+): DockflowEmployee {
+  return {
+    ...employee,
+    login: employee.username,
+    role: employee.roles[0] ?? "personnel",
+  };
 }
-function mapEmployeeList(row: EmployeeListRow) { return { ...mapEmployee(row), itemCount: Number(row.item_count) }; }
 function mapAssignedItem(row: AssignedItemRow): DockflowEmployeeItem {
   return { id: row.id, name: row.name, barcode: row.barcode, inventoryNumber: row.inventory_number, quantity: Number(row.quantity), status: "assigned", storageLocation: row.storage_location, assignedAt: new Date(row.assigned_at).toISOString(), cost: Number(row.cost), markingType: row.marking_type, photoUrl: row.photo_url, itemType: row.item_type, brand: row.brand, model: row.model, inventoryStatus: row.inventory_status, responsible: { iin: row.responsible_iin, fullName: row.responsible_name }, updatedAt: new Date(row.updated_at).toISOString(), issueHistory: [] };
 }

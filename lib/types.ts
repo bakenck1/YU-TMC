@@ -66,6 +66,8 @@ export interface AppUser {
   orgUnit?: string | null;
   position?: string | null;
   tutorId?: string | null;
+  directoryRoles?: string[];
+  directoryManaged?: boolean;
   role: UserRole;
   email: string;
   phone: string;

@@ -10,6 +10,7 @@ import type {
   InsertUserRecord,
   PasswordCredentialRecord,
   PasswordCredentialRepository,
+  SynchronizeDirectoryUserRecord,
   UpdateUserRecord,
   UserRecord,
   UserDirectoryEntryRecord,
@@ -78,6 +79,12 @@ export function createPostgresUserRepositories(
 
 class PostgresUserRepository implements UserRepository {
   constructor(private readonly source: PostgresRepositorySource) {}
+
+  async lockDirectorySynchronization(): Promise<void> {
+    await this.source.query(
+      "select pg_advisory_xact_lock(hashtext('yu_inventory_yessenov_directory_sync'))",
+    );
+  }
 
   async list(): Promise<UserRecord[]> {
     const result = await this.source.query<UserRow>(
@@ -304,6 +311,79 @@ class PostgresUserRepository implements UserRepository {
        for update`,
     );
     return result.rowCount ?? result.rows.length;
+  }
+
+  async synchronizeDirectoryUser(
+    input: SynchronizeDirectoryUserRecord,
+  ): Promise<UserRecord | null> {
+    const candidates = await this.source.query<UserRow>(
+      `select *
+       from ${USERS}
+       where email = $1
+          or (deleted_at is null and iin = $2)
+       for update`,
+      [input.email, input.iin],
+    );
+    if (candidates.rows.length > 1 || candidates.rows[0]?.deleted_at) {
+      return null;
+    }
+    const current = candidates.rows[0] ? mapUser(candidates.rows[0]) : null;
+    if (!current) {
+      return this.insert({
+        id: input.id,
+        email: input.email,
+        fullName: input.fullName,
+        iin: input.iin,
+        orgUnit: input.orgUnit,
+        position: input.position,
+        tutorId: input.personnelId,
+        role: "employee",
+        phone: input.phone,
+        emailVerified: true,
+        active: true,
+        createdAt: input.synchronizedAt,
+      });
+    }
+    // Email and application role are local identity/security fields. Keeping
+    // them stable avoids invalidating an active session or importing provider
+    // privileges. The current directory email is still returned by the
+    // management list for display.
+    if (
+      current.fullName === input.fullName &&
+      current.iin === input.iin &&
+      (current.orgUnit ?? null) === input.orgUnit &&
+      (current.position ?? null) === input.position &&
+      (current.tutorId ?? null) === input.personnelId &&
+      current.phone === input.phone &&
+      current.emailVerified
+    ) {
+      return current;
+    }
+    const result = await this.source.query<UserRow>(
+      `update ${USERS}
+       set full_name = $2,
+           iin = $3,
+           org_unit = $4,
+           "position" = $5,
+           tutor_id = $6,
+           phone = $7,
+           email_verified = true,
+           updated_at = $8
+       where id = $1
+         and deleted_at is null
+       returning *`,
+      [
+        current.id,
+        input.fullName,
+        input.iin,
+        input.orgUnit,
+        input.position,
+        input.personnelId,
+        input.phone,
+        input.synchronizedAt,
+      ],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
   }
 
   async isActiveRoom(id: string): Promise<boolean> {

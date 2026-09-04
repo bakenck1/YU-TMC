@@ -32,6 +32,7 @@ export default function UserDetailsModal({ user, canMutate, onClose, onEdit, onT
     [t("users.phone"), user.phone || "—"],
     [t("users.orgUnit"), user.orgUnit ?? "—"],
     [t("users.position"), user.position ?? "—"],
+    [t("users.yessenovRole"), user.directoryRoles?.join(", ") || "—"],
     [t("users.tutorId"), user.tutorId ?? "—"],
     [t("users.addedAt"), formatUserDate(user.addedAt, locale)],
   ];
