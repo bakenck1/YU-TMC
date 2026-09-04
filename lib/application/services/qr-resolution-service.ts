@@ -52,6 +52,7 @@ export class QrResolutionService {
           itemAccess,
           roomAccess,
           targetScope,
+          allowInactiveItemScan: targetScope === "item",
         })
       ) {
         return {
@@ -93,6 +94,7 @@ export class QrResolutionService {
         itemAccess,
         roomAccess,
         targetScope,
+        allowInactiveItemScan: false,
       })
     ) {
       return {
@@ -109,11 +111,37 @@ export class QrResolutionService {
 
     return toDto(record, fullAccess, actor.userId);
   }
+
+  async resolveItemPhoto(
+    input: unknown,
+    actor: AuthorizationActor,
+    kind: "barcode" | "qr",
+  ): Promise<{ bytes: Uint8Array; mimeType: "image/jpeg" }> {
+    const resolution = await this.resolve(input, actor, kind, "item");
+    const target = resolution.target;
+    if (
+      resolution.status !== "resolved" ||
+      resolution.qrStatus !== "active" ||
+      target?.kind !== "item"
+    ) {
+      throw new ApplicationError("not_found", "item_photo_not_found");
+    }
+
+    const photo = await this.unitOfWork.read(({ qr }) =>
+      qr.findItemPhoto
+        ? qr.findItemPhoto(target.id)
+        : Promise.resolve(null),
+    );
+    if (!photo) {
+      throw new ApplicationError("not_found", "item_photo_not_found");
+    }
+    return photo;
+  }
 }
 
-// A physical code is not a universal capability. Inaccessible and absent
-// records intentionally share the same resolver result to avoid an existence
-// oracle for revoked, inactive, or out-of-scope targets.
+// A physical barcode grants a bounded read-only item preview, including its
+// lifecycle status. Revoked codes and targets outside the requested scope stay
+// indistinguishable from absent records.
 function isRecordAccessible(
   record: QrResolutionRecord,
   access: {
@@ -121,6 +149,7 @@ function isRecordAccessible(
     itemAccess: boolean;
     roomAccess: boolean;
     targetScope: "any" | "item" | "room";
+    allowInactiveItemScan: boolean;
   },
 ): boolean {
   if (
@@ -132,7 +161,9 @@ function isRecordAccessible(
   if (access.fullAccess) return true;
   return !(
     record.qrStatus !== "active" ||
-    record.targetStatus !== "active" ||
+    (record.targetStatus !== "active" && !(
+      access.allowInactiveItemScan && record.targetKind === "item"
+    )) ||
     !(
       (record.targetKind === "item" && access.itemAccess) ||
       (record.targetKind === "room" &&
@@ -163,13 +194,49 @@ function toDto(
       roomDesignation: record.roomDesignation ?? undefined,
       inventoryNumber: record.inventoryNumber ?? undefined,
       responsibleName:
-        includeAllResponsibleNames || isCurrentUserResponsible
-        ? record.responsibleName
-        : undefined,
+        record.targetKind === "item" ||
+        includeAllResponsibleNames ||
+        isCurrentUserResponsible
+          ? record.responsibleName
+          : undefined,
+      responsibleId:
+        record.targetKind === "item"
+          ? record.responsibleUserId ?? null
+          : undefined,
       isAssigned:
         typeof record.responsibleUserId === "string" &&
         record.responsibleUserId.length > 0,
       isCurrentUserResponsible,
+      itemDetails:
+        record.targetKind === "item" &&
+        record.itemType &&
+        record.itemQuantity !== null &&
+        record.itemQuantity !== undefined &&
+        record.itemUnitPrice !== null &&
+        record.itemUnitPrice !== undefined &&
+        record.itemCondition &&
+        record.itemConnectionStatus &&
+        record.itemCreatedAt
+          ? {
+              itemType: record.itemType,
+              brand: record.itemBrand ?? null,
+              model: record.itemModel ?? null,
+              description: record.itemDescription ?? null,
+              quantity: record.itemQuantity,
+              unitPrice: record.itemUnitPrice,
+              condition: record.itemCondition,
+              connectionStatus: record.itemConnectionStatus,
+              photoUrl: record.itemHasPhoto
+                ? scannedItemPhotoUrl(record.canonicalKey, record.format)
+                : null,
+              createdAt: record.itemCreatedAt.toISOString(),
+            }
+          : undefined,
     },
   };
+}
+
+function scannedItemPhotoUrl(canonicalKey: string, format: QrResolutionDto["format"]) {
+  const kind = format === "legacy_raw" ? "barcode" : "qr";
+  return `/api/inventory/qr/item-photo?value=${encodeURIComponent(canonicalKey)}&kind=${kind}`;
 }

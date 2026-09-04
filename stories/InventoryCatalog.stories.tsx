@@ -137,6 +137,6 @@ export const LocalBarcodeTransferResultStory: Story = { name: "LocalBarcodeTrans
 export const MaintenanceItemsPanelStory: Story = { name: "MaintenanceItemsPanel", render: () => <MaintenanceItemsPanel initialItems={[{ ...STORY_ITEM_DTO, status: "maintenance" }]} canManage /> };
 export const OriginalBarcodeDistributionViewStory: Story = { name: "OriginalBarcodeDistributionView", render: () => <OriginalBarcodeDistributionView distribution={localBarcodeDistribution} actorId="user-1" actorRole="admin" /> };
 export const ProblemReportButtonStory: Story = { name: "ProblemReportButton", render: () => <ProblemReportButton items={roomItems} initialItemId={STORY_ITEM_DTO.id} /> };
-export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage /> };
+export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage actorRole="employee" /> };
 export const ReportMetricStory: Story = { name: "ReportMetric", render: () => <ReportMetric label="Проверено" value={24} /> };
 export const RoomQrBatchPrintViewStory: Story = { name: "RoomQrBatchPrintView", render: () => <RoomQrBatchPrintView rooms={[STORY_ROOM]} /> };

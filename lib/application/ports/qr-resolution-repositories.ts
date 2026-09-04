@@ -1,4 +1,6 @@
 import type {
+  ConnectionStatus,
+  ItemCondition,
   ItemStatus,
   QrFormat,
   QrStatus,
@@ -19,6 +21,16 @@ export interface QrResolutionRecord {
   inventoryNumber: string | null;
   responsibleName: string | null;
   responsibleUserId?: string | null;
+  itemType?: string | null;
+  itemBrand?: string | null;
+  itemModel?: string | null;
+  itemDescription?: string | null;
+  itemQuantity?: number | null;
+  itemUnitPrice?: number | null;
+  itemCondition?: ItemCondition | null;
+  itemConnectionStatus?: ConnectionStatus | null;
+  itemHasPhoto?: boolean;
+  itemCreatedAt?: Date | null;
 }
 
 export interface QrResolutionRepository {
@@ -28,6 +40,10 @@ export interface QrResolutionRepository {
     inventoryNumberKey: string,
     fallbackKey: string | null,
   ): Promise<QrResolutionRecord | null>;
+  findItemPhoto?(itemId: string): Promise<{
+    bytes: Uint8Array;
+    mimeType: "image/jpeg";
+  } | null>;
 }
 
 export interface QrResolutionRepositories {

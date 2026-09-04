@@ -207,6 +207,18 @@ test("marking a notification read hides BOLA as not found", async () => {
   assert.equal(stageFour.markCalls[0]?.includeAdminQueue, false);
 });
 
+test("marking all notifications read uses the actor-scoped mailbox", async () => {
+  const stageFour = new MemoryStageFourRepository();
+  const service = createService(stageFour);
+
+  await service.markAllNotificationsRead({ userId: ADMIN_ID, role: "admin" });
+
+  assert.equal(stageFour.markAllCalls.length, 1);
+  assert.equal(stageFour.markAllCalls[0]?.actorId, ADMIN_ID);
+  assert.equal(stageFour.markAllCalls[0]?.includeAdminQueue, true);
+  assert.equal(stageFour.markAllCalls[0]?.readAt.getTime(), NOW.getTime());
+});
+
 function createService(
   stageFour: MemoryStageFourRepository,
   findReader: (id: string) => TmcTransferUserRecord | null = liveHistoryReader,
@@ -247,6 +259,7 @@ class MemoryStageFourRepository implements TmcStageFourRepository {
   locationHistoryQueries: TmcTransferHistoryQuery[] = [];
   notificationQueries: Array<{ actorId: string; includeAdminQueue: boolean; now: Date; limit: number }> = [];
   markCalls: Array<{ notificationId: string; actorId: string; includeAdminQueue: boolean; readAt: Date }> = [];
+  markAllCalls: Array<{ actorId: string; includeAdminQueue: boolean; readAt: Date }> = [];
   markResult = true;
 
   async listHistory(input: TmcTransferHistoryQuery): Promise<TmcTransferRequestRecord[]> {
@@ -281,6 +294,9 @@ class MemoryStageFourRepository implements TmcStageFourRepository {
   async markNotificationRead(input: { notificationId: string; actorId: string; includeAdminQueue: boolean; readAt: Date }) {
     this.markCalls.push(input);
     return this.markResult;
+  }
+  async markAllNotificationsRead(input: { actorId: string; includeAdminQueue: boolean; readAt: Date }) {
+    this.markAllCalls.push(input);
   }
 }
 

@@ -227,6 +227,17 @@ export class TmcTransferRequestService {
     if (!updated) throw notificationNotFound();
   }
 
+  async markAllNotificationsRead(actor: AuthorizationActor): Promise<void> {
+    const actorId = normalizeReader(actor);
+    await this.unitOfWork.transaction(({ stageFour }) =>
+      stageFour.markAllNotificationsRead({
+        actorId,
+        includeAdminQueue: actor.role === "admin",
+        readAt: this.clock.now(),
+      }),
+    );
+  }
+
   async getById(
     id: string,
     actor: AuthenticatedTmcReadActor,
@@ -331,6 +342,13 @@ export class TmcTransferRequestService {
       if (!recipient || !recipient.active || recipient.deletedAt) {
         throw new ApplicationError("conflict", "recipient_unavailable");
       }
+      const assigneeId = responsibilityAssigneeId(request);
+      const assignee = assigneeId === recipient.id
+        ? recipient
+        : await transferRequests.findUserById(assigneeId);
+      if (!assignee || !assignee.active || assignee.deletedAt) {
+        throw new ApplicationError("conflict", "recipient_unavailable");
+      }
       const administrativeReason = normalizeAdministrativeReason(
         normalized.administrativeReason,
         isAdministrativeDecision,
@@ -371,7 +389,7 @@ export class TmcTransferRequestService {
               await applyApprovedLocalBarcodeTransfer(localBarcodes, {
                 itemId: item.itemId,
                 sourceGroupId: item.sourceLocalGroupId,
-                recipientUserId: request.recipient.id,
+                recipientUserId: assignee.id,
                 quantity: item.requestedQuantity,
                 sourceVersion: item.sourceVersion!,
                 comment: request.comment,
@@ -404,7 +422,7 @@ export class TmcTransferRequestService {
           currentResponsibleIdAtRequest: item.currentResponsibleIdAtRequest,
           expectedVersion: item.version,
           decision: decision.decision,
-          recipientId: request.recipient.id,
+          recipientId: assignee.id,
           decidedBy: actorId,
           decidedAt,
           newResponsibilityPeriodId: this.ids.create(),
@@ -702,6 +720,7 @@ export class TmcTransferRequestService {
         candidates,
         recipient.id,
         authorizedActor,
+        normalized.requestKind,
       );
       if (normalized.quantityTransfers.length > 0) {
         if (!localBarcodes) throw new Error("tmc_quantity_transfer_repository_missing");
@@ -891,7 +910,7 @@ export class TmcTransferRequestService {
             currentResponsibleIdAtRequest: item.currentResponsibleIdAtRequest,
             expectedVersion: item.version,
             decision: "accept",
-            recipientId: persisted.recipient.id,
+          recipientId: responsibilityAssigneeId(persisted),
             decidedBy: currentActor.id,
             decidedAt: createdAt,
             newResponsibilityPeriodId: this.ids.create(),
@@ -1099,7 +1118,9 @@ export class TmcTransferRequestService {
           requestId: after.id,
           requestItemId: item.id,
           result: item.result,
-          responsibleUserId: item.result === "accepted" ? after.recipient.id : previous.currentResponsibleIdAtRequest,
+          responsibleUserId: item.result === "accepted"
+            ? responsibilityAssigneeId(after)
+            : previous.currentResponsibleIdAtRequest,
         },
         reason: after.administrativeReason,
         isAdministrativeException: after.isAdministrativeDecision,
@@ -1153,7 +1174,7 @@ export class TmcTransferRequestService {
       ownersByOutcome.set(ownerId, entry);
     }
     for (const [ownerId, counts] of ownersByOutcome) {
-      if (ownerId === after.initiator.id) continue;
+      if (ownerId === after.initiator.id || ownerId === actor.id) continue;
       await stageFour.createNotification({
         id: this.ids.create(), domainEventId: this.ids.create(), type: "tmc_transfer.completed",
         actorId: actor.id, requestId: after.id, itemId: null,
@@ -1515,6 +1536,10 @@ class EmptyTmcTransferRequestError extends Error {
 
 function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
   if (!input || typeof input !== "object") throw validation("invalid_request");
+  const requestKind = input.requestKind ?? "handover";
+  if (requestKind !== "handover" && requestKind !== "claim") {
+    throw validation("invalid_request_kind");
+  }
   if (!isUuid(input.recipientId)) throw validation("invalid_recipient_id");
   if (!Array.isArray(input.itemIds)) throw validation("invalid_item_ids");
   if (input.itemIds.length < 1) throw validation("items_required");
@@ -1531,6 +1556,9 @@ function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
   }
   const quantityTransfers = input.quantityTransfers ?? [];
   if (!Array.isArray(quantityTransfers) || quantityTransfers.length > normalizedItemIds.length) {
+    throw validation("invalid_quantity_transfers");
+  }
+  if (requestKind === "claim" && quantityTransfers.length > 0) {
     throw validation("invalid_quantity_transfers");
   }
   const seenQuantityItems = new Set<string>();
@@ -1556,6 +1584,7 @@ function normalizeCreateInput(input: CreateTmcTransferRequestInput) {
   return {
     recipientId: input.recipientId.toLowerCase(),
     itemIds: normalizedItemIds,
+    requestKind,
     quantityTransfers: normalizedQuantityTransfers,
     comment: normalizeComment(input.comment),
   };
@@ -1662,6 +1691,7 @@ function classifyItems(
   candidates: readonly TmcTransferCandidateRecord[],
   recipientId: string,
   actor: AuthorizationActor,
+  requestKind: "handover" | "claim",
 ): ClassifiedItem[] {
   const candidatesById = new Map(
     candidates.map((candidate) => [candidate.itemId, candidate]),
@@ -1674,12 +1704,17 @@ function classifyItems(
     // A missing item and an item outside the caller's ownership scope must not
     // produce distinguishable batch outcomes.
     if (!candidate) return problem(itemId, "item_unavailable");
-    if (
-      !canPerformInventoryOperation(actor, {
+    const canCreateClaim =
+      requestKind === "claim" &&
+      actor.role === "employee" &&
+      candidate.responsibleUser?.id === recipientId;
+    const canCreateHandover =
+      requestKind === "handover" &&
+      canPerformInventoryOperation(actor, {
         operation: "tmc.transfer_request.create",
         currentResponsibleId: candidate.responsibleUser?.id ?? "",
-      })
-    ) {
+      });
+    if (!canCreateClaim && !canCreateHandover) {
       return problem(itemId, "item_unavailable");
     }
     if (candidate.itemStatus !== "active" || candidate.archivedAt) {
@@ -1691,7 +1726,10 @@ function classifyItems(
     ) {
       return problem(itemId, "item_unassigned");
     }
-    if (candidate.responsibleUser?.id === recipientId) {
+    if (
+      requestKind === "handover" &&
+      candidate.responsibleUser?.id === recipientId
+    ) {
       return problem(itemId, "already_responsible");
     }
     if (candidate.hasActiveTransfer) {
@@ -1981,6 +2019,15 @@ function normalizeAdministrativeReason(
   if (required && !normalized) throw validation("administrative_reason_required");
   if (!required && normalized) throw validation("administrative_reason_not_allowed");
   return required ? normalized : null;
+}
+
+function responsibilityAssigneeId(request: TmcTransferRequestRecord): string {
+  const isClaim =
+    request.items.length > 0 &&
+    request.items.every(
+      (item) => item.currentResponsibleIdAtRequest === request.recipient.id,
+    );
+  return isClaim ? request.initiator.id : request.recipient.id;
 }
 
 async function quantityTransferProblem(

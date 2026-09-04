@@ -99,7 +99,13 @@ export default function TmcLanding({
                   <li key={request.id} className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
-                        <p className="font-semibold text-zinc-900">{request.initiator.fullName}</p>
+                        <p className="font-semibold text-zinc-900">
+                          {request.kind === "claim"
+                            ? t("tmc.incoming.claimRequestedBy", {
+                                name: request.initiator.fullName,
+                              })
+                            : request.initiator.fullName}
+                        </p>
                         <p className="mt-1 text-sm text-zinc-600">{t("tmc.incoming.pendingCount", { pending: request.summary.pending, total: request.summary.total })}</p>
                         <ul className="mt-3 space-y-1 text-sm text-zinc-700">
                           {request.items.filter((item) => item.result === "pending").map((item) => (

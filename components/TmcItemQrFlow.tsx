@@ -1,12 +1,13 @@
 "use client";
 
-import { Barcode, MapPin, RotateCcw, UserRound, X } from "lucide-react";
+import { Barcode, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 import ItemsTable from "@/components/ItemsTable";
 import LocalBarcodeTransferResult from "@/components/LocalBarcodeTransferResult";
+import ScannedItemDetailsCard from "@/components/ScannedItemDetailsCard";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 import {
@@ -130,10 +131,12 @@ export default function TmcItemQrFlow({
       sourceVersion: number;
       quantity: number;
     },
+    requestKind: "handover" | "claim" = "handover",
   ) {
     const payload = {
       recipientId,
       itemIds: [itemId],
+      ...(requestKind === "claim" ? { requestKind } : {}),
       ...(quantityTransfer
         ? { quantityTransfers: [{ itemId, ...quantityTransfer }] }
         : {}),
@@ -359,14 +362,10 @@ export default function TmcItemQrFlow({
     }
   }
 
-  /**
-   * Task 3C: when scanning an occupied item in receive mode, create a transfer
-   * request with the current user (actorUserId) as the recipient. The current
-   * owner's name is intentionally hidden in the UI — only basic item data is shown.
-   */
+  /** Create a transfer request to the scanning employee for an occupied item. */
   async function requestTransferToSelf() {
     const item = flowState.status === "selected" ? flowState.item : null;
-    if (!item || !actorUserId || submissionInFlight.current) return;
+    if (!item?.responsibleId || !actorUserId || submissionInFlight.current) return;
 
     submissionInFlight.current = true;
     const sequence = ++submissionSequence.current;
@@ -376,7 +375,15 @@ export default function TmcItemQrFlow({
     setSubmission({ status: "submitting" });
 
     try {
-      await doCreateRequest(actorUserId, item.id, "", sequence, controller);
+      await doCreateRequest(
+        item.responsibleId,
+        item.id,
+        "",
+        sequence,
+        controller,
+        undefined,
+        "claim",
+      );
     } catch (error) {
       if (
         sequence === submissionSequence.current &&
@@ -393,18 +400,14 @@ export default function TmcItemQrFlow({
   }
 
   const item = flowState.status === "selected" ? flowState.item : null;
-  const location = item
-    ? [item.buildingName, item.roomDesignation].filter(Boolean).join(" · ")
-    : "";
   const receiveAlreadyAssigned =
     operation.id === "receive" && item?.isCurrentUserResponsible === true;
   // Item is occupied by someone else in receive mode — show "Request Transfer" instead.
   const receiveUnavailable =
     operation.id === "receive" &&
     !receiveAlreadyAssigned &&
+    !item?.localGroup &&
     item?.isAssigned === true;
-  const responsibleNameHidden =
-    item?.isAssigned === true && !item.responsibleName?.trim();
   const localDistribution = item?.distribution;
   const scannedLocalGroup = item?.localGroup;
   const localReturnRecipient = scannedLocalGroup?.previousResponsible ?? null;
@@ -445,23 +448,8 @@ export default function TmcItemQrFlow({
       ) : null}
 
       {item ? (
-        <article className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4" aria-live="polite">
-          <div className="flex items-start gap-3">
-            <Barcode className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-zinc-900">{item.title}</h3>
-              {item.inventoryNumber ? <p className="mt-1 text-sm text-zinc-600">{item.inventoryNumber}</p> : null}
-              {location ? <p className="mt-3 flex items-center gap-2 text-sm text-zinc-700"><MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />{location}</p> : null}
-              {/* Task 3C: hide the owner's name when the item is occupied in receive mode */}
-              {!responsibleNameHidden ? (
-                <p className="mt-2 flex items-center gap-2 text-sm text-zinc-700">
-                  <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {item.responsibleName || t("tmc.qr.noResponsible")}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+        <ScannedItemDetailsCard item={item} actions={
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={scanAgain} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-dark">
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               {t("tmc.qr.scanAgain")}
@@ -471,10 +459,10 @@ export default function TmcItemQrFlow({
               {t("tmc.qr.remove")}
             </button>
           </div>
-        </article>
+        } />
       ) : null}
 
-      {/* Task 3C: occupied item panel — show "Request Transfer" instead of the standard flow */}
+      {/* Occupied item panel: request a transfer instead of accepting it directly. */}
       {item && receiveUnavailable && submission.status !== "success" ? (
         <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
           <p className="text-sm text-zinc-600">{t("tmc.operation.occupiedHint")}</p>
@@ -483,7 +471,11 @@ export default function TmcItemQrFlow({
           ) : null}
           <button
             type="button"
-            disabled={submission.status === "submitting" || !actorUserId}
+            disabled={
+              submission.status === "submitting" ||
+              !actorUserId ||
+              !item.responsibleId
+            }
             onClick={() => void requestTransferToSelf()}
             className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
           >

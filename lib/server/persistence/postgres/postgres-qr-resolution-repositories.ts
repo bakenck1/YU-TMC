@@ -14,6 +14,7 @@ const ROOMS = '"yu_inventory"."rooms"';
 const ITEMS = '"yu_inventory"."items"';
 const RESPONSIBILITY = '"yu_inventory"."responsibility_periods"';
 const USERS = '"yu_inventory"."users"';
+const PHOTOS = '"yu_inventory"."photos"';
 
 interface QrRow extends QueryResultRow {
   canonical_key: string;
@@ -28,6 +29,16 @@ interface QrRow extends QueryResultRow {
   inventory_number: string | null;
   responsible_name: string | null;
   responsible_user_id: string | null;
+  item_type: string | null;
+  item_brand: string | null;
+  item_model: string | null;
+  item_description: string | null;
+  item_quantity: number | null;
+  item_unit_price: string | number | null;
+  item_condition: QrResolutionRecord["itemCondition"] | null;
+  item_connection_status: QrResolutionRecord["itemConnectionStatus"] | null;
+  item_has_photo: boolean;
+  item_created_at: Date | null;
 }
 
 export function createPostgresQrResolutionRepositories(
@@ -52,7 +63,18 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               r.designation as room_designation,
               i.inventory_number,
               u.full_name as responsible_name,
-              coalesce(rp.responsible_user_id, r.primary_responsible_id) as responsible_user_id
+              coalesce(rp.responsible_user_id, r.primary_responsible_id) as responsible_user_id,
+              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.quantity as item_quantity,
+              i.unit_price as item_unit_price, i.condition as item_condition,
+              i.connection_status as item_connection_status,
+              exists (
+                select 1 from ${PHOTOS} photo
+                 where photo.item_id = i.id
+                   and photo.purpose = 'item'
+                   and photo.status = 'attached'
+              ) as item_has_photo,
+              i.created_at as item_created_at
          from ${QR} q
          left join ${ROOMS} r on r.id = q.room_id
          left join ${BUILDINGS} b on b.id = coalesce(q.building_id, r.building_id)
@@ -84,6 +106,18 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       inventoryNumber: row.inventory_number,
       responsibleName: row.responsible_name,
       responsibleUserId: row.responsible_user_id,
+      itemType: row.item_type,
+      itemBrand: row.item_brand,
+      itemModel: row.item_model,
+      itemDescription: row.item_description,
+      itemQuantity:
+        row.item_quantity === null ? null : Number(row.item_quantity),
+      itemUnitPrice:
+        row.item_unit_price === null ? null : Number(row.item_unit_price),
+      itemCondition: row.item_condition,
+      itemConnectionStatus: row.item_connection_status,
+      itemHasPhoto: row.item_has_photo,
+      itemCreatedAt: row.item_created_at,
     };
   }
 
@@ -98,7 +132,18 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               i.id as target_id, i.status::text as target_status,
               i.name as title, b.name as building_name,
               r.designation as room_designation, i.inventory_number,
-              u.full_name as responsible_name, rp.responsible_user_id
+              u.full_name as responsible_name, rp.responsible_user_id,
+              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.quantity as item_quantity,
+              i.unit_price as item_unit_price, i.condition as item_condition,
+              i.connection_status as item_connection_status,
+              exists (
+                select 1 from ${PHOTOS} photo
+                 where photo.item_id = i.id
+                   and photo.purpose = 'item'
+                   and photo.status = 'attached'
+              ) as item_has_photo,
+              i.created_at as item_created_at
          from ${ITEMS} i
          join ${ROOMS} r on r.id = i.room_id
          join ${BUILDINGS} b on b.id = r.building_id
@@ -131,6 +176,35 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       inventoryNumber: row.inventory_number,
       responsibleName: row.responsible_name,
       responsibleUserId: row.responsible_user_id,
+      itemType: row.item_type,
+      itemBrand: row.item_brand,
+      itemModel: row.item_model,
+      itemDescription: row.item_description,
+      itemQuantity:
+        row.item_quantity === null ? null : Number(row.item_quantity),
+      itemUnitPrice:
+        row.item_unit_price === null ? null : Number(row.item_unit_price),
+      itemCondition: row.item_condition,
+      itemConnectionStatus: row.item_connection_status,
+      itemHasPhoto: row.item_has_photo,
+      itemCreatedAt: row.item_created_at,
     };
+  }
+
+  async findItemPhoto(itemId: string) {
+    const result = await this.source.query<{
+      binary_data: Buffer | null;
+      trusted_mime_type: string | null;
+    }>(
+      `select binary_data, trusted_mime_type
+         from ${PHOTOS}
+        where item_id = $1 and purpose = 'item' and status = 'attached'
+        order by attached_at desc nulls last
+        limit 1`,
+      [itemId],
+    );
+    const row = result.rows[0];
+    if (!row?.binary_data || row.trusted_mime_type !== "image/jpeg") return null;
+    return { bytes: row.binary_data, mimeType: "image/jpeg" as const };
   }
 }

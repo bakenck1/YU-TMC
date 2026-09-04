@@ -12,7 +12,11 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/AppSettingsProvider", () => ({
-  useAppSettings: () => ({ language: "en", t: (key: string) => key }),
+  useAppSettings: () => ({
+    language: "en",
+    t: (key: string, params?: { name?: string }) =>
+      params?.name ? `${key} ${params.name}` : key,
+  }),
 }));
 
 const request = (): TmcTransferRequestDto => ({
@@ -119,6 +123,31 @@ describe("TmcTransferRequestCard", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     const init = vi.mocked(fetch).mock.calls[0]![1] as RequestInit;
     expect(JSON.parse(String(init.body)).decisions.map((decision: { decision: string }) => decision.decision)).toEqual(["reject", "reject"]);
+  });
+
+  it("shows claim-specific approval actions to the current owner", async () => {
+    render(
+      <TmcTransferRequestCard
+        request={{ ...request(), kind: "claim" }}
+        canDecide
+        showOverdue={false}
+        requiresAdministrativeReason={false}
+      />,
+    );
+
+    expect(screen.getByText("tmc.request.claimRequester")).not.toBeNull();
+    expect(screen.getByText("tmc.request.claimOwner")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "tmc.request.acceptSelected" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", {
+      name: "tmc.request.approveClaim User 11111111-1111-4111-8111-111111111111",
+    }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const init = vi.mocked(fetch).mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(String(init.body)).decisions).toEqual([
+      { itemId: "33333333-3333-4333-8333-000000000001", itemVersion: 1, decision: "accept" },
+      { itemId: "33333333-3333-4333-8333-000000000002", itemVersion: 1, decision: "accept" },
+    ]);
   });
 
   it("uses large touch targets and clear success and rejection colors", () => {

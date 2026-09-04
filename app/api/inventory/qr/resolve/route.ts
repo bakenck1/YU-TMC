@@ -8,6 +8,9 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PRIVATE_HEADERS = {
+  "cache-control": "private, no-store, max-age=0, must-revalidate",
+};
 
 export async function GET(request: Request) {
   try {
@@ -27,6 +30,9 @@ export async function GET(request: Request) {
         authorizationActor(user),
       );
       if (localGroup) {
+        const scannedPhotoUrl = localGroup.photoUrl
+          ? `/api/inventory/qr/item-photo?value=${encodeURIComponent(localGroup.localBarcode)}&kind=barcode`
+          : null;
         return Response.json({
           resolution: {
             status: localGroup.status === "cancelled" ? "cancelled" : "resolved",
@@ -42,8 +48,22 @@ export async function GET(request: Request) {
               roomDesignation: localGroup.location.roomDesignation,
               inventoryNumber: localGroup.localBarcode,
               responsibleName: localGroup.responsible.fullName,
+              responsibleId: localGroup.responsible.id,
               isAssigned: true,
               isCurrentUserResponsible: localGroup.responsible.id === user.userId,
+              itemDetails: {
+                itemType: localGroup.itemType,
+                brand: localGroup.brand,
+                model: localGroup.model,
+                description: localGroup.description,
+                quantity: localGroup.quantity,
+                unitPrice: localGroup.unitPrice,
+                condition: localGroup.condition ?? "good",
+                connectionStatus:
+                  localGroup.connectionStatus ?? "not_applicable",
+                photoUrl: scannedPhotoUrl,
+                createdAt: localGroup.transferredAt,
+              },
               localGroup: {
                 id: localGroup.id,
                 localBarcode: localGroup.localBarcode,
@@ -56,7 +76,7 @@ export async function GET(request: Request) {
               },
             },
           },
-        });
+        }, { headers: PRIVATE_HEADERS });
       }
     }
     const resolution = await getApplicationServices().qr.resolve(
@@ -75,7 +95,7 @@ export async function GET(request: Request) {
         if (!(error instanceof ApplicationError && (error.kind === "not_found" || error.kind === "forbidden"))) throw error;
       }
     }
-    return Response.json({ resolution });
+    return Response.json({ resolution }, { headers: PRIVATE_HEADERS });
   } catch (error) {
     return error instanceof ApplicationError
       ? applicationErrorResponse(error)
