@@ -8,7 +8,7 @@ import {
 
 const TOKEN = "directory-service-token";
 
-test("maps active personnel from the paginated Yessenov users API", async () => {
+test("maps active personnel from the paginated Yessenov v2 API", async () => {
   const requests: Array<{ url: URL; authorization: string | null }> = [];
   const fetcher = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(input instanceof URL ? input.href : String(input));
@@ -19,16 +19,16 @@ test("maps active personnel from the paginated Yessenov users API", async () => 
         count: 2,
         size: 1,
         next: null,
-        previous: "https://id.yu.edu.kz/api/users/",
-        results: [directoryUser()],
+        previous: "https://api.yu.edu.kz/api/v2/personnels/?size=100",
+        results: [directoryPersonnel()],
       });
     }
     return Response.json({
       count: 2,
       size: 1,
-      next: "https://id.yu.edu.kz/api/users/?page=2",
+      next: "https://api.yu.edu.kz/api/v2/personnels/?page=2&size=100",
       previous: null,
-      results: [directoryUser({ id: 12, is_active: false })],
+      results: [directoryPersonnel({ id: 12, is_active: false })],
     });
   }) as typeof fetch;
 
@@ -38,8 +38,11 @@ test("maps active personnel from the paginated Yessenov users API", async () => 
   const employees = await client.listEmployees();
 
   assert.equal(requests.length, 2);
-  assert.equal(requests[0]?.url.href, "https://id.yu.edu.kz/api/users/");
-  assert.equal(requests[0]?.authorization, `Bearer ${TOKEN}`);
+  assert.equal(
+    requests[0]?.url.href,
+    "https://api.yu.edu.kz/api/v2/personnels/?size=100",
+  );
+  assert.equal(requests[0]?.authorization, `Token ${TOKEN}`);
   assert.equal(employees.length, 1);
   assert.deepEqual(employees[0], {
     id: 10001,
@@ -78,7 +81,7 @@ test("looks up an employee by exact IIN and does not send the token in the URL",
       size: 1,
       next: null,
       previous: null,
-      results: [directoryUser()],
+      results: [directoryPersonnel()],
     });
   }) as typeof fetch;
   const client = createYessenovDirectoryClient(fetcher, {
@@ -90,6 +93,58 @@ test("looks up an employee by exact IIN and does not send the token in the URL",
   assert.equal(capturedUrl?.searchParams.get("search"), "000000000000");
   assert.equal(capturedUrl?.href.includes(TOKEN), false);
   assert.equal(await client.findEmployee("invalid"), null);
+});
+
+test("maps a direct personnel record returned by the v2 endpoint", async () => {
+  const client = createYessenovDirectoryClient(
+    (async () =>
+      Response.json({
+        count: 1,
+        size: 1,
+        next: null,
+        previous: null,
+        results: [
+          {
+            id: 20001,
+            user: {
+              id: 10001,
+              username: "test.employee",
+              email: "TEST.EMPLOYEE@YU.EDU.KZ",
+              is_active: true,
+              is_superuser: false,
+              role: ["personnel"],
+            },
+            first_name: "Test",
+            last_name: "Employee",
+            middle_name: "Example",
+            full_name: "Employee Test Example",
+            display_name: "Employee Test",
+            identify_code: "000000000000",
+            mobile_phone: "77000000000",
+            employed_at: "2025-07-24",
+            is_active: true,
+            main_position: {
+              orgunit: {
+                id: 24,
+                name_ru: "IT Department",
+                name_kk: null,
+                name_en: "IT Department",
+              },
+              position: { id: 379, name: "Developer" },
+            },
+          },
+        ],
+      })) as typeof fetch,
+    { YESSENOV_DIRECTORY_API_TOKEN: TOKEN },
+  );
+
+  const employee = (await client.listEmployees())[0];
+  assert.equal(employee?.id, 10001);
+  assert.equal(employee?.personnelId, 20001);
+  assert.equal(employee?.email, "test.employee@yu.edu.kz");
+  assert.equal(employee?.iin, "000000000000");
+  assert.deepEqual(employee?.roles, ["personnel"]);
+  assert.equal(employee?.position?.name, "Developer");
 });
 
 test("fails closed without a token and rejects cross-origin pagination", async () => {
@@ -122,7 +177,7 @@ test("fails closed without a token and rejects cross-origin pagination", async (
   );
 });
 
-function directoryUser(overrides: Record<string, unknown> = {}) {
+function directoryPersonnel(overrides: Record<string, unknown> = {}) {
   return {
     id: 10001,
     username: "test.employee",

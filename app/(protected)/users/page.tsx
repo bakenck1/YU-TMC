@@ -9,12 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage() {
   const currentUser = await requireAuthorizedPage("/users");
   const services = getApplicationServices();
-  const users = (await services.users.listUsersForManagement(currentUser)).map(
-    (user) => ({
-      ...user,
-      phone: user.phone ?? "—",
-    }),
-  );
+  const users = (
+    await services.users.listUsersForManagement(currentUser, {
+      synchronizeDirectory: false,
+    })
+  ).map((user) => ({
+    ...user,
+    phone: user.phone ?? "—",
+  }));
 
   return (
     <UsersManager

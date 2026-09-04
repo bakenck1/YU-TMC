@@ -40,9 +40,10 @@ application role.
 ## Dockflow employee directory
 
 The real Dockflow endpoints read employee profiles from
-`https://id.yu.edu.kz/api/users/`. Ask the Yessenov ID administrators for a
-service Bearer token with read-only access to that endpoint and store it only
-in the deployment secret store:
+`https://api.yu.edu.kz/api/v2/personnels/`. Ask the Yessenov University API
+administrators for a service token with read-only access to that endpoint and
+store it only in the deployment secret store. The application sends it in the
+`Authorization: Token <token>` header:
 
 ```dotenv
 YESSENOV_DIRECTORY_API_TOKEN=...
@@ -50,17 +51,17 @@ YESSENOV_DIRECTORY_API_TOKEN=...
 
 `GET /api/v1/employees` follows the Yessenov API pagination. Employee lookup
 uses its `search` filter and then requires an exact match against
-`personnel.identify_code`; inventory assignments and item counts are joined
+`identify_code`; inventory assignments and item counts are joined
 from PostgreSQL by that IIN. Only the Dockflow profile fields are exposed. The
 integration deliberately omits recovery email, addresses, identity-document
 details, birth date, custom data and permissions. The directory token is sent
-only to the fixed HTTPS host `id.yu.edu.kz`, including validated pagination
+only to the fixed HTTPS host `api.yu.edu.kz`, including validated pagination
 links, and is never forwarded from a caller-provided URL.
 
 The same directory powers the application's **Users** page. Every server-side
 load of `/users` and every `GET /api/users` request fetches every page with
 `cache: "no-store"`, then inserts missing active personnel and refreshes their
-full name, IIN (`personnel.identify_code`), department, position, personnel ID,
+full name, IIN (`identify_code`), department, position, personnel ID,
 phone and verified-email state before returning the list. New directory users
 receive the least-privileged local `employee` role. Existing local roles,
 activation state and login email are never overwritten; Yessenov roles and the

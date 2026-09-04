@@ -33,8 +33,9 @@ production-переменные из `.env.example`, включая `DATABASE_UR
 `WEB_PUSH_VAPID_*` переменные. Для входа через Yessenov ID также задайте
 `YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` и точный HTTPS
 `YESSENOV_OIDC_REDIRECT_URI`. Для реального Dockflow API также нужны отдельный
-`DOCKFLOW_API_KEY` и выданный Yessenov ID read-only Bearer-токен
-`YESSENOV_DIRECTORY_API_TOKEN` для `GET /api/users/`. Для TLS БД с частным CA укажите сертификат в
+`DOCKFLOW_API_KEY` и выданный Yessenov University read-only service-токен
+`YESSENOV_DIRECTORY_API_TOKEN` для `GET https://api.yu.edu.kz/api/v2/personnels/`.
+Для TLS БД с частным CA укажите сертификат в
 `DATABASE_SSL_CA` одной строкой с экранированными переводами строки (`\n`).
 Backup читает только database-переменные из строк формата `KEY=value`; он не
 исполняет содержимое env-файла как shell-код.

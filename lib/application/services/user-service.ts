@@ -531,6 +531,7 @@ export class UserService {
 
   async listUsersForManagement(
     actor: AuthenticatedUserManagementActor,
+    options: { synchronizeDirectory?: boolean } = {},
   ): Promise<UserDto[]> {
     if (
       !isUuid(actor.userId) ||
@@ -542,7 +543,7 @@ export class UserService {
     }
 
     const actorUserId = actor.userId.toLowerCase();
-    if (this.personnelDirectory) {
+    if (this.personnelDirectory && options.synchronizeDirectory !== false) {
       await this.unitOfWork.transaction(async ({ users }) => {
         const currentActor = await requireCurrentActor(
           users,

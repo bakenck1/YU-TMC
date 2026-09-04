@@ -155,8 +155,8 @@ Authorization: Bearer <TEST_API_KEY>
 ## 7. Реализованный следующий этап
 
 Источником реальных ИИН, ФИО, телефонов, логинов, подразделений и должностей
-утверждён защищённый endpoint `https://id.yu.edu.kz/api/users/`. Сервер
-аутентифицируется отдельным read-only Bearer-токеном из
+утверждён защищённый endpoint `https://api.yu.edu.kz/api/v2/personnels/`. Сервер
+аутентифицируется отдельным read-only service-токеном (`Authorization: Token`) из
 `YESSENOV_DIRECTORY_API_TOKEN`; ключ, предъявляемый Dockflow, во внешний API не
 передаётся.
 

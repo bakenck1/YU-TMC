@@ -7,7 +7,8 @@ The integration is exposed by the application itself:
 - API base path: `/api/v1`
 
 Set `DOCKFLOW_API_KEY` in the application environment and obtain a read-only
-Yessenov ID service token for `GET https://id.yu.edu.kz/api/users/` as
+Yessenov University service token for
+`GET https://api.yu.edu.kz/api/v2/personnels/` as
 `YESSENOV_DIRECTORY_API_TOKEN`.
 Swagger's **Authorize** dialog expects the key value without the `Bearer` prefix.
 Direct HTTP clients send it as:

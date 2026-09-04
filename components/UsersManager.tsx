@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -50,6 +50,29 @@ export default function UsersManager({
   const [formUserId, setFormUserId] = useState<string | null | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/users", {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { users?: UserDto[] };
+        if (!Array.isArray(payload.users)) return;
+        setRecords(payload.users.map(normalizeUser));
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          // Keep the already persisted directory snapshot visible when a
+          // background refresh is temporarily unavailable.
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, []);
 
   const selectedUser = records.find((user) => user.id === selectedId) ?? null;
   const formUser = formUserId === null ? null : records.find((user) => user.id === formUserId) ?? null;

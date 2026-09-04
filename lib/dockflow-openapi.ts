@@ -136,7 +136,7 @@ export const dockflowOpenApiDocument = {
       get: {
         tags: ["Employees"],
         summary: "Получить сотрудника и закреплённые ТМЦ",
-        description: "Профиль загружается из https://id.yu.edu.kz/api/users/, ТМЦ — из YU Inventory.",
+        description: "Профиль загружается из https://api.yu.edu.kz/api/v2/personnels/, ТМЦ — из YU Inventory.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/Iin" }],
         responses: {
