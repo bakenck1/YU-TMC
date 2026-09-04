@@ -49,7 +49,7 @@ settings и monitoring.
 - 100% line coverage не доказывает authorization или transaction rollback.
 - Не копировать 511 существующих tests в новые unit files.
 - Не превращать integration test в implementation-detail test.
-- Не делать local development зависимым от Docker.
+- Не делать local development зависимым от дополнительной инфраструктуры.
 
 ## Acceptance
 

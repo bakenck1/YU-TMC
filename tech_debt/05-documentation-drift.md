@@ -14,7 +14,7 @@
 
 1. Переписать README как onboarding для YU Inventory: prerequisites,
    embedded/external PostgreSQL paths, `.env` separation, dev/test/build/
-   security/UI/database commands, mobile Docker runtime, auth/SSO/push setup и
+   security/UI/database commands, mobile runtime, auth/SSO/push setup и
    ссылка на release checklist.
 2. Заменить stale commands в `docs/database.md` и `TASKS.md` на реально
    существующие scripts: `npm run test:all`,
@@ -36,7 +36,7 @@
 ## Подводные камни
 
 - Не переписывать исторические security audit snapshots.
-- Не обещать Docker, если embedded local path — официальный default.
+- Не обещать необязательную инфраструктуру, если embedded local path — официальный default.
 - Не добавлять alias scripts только ради маскировки устаревшей документации.
 - Сохранить русскую/английскую информацию, не смешивая operational source of
   truth с PRD history.

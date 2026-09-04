@@ -102,7 +102,7 @@ checklist не представлены как единый контракт.
 
 ## Подводные камни
 
-- Не сделать Docker обязательным для каждого локального `npm run test:all`.
+- Не делать дополнительную инфраструктуру обязательной для каждого локального `npm run test:all`.
   Embedded/managed PostgreSQL path должен остаться доступным.
 - Не подменять production credentials CI placeholders в реальном deploy job.
 - `db:smoke` должен проверять именно ту БД, на которую направлен runtime URL,

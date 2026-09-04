@@ -1,7 +1,7 @@
 # Release checklist
 
 Этот список разделяет автоматические проверки CI и обязательные действия при
-релизе YU Inventory без Docker.
+релизе YU Inventory.
 
 ## Automated CI gates
 

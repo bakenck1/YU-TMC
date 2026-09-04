@@ -21,7 +21,7 @@
 - Ограниченный body gateway для JSON, multipart/photo и bulk-входов; durable DB rate limiter вместо process-local состояния.
 - Fail-closed row budgets на persistence-границе для users, inventory, inspections, service requests, transfers, room workspace, audit и push subscriptions: PostgreSQL получает sentinel `LIMIT`, переполнение не обрезается молча.
 - Удаление source maps из production runtime image и invariant в `security-check`.
-- Production Next build сам отключает Turbopack/server source maps; Docker cleanup остаётся второй защитой.
+- Production Next build сам отключает Turbopack/server source maps; runtime cleanup остаётся второй защитой.
 - Зафиксированы regression-тесты для auth/session races, ownership, stale objects, concurrency и DTO privacy.
 
 ## Доказательства
@@ -32,8 +32,8 @@
 - После build: `standalone_maps=0`, `static_maps=0`; `npm run storybook:build` также passed.
 - `npm run lint`, `npm run security:check`, `npm run db:check`, `npm run ui:check` — passed.
 - `npm audit --omit=dev --audit-level=high --prefer-offline`: 0 vulnerabilities.
-- Secret-pattern scan не нашёл credential material в tracked application/runtime scope; `.dockerignore` исключает `.env*`, secret/credential files, `.git`, tests и generated audit/build data.
-- `docker compose -f docker-compose.mobile.yml config --quiet` и production compose validation с non-secret placeholder values — passed; production compose требует secrets явно и не имеет permissive defaults.
+- Secret-pattern scan не нашёл credential material в tracked application/runtime scope; `.gitignore` исключает `.env*`, secret/credential files, tests и generated audit/build data.
+- Production validation с non-secret placeholder values — passed; secrets требуется передавать явно, permissive defaults отсутствуют.
 - `git diff --check`: ошибок whitespace нет; предупреждения относятся к недоступному пользовательскому global git ignore и CRLF normalization.
 
 ## Остаточные release-gates
@@ -42,7 +42,7 @@
 
 1. Выполнить production secret/DB-role/TLS/ingress/backups review, включая trusted-proxy configuration.
 2. Выполнить ручную проверку браузера, PWA, OAuth, password reset и push на staging; затем authenticated DAST/pentest.
-3. Собрать и просканировать Docker runtime image. Локально Docker daemon недоступен; сам `Dockerfile.mobile` удаляет `.map` перед runtime.
+3. Собрать и просканировать production runtime на staging-среде.
 4. Закрыть P1 эксплуатационный backlog: alerting, нагрузочный прогон, `EXPLAIN` для тяжёлых коллекций и rollback/runbook.
 5. Отдельно принять решение по продуктовой политике: сотрудник по текущему контракту может сканировать активный чужой инвентарный barcode для запуска transfer request.
 
