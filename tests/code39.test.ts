@@ -39,6 +39,18 @@ test("scans the readable value printed on university barcode labels", () => {
     inventoryNumber: "2416/1056",
     fallbackKey: null,
   });
+  assert.deepEqual(parseCode39ScanInput("050/0002223"), {
+    ok: true,
+    value: "050/0002223",
+    inventoryNumber: "050/0002223",
+    fallbackKey: null,
+  });
+  assert.deepEqual(parseCode39ScanInput("123/154"), {
+    ok: true,
+    value: "123/154",
+    inventoryNumber: "123/154",
+    fallbackKey: null,
+  });
 });
 
 test("parses the compact fallback without treating it as an inventory number", () => {

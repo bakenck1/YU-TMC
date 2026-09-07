@@ -76,9 +76,17 @@ async function startZxingDecoder({
     import("@zxing/library").DecodeHintType,
     unknown
   >();
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    format === "code_39" ? BarcodeFormat.CODE_39 : BarcodeFormat.QR_CODE,
-  ]);
+  hints.set(
+    DecodeHintType.POSSIBLE_FORMATS,
+    format === "code_39"
+      ? [
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.CODE_93,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODABAR,
+        ]
+      : [BarcodeFormat.QR_CODE],
+  );
   hints.set(DecodeHintType.TRY_HARDER, true);
 
   const reader = new BrowserMultiFormatReader(hints, {

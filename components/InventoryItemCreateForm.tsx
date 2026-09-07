@@ -193,7 +193,12 @@ export default function InventoryItemCreateForm({
                   value={responsible}
                   onChange={setResponsible}
                   employeeOnly
-                  label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
+                  label={(
+                    <>
+                      <span className="font-normal text-zinc-500">{t("createItem.responsible")} </span>
+                      <span className="font-normal text-zinc-500">({t("createItem.optional")})</span>
+                    </>
+                  )}
                 />
               ) : null}
               {!restricted && (
