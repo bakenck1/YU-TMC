@@ -194,7 +194,6 @@ export default function InventoryItemCreateForm({
                   onChange={setResponsible}
                   employeeOnly
                   label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
-                  className=""
                 />
               ) : null}
               {!restricted && (

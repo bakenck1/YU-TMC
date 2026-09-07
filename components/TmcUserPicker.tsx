@@ -29,13 +29,11 @@ export default function TmcUserPicker({
   onChange,
   employeeOnly = false,
   label,
-  className = "mt-5",
 }: {
   value: TmcOperationUserDto | null | TmcUserPickerValue;
   onChange: (user: TmcOperationUserDto | null) => void;
   employeeOnly?: boolean;
   label?: string;
-  className?: string;
 }) {
   const { t } = useAppSettings();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -146,7 +144,7 @@ export default function TmcUserPicker({
   return (
     <div
       ref={rootRef}
-      className={`relative ${className}`}
+      className="relative mt-5"
       onBlur={(event) => {
         if (!rootRef.current?.contains(event.relatedTarget)) setOpen(false);
       }}

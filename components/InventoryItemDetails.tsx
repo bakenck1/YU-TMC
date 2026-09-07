@@ -755,7 +755,6 @@ export default function InventoryItemDetails({
                 onChange={setResponsible}
                 employeeOnly
                 label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
-                className=""
               />
             </div>
             <label className="block text-sm">
