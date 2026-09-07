@@ -1044,6 +1044,9 @@ export default function InventoryItemDetails({
               ) : (
                 <QrCode className="h-[86.4px] w-[86.4px] text-zinc-600" strokeWidth={1.5} />
               )}
+              <p className="mt-1 max-w-[190px] break-all font-mono text-sm font-medium text-zinc-700">
+                {item.inventoryNumber}
+              </p>
               <button
                 type="button"
                 onClick={() => { setCodeKind("qr"); setQrDialog("generate"); }}
