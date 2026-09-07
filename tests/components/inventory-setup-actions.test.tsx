@@ -128,7 +128,7 @@ describe("inventory setup actions", () => {
     expect((nameInput as HTMLInputElement).required).toBe(true);
     expect((typeInput as HTMLInputElement).required).toBe(true);
     expect((roomSelect as HTMLSelectElement).required).toBe(true);
-    expect((barcodeInput as HTMLInputElement).required).toBe(true);
+    expect((barcodeInput as HTMLInputElement).required).toBe(false);
     expect((responsibleInput as HTMLInputElement).required).toBe(false);
     expect(nameInput.closest("label")?.textContent).toContain(
       "createItem.required",
@@ -137,7 +137,7 @@ describe("inventory setup actions", () => {
       "createItem.required",
     );
     expect(barcodeInput.closest("label")?.textContent).toContain(
-      "createItem.required",
+      "createItem.optional",
     );
     expect(screen.getByText("createItem.responsible").className).toContain(
       "font-normal",

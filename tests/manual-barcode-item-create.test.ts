@@ -14,7 +14,7 @@ import { parseCode39ScanInput } from "../lib/domain/code39";
 
 const ROOT = new URL("../", import.meta.url);
 
-test("barcode input is required and sent to the item creation API", async () => {
+test("barcode input is optional and sent to the item creation API when provided", async () => {
   const form = await readFile(
     new URL("components/InventoryItemCreateForm.tsx", ROOT),
     "utf8",
@@ -23,21 +23,45 @@ test("barcode input is required and sent to the item creation API", async () => 
     new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
 
   assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: restricted \? null : barcode\.trim\(\)/);
+  assert.match(form, /barcode: restricted \? null : \(barcode\.trim\(\) \|\| null\)/);
   assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);
-  assert.doesNotMatch(form, /t\("createItem\.barcodeOptionalHint"\)/);
-  assert.match(form, /!barcode\.trim\(\)/);
-  assert.match(route, /body\.barcode\.trim\(\)\.length === 0/);
+  assert.match(form, /t\("createItem\.barcodeOptionalHint"\)/);
+  assert.doesNotMatch(form, /!barcode\.trim\(\)/);
+  assert.doesNotMatch(route, /body\.barcode\.trim\(\)\.length === 0/);
   assert.match(form, /setBarcode\(value\)/);
   assert.doesNotMatch(form, /if \(rooms\.length === 0\) return null/);
   assert.match(form, /t\("createItem\.noRooms"\)/);
 });
 
-test("item creation service rejects a missing or blank barcode", async () => {
+test("item creation service accepts a missing barcode", async () => {
+  let inserted: InventoryItemRecord | undefined;
   const repositories = {
-    items: {} as InventoryItemRepository,
+    items: {
+      roomExists: async () => true,
+      insertItem: async (record: InsertInventoryItemRecord) => {
+        inserted = {
+          ...record,
+          roomDesignation: "101",
+          floorNumber: 1,
+          buildingId: "building-1",
+          buildingName: "Main",
+          status: "active",
+          qrCode: null,
+          responsibleId: null,
+          responsibleName: null,
+          photoUrl: null,
+          version: 1,
+          createdAt: record.occurredAt,
+          updatedAt: record.occurredAt,
+          archivedAt: null,
+        };
+        return inserted;
+      },
+      insertItemQr: async () => undefined,
+      appendAudit: async () => undefined,
+    } as unknown as InventoryItemRepository,
   } satisfies InventoryItemRepositories;
   const unitOfWork: UnitOfWork<InventoryItemRepositories> = {
     read: async (work) => work(repositories),
@@ -46,7 +70,7 @@ test("item creation service rejects a missing or blank barcode", async () => {
   const service = new InventoryItemService(
     unitOfWork,
     { now: () => new Date("2026-09-07T12:00:00.000Z") },
-    { create: () => "unused" },
+    { create: () => "item-without-barcode" },
     { create: () => new Uint8Array(16) },
     { next: () => "unused" },
   );
@@ -57,11 +81,10 @@ test("item creation service rejects a missing or blank barcode", async () => {
   };
   const actor = { userId: "user-1", role: "admin" as const };
 
-  await assert.rejects(service.createItem(input, actor), /invalid_barcode/);
-  await assert.rejects(
-    service.createItem({ ...input, barcode: "   " }, actor),
-    /invalid_barcode/,
-  );
+  await service.createItem(input, actor);
+
+  assert.equal(inserted?.inventoryNumberKind, "temporary");
+  assert.equal(inserted?.inventoryNumber, "unused");
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {
