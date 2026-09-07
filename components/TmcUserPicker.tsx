@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Search, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
@@ -33,7 +33,7 @@ export default function TmcUserPicker({
   value: TmcOperationUserDto | null | TmcUserPickerValue;
   onChange: (user: TmcOperationUserDto | null) => void;
   employeeOnly?: boolean;
-  label?: string;
+  label?: ReactNode;
 }) {
   const { t } = useAppSettings();
   const rootRef = useRef<HTMLDivElement>(null);

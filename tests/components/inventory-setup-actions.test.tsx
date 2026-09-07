@@ -123,11 +123,13 @@ describe("inventory setup actions", () => {
     const typeInput = screen.getByLabelText(/items\.type/);
     const roomSelect = screen.getByLabelText(/itemDetails\.room/);
     const barcodeInput = screen.getByLabelText(/createItem\.barcode/);
+    const responsibleInput = screen.getByLabelText(/createItem\.responsible/);
 
     expect((nameInput as HTMLInputElement).required).toBe(true);
     expect((typeInput as HTMLInputElement).required).toBe(true);
     expect((roomSelect as HTMLSelectElement).required).toBe(true);
     expect((barcodeInput as HTMLInputElement).required).toBe(true);
+    expect((responsibleInput as HTMLInputElement).required).toBe(false);
     expect(nameInput.closest("label")?.textContent).toContain(
       "createItem.required",
     );
@@ -136,6 +138,12 @@ describe("inventory setup actions", () => {
     );
     expect(barcodeInput.closest("label")?.textContent).toContain(
       "createItem.required",
+    );
+    expect(screen.getByText("createItem.responsible").className).toContain(
+      "font-normal",
+    );
+    expect((responsibleInput as HTMLInputElement).labels?.item(0)?.textContent).toContain(
+      "createItem.optional",
     );
   });
 

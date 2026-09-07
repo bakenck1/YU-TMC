@@ -60,7 +60,7 @@ test("registers a network-only service worker because offline mode is out of sco
   assert.match(layout, /export const viewport: Viewport/);
 });
 
-test("uses Code 39 for every item scanner and reserves QR for rooms", async () => {
+test("supports university linear barcode formats and reserves QR for rooms", async () => {
   const [scanner, inspections, itemScanner, roomScanner, transfers, packageJson] =
     await Promise.all([
       source("lib/browser-barcode-scanner.ts"),
@@ -73,6 +73,9 @@ test("uses Code 39 for every item scanner and reserves QR for rooms", async () =
 
   assert.match(scanner, /import\("@zxing\/browser"\)/);
   assert.match(scanner, /BarcodeFormat\.CODE_39/);
+  assert.match(scanner, /BarcodeFormat\.CODE_93/);
+  assert.match(scanner, /BarcodeFormat\.CODE_128/);
+  assert.match(scanner, /BarcodeFormat\.CODABAR/);
   assert.match(scanner, /BarcodeFormat\.QR_CODE/);
   assert.match(scanner, /facingMode: \{ ideal: facingMode \}/);
   assert.match(inspections, /format: "code_39"/);
