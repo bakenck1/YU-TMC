@@ -55,8 +55,6 @@ function parseCreate(
     typeof body.name !== "string" ||
     (body.category !== "electronics" && body.category !== "furniture") ||
     typeof body.roomId !== "string" ||
-    (!restricted &&
-      (typeof body.barcode !== "string" || body.barcode.trim().length === 0)) ||
     (!restricted && (!body.photo || typeof body.photo !== "object")) ||
     (body.description !== undefined &&
       body.description !== null &&

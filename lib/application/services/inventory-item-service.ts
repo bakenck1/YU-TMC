@@ -397,12 +397,6 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.create");
-    if (
-      actor.role !== "warehouse" &&
-      (typeof input.barcode !== "string" || input.barcode.trim().length === 0)
-    ) {
-      throw new ApplicationError("validation", "invalid_barcode");
-    }
     const authorizedInput = actor.role === "warehouse"
       ? normalizeWarehouseCreateInput(input)
       : input;
