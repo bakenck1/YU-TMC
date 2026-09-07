@@ -88,7 +88,7 @@ export class AssetLossService {
            from ${TABLES.items} i
            join ${TABLES.periods} rp on rp.item_id = i.id
           where i.id = $1 and rp.responsible_user_id = $2
-            and rp.ended_at is null and i.status <> 'decommissioned'
+            and rp.ended_at is null and i.status not in ('decommissioned', 'decommissioned_in_use')
           for update of i, rp`,
         [input.itemId, employeeId],
       );

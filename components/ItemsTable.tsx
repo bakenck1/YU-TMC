@@ -28,6 +28,10 @@ import InventoryFilterInput from "./InventoryFilterInput";
 import InventoryThumbnail from "./InventoryThumbnail";
 import InventoryVisibleStatus from "./InventoryVisibleStatus";
 import { code39PayloadForItem } from "@/lib/domain/code39";
+import {
+  inventoryItemCategoryTranslationKey,
+  type InventoryItemCategoryTranslationKey,
+} from "@/lib/inventory-categories";
 
 function loadSearchHistory(storageKey: string) {
   try {
@@ -112,9 +116,16 @@ const COLUMN_LABEL_KEYS = {
 
 function categoryLabel(
   category: InventoryItem["category"],
-  t: (key: "common.electronics" | "data.furniture") => string,
+  t: (key: InventoryItemCategoryTranslationKey) => string,
 ) {
-  return category === "furniture" ? t("data.furniture") : t("common.electronics");
+  if (
+    category === "electronics" ||
+    category === "electrical_equipment" ||
+    category === "furniture"
+  ) {
+    return t(inventoryItemCategoryTranslationKey(category));
+  }
+  return category;
 }
 
 function barcodeValue(item: InventoryItem) {
@@ -142,7 +153,7 @@ export default function ItemsTable({
   dateLabel?: string;
   searchHistoryScope?: string;
   columnSettingsScope?: string;
-  excelDataset?: "items" | "decommissioned";
+  excelDataset?: "items" | "decommissioned" | "decommissioned_in_use";
   itemCreation?: {
     rooms: RoomDto[];
     buildings: BuildingDto[];
@@ -483,6 +494,7 @@ export default function ItemsTable({
                 <select value={draftFilters.category} onChange={(event) => updateDraftFilter("category", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">
                   <option value="all">{t("items.allCategories")}</option>
                   <option value="electronics">{t("common.electronics")}</option>
+                  <option value="electrical_equipment">{t("data.electricalEquipment")}</option>
                   <option value="furniture">{t("data.furniture")}</option>
                 </select>
               </label>

@@ -323,7 +323,7 @@ class PostgresInventoryLocationRepository
   async countActiveItems(roomId: string): Promise<number> {
     const result = await this.source.query<{ count: number } & QueryResultRow>(
       `select count(*)::int as count from ${ITEMS}
-       where room_id = $1 and status <> 'decommissioned' and archived_at is null`,
+       where room_id = $1 and status not in ('decommissioned', 'decommissioned_in_use') and archived_at is null`,
       [roomId],
     );
     return result.rows[0]?.count ?? 0;

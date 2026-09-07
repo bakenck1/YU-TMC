@@ -20,7 +20,7 @@ export function filterDecommissionedItems(
   return items.filter((item) => {
     const decommissionedOn = item.decommissionedOn ?? "";
     return (
-      item.status === "decommissioned" &&
+      (item.status === "decommissioned" || item.status === "decommissioned_in_use") &&
       (!normalizedQuery ||
         [
           item.name,

@@ -88,6 +88,7 @@ function valueByType(items: InventoryItemDto[]): ChartDatum[] {
 function statusName(item: InventoryItemDto) {
   if (item.status === "maintenance") return "На обслуживании";
   if (item.status === "decommissioned") return "Списано";
+  if (item.status === "decommissioned_in_use") return "Списан, но используется";
   return "Активен";
 }
 

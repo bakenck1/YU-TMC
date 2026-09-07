@@ -75,6 +75,10 @@ export function localizeItemError(
     invalid_service_name: "itemDetails.errorService",
     invalid_service_reason: "itemDetails.errorService",
     service_photo_required: "itemDetails.errorServicePhoto",
+    restore_reason_required: "itemDetails.errorDecommissionedWorkflow",
+    decommissioned_usage_invalid_state: "itemDetails.errorConflict",
+    restore_invalid_state: "itemDetails.errorConflict",
+    decommissioned_workflow_required: "itemDetails.errorConflict",
     service_failed: "itemDetails.errorUnavailable",
     item_comments_unavailable: "itemDetails.errorUnavailable",
     items_unavailable: "itemDetails.errorUnavailable",
@@ -128,6 +132,7 @@ function localizeOperationValue(
     active: "itemDetails.statusActive",
     maintenance: "itemDetails.statusMaintenance",
     decommissioned: "itemDetails.statusDecommissioned",
+    decommissioned_in_use: "itemDetails.statusDecommissionedInUse",
   };
   return labels[value] ? t(labels[value]) : value;
 }
@@ -142,6 +147,8 @@ function auditActionLabel(
     "item.photo_captured": "itemDetails.auditPhotoCaptured",
     "item.protected_fields_updated": "itemDetails.auditProtectedUpdated",
     "item.archived": "itemDetails.auditArchived",
+    "item.decommissioned_usage_started": "itemDetails.auditDecommissionedUsageStarted",
+    "item.restored_from_decommission": "itemDetails.auditRestoredFromDecommission",
     "item.sent_to_service": "itemDetails.auditSentToService",
     "item.component_added": "itemDetails.auditComponentAdded",
     "item.component_removed": "itemDetails.auditComponentRemoved",

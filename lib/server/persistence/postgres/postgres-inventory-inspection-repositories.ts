@@ -419,7 +419,7 @@ class PostgresInventoryInspectionRepository
            select responsible_user_id from ${RESPONSIBILITY}
             where item_id = item.id and ended_at is null limit 1
          ) responsibility on true
-        where item.room_id = $2 and item.status <> 'decommissioned'
+        where item.room_id = $2 and item.status not in ('decommissioned', 'decommissioned_in_use')
        on conflict do nothing`,
       [inspectionRoomId, roomId, capturedAt],
     );

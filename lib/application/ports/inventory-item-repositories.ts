@@ -5,6 +5,7 @@ import type {
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
 import type { UserRole } from "@/lib/contracts/users";
+import type { InventoryItemCategory } from "@/lib/inventory-categories";
 import type { InventoryResponsibilityRepository } from "@/lib/application/ports/inventory-responsibility-repositories";
 
 export interface InventoryItemRecord {
@@ -37,6 +38,10 @@ export interface InventoryItemRecord {
   updatedAt: Date;
   maintenanceStartedAt?: Date | null;
   archivedAt: Date | null;
+  decommissionedUsageReason?: string | null;
+  decommissionedUsageComment?: string | null;
+  decommissionedUsageStartedAt?: Date | null;
+  decommissionedUsagePhotoUrl?: string | null;
 }
 
 export interface InsertInventoryItemRecord {
@@ -72,7 +77,7 @@ export interface UpdateInventoryItemContentRecord {
 
 export interface UpdateInventoryItemCategoryRecord {
   id: string;
-  category: "electronics" | "furniture";
+  category: InventoryItemCategory;
   actorId: string;
   occurredAt: Date;
 }
@@ -149,6 +154,27 @@ export interface ResolveMaintenanceItemRecord {
 }
 
 export interface ArchiveInventoryItemRecord {
+  id: string;
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
+}
+
+export interface MarkDecommissionedItemInUseRecord {
+  id: string;
+  roomId: string;
+  reason: string | null;
+  adminComment: string | null;
+  photoId: string | null;
+  photoBytes: Uint8Array | null;
+  photoWidth: number | null;
+  photoHeight: number | null;
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
+}
+
+export interface RestoreDecommissionedItemRecord {
   id: string;
   actorId: string;
   expectedVersion: number;
@@ -284,6 +310,7 @@ export interface InventoryItemRepository {
   findItemPhoto(id: string): Promise<StoredItemPhoto | null>;
   insertServiceItemPhoto(input: InsertServiceItemPhotoRecord): Promise<void>;
   findServiceItemPhoto(id: string): Promise<StoredItemPhoto | null>;
+  findDecommissionedUsagePhoto?(id: string): Promise<StoredItemPhoto | null>;
   updateItemProtected(
     input: UpdateInventoryItemProtectedRecord,
   ): Promise<InventoryItemRecord | null>;
@@ -297,6 +324,8 @@ export interface InventoryItemRepository {
     input: ResolveMaintenanceItemRecord,
   ): Promise<InventoryItemRecord | null>;
   archiveItem(input: ArchiveInventoryItemRecord): Promise<InventoryItemRecord | null>;
+  markDecommissionedInUse?(input: MarkDecommissionedItemInUseRecord): Promise<InventoryItemRecord | null>;
+  restoreDecommissionedItem?(input: RestoreDecommissionedItemRecord): Promise<InventoryItemRecord | null>;
   insertItemQr(input: InsertItemQrRecord): Promise<void>;
   replaceItemQr(input: ReplaceItemQrRecord): Promise<void>;
   appendAudit(input: AppendItemAuditRecord): Promise<void>;

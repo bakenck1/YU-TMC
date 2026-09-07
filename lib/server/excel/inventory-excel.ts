@@ -8,6 +8,7 @@ import type { InspectionDto } from "@/lib/contracts/inventory-inspections";
 import type { InventoryExcelPreviewDto, InventoryExcelValidationError } from "@/lib/contracts/inventory-excel";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { categoryFromLegacyType } from "@/lib/inventory-categories";
 
 const MAX_IMPORT_ROWS = 2_000;
 const MAX_ARCHIVE_ENTRIES = 2_000;
@@ -37,7 +38,9 @@ export interface ParsedInventoryWorkbook {
 }
 
 export function activeInventoryItems(items: InventoryItemDto[]) {
-  return items.filter((item) => item.status !== "decommissioned");
+  return items.filter(
+    (item) => item.status !== "decommissioned" && item.status !== "decommissioned_in_use",
+  );
 }
 
 export async function createInventoryTemplate(rooms: ImportRoom[]): Promise<Uint8Array> {
@@ -177,7 +180,7 @@ export async function parseInventoryWorkbook(
       inputs.push({
         name,
         description: description || null,
-        category: itemType.trim().toLocaleLowerCase("ru-RU") === "мебель" ? "furniture" : "electronics",
+        category: categoryFromLegacyType(itemType),
         brand: brand || null,
         model: model || null,
         quantity,

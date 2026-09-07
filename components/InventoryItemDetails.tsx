@@ -51,6 +51,11 @@ import type { UserRole } from "@/lib/contracts/users";
 import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+import {
+  categoryFromLegacyType,
+  inventoryItemCategoryTranslationKey,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 
 type ResponsiblePickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
   Partial<Pick<TmcOperationUserDto, "email" | "role">>;
@@ -112,8 +117,8 @@ export default function InventoryItemDetails({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
-  const [category, setCategory] = useState<"electronics" | "furniture">(
-    item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"),
+  const [category, setCategory] = useState<InventoryItemCategory>(
+    item.category ?? categoryFromLegacyType(item.itemType),
   );
   const [brand, setBrand] = useState(item.brand ?? "");
   const [model, setModel] = useState(item.model ?? "");
@@ -139,6 +144,11 @@ export default function InventoryItemDetails({
   const [archiveConfirmationOpen, setArchiveConfirmationOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [servicePhoto, setServicePhoto] = useState<{ imageDataUrl: string; width: number; height: number } | null>(null);
+  const [decommissionedUsageReason, setDecommissionedUsageReason] = useState("");
+  const [decommissionedUsageComment, setDecommissionedUsageComment] = useState("");
+  const [decommissionedUsagePhoto, setDecommissionedUsagePhoto] = useState<{ imageDataUrl: string; width: number; height: number } | null>(null);
+  const [restoreReason, setRestoreReason] = useState("");
+  const [cameraTarget, setCameraTarget] = useState<"item" | "service" | "decommissioned_usage">("item");
   const [qrDialog, setQrDialog] = useState<"generate" | "scan" | "purpose" | null>(null);
   const [codeKind, setCodeKind] = useState<"barcode" | "qr">("barcode");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -240,7 +250,7 @@ export default function InventoryItemDetails({
   function openContentEditor() {
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"));
+    setCategory(item.category ?? categoryFromLegacyType(item.itemType));
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -255,7 +265,7 @@ export default function InventoryItemDetails({
     setEditing(false);
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.category ?? (item.itemType === "furniture" ? "furniture" : "electronics"));
+    setCategory(item.category ?? categoryFromLegacyType(item.itemType));
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -314,7 +324,7 @@ export default function InventoryItemDetails({
         throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
-      setCategory(body.item.category ?? (body.item.itemType === "furniture" ? "furniture" : "electronics"));
+      setCategory(body.item.category ?? categoryFromLegacyType(body.item.itemType));
       setBrand(body.item.brand ?? "");
       setModel(body.item.model ?? "");
       setQuantity(String(body.item.quantity));
@@ -339,6 +349,52 @@ export default function InventoryItemDetails({
     setError("");
     setSaved(false);
     try {
+      if (item.status !== "decommissioned_in_use" && status === "decommissioned_in_use") {
+        const response = await fetch(`/api/inventory/items/${item.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            operation: "mark_decommissioned_in_use",
+            version: item.version,
+            roomId: protectedRoomId,
+            responsibleUserId: responsible?.id ?? null,
+            reason: decommissionedUsageReason,
+            adminComment: decommissionedUsageComment,
+            photo: decommissionedUsagePhoto,
+          }),
+        });
+        const body = await response.json().catch(() => ({})) as { item?: InventoryItemDto; error?: string };
+        if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
+        setItem(body.item);
+        setStatus(body.item.status);
+        setResponsible(responsiblePickerValue(body.item.responsible));
+        setProtectedEditing(false);
+        setSaved(true);
+        router.refresh();
+        return;
+      }
+      if (
+        (item.status === "decommissioned" || item.status === "decommissioned_in_use") &&
+        status === "active"
+      ) {
+        const response = await fetch(`/api/inventory/items/${item.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            operation: "restore_decommissioned",
+            version: item.version,
+            reason: restoreReason,
+          }),
+        });
+        const body = await response.json().catch(() => ({})) as { item?: InventoryItemDto; error?: string };
+        if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
+        setItem(body.item);
+        setStatus(body.item.status);
+        setProtectedEditing(false);
+        setSaved(true);
+        router.refresh();
+        return;
+      }
       const roomChanged = protectedRoomId !== item.room.id;
       const inventoryNumberChanged = inventoryNumber.trim() !== item.inventoryNumber;
       const statusChanged = status !== item.status;
@@ -430,6 +486,10 @@ export default function InventoryItemDetails({
     setResponsible(responsiblePickerValue(item.responsible));
     setReplaceQr(false);
     setQrReplaceReason("");
+    setDecommissionedUsageReason("");
+    setDecommissionedUsageComment("");
+    setDecommissionedUsagePhoto(null);
+    setRestoreReason("");
     setError("");
     setSaved(false);
     setProtectedEditing(true);
@@ -618,13 +678,15 @@ export default function InventoryItemDetails({
       ? t("itemDetails.statusMaintenance")
       : item.status === "decommissioned"
         ? t("itemDetails.statusDecommissioned")
-        : t("itemDetails.statusActive");
+        : item.status === "decommissioned_in_use"
+          ? t("itemDetails.statusDecommissionedInUse")
+          : t("itemDetails.statusActive");
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold text-zinc-700">{item.name}</h1>
-        <span className="rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-600">
+        <span className={`rounded px-2 py-1 text-xs font-medium ${item.status === "decommissioned_in_use" ? "bg-orange-100 text-orange-800 ring-1 ring-orange-300" : "bg-violet-100 text-violet-600"}`}>
           {statusLabel}
         </span>
       </div>
@@ -656,8 +718,8 @@ export default function InventoryItemDetails({
                 {t("itemDetails.protectedFields")}
               </button>
             ) : null}
-            {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status === "maintenance"} title={item.status === "maintenance" ? t("itemDetails.alreadyInService") : t("items.sendToService")} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? t("itemDetails.sending") : item.status === "maintenance" ? t("itemDetails.inService") : t("items.sendToService")}</button> : null}
-            {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("items.writeOff")}</button> : null}
+            {canSendToService ? <button type="button" onClick={() => setServiceDialogOpen(true)} disabled={servicing || item.status !== "active"} title={item.status === "maintenance" ? t("itemDetails.alreadyInService") : t("items.sendToService")} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"><Wrench className="h-4 w-4" />{servicing ? t("itemDetails.sending") : item.status === "maintenance" ? t("itemDetails.inService") : t("items.sendToService")}</button> : null}
+            {canManageProtected ? <button type="button" onClick={() => setArchiveConfirmationOpen(true)} disabled={archiving || item.status === "decommissioned" || item.status === "decommissioned_in_use"} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("items.writeOff")}</button> : null}
           </div>
         ) : null}
       </nav>
@@ -754,7 +816,9 @@ export default function InventoryItemDetails({
                 value={responsible}
                 onChange={setResponsible}
                 employeeOnly
-                label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
+                label={item.status !== "decommissioned_in_use" && status === "decommissioned_in_use"
+                  ? `${t("createItem.responsible")} (${t("createItem.required")})`
+                  : `${t("createItem.responsible")} (${t("createItem.optional")})`}
               />
             </div>
             <label className="block text-sm">
@@ -774,11 +838,45 @@ export default function InventoryItemDetails({
                 }
                 className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
               >
-                <option value="active">{t("itemDetails.statusActive")}</option>
-                <option value="maintenance">{t("itemDetails.statusMaintenance")}</option>
-                <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option>
+                {(item.status === "decommissioned" || item.status === "decommissioned_in_use") ? (
+                  <>
+                    {item.status === "decommissioned" ? <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option> : null}
+                    <option value="decommissioned_in_use">{t("itemDetails.statusDecommissionedInUse")}</option>
+                    <option value="active">{t("itemDetails.restoreFromDecommission")}</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="active">{t("itemDetails.statusActive")}</option>
+                    <option value="maintenance">{t("itemDetails.statusMaintenance")}</option>
+                    <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option>
+                    <option value="decommissioned_in_use">{t("itemDetails.statusDecommissionedInUse")}</option>
+                  </>
+                )}
               </select>
             </label>
+            {item.status !== "decommissioned_in_use" && status === "decommissioned_in_use" ? (
+              <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50 p-4 sm:col-span-2">
+                <p className="font-semibold text-orange-900">{t("itemDetails.decommissionedUsageTitle")}</p>
+                <label className="block text-sm text-zinc-700">
+                  {t("itemDetails.decommissionedUsageReason")}
+                  <textarea value={decommissionedUsageReason} onChange={(event) => setDecommissionedUsageReason(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5" />
+                </label>
+                <label className="block text-sm text-zinc-700">
+                  {t("itemDetails.decommissionedUsageComment")}
+                  <textarea value={decommissionedUsageComment} onChange={(event) => setDecommissionedUsageComment(event.target.value)} maxLength={2000} rows={2} className="mt-1 w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5" />
+                </label>
+                <button type="button" onClick={() => { setCameraTarget("decommissioned_usage"); setCameraOpen(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-orange-300 bg-white px-4 text-sm font-semibold text-orange-800">
+                  <Camera className="h-4 w-4" />
+                  {decommissionedUsagePhoto ? t("itemDetails.conditionPhotoAttached") : t("itemDetails.addConditionPhoto")}
+                </button>
+              </div>
+            ) : null}
+            {(item.status === "decommissioned" || item.status === "decommissioned_in_use") && status === "active" ? (
+              <label className="block text-sm text-zinc-700 sm:col-span-2">
+                {t("itemDetails.restoreReason")}
+                <textarea value={restoreReason} onChange={(event) => setRestoreReason(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5" />
+              </label>
+            ) : null}
             <div className="space-y-2 text-sm sm:col-span-2">
               <label className="flex items-center gap-2 text-zinc-700">
                 <input
@@ -819,6 +917,8 @@ export default function InventoryItemDetails({
                   saving ||
                   !protectedRoomId ||
                   !inventoryNumber.trim() ||
+                  (item.status !== "decommissioned_in_use" && status === "decommissioned_in_use" && !responsible) ||
+                  ((item.status === "decommissioned" || item.status === "decommissioned_in_use") && status === "active" && !restoreReason.trim()) ||
                   (replaceQr && !qrReplaceReason.trim())
                 }
                 className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -860,7 +960,7 @@ export default function InventoryItemDetails({
         saving={servicing}
         onClose={() => { setServiceDialogOpen(false); setServicePhoto(null); }}
         onSubmit={(input) => void sendToService(input)}
-        onAddPhoto={() => setCameraOpen(true)}
+        onAddPhoto={() => { setCameraTarget("service"); setCameraOpen(true); }}
         photoAttached={Boolean(servicePhoto)}
         photoRequired={requiresServicePhoto}
       />
@@ -869,7 +969,8 @@ export default function InventoryItemDetails({
         onClose={() => setCameraOpen(false)}
         onCapture={(photo) => {
           setCameraOpen(false);
-          if (serviceDialogOpen) setServicePhoto(photo);
+          if (cameraTarget === "service") setServicePhoto(photo);
+          else if (cameraTarget === "decommissioned_usage") setDecommissionedUsagePhoto(photo);
           else void saveCameraPhoto(photo);
         }}
       />
@@ -924,7 +1025,7 @@ export default function InventoryItemDetails({
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.type")}</span>
-                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select>
+                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select>
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("itemDetails.brand")}</span>
@@ -1018,7 +1119,7 @@ export default function InventoryItemDetails({
               {canEditContent ? (
                 <button
                   type="button"
-                  onClick={() => setCameraOpen(true)}
+                  onClick={() => { setCameraTarget("item"); setCameraOpen(true); }}
                   disabled={capturingPhoto}
                   className="absolute bottom-2 right-2 inline-flex h-11 items-center gap-2 rounded-full bg-white px-3 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
                 >
@@ -1064,7 +1165,7 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
-            <InventoryOverviewRow label={t("items.type")} value={item.category === "furniture" ? t("data.furniture") : t("common.electronics")} />
+            <InventoryOverviewRow label={t("items.type")} value={t(inventoryItemCategoryTranslationKey(item.category ?? categoryFromLegacyType(item.itemType)))} />
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
@@ -1076,6 +1177,21 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
             <InventoryOverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
           </dl>
+          {item.decommissionedUsage ? (
+            <section className="mt-6 rounded-2xl border border-orange-300 bg-orange-50 p-4">
+              <h2 className="font-semibold text-orange-950">{t("itemDetails.decommissionedUsageTitle")}</h2>
+              <dl className="mt-3 divide-y divide-orange-200 text-sm">
+                <InventoryOverviewRow label={t("itemDetails.decommissionedUsageReason")} value={item.decommissionedUsage.reason || t("common.notSpecified")} />
+                <InventoryOverviewRow label={t("itemDetails.decommissionedUsageComment")} value={item.decommissionedUsage.adminComment || t("common.notSpecified")} />
+                <InventoryOverviewRow label={t("itemDetails.decommissionedUsageDate")} value={new Date(item.decommissionedUsage.startedAt).toLocaleString(locale)} />
+              </dl>
+              {item.decommissionedUsage.photoUrl ? (
+                <a href={item.decommissionedUsage.photoUrl} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-xl border border-orange-200 bg-white">
+                  <Image src={item.decommissionedUsage.photoUrl} alt={t("itemDetails.conditionPhoto")} width={720} height={540} unoptimized className="h-auto w-full object-cover" />
+                </a>
+              ) : null}
+            </section>
+          ) : null}
         </section>
 
         <LocalBarcodeDistributionPanel

@@ -46,8 +46,20 @@ export async function GET(request: Request) {
     }
     if (dataset === "decommissioned") {
       return workbookResponse(
-        await exportInventoryItems(await services.items.listDecommissionedItems(actor), "Decommissioned"),
+        await exportInventoryItems(
+          (await services.items.listDecommissionedItems(actor)).filter((item) => item.status === "decommissioned"),
+          "Decommissioned",
+        ),
         "decommissioned-items.xlsx",
+      );
+    }
+    if (dataset === "decommissioned_in_use") {
+      return workbookResponse(
+        await exportInventoryItems(
+          (await services.items.listDecommissionedItems(actor)).filter((item) => item.status === "decommissioned_in_use"),
+          "Decommissioned but in use",
+        ),
+        "decommissioned-in-use.xlsx",
       );
     }
     if (dataset === "inspection-results") {
@@ -74,7 +86,11 @@ export async function POST(request: Request) {
         itemIds?: unknown;
         columns?: unknown;
       };
-      if (body.dataset !== "items" && body.dataset !== "decommissioned") throw invalidRequest();
+      if (
+        body.dataset !== "items" &&
+        body.dataset !== "decommissioned" &&
+        body.dataset !== "decommissioned_in_use"
+      ) throw invalidRequest();
       const itemIdsProvided = Array.isArray(body.itemIds);
       const rawItemIds: unknown[] = itemIdsProvided ? (body.itemIds as unknown[]) : [];
       const itemIds = rawItemIds.filter(isUuid).slice(0, 2_000);
@@ -83,13 +99,19 @@ export async function POST(request: Request) {
         ? rawColumns.filter((value): value is string => typeof value === "string" && value.length <= 40).slice(0, 30)
         : undefined;
       const services = getApplicationServices();
-      const source = body.dataset === "decommissioned"
-        ? await services.items.listDecommissionedItems(actor)
-        : activeInventoryItems(await services.items.listItems(actor));
+      const source = body.dataset === "items"
+        ? activeInventoryItems(await services.items.listItems(actor))
+        : (await services.items.listDecommissionedItems(actor)).filter(
+            (item) => item.status === body.dataset,
+          );
       const selected = itemIdsProvided ? source.filter((item) => itemIds.includes(item.id)) : source;
       return workbookResponse(
-        await exportInventoryItems(selected, body.dataset === "items" ? "Inventory items" : "Decommissioned", columns),
-        body.dataset === "items" ? "inventory-items.xlsx" : "decommissioned-items.xlsx",
+        await exportInventoryItems(
+          selected,
+          body.dataset === "items" ? "Inventory items" : body.dataset === "decommissioned_in_use" ? "Decommissioned but in use" : "Decommissioned",
+          columns,
+        ),
+        body.dataset === "items" ? "inventory-items.xlsx" : body.dataset === "decommissioned_in_use" ? "decommissioned-in-use.xlsx" : "decommissioned-items.xlsx",
       );
     }
     if (action !== "preview" && action !== "import") throw invalidRequest();

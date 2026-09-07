@@ -11,6 +11,7 @@ import type {
   InsertInventoryItemCommentAttachmentRecord,
   InsertItemQrRecord,
   InsertServiceItemPhotoRecord,
+  MarkDecommissionedItemInUseRecord,
   InventoryItemRecord,
   InventoryItemAuditRecord,
   InventoryItemCommentRecord,
@@ -20,6 +21,7 @@ import type {
   ReplaceItemQrRecord,
   RemoveInventoryItemPhotoRecord,
   ResolveMaintenanceItemRecord,
+  RestoreDecommissionedItemRecord,
   StoredInventoryItemCommentAttachment,
   UpdateInventoryItemContentRecord,
   UpdateInventoryItemCategoryRecord,
@@ -72,6 +74,10 @@ interface ItemRow extends QueryResultRow {
   photo_url: string | null;
   photo_id: string | null;
   service_photo_id: string | null;
+  decommissioned_usage_photo_id: string | null;
+  decommissioned_usage_reason: string | null;
+  decommissioned_usage_comment: string | null;
+  decommissioned_usage_started_at: Date | null;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -120,7 +126,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
       itemSelect(
-        "where i.status = 'decommissioned'",
+        "where i.status in ('decommissioned', 'decommissioned_in_use')",
         sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
       ),
       [],
@@ -133,7 +139,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   ): Promise<InventoryItemRecord[]> {
     const result = await this.source.query<ItemRow>(
       itemSelect(
-        "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status = 'decommissioned'",
+        "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
         sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
       ),
       [userId],
@@ -197,6 +203,8 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
             'item.photo_captured',
             'item.protected_fields_updated',
             'item.archived',
+            'item.decommissioned_usage_started',
+            'item.restored_from_decommission',
             'item.sent_to_service',
             'item.component_added',
             'item.component_removed'
@@ -388,7 +396,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const result = await this.source.query<ItemRow>(
       itemSelect(
         `where i.id <> $1
-           and i.status <> 'decommissioned'
+           and i.status not in ('decommissioned', 'decommissioned_in_use')
            and not exists (
              select 1
                from ${COMPONENTS} component
@@ -503,7 +511,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
        set name = $2, description = $3, item_type = $4, brand = $5,
            model = $6, quantity = $7, unit_price = $8, updated_by = $9,
            updated_at = $10, version = version + 1
-       where id = $1 and version = $11 and status <> 'decommissioned'`,
+       where id = $1 and version = $11 and status not in ('decommissioned', 'decommissioned_in_use')`,
       [
         input.id,
         input.name,
@@ -528,7 +536,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const itemUpdate = await this.source.query<{ id: string }>(
       `update ${ITEMS}
        set updated_by = $2, updated_at = $3, version = version + 1
-       where id = $1 and version = $4 and status <> 'decommissioned'`,
+       where id = $1 and version = $4 and status not in ('decommissioned', 'decommissioned_in_use')`,
       [input.id, input.actorId, input.occurredAt, input.expectedVersion],
     );
     if (itemUpdate.rowCount !== 1) return null;
@@ -571,7 +579,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const itemUpdate = await this.source.query(
       `update ${ITEMS}
           set updated_by = $2, updated_at = $3, version = version + 1
-        where id = $1 and version = $4 and status <> 'decommissioned'`,
+        where id = $1 and version = $4 and status not in ('decommissioned', 'decommissioned_in_use')`,
       [input.id, input.actorId, input.occurredAt, input.expectedVersion],
     );
     if (itemUpdate.rowCount !== 1) return null;
@@ -646,6 +654,24 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       : null;
   }
 
+  async findDecommissionedUsagePhoto(id: string) {
+    const result = await this.source.query<{
+      binary_data: Buffer | null;
+      trusted_mime_type: string | null;
+    }>(
+      `select binary_data, trusted_mime_type
+         from ${PHOTOS}
+        where item_id = $1 and purpose = 'decommissioned_usage' and status = 'attached'
+        order by attached_at desc
+        limit 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    return row?.binary_data && row.trusted_mime_type === "image/jpeg"
+      ? { bytes: row.binary_data, mimeType: "image/jpeg" as const }
+      : null;
+  }
+
   async updateItemProtected(
     input: UpdateInventoryItemProtectedRecord,
   ): Promise<InventoryItemRecord | null> {
@@ -659,11 +685,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
              connection_status = $8::"yu_inventory"."connection_status",
              archived_by = case
                when $6::"yu_inventory"."item_status" = 'decommissioned'
+                 or $6::"yu_inventory"."item_status" = 'decommissioned_in_use'
                  then coalesce(archived_by, $9)
                else null
              end,
              archived_at = case
                when $6::"yu_inventory"."item_status" = 'decommissioned'
+                 or $6::"yu_inventory"."item_status" = 'decommissioned_in_use'
                  then coalesce(archived_at, $10)
                else null
              end,
@@ -799,6 +827,64 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.findItemById(input.id);
   }
 
+  async markDecommissionedInUse(
+    input: MarkDecommissionedItemInUseRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const updated = await this.source.query(
+      `update ${ITEMS}
+          set room_id = $2, status = 'decommissioned_in_use',
+              archived_by = coalesce(archived_by, $6),
+              archived_at = coalesce(archived_at, $5),
+              decommissioned_usage_reason = $3,
+              decommissioned_usage_comment = $4,
+              decommissioned_usage_started_at = $5,
+              decommissioned_usage_started_by = $6,
+              updated_by = $6, updated_at = $5, version = version + 1
+        where id = $1 and version = $7 and status <> 'decommissioned_in_use'`,
+      [input.id, input.roomId, input.reason, input.adminComment, input.occurredAt,
+       input.actorId, input.expectedVersion],
+    );
+    if (updated.rowCount !== 1) return null;
+    if (
+      input.photoId && input.photoBytes && input.photoWidth && input.photoHeight
+    ) {
+      const objectKey = `database://items/${input.id}/decommissioned-usage/${input.photoId}.jpg`;
+      const checksum = createHash("sha256").update(input.photoBytes).digest("hex");
+      await this.source.query(
+        `insert into ${PHOTOS}
+           (id, purpose, status, uploaded_by, original_object_key, preview_object_key,
+            trusted_mime_type, byte_size, width, height, checksum_sha256,
+            reserved_at, expires_at, attached_at, item_id, binary_data)
+         values ($1, 'decommissioned_usage', 'attached', $2, $3, $3, 'image/jpeg',
+                 $4, $5, $6, $7, $8, $9, $8, $10, $11)`,
+        [input.photoId, input.actorId, objectKey, input.photoBytes.byteLength,
+         input.photoWidth, input.photoHeight, checksum, input.occurredAt,
+         new Date(input.occurredAt.getTime() + 24 * 60 * 60 * 1000), input.id,
+         Buffer.from(input.photoBytes)],
+      );
+    }
+    return this.findItemById(input.id);
+  }
+
+  async restoreDecommissionedItem(
+    input: RestoreDecommissionedItemRecord,
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query(
+      `update ${ITEMS}
+          set status = 'active', archived_by = null, archived_at = null,
+              decommissioned_usage_reason = null,
+              decommissioned_usage_comment = null,
+              decommissioned_usage_started_at = null,
+              decommissioned_usage_started_by = null,
+              updated_by = $2, updated_at = $3, version = version + 1
+        where id = $1 and version = $4
+          and status in ('decommissioned', 'decommissioned_in_use')`,
+      [input.id, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (result.rowCount !== 1) return null;
+    return this.findItemById(input.id);
+  }
+
   async insertItemQr(input: InsertItemQrRecord): Promise<void> {
     try {
       await this.source.query(
@@ -904,6 +990,10 @@ function itemSelect(where: string, limit = "") {
            r.primary_responsible_id as room_responsible_id,
            p.preview_object_key as photo_url, p.id as photo_id,
            service_photo.id as service_photo_id,
+           usage_photo.id as decommissioned_usage_photo_id,
+           i.decommissioned_usage_reason,
+           i.decommissioned_usage_comment,
+           i.decommissioned_usage_started_at,
            i.version, i.created_at, i.updated_at,
            service_move.occurred_at as maintenance_started_at, i.archived_at
       from ${ITEMS} i
@@ -947,6 +1037,14 @@ function itemSelect(where: string, limit = "") {
          order by attached_at desc nulls last
          limit 1
       ) service_photo on true
+      left join lateral (
+        select id
+          from ${PHOTOS}
+         where item_id = i.id and purpose = 'decommissioned_usage'
+           and status = 'attached'
+         order by attached_at desc nulls last
+         limit 1
+      ) usage_photo on true
       ${where}
      order by i.updated_at desc, i.id
      ${limit}`;
@@ -981,6 +1079,14 @@ function mapItem(row: ItemRow): InventoryItemRecord {
       : row.photo_url,
     servicePhotoUrl: row.service_photo_id
       ? `/api/inventory/items/${row.id}/service-photo?v=${row.version}`
+      : null,
+    decommissionedUsageReason: row.decommissioned_usage_reason,
+    decommissionedUsageComment: row.decommissioned_usage_comment,
+    decommissionedUsageStartedAt: row.decommissioned_usage_started_at
+      ? new Date(row.decommissioned_usage_started_at)
+      : null,
+    decommissionedUsagePhotoUrl: row.decommissioned_usage_photo_id
+      ? `/api/inventory/items/${row.id}/decommissioned-usage-photo?v=${row.version}`
       : null,
     version: Number(row.version),
     createdAt: new Date(row.created_at),

@@ -4,6 +4,7 @@ export const EMPLOYEE_ITEM_STATUSES = [
   "active",
   "maintenance",
   "decommissioned",
+  "decommissioned_in_use",
 ] as const satisfies readonly ItemStatus[];
 
 export type EmployeeItemTabKey =

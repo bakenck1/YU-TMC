@@ -174,14 +174,19 @@ test("lists protected-field audit snapshots only for administrators", async () =
 
 test("records protected-field before and after snapshots with the acting administrator", async () => {
   let captured: Record<string, unknown> | undefined;
-  const updated = {
+  const current = {
     ...DECOMMISSIONED_ITEM,
+    status: "maintenance" as const,
+    archivedAt: null,
+  };
+  const updated = {
+    ...current,
     roomId: "22222222-2222-4222-8222-222222222222",
     status: "active" as const,
-    version: DECOMMISSIONED_ITEM.version + 1,
+    version: current.version + 1,
   };
   const service = createService({
-    findItemById: async () => DECOMMISSIONED_ITEM,
+    findItemById: async () => current,
     roomExists: async () => true,
     updateItemProtected: async () => updated,
     appendAudit: async (record) => {
@@ -192,9 +197,9 @@ test("records protected-field before and after snapshots with the acting adminis
   await service.updateProtected(
     "item-1",
     {
-      version: DECOMMISSIONED_ITEM.version,
+      version: current.version,
       roomId: "22222222-2222-4222-8222-222222222222",
-      inventoryNumber: DECOMMISSIONED_ITEM.inventoryNumber,
+      inventoryNumber: current.inventoryNumber,
       status: "active",
     },
     { userId: "admin-1", role: "admin" },
@@ -205,11 +210,11 @@ test("records protected-field before and after snapshots with the acting adminis
   assert.equal(captured?.action, "item.protected_fields_updated");
   assert.equal(captured?.subjectRevision, updated.version);
   assert.deepEqual(captured?.beforeValues, {
-    roomId: DECOMMISSIONED_ITEM.roomId,
-    roomLabel: `${DECOMMISSIONED_ITEM.buildingName}, ${DECOMMISSIONED_ITEM.roomDesignation}`,
-    inventoryNumber: DECOMMISSIONED_ITEM.inventoryNumber,
-    status: DECOMMISSIONED_ITEM.status,
-    qrCode: DECOMMISSIONED_ITEM.qrCode,
+    roomId: current.roomId,
+    roomLabel: `${current.buildingName}, ${current.roomDesignation}`,
+    inventoryNumber: current.inventoryNumber,
+    status: current.status,
+    qrCode: current.qrCode,
   });
   assert.deepEqual(captured?.afterValues, {
     roomId: updated.roomId,

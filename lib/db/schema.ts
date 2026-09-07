@@ -766,6 +766,13 @@ export const itemsTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    decommissionedUsageReason: text(),
+    decommissionedUsageComment: text(),
+    decommissionedUsageStartedAt: timestamp({ withTimezone: true, mode: "date" }),
+    decommissionedUsageStartedBy: uuid().references(() => usersTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
     version: integer().notNull().default(1),
   },
   (table) => [
@@ -773,7 +780,7 @@ export const itemsTable = inventorySchema.table(
       "items_display_values_check",
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
-          AND ${table.itemType} in ('electronics', 'furniture')
+          AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture')
           AND btrim(${table.inventoryNumber}) <> ''
           AND btrim(${table.inventoryNumberKey}) <> ''
           AND ${table.quantity} > 0
@@ -782,6 +789,23 @@ export const itemsTable = inventorySchema.table(
     check(
       "items_archive_state_check",
       sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`,
+    ),
+    check(
+      "items_decommissioned_usage_check",
+      sql`(
+        ${table.status}::text = 'decommissioned_in_use'
+        AND ${table.archivedAt} IS NOT NULL
+        AND (${table.decommissionedUsageReason} IS NULL OR btrim(${table.decommissionedUsageReason}) <> '')
+        AND (${table.decommissionedUsageComment} IS NULL OR btrim(${table.decommissionedUsageComment}) <> '')
+        AND ${table.decommissionedUsageStartedAt} IS NOT NULL
+        AND ${table.decommissionedUsageStartedBy} IS NOT NULL
+      ) OR (
+        ${table.status}::text <> 'decommissioned_in_use'
+        AND ${table.decommissionedUsageReason} IS NULL
+        AND ${table.decommissionedUsageComment} IS NULL
+        AND ${table.decommissionedUsageStartedAt} IS NULL
+        AND ${table.decommissionedUsageStartedBy} IS NULL
+      )`,
     ),
     check("items_version_check", sql`${table.version} > 0`),
     uniqueIndex("items_inventory_number_key_unique").on(
@@ -2221,7 +2245,7 @@ export const photosTable = inventorySchema.table(
             ${table.status} NOT IN ('reserved', 'expired')
             AND (
               (
-                  ${table.purpose}::text IN ('item', 'service_request', 'asset_loss_receipt')
+                  ${table.purpose}::text IN ('item', 'service_request', 'decommissioned_usage', 'asset_loss_receipt')
                 AND ${table.itemId} IS NOT NULL
                 AND ${table.resultId} IS NULL
                 AND ${table.resultRevisionNumber} IS NULL

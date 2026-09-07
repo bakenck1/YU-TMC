@@ -1,4 +1,8 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import {
+  isInventoryItemCategory,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
@@ -18,14 +22,13 @@ export async function PATCH(request: Request) {
       !body ||
       typeof body !== "object" ||
       !Array.isArray((body as Record<string, unknown>).itemIds) ||
-      (((body as Record<string, unknown>).category !== "electronics") &&
-        ((body as Record<string, unknown>).category !== "furniture"))
+      !isInventoryItemCategory((body as Record<string, unknown>).category)
     ) {
       throw invalidRequest();
     }
     const updatedItemIds = await getApplicationServices().items.bulkChangeCategory(
       (body as { itemIds: string[] }).itemIds,
-      (body as { category: "electronics" | "furniture" }).category,
+      (body as { category: InventoryItemCategory }).category,
       authorizationActor(user),
     );
     return Response.json({ updatedItemIds });

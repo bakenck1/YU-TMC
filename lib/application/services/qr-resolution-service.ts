@@ -162,7 +162,8 @@ function isRecordAccessible(
   return !(
     record.qrStatus !== "active" ||
     (record.targetStatus !== "active" && !(
-      access.allowInactiveItemScan && record.targetKind === "item"
+      record.targetKind === "item" &&
+      (access.allowInactiveItemScan || record.targetStatus === "decommissioned_in_use")
     )) ||
     !(
       (record.targetKind === "item" && access.itemAccess) ||

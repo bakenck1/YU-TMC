@@ -17,6 +17,10 @@ const STATUS_CONFIG: Record<ItemStatus, { labelKey: TranslationKey; className: s
     labelKey: "status.decommissioned",
     className: "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
   },
+  decommissioned_in_use: {
+    labelKey: "status.decommissioned_in_use",
+    className: "bg-orange-100 text-orange-800 ring-1 ring-inset ring-orange-600/30",
+  },
 };
 
 export default function StatusBadge({ status }: { status: ItemStatus }) {

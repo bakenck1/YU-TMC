@@ -9,6 +9,7 @@ import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+import type { InventoryItemCategory } from "@/lib/inventory-categories";
 
 export default function InventoryItemCreateForm({
   rooms,
@@ -35,7 +36,7 @@ export default function InventoryItemCreateForm({
   const [open, setOpen] = useState(openInitially);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<"" | "electronics" | "furniture">("");
+  const [category, setCategory] = useState<"" | InventoryItemCategory>("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -162,7 +163,7 @@ export default function InventoryItemCreateForm({
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select></label>
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>

@@ -23,13 +23,17 @@ export function inventoryLineValue(item: InventoryItem): number {
 export function summarizeInventory(items: InventoryItem[]): InventorySummary {
   return {
     totalValue: items.reduce(
-      (total, item) => total + inventoryLineValue(item),
+      (total, item) => total + (
+        item.status === "decommissioned" || item.status === "decommissioned_in_use"
+          ? 0
+          : inventoryLineValue(item)
+      ),
       0,
     ),
     totalItems: items.length,
     maintenance: items.filter((item) => item.status === "maintenance").length,
     decommissioned: items.filter(
-      (item) => item.status === "decommissioned",
+      (item) => item.status === "decommissioned" || item.status === "decommissioned_in_use",
     ).length,
   };
 }
@@ -42,7 +46,9 @@ export function itemsForInventorySummary(
     case "maintenance":
       return items.filter((item) => item.status === "maintenance");
     case "decommissioned":
-      return items.filter((item) => item.status === "decommissioned");
+      return items.filter(
+        (item) => item.status === "decommissioned" || item.status === "decommissioned_in_use",
+      );
     default:
       return items;
   }

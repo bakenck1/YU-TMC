@@ -145,6 +145,7 @@ function campusStatus(status: InventoryItemDto["status"]): CampusStatus {
     case "maintenance":
       return "service";
     case "decommissioned":
+    case "decommissioned_in_use":
       return "writeoff";
     default:
       return "ok";

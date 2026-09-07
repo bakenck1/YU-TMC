@@ -11,9 +11,7 @@ export function toLocalBarcodeInventoryItem(
     localGroupId: group.id,
     name: group.itemName,
     inventoryNumber: group.localBarcode,
-    category: group.itemType.trim().toLocaleLowerCase("ru-RU") === "furniture"
-      ? "furniture"
-      : categoryFromLegacyType(group.itemType),
+    category: categoryFromLegacyType(group.itemType),
     brand: group.brand ?? undefined,
     model: group.model ?? undefined,
     buildingId: group.location.buildingId,

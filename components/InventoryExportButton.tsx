@@ -8,7 +8,7 @@ import type { InventoryColumnVisibility } from "@/lib/inventory-columns";
 import { createInventoryExportPayload } from "@/lib/inventory-export";
 
 type InventoryExportButtonProps = {
-  dataset: "items" | "decommissioned";
+  dataset: "items" | "decommissioned" | "decommissioned_in_use";
   itemIds: string[];
   columns: InventoryColumnVisibility;
 };
@@ -37,7 +37,9 @@ export default function InventoryExportButton({
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = dataset === "items" ? "inventory-items.xlsx" : "decommissioned-items.xlsx";
+      anchor.download = dataset === "items" ? "inventory-items.xlsx"
+        : dataset === "decommissioned_in_use" ? "decommissioned-in-use.xlsx"
+        : "decommissioned-items.xlsx";
       document.body.append(anchor);
       anchor.click();
       anchor.remove();

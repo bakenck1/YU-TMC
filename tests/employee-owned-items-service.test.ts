@@ -88,7 +88,7 @@ test("an employee receives only their assigned items and derived summary", async
     "mine-decommissioned",
   ]);
   assert.deepEqual(summarizeInventory(items.map(toInventoryItemView)), {
-    totalValue: 3_000,
+    totalValue: 2_000,
     totalItems: 3,
     maintenance: 1,
     decommissioned: 1,
