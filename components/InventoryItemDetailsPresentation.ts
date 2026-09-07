@@ -93,7 +93,10 @@ export function localizeItemError(
     "invalid_inventory_number",
     "invalid_item_status",
     "invalid_room_id",
+    "invalid_responsible_user_id",
+    "responsible_user_not_available",
   ]);
+  if (code === "transfer_already_pending") return t("itemDetails.errorConflict");
   if (direct[code]) return t(direct[code]);
   if (invalidCodes.has(code)) return t("itemDetails.errorInvalidFields");
   if (cause instanceof TypeError) return t("itemDetails.errorUnavailable");

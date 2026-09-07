@@ -61,7 +61,7 @@ export interface TmcUserPickerQueryState {
 
 export function reconcileTmcUserPickerQuery(
   state: TmcUserPickerQueryState,
-  value: TmcOperationUserDto | null,
+  value: Pick<TmcOperationUserDto, "id" | "fullName"> | null,
 ): TmcUserPickerQueryState {
   const valueId = value?.id ?? null;
   return state.valueId === valueId

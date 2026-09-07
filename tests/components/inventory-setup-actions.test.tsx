@@ -25,6 +25,18 @@ vi.mock("@/components/PushNotificationControl", () => ({
   default: () => null,
 }));
 
+vi.mock("@/components/InventoryItemCameraCapture", () => ({
+  default: ({ open, onCapture }: { open: boolean; onCapture: (photo: { imageDataUrl: string; width: number; height: number }) => void }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() => onCapture({ imageDataUrl: "data:image/jpeg;base64,/9j/", width: 1, height: 1 })}
+      >
+        capture-test-photo
+      </button>
+    ) : null,
+}));
+
 const BUILDING: BuildingDto = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Test building",
@@ -110,16 +122,71 @@ describe("inventory setup actions", () => {
     const nameInput = screen.getByLabelText(/items\.name/);
     const typeInput = screen.getByLabelText(/items\.type/);
     const roomSelect = screen.getByLabelText(/itemDetails\.room/);
+    const barcodeInput = screen.getByLabelText(/createItem\.barcode/);
 
     expect((nameInput as HTMLInputElement).required).toBe(true);
     expect((typeInput as HTMLInputElement).required).toBe(true);
     expect((roomSelect as HTMLSelectElement).required).toBe(true);
+    expect((barcodeInput as HTMLInputElement).required).toBe(true);
     expect(nameInput.closest("label")?.textContent).toContain(
       "createItem.required",
     );
     expect(typeInput.closest("label")?.textContent).toContain(
       "createItem.required",
     );
+    expect(barcodeInput.closest("label")?.textContent).toContain(
+      "createItem.required",
+    );
+  });
+
+  it("searches after two characters and submits the selected responsible employee", async () => {
+    const employee = {
+      id: "33333333-3333-4333-8333-333333333333",
+      fullName: "Алия Серикова",
+      email: "aliya@example.test",
+      role: "employee" as const,
+    };
+    const fetchMock = vi.fn(async (
+      input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => {
+      void _init;
+      if (String(input).startsWith("/api/inventory/transfer-recipient-candidates")) {
+        return { ok: true, json: async () => ({ users: [employee] }) } as Response;
+      }
+      return { ok: true, json: async () => ({ item: {} }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+
+    fireEvent.change(screen.getByLabelText(/items\.name/), {
+      target: { value: "Монитор" },
+    });
+    fireEvent.change(screen.getByLabelText(/items\.type/), {
+      target: { value: "electronics" },
+    });
+    fireEvent.change(screen.getByLabelText(/createItem\.barcode/), {
+      target: { value: "RESP-1001" },
+    });
+    const responsibleInput = screen.getByLabelText(/createItem\.responsible/);
+    fireEvent.focus(responsibleInput);
+    fireEvent.change(responsibleInput, { target: { value: "Ал" } });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const option = await screen.findByRole("option", { name: /Алия Серикова/ });
+    fireEvent.click(option);
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "createItem.create" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input]) =>
+        String(input) === "/api/inventory/items",
+      );
+      expect(createCall).toBeDefined();
+      expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
+        responsibleUserId: employee.id,
+      });
+    });
   });
 
   it("explains how to add an inspection assignee when none exist", () => {

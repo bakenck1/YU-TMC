@@ -184,6 +184,7 @@ function isProtectedPatch(value: unknown): value is Record<string, unknown> {
     "status" in body ||
     "condition" in body ||
     "connectionStatus" in body ||
+    "responsibleUserId" in body ||
     "replaceQr" in body
   );
 }
@@ -238,6 +239,9 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
       value.connectionStatus !== "connected" &&
       value.connectionStatus !== "disconnected" &&
       value.connectionStatus !== "not_applicable") ||
+    (value.responsibleUserId !== undefined &&
+      value.responsibleUserId !== null &&
+      typeof value.responsibleUserId !== "string") ||
     (value.replaceQr !== undefined && typeof value.replaceQr !== "boolean") ||
     (value.qrReplaceReason !== undefined &&
       value.qrReplaceReason !== null &&
@@ -248,6 +252,7 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
   return {
     version: value.version as number,
     roomId: value.roomId,
+    responsibleUserId: value.responsibleUserId as string | null | undefined,
     inventoryNumber: value.inventoryNumber,
     status: value.status,
     condition: value.condition as UpdateInventoryItemProtectedInput["condition"],

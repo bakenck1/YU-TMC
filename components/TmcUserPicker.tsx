@@ -21,14 +21,19 @@ const ROLE_LABEL_KEYS = {
   employee: "users.employee",
 } as const satisfies Record<TmcOperationUserDto["role"], TranslationKey>;
 
+type TmcUserPickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
+  Partial<Pick<TmcOperationUserDto, "email" | "role">>;
+
 export default function TmcUserPicker({
   value,
   onChange,
   employeeOnly = false,
+  label,
 }: {
-  value: TmcOperationUserDto | null;
+  value: TmcOperationUserDto | null | TmcUserPickerValue;
   onChange: (user: TmcOperationUserDto | null) => void;
   employeeOnly?: boolean;
+  label?: string;
 }) {
   const { t } = useAppSettings();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -145,7 +150,7 @@ export default function TmcUserPicker({
       }}
     >
       <label htmlFor={`${listboxId}-input`} className="block text-sm font-semibold text-zinc-800">
-        {t("tmc.recipient.label")}
+        {label ?? t("tmc.recipient.label")}
       </label>
       <div className="relative mt-2">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
@@ -177,9 +182,11 @@ export default function TmcUserPicker({
           </button>
         ) : null}
       </div>
-      {value ? (
+      {value && (value.email || value.role) ? (
         <p aria-live="polite" className="mt-2 text-xs text-zinc-600">
-          {value.email} · {t(ROLE_LABEL_KEYS[value.role])}
+          {[value.email, value.role ? t(ROLE_LABEL_KEYS[value.role]) : null]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       ) : null}
 

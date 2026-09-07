@@ -5,6 +5,7 @@ import type {
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
 import type { UserRole } from "@/lib/contracts/users";
+import type { InventoryResponsibilityRepository } from "@/lib/application/ports/inventory-responsibility-repositories";
 
 export interface InventoryItemRecord {
   id: string;
@@ -304,4 +305,6 @@ export interface InventoryItemRepository {
 
 export interface InventoryItemRepositories {
   items: InventoryItemRepository;
+  /** Present in production so item data and responsibility change atomically. */
+  responsibility?: InventoryResponsibilityRepository;
 }

@@ -55,7 +55,8 @@ function parseCreate(
     typeof body.name !== "string" ||
     (body.category !== "electronics" && body.category !== "furniture") ||
     typeof body.roomId !== "string" ||
-    (!restricted && typeof body.barcode !== "string") ||
+    (!restricted &&
+      (typeof body.barcode !== "string" || body.barcode.trim().length === 0)) ||
     (!restricted && (!body.photo || typeof body.photo !== "object")) ||
     (body.description !== undefined &&
       body.description !== null &&
@@ -69,7 +70,10 @@ function parseCreate(
       typeof body.barcode !== "string") ||
     (body.inventoryNumber !== undefined &&
       body.inventoryNumber !== null &&
-      typeof body.inventoryNumber !== "string")
+      typeof body.inventoryNumber !== "string") ||
+    (body.responsibleUserId !== undefined &&
+      body.responsibleUserId !== null &&
+      typeof body.responsibleUserId !== "string")
   ) {
     throw invalidRequest();
   }
@@ -101,6 +105,7 @@ function parseCreate(
     unitPrice: body.unitPrice as number | null | undefined,
     barcode: body.barcode as string | null | undefined,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
+    responsibleUserId: body.responsibleUserId as string | null | undefined,
     photo: photo ? {
       imageDataUrl: photo.imageDataUrl as string,
       width: photo.width as number,
