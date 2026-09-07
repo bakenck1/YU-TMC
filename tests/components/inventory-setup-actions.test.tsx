@@ -130,6 +130,11 @@ describe("inventory setup actions", () => {
     expect((roomSelect as HTMLSelectElement).required).toBe(true);
     expect((barcodeInput as HTMLInputElement).required).toBe(false);
     expect((responsibleInput as HTMLInputElement).required).toBe(false);
+    expect(
+      (screen.getByRole("option", {
+        name: "data.electricalEquipment",
+      }) as HTMLOptionElement).value,
+    ).toBe("electrical_equipment");
     expect(nameInput.closest("label")?.textContent).toContain(
       "createItem.required",
     );
@@ -171,7 +176,7 @@ describe("inventory setup actions", () => {
       target: { value: "Монитор" },
     });
     fireEvent.change(screen.getByLabelText(/items\.type/), {
-      target: { value: "electronics" },
+      target: { value: "electrical_equipment" },
     });
     fireEvent.change(screen.getByLabelText(/createItem\.barcode/), {
       target: { value: "RESP-1001" },
@@ -192,6 +197,7 @@ describe("inventory setup actions", () => {
       );
       expect(createCall).toBeDefined();
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
+        category: "electrical_equipment",
         responsibleUserId: employee.id,
       });
     });

@@ -1,4 +1,4 @@
-export type ItemStatus = "active" | "maintenance" | "decommissioned";
+export type ItemStatus = "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
 
 export type ItemCategory = import("@/lib/inventory-categories").InventoryItemCategory | string;
 

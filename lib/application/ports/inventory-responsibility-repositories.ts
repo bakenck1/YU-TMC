@@ -6,7 +6,7 @@ export interface ItemResponsibilityState {
   responsibilityPeriodId: string | null;
   responsibleUserId: string | null;
   responsibleName: string | null;
-  itemStatus: "active" | "maintenance" | "decommissioned";
+  itemStatus: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
 }
 
 export interface InventoryResponsibilityAuthorizationUser {

@@ -21,6 +21,7 @@ import type {
 } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 import type { InventoryItem } from "@/lib/types";
+import type { InventoryItemCategory } from "@/lib/inventory-categories";
 
 type Mode = "transfer" | "location" | "category" | "delete";
 type Outcome = TmcTransferRequestCreationItemOutcomeDto | TmcOperationItemOutcomeDto;
@@ -54,7 +55,7 @@ export default function TmcBulkActions({
   const [recipient, setRecipient] = useState<TmcOperationUserDto | null>(null);
   const [buildingId, setBuildingId] = useState("");
   const [roomId, setRoomId] = useState("");
-  const [category, setCategory] = useState<"electronics" | "furniture">("electronics");
+  const [category, setCategory] = useState<InventoryItemCategory>("electronics");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -439,7 +440,7 @@ export default function TmcBulkActions({
               <div className="mt-5 space-y-4">
                 {mode === "transfer" ? <TmcUserPicker value={recipient} onChange={(value) => { setRecipient(value); localTransferKeys.current = {}; }} /> : mode === "category" ? (
                   <label className="block text-sm text-zinc-600">{t("items.type")}
-                    <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5"><option value="electronics">{t("common.electronics")}</option><option value="furniture">{t("data.furniture")}</option></select>
+                    <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5"><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select>
                   </label>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">

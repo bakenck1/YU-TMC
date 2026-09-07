@@ -48,6 +48,8 @@ export default function DecommissionedItemsView({
       dateTo,
     });
   }, [building, dateFrom, dateTo, items, query, responsible]);
+  const inUse = filtered.filter((item) => item.status === "decommissioned_in_use");
+  const archived = filtered.filter((item) => item.status === "decommissioned");
 
   return (
     <div className="space-y-4">
@@ -129,8 +131,24 @@ export default function DecommissionedItemsView({
         </label>
       </section>
 
+      <section className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
+        <h2 className="text-lg font-semibold text-orange-900">
+          {t("decommissioned.inUseTitle")} ({inUse.length})
+        </h2>
+        <p className="mt-1 text-sm text-orange-800">{t("decommissioned.inUseSubtitle")}</p>
+      </section>
       <ItemsTable
-        items={filtered}
+        items={inUse}
+        showFilters={false}
+        dateLabel={t("decommissioned.decommissionedAt")}
+        excelDataset={canExport ? "decommissioned_in_use" : undefined}
+      />
+
+      <h2 className="pt-2 text-lg font-semibold text-zinc-800">
+        {t("decommissioned.archiveTitle")} ({archived.length})
+      </h2>
+      <ItemsTable
+        items={archived}
         showFilters={false}
         dateLabel={t("decommissioned.decommissionedAt")}
         excelDataset={canExport ? "decommissioned" : undefined}

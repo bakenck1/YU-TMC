@@ -41,13 +41,14 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     const created = await service.createItem(
       {
         name: "Form-assigned monitor",
-        category: "electronics",
+        category: "electrical_equipment",
         roomId,
         barcode: `RESP-${randomUUID()}`,
         responsibleUserId: firstEmployeeId,
       },
       { userId: adminId, role: "admin" },
     );
+    expect(created.category).toBe("electrical_equipment");
     expect(created.responsible?.id).toBe(firstEmployeeId);
 
     const updated = await service.updateProtected(
@@ -101,6 +102,64 @@ describe("PostgreSQL item-form responsibility assignment", () => {
       audit.reason === "inventory_item_form_assignment" &&
       audit.is_administrative_exception
     )).toBe(true);
+  });
+
+  it("records decommissioned use without optional evidence and restores the item only through audited actions", async () => {
+    const adminId = randomUUID();
+    const firstEmployeeId = randomUUID();
+    const secondEmployeeId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, firstEmployeeId, secondEmployeeId);
+    await seedRoom(adminId, buildingId, roomId);
+    const service = createService();
+    const actor = { userId: adminId, role: "admin" as const };
+    const created = await service.createItem({
+      name: "Decommissioned projector still in use",
+      category: "electrical_equipment",
+      roomId,
+      responsibleUserId: firstEmployeeId,
+    }, actor);
+    const inUse = await service.markDecommissionedInUse(created.id, {
+      version: created.version,
+      roomId,
+      responsibleUserId: secondEmployeeId,
+    }, actor);
+
+    expect(inUse.status).toBe("decommissioned_in_use");
+    expect(inUse.responsible?.id).toBe(secondEmployeeId);
+    expect(inUse.decommissionedUsage).toMatchObject({
+      reason: null,
+      adminComment: null,
+      photoUrl: null,
+    });
+    await expect(service.getDecommissionedUsagePhoto(created.id, actor)).rejects.toThrow("item_photo_not_found");
+    await expect(service.updateProtected(created.id, {
+      version: inUse.version,
+      roomId,
+      inventoryNumber: inUse.inventoryNumber,
+      status: "active",
+    }, actor)).rejects.toThrow("decommissioned_workflow_required");
+
+    const restored = await service.restoreDecommissionedItem(created.id, {
+      version: inUse.version,
+      reason: "Accounting cancelled the write-off",
+    }, actor);
+    expect(restored.status).toBe("active");
+    expect(restored.archivedAt).toBeNull();
+    expect(restored.decommissionedUsage).toBeNull();
+    const audit = await database.query<{ action: string; reason: string | null }>(
+      `select action, after_values->>'reason' as reason
+         from "yu_inventory"."audit_records"
+        where subject_kind = 'item' and subject_id = $1
+          and action in ('item.decommissioned_usage_started', 'item.restored_from_decommission')
+        order by occurred_at, id`,
+      [created.id],
+    );
+    expect(audit.rows).toEqual([
+      { action: "item.decommissioned_usage_started", reason: null },
+      { action: "item.restored_from_decommission", reason: "Accounting cancelled the write-off" },
+    ]);
   });
 });
 

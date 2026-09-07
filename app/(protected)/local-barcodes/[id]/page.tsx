@@ -64,9 +64,7 @@ function toLocalInventoryItem(group: LocalBarcodeGroupDto): InventoryItemDto {
     id: group.id,
     name: group.itemName,
     description: group.description,
-    category: group.itemType.trim().toLocaleLowerCase("ru-RU") === "furniture"
-      ? "furniture"
-      : categoryFromLegacyType(group.itemType),
+    category: categoryFromLegacyType(group.itemType),
     itemType: group.itemType,
     brand: group.brand,
     model: group.model,

@@ -4,6 +4,8 @@ import type {
   InventoryItemCommentDto,
   InventoryItemDto,
   InventoryItemOperationDto,
+  MarkDecommissionedItemInUseInput,
+  RestoreDecommissionedItemInput,
   UpdateInventoryItemContentInput,
   UpdateInventoryItemPhotoInput,
   UpdateInventoryItemProtectedInput,
@@ -185,7 +187,9 @@ export class InventoryItemService {
       }
       if (
         leftItem.status === "decommissioned" ||
-        rightItem.status === "decommissioned"
+        leftItem.status === "decommissioned_in_use" ||
+        rightItem.status === "decommissioned" ||
+        rightItem.status === "decommissioned_in_use"
       ) {
         throw new ApplicationError(
           "validation",
@@ -936,10 +940,17 @@ export class InventoryItemService {
     return this.getItemPhotoByPurpose(id, actor, "service_request");
   }
 
+  async getDecommissionedUsagePhoto(
+    id: string,
+    actor: AuthorizationActor,
+  ): Promise<StoredItemPhoto> {
+    return this.getItemPhotoByPurpose(id, actor, "decommissioned_usage");
+  }
+
   private async getItemPhotoByPurpose(
     id: string,
     actor: AuthorizationActor,
-    purpose: "item" | "service_request",
+    purpose: "item" | "service_request" | "decommissioned_usage",
   ): Promise<StoredItemPhoto> {
     return this.unitOfWork.read(async ({ items }) => {
       const item = await items.findItemById(id);
@@ -967,11 +978,132 @@ export class InventoryItemService {
       }
       const photo = purpose === "item"
         ? await items.findItemPhoto(id)
-        : await items.findServiceItemPhoto(id);
+        : purpose === "service_request"
+          ? await items.findServiceItemPhoto(id)
+          : items.findDecommissionedUsagePhoto
+            ? await items.findDecommissionedUsagePhoto(id)
+            : null;
       if (!photo) {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
       return photo;
+    });
+  }
+
+  async markDecommissionedInUse(
+    id: string,
+    input: MarkDecommissionedItemInUseInput,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.manage_protected_fields");
+    if (!Number.isInteger(input.version) || input.version < 1) {
+      throw new ApplicationError("validation", "invalid_version");
+    }
+    const roomId = normalizeId(input.roomId, "invalid_room_id");
+    const responsibleUserId = normalizeId(
+      input.responsibleUserId,
+      "invalid_responsible_user_id",
+    ).toLowerCase();
+    const reason = normalizeOptionalBlankText(
+      input.reason,
+      1_000,
+      "invalid_decommissioned_usage_reason",
+    ) ?? null;
+    const adminComment = normalizeOptionalBlankText(
+      input.adminComment,
+      2_000,
+      "invalid_decommissioned_usage_comment",
+    ) ?? null;
+    const photo = input.photo
+      ? await normalizeCameraPhoto({ version: input.version, ...input.photo })
+      : null;
+    return this.unitOfWork.transaction(async ({ items, responsibility }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.version !== input.version) throw versionConflict();
+      if (current.status === "decommissioned_in_use") {
+        throw new ApplicationError("conflict", "decommissioned_usage_invalid_state");
+      }
+      if (!(await items.roomExists(roomId))) {
+        throw new ApplicationError("not_found", "room_not_found");
+      }
+      const occurredAt = this.clock.now();
+      if (!items.markDecommissionedInUse) throw new Error("decommissioned_workflow_unavailable");
+      const updated = await items.markDecommissionedInUse({
+        id,
+        roomId,
+        reason,
+        adminComment,
+        photoId: photo ? this.ids.create() : null,
+        photoBytes: photo?.bytes ?? null,
+        photoWidth: photo?.width ?? null,
+        photoHeight: photo?.height ?? null,
+        actorId: actor.userId,
+        expectedVersion: input.version,
+        occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      await this.changeResponsible({
+        repository: responsibility,
+        itemId: id,
+        responsibleUserId,
+        actor,
+        subjectRevision: updated.version,
+        occurredAt,
+      });
+      await items.appendAudit(createAudit({
+        id: this.ids.create(), actor, subjectId: id,
+        subjectRevision: updated.version,
+        action: "item.decommissioned_usage_started",
+        beforeValues: { status: current.status, roomId: current.roomId },
+        afterValues: {
+          status: "decommissioned_in_use",
+          roomId,
+          responsibleUserId,
+          reason,
+          adminComment,
+          photo: photo ? "attached" : null,
+        },
+        occurredAt,
+      }));
+      const refreshed = await items.findItemById(id);
+      if (!refreshed) throw new Error("item_refresh_failed");
+      return toItemDto(refreshed);
+    });
+  }
+
+  async restoreDecommissionedItem(
+    id: string,
+    input: RestoreDecommissionedItemInput,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.manage_protected_fields");
+    if (!Number.isInteger(input.version) || input.version < 1) {
+      throw new ApplicationError("validation", "invalid_version");
+    }
+    const reason = normalizeText(input.reason, 1_000, "restore_reason_required");
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.version !== input.version) throw versionConflict();
+      if (current.status !== "decommissioned" && current.status !== "decommissioned_in_use") {
+        throw new ApplicationError("conflict", "restore_invalid_state");
+      }
+      const occurredAt = this.clock.now();
+      if (!items.restoreDecommissionedItem) throw new Error("decommissioned_workflow_unavailable");
+      const updated = await items.restoreDecommissionedItem({
+        id, actorId: actor.userId, expectedVersion: input.version, occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      await items.appendAudit(createAudit({
+        id: this.ids.create(), actor, subjectId: id,
+        subjectRevision: updated.version,
+        action: "item.restored_from_decommission",
+        beforeValues: { status: current.status },
+        afterValues: { status: "active", reason },
+        occurredAt,
+      }));
+      return toItemDto(updated);
     });
   }
 
@@ -993,6 +1125,13 @@ export class InventoryItemService {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== input.version) throw versionConflict();
+      if (
+        (current.status === "decommissioned_in_use" && values.status !== current.status) ||
+        (values.status === "decommissioned_in_use" && current.status !== values.status) ||
+        (current.status === "decommissioned" && values.status !== "decommissioned")
+      ) {
+        throw new ApplicationError("conflict", "decommissioned_workflow_required");
+      }
       if (!(await items.roomExists(values.roomId))) {
         throw new ApplicationError("not_found", "room_not_found");
       }
@@ -1408,6 +1547,12 @@ function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
   };
 }
 
+function normalizeOptionalBlankText(value: unknown, max: number, code: string) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  return normalizeText(value, max, code);
+}
+
 function normalizeOptionalResponsibleUserId(
   value: unknown,
 ): string | null | undefined {
@@ -1631,7 +1776,12 @@ function normalizeId(value: unknown, code: string) {
 }
 
 function normalizeStatus(value: unknown): ItemStatus {
-  if (value === "active" || value === "maintenance" || value === "decommissioned") {
+  if (
+    value === "active" ||
+    value === "maintenance" ||
+    value === "decommissioned" ||
+    value === "decommissioned_in_use"
+  ) {
     return value;
   }
   throw new ApplicationError("validation", "invalid_item_status");
@@ -1805,6 +1955,16 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     updatedAt: record.updatedAt.toISOString(),
     maintenanceStartedAt: record.maintenanceStartedAt?.toISOString() ?? null,
     archivedAt: record.archivedAt?.toISOString() ?? null,
+    decommissionedUsage:
+      record.status === "decommissioned_in_use" &&
+      record.decommissionedUsageStartedAt
+        ? {
+            reason: record.decommissionedUsageReason ?? null,
+            adminComment: record.decommissionedUsageComment ?? null,
+            startedAt: record.decommissionedUsageStartedAt.toISOString(),
+            photoUrl: record.decommissionedUsagePhotoUrl ?? null,
+          }
+        : null,
   };
 }
 

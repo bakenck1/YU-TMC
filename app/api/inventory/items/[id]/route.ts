@@ -5,6 +5,10 @@ import type {
 import { after } from "next/server";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
+import {
+  isInventoryItemCategory,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -63,6 +67,10 @@ export async function PATCH(
             },
             actor,
           )
+        : isMarkDecommissionedInUsePatch(body)
+        ? await services.items.markDecommissionedInUse(id, body, actor)
+        : isRestoreDecommissionedPatch(body)
+        ? await services.items.restoreDecommissionedItem(id, body, actor)
         : isMaintenanceResolutionPatch(body)
         ? await services.items.resolveMaintenanceItem(
             id,
@@ -98,6 +106,37 @@ export async function PATCH(
   } catch (error) {
     return itemErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);
   }
+}
+
+function isMarkDecommissionedInUsePatch(value: unknown): value is {
+  operation: "mark_decommissioned_in_use";
+  version: number;
+  roomId: string;
+  responsibleUserId: string;
+  reason?: string | null;
+  adminComment?: string | null;
+  photo?: { imageDataUrl: string; width: number; height: number };
+} {
+  if (!value || typeof value !== "object") return false;
+  const body = value as Record<string, unknown>;
+  return body.operation === "mark_decommissioned_in_use" &&
+    Number.isInteger(body.version) &&
+    typeof body.roomId === "string" &&
+    typeof body.responsibleUserId === "string" &&
+    (body.reason === undefined || body.reason === null || typeof body.reason === "string") &&
+    (body.adminComment === undefined || body.adminComment === null || typeof body.adminComment === "string") &&
+    (body.photo === undefined || body.photo === null || isCameraPhoto(body.photo));
+}
+
+function isRestoreDecommissionedPatch(value: unknown): value is {
+  operation: "restore_decommissioned";
+  version: number;
+  reason: string;
+} {
+  if (!value || typeof value !== "object") return false;
+  const body = value as Record<string, unknown>;
+  return body.operation === "restore_decommissioned" &&
+    Number.isInteger(body.version) && typeof body.reason === "string";
 }
 
 function isMaintenanceResolutionPatch(value: unknown): value is {
@@ -197,8 +236,7 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
     typeof body.name !== "string" ||
     (body.category !== undefined &&
       body.category !== null &&
-      body.category !== "electronics" &&
-      body.category !== "furniture") ||
+      !isInventoryItemCategory(body.category)) ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -213,7 +251,7 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
   return {
     version: body.version as number,
     name: body.name,
-    category: body.category as "electronics" | "furniture" | null | undefined,
+    category: body.category as InventoryItemCategory | null | undefined,
     description: body.description as string | null | undefined,
     itemType: body.itemType as string | null | undefined,
     brand: body.brand as string | null | undefined,
@@ -230,7 +268,8 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
     typeof value.inventoryNumber !== "string" ||
     (value.status !== "active" &&
       value.status !== "maintenance" &&
-      value.status !== "decommissioned") ||
+      value.status !== "decommissioned" &&
+      value.status !== "decommissioned_in_use") ||
     (value.condition !== undefined &&
       value.condition !== "good" &&
       value.condition !== "needs_attention" &&

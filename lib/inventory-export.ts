@@ -1,7 +1,7 @@
 import type { InventoryColumnVisibility } from "@/lib/inventory-columns";
 
 export function createInventoryExportPayload(
-  dataset: "items" | "decommissioned",
+  dataset: "items" | "decommissioned" | "decommissioned_in_use",
   itemIds: readonly string[],
   columns: InventoryColumnVisibility,
 ) {

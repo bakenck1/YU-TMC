@@ -19,7 +19,7 @@ export interface LocalBarcodeItemRecord {
   inventoryNumber: string;
   quantity: number;
   version: number;
-  status: "active" | "maintenance" | "decommissioned";
+  status: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
   responsibleUserId: string | null;
   responsibleName: string | null;
   roomId: string;

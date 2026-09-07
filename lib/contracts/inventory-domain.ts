@@ -5,6 +5,7 @@ export const ITEM_STATUSES = [
   "active",
   "maintenance",
   "decommissioned",
+  "decommissioned_in_use",
 ] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
@@ -55,6 +56,7 @@ export type QrStatus = (typeof QR_STATUSES)[number];
 export const PHOTO_PURPOSES = [
   "item",
   "service_request",
+  "decommissioned_usage",
   "inspection_result",
   "decision_dispute",
   "asset_loss_receipt",

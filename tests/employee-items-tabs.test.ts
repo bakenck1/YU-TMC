@@ -20,11 +20,11 @@ test("employee inventory renders a roving, fully associated tab list", () => {
   );
 
   assert.match(markup, /role="tablist" aria-label="Inventory"/);
-  assert.equal((markup.match(/role="tab"/g) ?? []).length, 3);
+  assert.equal((markup.match(/role="tab"/g) ?? []).length, 4);
   assert.equal((markup.match(/tabindex="0"/g) ?? []).length, 1);
-  assert.equal((markup.match(/tabindex="-1"/g) ?? []).length, 2);
+  assert.equal((markup.match(/tabindex="-1"/g) ?? []).length, 3);
   assert.match(markup, /id="employee-items-tab-maintenance"[^>]*aria-selected="true"/);
-  for (const status of ["active", "maintenance", "decommissioned"]) {
+  for (const status of ["active", "maintenance", "decommissioned", "decommissioned_in_use"]) {
     assert.match(markup, new RegExp(`aria-controls="employee-items-panel-${status}"`));
   }
 
@@ -53,11 +53,11 @@ test("employee tab keyboard interaction invokes selection, focus, and preventDef
     },
   });
 
-  assert.deepEqual(selected, ["decommissioned"]);
-  assert.deepEqual(focused, ["decommissioned"]);
+  assert.deepEqual(selected, ["decommissioned_in_use"]);
+  assert.deepEqual(focused, ["decommissioned_in_use"]);
   assert.equal(prevented, true);
   assert.equal(employeeItemTabAfterKey("maintenance", "Home"), "active");
-  assert.equal(employeeItemTabAfterKey("active", "End"), "decommissioned");
+  assert.equal(employeeItemTabAfterKey("active", "End"), "decommissioned_in_use");
 });
 
 test("employee status selection returns only the selected status items", () => {

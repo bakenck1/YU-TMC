@@ -43,6 +43,12 @@ export interface InventoryItemDto {
   updatedAt: string;
   maintenanceStartedAt?: string | null;
   archivedAt: string | null;
+  decommissionedUsage?: {
+    reason: string | null;
+    adminComment: string | null;
+    startedAt: string;
+    photoUrl: string | null;
+  } | null;
 }
 
 export interface InventoryItemAuditDto {
@@ -152,4 +158,18 @@ export interface UpdateInventoryItemProtectedInput {
   connectionStatus?: ConnectionStatus;
   replaceQr?: boolean;
   qrReplaceReason?: string | null;
+}
+
+export interface MarkDecommissionedItemInUseInput {
+  version: number;
+  roomId: string;
+  responsibleUserId: string;
+  reason?: string | null;
+  adminComment?: string | null;
+  photo?: Omit<UpdateInventoryItemPhotoInput, "version">;
+}
+
+export interface RestoreDecommissionedItemInput {
+  version: number;
+  reason: string;
 }

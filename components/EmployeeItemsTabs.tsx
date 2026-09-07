@@ -22,6 +22,7 @@ const EMPLOYEE_TAB_LABELS = {
   active: "status.active",
   maintenance: "status.maintenance",
   decommissioned: "status.decommissioned",
+  decommissioned_in_use: "status.decommissioned_in_use",
 } as const;
 
 export function EmployeeItemsTabList({

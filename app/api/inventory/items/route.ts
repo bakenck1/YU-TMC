@@ -1,4 +1,8 @@
 import type { CreateInventoryItemInput } from "@/lib/contracts/inventory-items";
+import {
+  isInventoryItemCategory,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -53,7 +57,7 @@ function parseCreate(
   const body = value as Record<string, unknown>;
   if (
     typeof body.name !== "string" ||
-    (body.category !== "electronics" && body.category !== "furniture") ||
+    !isInventoryItemCategory(body.category) ||
     typeof body.roomId !== "string" ||
     (!restricted && (!body.photo || typeof body.photo !== "object")) ||
     (body.description !== undefined &&
@@ -94,7 +98,7 @@ function parseCreate(
   }
   return {
     name: body.name,
-    category: body.category as "electronics" | "furniture",
+    category: body.category as InventoryItemCategory,
     roomId: body.roomId,
     description: body.description as string | null | undefined,
     brand: body.brand as string | null | undefined,
