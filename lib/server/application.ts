@@ -93,7 +93,10 @@ function createApplicationServices(): ApplicationServices {
 
   return {
     items: new InventoryItemService(
-      createPostgresUnitOfWork(createPostgresInventoryItemRepositories),
+      createPostgresUnitOfWork((source) => ({
+        ...createPostgresInventoryItemRepositories(source),
+        ...createPostgresInventoryResponsibilityRepositories(source),
+      })),
       { now: () => new Date() },
       { create: () => randomUUID() },
       { create: () => randomBytes(16) },

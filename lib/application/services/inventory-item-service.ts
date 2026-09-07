@@ -24,6 +24,7 @@ import type {
   StoredItemPhoto,
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
+import type { InventoryResponsibilityRepository } from "@/lib/application/ports/inventory-responsibility-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
@@ -43,6 +44,8 @@ import {
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import sharp from "sharp";
+
+const ITEM_FORM_RESPONSIBILITY_REASON = "inventory_item_form_assignment";
 
 export interface InventoryItemClock {
   now(): Date;
@@ -394,10 +397,19 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.create");
+    if (
+      actor.role !== "warehouse" &&
+      (typeof input.barcode !== "string" || input.barcode.trim().length === 0)
+    ) {
+      throw new ApplicationError("validation", "invalid_barcode");
+    }
     const authorizedInput = actor.role === "warehouse"
       ? normalizeWarehouseCreateInput(input)
       : input;
     const values = normalizeCreateInput(authorizedInput);
+    if (values.responsibleUserId) {
+      requirePermission(actor, "inventory.item.manage_protected_fields");
+    }
     const photo = authorizedInput.photo
       ? await normalizeCameraPhoto({ version: 1, ...authorizedInput.photo })
       : null;
@@ -411,7 +423,7 @@ export class InventoryItemService {
     const inventoryNumberKind = values.inventoryNumber ? "official" : "temporary";
     const qrCode = qrIdentifierFromEntropy(this.qrEntropy.create());
 
-    return this.unitOfWork.transaction(async ({ items }) => {
+    return this.unitOfWork.transaction(async ({ items, responsibility }) => {
       if (!(await items.roomExists(values.roomId))) {
         throw new ApplicationError("not_found", "room_not_found");
       }
@@ -460,7 +472,19 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      if (!photo) return toItemDto({ ...created, qrCode });
+      await this.changeResponsible({
+        repository: responsibility,
+        itemId,
+        responsibleUserId: values.responsibleUserId,
+        actor,
+        subjectRevision: created.version,
+        occurredAt,
+      });
+      const assigned = values.responsibleUserId !== undefined
+        ? await items.findItemById(itemId)
+        : created;
+      if (!assigned) throw new Error("item_refresh_failed");
+      if (!photo) return toItemDto({ ...assigned, qrCode });
       const photographed = await items.updateItemPhoto({
         id: itemId,
         photoId: this.ids.create(),
@@ -490,6 +514,91 @@ export class InventoryItemService {
         }),
       );
       return toItemDto({ ...photographed, qrCode });
+    });
+  }
+
+  private async changeResponsible(input: {
+    repository: InventoryResponsibilityRepository | undefined;
+    itemId: string;
+    responsibleUserId: string | null | undefined;
+    actor: AuthorizationActor;
+    subjectRevision: number;
+    occurredAt: Date;
+  }): Promise<void> {
+    if (input.responsibleUserId === undefined) return;
+    const repository = input.repository;
+    if (!repository) throw new Error("responsibility_repository_unavailable");
+    const current = await repository.findItemStateForUpdate(input.itemId);
+    if (!current) throw new ApplicationError("not_found", "item_not_found");
+    if (current.responsibleUserId === input.responsibleUserId) return;
+    if (await repository.findPendingTransfer(input.itemId)) {
+      throw new ApplicationError("conflict", "transfer_already_pending");
+    }
+    if (input.responsibleUserId) {
+      if (current.itemStatus === "decommissioned") {
+        throw new ApplicationError("conflict", "item_not_available");
+      }
+      const target = await repository.findAuthorizationUserForUpdate(
+        input.responsibleUserId,
+      );
+      if (
+        !target ||
+        target.id !== input.responsibleUserId ||
+        !target.active ||
+        target.deletedAt ||
+        target.role !== "employee"
+      ) {
+        throw new ApplicationError(
+          "validation",
+          "responsible_user_not_available",
+        );
+      }
+    }
+    if (current.responsibleUserId && current.responsibilityPeriodId) {
+      const closed = await repository.closeResponsibility({
+        itemId: input.itemId,
+        expectedResponsibilityPeriodId: current.responsibilityPeriodId,
+        expectedResponsibleUserId: current.responsibleUserId,
+        endedBy: input.actor.userId,
+        endedAt: input.occurredAt,
+        endReason: ITEM_FORM_RESPONSIBILITY_REASON,
+      });
+      if (!closed) throw versionConflict();
+    }
+    if (input.responsibleUserId) {
+      try {
+        await repository.insertResponsibility({
+          id: this.ids.create(),
+          itemId: input.itemId,
+          responsibleUserId: input.responsibleUserId,
+          source: "admin_override",
+          startedBy: input.actor.userId,
+          startedAt: input.occurredAt,
+        });
+      } catch (error) {
+        if (postgresErrorCode(error) === "23505") throw versionConflict();
+        throw error;
+      }
+    }
+    await repository.appendAudit({
+      id: this.ids.create(),
+      actorId: input.actor.userId,
+      actorRole: input.actor.role,
+      subjectKind: "responsibility",
+      subjectId: input.itemId,
+      subjectRevision: input.subjectRevision,
+      action: "responsibility.admin_override",
+      beforeValues: {
+        responsibleUserId: current.responsibleUserId,
+      },
+      afterValues: {
+        responsibleUserId: input.responsibleUserId,
+        source: "admin_override",
+        ...(input.responsibleUserId ? {} : { outcome: "released" }),
+      },
+      reason: ITEM_FORM_RESPONSIBILITY_REASON,
+      isAdministrativeException: true,
+      occurredAt: input.occurredAt,
     });
   }
 
@@ -886,7 +995,7 @@ export class InventoryItemService {
     const qrReplaceReason = replaceQr
       ? normalizeText(input.qrReplaceReason, 1_000, "qr_replace_reason_required")
       : null;
-    return this.unitOfWork.transaction(async ({ items }) => {
+    return this.unitOfWork.transaction(async ({ items, responsibility }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== input.version) throw versionConflict();
@@ -897,6 +1006,7 @@ export class InventoryItemService {
         values.inventoryNumber === current.inventoryNumber
           ? current.inventoryNumberKind
           : "official";
+      const occurredAt = this.clock.now();
       const updated = await items.updateItemProtected({
         id,
         ...values,
@@ -906,7 +1016,7 @@ export class InventoryItemService {
         inventoryNumberKind,
         actorId: actor.userId,
         expectedVersion: input.version,
-        occurredAt: this.clock.now(),
+        occurredAt,
       });
       if (!updated) throw versionConflict();
       let qrCode = current.qrCode;
@@ -921,6 +1031,14 @@ export class InventoryItemService {
           revokeReason: qrReplaceReason!,
         });
       }
+      await this.changeResponsible({
+        repository: responsibility,
+        itemId: id,
+        responsibleUserId: values.responsibleUserId,
+        actor,
+        subjectRevision: updated.version,
+        occurredAt,
+      });
       await items.appendAudit(
         createAudit({
           id: this.ids.create(),
@@ -953,10 +1071,14 @@ export class InventoryItemService {
             qrCode,
             qrReplaceReason,
           },
-          occurredAt: this.clock.now(),
+          occurredAt,
         }),
       );
-      return toItemDto({ ...updated, qrCode });
+      const refreshed = values.responsibleUserId !== undefined
+        ? await items.findItemById(id)
+        : updated;
+      if (!refreshed) throw new Error("item_refresh_failed");
+      return toItemDto({ ...refreshed, qrCode });
     });
   }
 
@@ -1132,6 +1254,9 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     unitPrice: content.unitPrice ?? 0,
     roomId,
     inventoryNumber,
+    responsibleUserId: normalizeOptionalResponsibleUserId(
+      input.responsibleUserId,
+    ),
   };
 }
 
@@ -1144,7 +1269,8 @@ function normalizeWarehouseCreateInput(
     (input.quantity !== undefined && input.quantity !== null && input.quantity !== 1) ||
     (input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== 0) ||
     (input.barcode !== undefined && input.barcode !== null) ||
-    (input.inventoryNumber !== undefined && input.inventoryNumber !== null);
+    (input.inventoryNumber !== undefined && input.inventoryNumber !== null) ||
+    (input.responsibleUserId !== undefined && input.responsibleUserId !== null);
   if (hasProtectedValues) throw forbidden();
   return {
     name: input.name,
@@ -1282,7 +1408,22 @@ function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
     status: normalizeStatus(input.status),
     condition: normalizeOptionalCondition(input.condition),
     connectionStatus: normalizeOptionalConnectionStatus(input.connectionStatus),
+    responsibleUserId: normalizeOptionalResponsibleUserId(
+      input.responsibleUserId,
+    ),
   };
+}
+
+function normalizeOptionalResponsibleUserId(
+  value: unknown,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return normalizeId(value, "invalid_responsible_user_id").toLowerCase();
+}
+
+function postgresErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
 }
 
 function normalizeOptionalCondition(

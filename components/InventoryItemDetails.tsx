@@ -49,6 +49,19 @@ import {
 import { translateCampusBuilding } from "@/lib/i18n";
 import type { UserRole } from "@/lib/contracts/users";
 import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
+import TmcUserPicker from "@/components/TmcUserPicker";
+import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
+
+type ResponsiblePickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
+  Partial<Pick<TmcOperationUserDto, "email" | "role">>;
+
+function responsiblePickerValue(
+  responsible: InventoryItemDto["responsible"],
+): ResponsiblePickerValue | null {
+  return responsible
+    ? { id: responsible.id, fullName: responsible.name }
+    : null;
+}
 
 export default function InventoryItemDetails({
   initialItem,
@@ -112,6 +125,9 @@ export default function InventoryItemDetails({
   const [protectedEditing, setProtectedEditing] = useState(false);
   const [protectedBuildingId, setProtectedBuildingId] = useState(item.room.buildingId);
   const [protectedRoomId, setProtectedRoomId] = useState(item.room.id);
+  const [responsible, setResponsible] = useState<ResponsiblePickerValue | null>(
+    responsiblePickerValue(item.responsible),
+  );
   const [inventoryNumber, setInventoryNumber] = useState(item.inventoryNumber);
   const [status, setStatus] = useState(item.status);
   const [condition, setCondition] = useState<NonNullable<InventoryItemDto["condition"]>>(item.condition ?? "good");
@@ -326,9 +342,11 @@ export default function InventoryItemDetails({
       const roomChanged = protectedRoomId !== item.room.id;
       const inventoryNumberChanged = inventoryNumber.trim() !== item.inventoryNumber;
       const statusChanged = status !== item.status;
+      const responsibleChanged =
+        (responsible?.id ?? null) !== (item.responsible?.id ?? null);
       const submit = async (
         version: number,
-        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"]; condition: NonNullable<InventoryItemDto["condition"]>; connectionStatus: NonNullable<InventoryItemDto["connectionStatus"]> },
+        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"]; condition: NonNullable<InventoryItemDto["condition"]>; connectionStatus: NonNullable<InventoryItemDto["connectionStatus"]>; responsibleUserId: string | null },
       ) => {
         const response = await fetch(`/api/inventory/items/${item.id}`, {
           method: "PATCH",
@@ -352,6 +370,7 @@ export default function InventoryItemDetails({
         status,
         condition,
         connectionStatus,
+        responsibleUserId: responsible?.id ?? null,
       });
       if (result.response.status === 409 && result.body.error === "version_conflict") {
         const latestResponse = await fetch(`/api/inventory/items/${item.id}`);
@@ -372,6 +391,9 @@ export default function InventoryItemDetails({
           status: statusChanged ? status : latestItem.status,
           condition: condition !== (item.condition ?? "good") ? condition : (latestItem.condition ?? "good"),
           connectionStatus: connectionStatus !== (item.connectionStatus ?? "not_applicable") ? connectionStatus : (latestItem.connectionStatus ?? "not_applicable"),
+          responsibleUserId: responsibleChanged
+            ? responsible?.id ?? null
+            : latestItem.responsible?.id ?? null,
         });
       }
       if (!result.response.ok || !result.body.item) {
@@ -385,6 +407,7 @@ export default function InventoryItemDetails({
       setStatus(body.item.status);
       setCondition(body.item.condition ?? "good");
       setConnectionStatus(body.item.connectionStatus ?? "not_applicable");
+      setResponsible(responsiblePickerValue(body.item.responsible));
       setProtectedEditing(false);
       setReplaceQr(false);
       setQrReplaceReason("");
@@ -404,6 +427,7 @@ export default function InventoryItemDetails({
     setStatus(item.status);
     setCondition(item.condition ?? "good");
     setConnectionStatus(item.connectionStatus ?? "not_applicable");
+    setResponsible(responsiblePickerValue(item.responsible));
     setReplaceQr(false);
     setQrReplaceReason("");
     setError("");
@@ -419,6 +443,7 @@ export default function InventoryItemDetails({
     setStatus(item.status);
     setCondition(item.condition ?? "good");
     setConnectionStatus(item.connectionStatus ?? "not_applicable");
+    setResponsible(responsiblePickerValue(item.responsible));
     setReplaceQr(false);
     setQrReplaceReason("");
     setError("");
@@ -724,6 +749,15 @@ export default function InventoryItemDetails({
                 ))}
               </select>
             </label>
+            <div className="sm:col-span-2">
+              <TmcUserPicker
+                value={responsible}
+                onChange={setResponsible}
+                employeeOnly
+                label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
+                className=""
+              />
+            </div>
             <label className="block text-sm">
               <span className="text-zinc-600">{t("itemDetails.officialNumber")}</span>
               <input

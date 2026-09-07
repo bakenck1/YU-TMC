@@ -110,6 +110,8 @@ export interface CreateInventoryItemInput {
   quantity?: number | null;
   unitPrice?: number | null;
   roomId: string;
+  /** Employee assigned to the item at creation time. Null leaves it unassigned. */
+  responsibleUserId?: string | null;
   /** Barcode value entered or scanned from the item's label. */
   barcode?: string | null;
   inventoryNumber?: string | null;
@@ -142,6 +144,8 @@ export interface UpdateInventoryItemPhotoInput {
 export interface UpdateInventoryItemProtectedInput {
   version: number;
   roomId: string;
+  /** New responsible employee. Null releases the current assignment. */
+  responsibleUserId?: string | null;
   inventoryNumber: string;
   status: ItemStatus;
   condition?: ItemCondition;

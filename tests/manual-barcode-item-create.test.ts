@@ -14,7 +14,7 @@ import { parseCode39ScanInput } from "../lib/domain/code39";
 
 const ROOT = new URL("../", import.meta.url);
 
-test("manual barcode input is optional and sent to the item creation API when provided", async () => {
+test("barcode input is required and sent to the item creation API", async () => {
   const form = await readFile(
     new URL("components/InventoryItemCreateForm.tsx", ROOT),
     "utf8",
@@ -23,15 +23,45 @@ test("manual barcode input is optional and sent to the item creation API when pr
     new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
 
   assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: restricted \? null : \(barcode \|\| null\)/);
+  assert.match(form, /barcode: restricted \? null : barcode\.trim\(\)/);
   assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);
-  assert.match(form, /t\("createItem\.barcodeOptionalHint"\)/);
-  assert.doesNotMatch(form, /!barcode\.trim\(\)/);
+  assert.doesNotMatch(form, /t\("createItem\.barcodeOptionalHint"\)/);
+  assert.match(form, /!barcode\.trim\(\)/);
+  assert.match(route, /body\.barcode\.trim\(\)\.length === 0/);
   assert.match(form, /setBarcode\(value\)/);
   assert.doesNotMatch(form, /if \(rooms\.length === 0\) return null/);
   assert.match(form, /t\("createItem\.noRooms"\)/);
+});
+
+test("item creation service rejects a missing or blank barcode", async () => {
+  const repositories = {
+    items: {} as InventoryItemRepository,
+  } satisfies InventoryItemRepositories;
+  const unitOfWork: UnitOfWork<InventoryItemRepositories> = {
+    read: async (work) => work(repositories),
+    transaction: async (work) => work(repositories),
+  };
+  const service = new InventoryItemService(
+    unitOfWork,
+    { now: () => new Date("2026-09-07T12:00:00.000Z") },
+    { create: () => "unused" },
+    { create: () => new Uint8Array(16) },
+    { next: () => "unused" },
+  );
+  const input = {
+    name: "Monitor",
+    itemType: "Equipment",
+    roomId: "11111111-1111-4111-8111-111111111111",
+  };
+  const actor = { userId: "user-1", role: "admin" as const };
+
+  await assert.rejects(service.createItem(input, actor), /invalid_barcode/);
+  await assert.rejects(
+    service.createItem({ ...input, barcode: "   " }, actor),
+    /invalid_barcode/,
+  );
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {
