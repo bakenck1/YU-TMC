@@ -59,14 +59,16 @@ export function oneCFixedAssetPayload(asset: OneCFixedAsset) {
 }
 
 function normalizeAsset(record: Record<string, unknown>, index: number): OneCFixedAsset {
-  const externalId = text(record, "ExternalId", "GUID", "Guid", "GUIDОС", "Идентификатор");
+  const externalIdValue = text(record, "ExternalId", "GUID", "Guid", "GUIDОС", "Идентификатор");
   const code = text(record, "Code", "Код");
   const inventoryNumber = text(record, "InventoryNumber", "ИнвентарныйНомер");
   const name = text(record, "Name", "Наименование", "ОсновноеСредство") ?? code;
-  if (!externalId || !UUID.test(externalId)) rowFail(index, "invalid_external_id");
+  if (!externalIdValue || !UUID.test(externalIdValue)) rowFail(index, "invalid_external_id");
+  const externalId = externalIdValue.toLowerCase();
   if (!name) rowFail(index, "name_required");
-  const responsibleExternalId = text(record, "ResponsibleExternalId", "ResponsibleGUID", "ResponsibleGuid", "GUIDМОЛ");
-  if (responsibleExternalId && !UUID.test(responsibleExternalId)) rowFail(index, "invalid_responsible_external_id");
+  const responsibleExternalIdValue = text(record, "ResponsibleExternalId", "ResponsibleGUID", "ResponsibleGuid", "GUIDМОЛ");
+  if (responsibleExternalIdValue && !UUID.test(responsibleExternalIdValue)) rowFail(index, "invalid_responsible_external_id");
+  const responsibleExternalId = responsibleExternalIdValue?.toLowerCase() ?? null;
   const rawStatus = text(record, "Status", "Статус");
   const status = rawStatus ? (STATUS_ALIASES.get(rawStatus.toLocaleLowerCase("ru")) ?? null) : null;
   if (rawStatus && !status) rowFail(index, "invalid_status");

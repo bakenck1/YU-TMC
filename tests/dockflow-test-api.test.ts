@@ -107,11 +107,29 @@ test("collection pagination is bounded, deterministic at the repository seam, an
   const first = await listDockflowItems(request("/api/v1/items?limit=1"), paged);
   const firstBody = await first.json();
   assert.equal(firstBody.items.length, 1); assert.equal(typeof firstBody.nextCursor, "string");
-  assert.deepEqual(seen[0], { offset: 0, limit: 2 });
+  assert.deepEqual(seen[0], { after: null, limit: 2 });
   const second = await listDockflowItems(request(`/api/v1/items?limit=1&cursor=${firstBody.nextCursor}`), paged);
-  assert.equal(second.status, 200); assert.deepEqual(seen[1], { offset: 1, limit: 2 });
+  assert.equal(second.status, 200);
+  assert.deepEqual(seen[1], {
+    after: { sortValue: "2026-08-28T10:00:00.000Z", id: "00000000-0000-4000-8000-000000000001" },
+    limit: 2,
+  });
   assert.equal((await listDockflowItems(request("/api/v1/items?limit=201"), paged)).status, 400);
   assert.equal((await listDockflowItems(request("/api/v1/items?unknown=1"), paged)).status, 400);
+});
+
+test("rejects cursor timestamps that normalize to a different calendar date", async () => {
+  const invalidCursor = Buffer.from(JSON.stringify([
+    1,
+    "items",
+    null,
+    "2026-02-30T00:00:00.000Z",
+    "00000000-0000-4000-8000-000000000001",
+  ])).toString("base64url");
+  const response = await listDockflowItems(request(`/api/v1/items?cursor=${invalidCursor}`), repository);
+
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "INVALID_PAGE");
 });
 
 test("employee item envelopes are bounded and expose continuation", async () => {
@@ -127,10 +145,45 @@ test("employee item envelopes are bounded and expose continuation", async () => 
   const body = await detail.json();
   assert.equal(body.items.length, 1);
   assert.equal(typeof body.nextCursor, "string");
-  assert.deepEqual(seen[0], { offset: 0, limit: 2 });
+  assert.deepEqual(seen[0], { after: null, limit: 2 });
   const items = await findDockflowEmployeeItems(request(`/api/v1/employees/${employee.iin}/items?limit=1&cursor=${body.nextCursor}`), employee.iin, paged);
   assert.equal(items.status, 200);
-  assert.deepEqual(seen[1], { offset: 1, limit: 2 });
+  assert.deepEqual(seen[1], {
+    after: { sortValue: "2026-08-28T10:00:00.000Z", id: "00000000-0000-4000-8000-000000000001" },
+    limit: 2,
+  });
+});
+
+test("item continuation remains stable when a newer row appears between pages", async () => {
+  const template = (await repository.listItems())[0];
+  assert.ok(template);
+  let rows = [
+    { ...template, id: "00000000-0000-4000-8000-000000000001", updatedAt: "2026-08-28T10:00:00.000Z" },
+    { ...template, id: "00000000-0000-4000-8000-000000000002", updatedAt: "2026-08-27T10:00:00.000Z" },
+    { ...template, id: "00000000-0000-4000-8000-000000000003", updatedAt: "2026-08-26T10:00:00.000Z" },
+  ];
+  const changing = {
+    ...repository,
+    async listItems(page = { after: null, limit: 101 }) {
+      return rows
+        .filter((item) => !page.after
+          || item.updatedAt < page.after.sortValue
+          || (item.updatedAt === page.after.sortValue && item.id > page.after.id))
+        .slice(0, page.limit);
+    },
+  } satisfies DockflowDataRepository;
+
+  const first = await listDockflowItems(request("/api/v1/items?limit=1"), changing);
+  const firstBody = await first.json();
+  rows = [
+    { ...template, id: "00000000-0000-4000-8000-000000000004", updatedAt: "2026-08-29T10:00:00.000Z" },
+    ...rows,
+  ];
+  const second = await listDockflowItems(request(`/api/v1/items?limit=1&cursor=${firstBody.nextCursor}`), changing);
+  const secondBody = await second.json();
+
+  assert.equal(firstBody.items[0].id, "00000000-0000-4000-8000-000000000001");
+  assert.equal(secondBody.items[0].id, "00000000-0000-4000-8000-000000000002");
 });
 
 test("unexpected inventory and photo failures use stable retryable JSON without details", async () => {

@@ -88,6 +88,72 @@ describe("PostgreSQL asset-loss vertical", () => {
     await expect(migrationPool.query(`insert into "yu_inventory"."asset_loss_case_events" (id,loss_case_id,from_status,to_status,actor_id) values ($1,$2,'rejected','accounting_review',$3)`, [randomUUID(), created.id, fixture.employeeId])).rejects.toMatchObject({ code: "23514" });
   });
 
+  it("rejects a case status change that omits its matching event", async () => {
+    const fixture = await seed();
+    const app = service();
+    const created = await app.create({ itemId: fixture.itemId }, employee(fixture.employeeId));
+    await app.submitReceipt(created.id, photo([1]), employee(fixture.employeeId));
+
+    await expect(migrationPool.query(
+      `update "yu_inventory"."asset_loss_cases"
+          set status = 'rejected', reviewed_by = $2, reviewed_at = now(),
+              review_result = 'rejected', review_comment = 'Direct mutation'
+        where id = $1`,
+      [created.id, fixture.adminId],
+    )).rejects.toMatchObject({ code: "23514" });
+    await expect(migrationPool.query<{ status: string }>(
+      'select status from "yu_inventory"."asset_loss_cases" where id = $1',
+      [created.id],
+    )).resolves.toMatchObject({ rows: [{ status: "accounting_review" }] });
+  });
+
+  it("allows multiple fully-evented transitions in one transaction", async () => {
+    const fixture = await seed();
+    const app = service();
+    const created = await app.create({ itemId: fixture.itemId }, employee(fixture.employeeId));
+    await app.submitReceipt(created.id, photo([1]), employee(fixture.employeeId));
+    const client = await migrationPool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `update "yu_inventory"."asset_loss_cases"
+            set status = 'rejected', reviewed_by = $2, reviewed_at = now(),
+                review_result = 'rejected', review_comment = 'First review'
+          where id = $1`,
+        [created.id, fixture.adminId],
+      );
+      await client.query(
+        `insert into "yu_inventory"."asset_loss_case_events"
+          (id,loss_case_id,from_status,to_status,actor_id,occurred_at)
+         values ($1,$2,'accounting_review','rejected',$3,clock_timestamp())`,
+        [randomUUID(), created.id, fixture.adminId],
+      );
+      await client.query(
+        `update "yu_inventory"."asset_loss_cases"
+            set status = 'accounting_review', reviewed_by = null, reviewed_at = null,
+                review_result = null, review_comment = null
+          where id = $1`,
+        [created.id],
+      );
+      await client.query(
+        `insert into "yu_inventory"."asset_loss_case_events"
+          (id,loss_case_id,from_status,to_status,actor_id,occurred_at)
+         values ($1,$2,'rejected','accounting_review',$3,clock_timestamp() + interval '1 millisecond')`,
+        [randomUUID(), created.id, fixture.adminId],
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    await expect(migrationPool.query<{ status: string }>(
+      'select status from "yu_inventory"."asset_loss_cases" where id = $1',
+      [created.id],
+    )).resolves.toMatchObject({ rows: [{ status: "accounting_review" }] });
+  });
+
   it("serializes concurrent accounting decisions to one terminal edge", async () => {
     const fixture = await seed(); const app = service();
     const created = await app.create({ itemId: fixture.itemId }, employee(fixture.employeeId));

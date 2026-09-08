@@ -63,7 +63,7 @@ if (hasRuntimeDatabase) {
 }
 
 console.log(
-  `Test suite summary: server=ran, ui=ran, components=ran, database=${hasRuntimeDatabase ? "ran" : "SKIPPED"}.`,
+  `Test suite summary: unit-route=ran, ui=ran, component=ran, postgresql=${hasRuntimeDatabase ? "ran" : "SKIPPED"}.`,
 );
 
 function runNodeTests(files, extraArguments) {

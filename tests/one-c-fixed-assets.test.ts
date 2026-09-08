@@ -139,6 +139,13 @@ describe("1C fixed assets XML contract", () => {
     });
   });
 
+  it("canonicalizes UUID identifiers before idempotency hashing and storage", () => {
+    const upper = GUID.toUpperCase();
+    const assets = parseOneCFixedAssets(`<FixedAssets><FixedAsset><GUID>${upper}</GUID><ResponsibleGUID>${upper}</ResponsibleGUID><Name>x</Name></FixedAsset></FixedAssets>`);
+    assert.equal(assets[0]?.externalId, GUID);
+    assert.equal(assets[0]?.responsibleExternalId, GUID);
+  });
+
   it("enforces exact shape, duplicate, length, record-count, entity and namespace policy", () => {
     const cases = [
       ["<Envelope><FixedAssets><FixedAsset><GUID>" + GUID + "</GUID><Name>x</Name></FixedAsset></FixedAssets></Envelope>", "invalid_root"],

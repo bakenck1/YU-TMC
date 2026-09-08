@@ -6,7 +6,7 @@ import { closeDatabase } from "@/lib/db/client";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
-import { oneCFixedAssetPayload, type OneCFixedAsset } from "@/lib/server/integrations/one-c-fixed-assets";
+import { oneCFixedAssetPayload, parseOneCFixedAssets, type OneCFixedAsset } from "@/lib/server/integrations/one-c-fixed-assets";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
 
@@ -78,6 +78,19 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(stored.rows[0]?.payload_hash).toBe(oneCFixedAssetPayload({ ...asset, residualCost: 90 }).hash);
   });
 
+  it("replays differently-cased UUIDs into one canonical inbox row", async () => {
+    const repository = new PostgresOneCFixedAssetRepository(runtimePool);
+    const upper = asset.externalId.toUpperCase();
+    const first = parseAssetXml(upper);
+    const replay = parseAssetXml(asset.externalId);
+
+    await expect(repository.saveBatch(first)).resolves.toEqual({ created: 1, updated: 0, unchanged: 0 });
+    await expect(repository.saveBatch(replay)).resolves.toEqual({ created: 0, updated: 0, unchanged: 1 });
+    await expect(runtimePool.query<{ external_id: string }>(
+      'select external_id from "yu_inventory"."one_c_fixed_asset_inbox"',
+    )).resolves.toMatchObject({ rows: [{ external_id: asset.externalId }] });
+  });
+
   it("rolls the entire batch back when a later record cannot be serialized", async () => {
     const invalid = { ...asset, externalId: "03572fab-9e95-41ea-9a1b-002590861d2e", quantity: BigInt(1) } as unknown as OneCFixedAsset;
     await expect(new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([asset, invalid])).rejects.toThrow();
@@ -110,4 +123,8 @@ async function resetSchemas(config: DatabaseConfig) {
   const pool = createPostgresPool(config, { max: 1 });
   try { await pool.query('drop schema if exists "yu_migrations" cascade'); await pool.query('drop schema if exists "yu_inventory" cascade'); }
   finally { await pool.end(); }
+}
+
+function parseAssetXml(externalId: string) {
+  return parseOneCFixedAssets(`<FixedAssets><FixedAsset><GUID>${externalId}</GUID><Name>${asset.name}</Name><Status>${asset.status}</Status><ResidualCost>${asset.residualCost}</ResidualCost></FixedAsset></FixedAssets>`);
 }

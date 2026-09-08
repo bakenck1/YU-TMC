@@ -17,12 +17,24 @@ export function createPostgresDockflowInventoryRepository(pool = getDatabasePool
         result.rows.map((row) => [row.iin, Number(row.item_count)]),
       );
     },
-    async itemsForEmployee(iin, page = { offset: 0, limit: 101 }) {
-      const result = await pool.query<AssignedItemRow>(`${assignedItemsSelect("u.iin = $1")} limit $2 offset $3`, [iin, page.limit, page.offset]);
+    async itemsForEmployee(iin, page = { after: null, limit: 101 }) {
+      const result = await pool.query<AssignedItemRow>(
+        `${assignedItemsSelect("u.iin = $1")}
+         where ($2::timestamptz is null or assigned_at < $2 or (assigned_at = $2 and source_id > $3::uuid))
+         order by assigned_at desc, id
+         limit $4`,
+        [iin, page.after?.sortValue ?? null, page.after?.id ?? null, page.limit],
+      );
       return result.rows.map(mapAssignedItem);
     },
-    async listItems(page = { offset: 0, limit: 101 }) {
-      const result = await pool.query<InventoryItemRow>(`${inventoryItemsSelect}\n order by updated_at desc, id limit $1 offset $2`, [page.limit, page.offset]);
+    async listItems(page = { after: null, limit: 101 }) {
+      const result = await pool.query<InventoryItemRow>(
+        `select * from (${inventoryItemsSelect}) inventory_items
+          where ($1::timestamptz is null or updated_at < $1 or (updated_at = $1 and id > $2::uuid))
+          order by updated_at desc, id
+          limit $3`,
+        [page.after?.sortValue ?? null, page.after?.id ?? null, page.limit],
+      );
       return result.rows.map(mapInventoryItem);
     },
     async findItemPhoto(id) {
@@ -73,7 +85,7 @@ const assignedItemsSelect = (employeePredicate: string) => `
              coalesce(barcode.original_value, i.inventory_number) as barcode,
              i.inventory_number, i.quantity,
              concat_ws(', ', b.name, r.designation) as storage_location,
-             rp.started_at as assigned_at, i.unit_price as cost,
+             date_trunc('milliseconds', rp.started_at) as assigned_at, i.unit_price as cost,
              'individual'::text as marking_type,
              photo.url as photo_url, i.item_type, i.brand, i.model,
              i.status::text as inventory_status, u.iin as responsible_iin,
@@ -104,7 +116,7 @@ const assignedItemsSelect = (employeePredicate: string) => `
       select g.id as source_id, i.name, g.barcode_value as barcode,
              i.inventory_number, g.quantity,
              concat_ws(', ', b.name, r.designation) as storage_location,
-             g.transferred_at as assigned_at, i.unit_price as cost,
+             date_trunc('milliseconds', g.transferred_at) as assigned_at, i.unit_price as cost,
              case when g.quantity > 1 then 'batch' else 'individual' end as marking_type,
              photo.url as photo_url, i.item_type, i.brand, i.model,
              i.status::text as inventory_status, u.iin as responsible_iin,
@@ -123,8 +135,7 @@ const assignedItemsSelect = (employeePredicate: string) => `
         ) photo on true
        where ${employeePredicate} and u.is_active = true and u.deleted_at is null and g.status = 'active'
          and i.archived_at is null and i.status <> 'decommissioned'
-    ) assigned_items
-   order by assigned_at desc, id`;
+    ) assigned_items`;
 
 const inventoryItemsSelect = `
   select i.id, i.name, coalesce(barcode.original_value, i.inventory_number) as barcode,
@@ -133,7 +144,8 @@ const inventoryItemsSelect = `
          i.unit_price as cost, 'individual'::text as marking_type,
          '[]'::json as assignments, photo.url as photo_url, i.item_type,
          i.brand, i.model, i.status::text as inventory_status,
-         null::text as responsible_iin, null::text as responsible_name, i.updated_at
+         null::text as responsible_iin, null::text as responsible_name,
+         date_trunc('milliseconds', i.updated_at) as updated_at
     from "yu_inventory"."items" i
     join "yu_inventory"."rooms" r on r.id = i.room_id
     join "yu_inventory"."buildings" b on b.id = r.building_id
@@ -157,7 +169,8 @@ const inventoryItemsSelect = `
          i.unit_price as cost, 'individual'::text as marking_type,
          json_build_array(json_build_object('employeeIin', u.iin, 'quantity', i.quantity, 'assignedAt', rp.started_at)) as assignments,
          photo.url as photo_url, i.item_type, i.brand, i.model, i.status::text as inventory_status,
-         u.iin as responsible_iin, u.full_name as responsible_name, i.updated_at
+         u.iin as responsible_iin, u.full_name as responsible_name,
+         date_trunc('milliseconds', i.updated_at) as updated_at
     from "yu_inventory"."responsibility_periods" rp
     join "yu_inventory"."users" u on u.id = rp.responsible_user_id
     join "yu_inventory"."items" i on i.id = rp.item_id
@@ -183,7 +196,8 @@ const inventoryItemsSelect = `
          case when g.quantity > 1 then 'batch' else 'individual' end as marking_type,
          json_build_array(json_build_object('employeeIin', u.iin, 'quantity', g.quantity, 'assignedAt', g.transferred_at)) as assignments,
          photo.url as photo_url, i.item_type, i.brand, i.model, i.status::text as inventory_status,
-         u.iin as responsible_iin, u.full_name as responsible_name, i.updated_at
+         u.iin as responsible_iin, u.full_name as responsible_name,
+         date_trunc('milliseconds', i.updated_at) as updated_at
     from "yu_inventory"."local_item_groups" g
     join "yu_inventory"."users" u on u.id = g.responsible_user_id
     join "yu_inventory"."items" i on i.id = g.item_id
