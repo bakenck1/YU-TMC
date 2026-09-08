@@ -253,6 +253,13 @@
       "when": 1788784630374,
       "tag": "20260907123710_elite_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788849000000,
+      "tag": "20260908113000_one_c_fixed_asset_inbox_contract",
+      "breakpoints": true
     }
   ]
 }

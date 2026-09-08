@@ -112,6 +112,10 @@
       {
         "tag": "20260903120000_one_c_fixed_asset_inbox",
         "reason": "The hand-authored raw SQL migration adds an integration inbox table that is intentionally accessed through parameterized SQL rather than the Drizzle schema."
+      },
+      {
+        "tag": "20260908113000_one_c_fixed_asset_inbox_contract",
+        "reason": "The forward-only raw SQL migration adds a payload-hash check to the already-deployed 1C inbox without rewriting its historical migration."
       }
     ]
   },

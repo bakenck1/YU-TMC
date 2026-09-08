@@ -1,34 +1,16 @@
-import { ingestOneCFixedAssets, authorizeOneCRequest, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
+import { createOneCFixedAssetsPostHandler, getOneCFixedAssetsCapability } from "@/lib/server/http/one-c-fixed-assets-handler";
+import { getApplicationServices } from "@/lib/server/application";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return Response.json(
-    {
-      service: "1c-fixed-assets",
-      status: "ready",
-      method: "POST",
-      authentication: "Bearer token required",
-      contentType: ["application/xml", "text/xml"],
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  return getOneCFixedAssetsCapability();
 }
 
-export async function POST(request: Request) {
-  const unauthorized = authorizeOneCRequest(request);
-  if (unauthorized) return unauthorized;
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
-  if (contentType !== "application/xml" && contentType !== "text/xml") {
-    return Response.json({ error: "unsupported_media_type", expected: ["application/xml", "text/xml"] }, { status: 415 });
-  }
-  try {
-    const result = await ingestOneCFixedAssets(parseOneCFixedAssets(await request.text()));
-    return Response.json({ success: result.errors.length === 0, ...result }, { status: result.errors.length ? 207 : 200 });
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "invalid_xml";
-    const status = code === "xml_too_large" ? 413 : 400;
-    return Response.json({ success: false, error: code }, { status });
-  }
-}
+export const POST = createOneCFixedAssetsPostHandler({
+  service: {
+    importBatch: (assets) => getApplicationServices().oneCFixedAssets.importBatch(assets),
+    tryAcquireLease: (keyId) => getApplicationServices().oneCFixedAssets.tryAcquireLease(keyId),
+  },
+});
