@@ -163,7 +163,8 @@ export interface UpdateInventoryItemProtectedInput {
 export interface MarkDecommissionedItemInUseInput {
   version: number;
   roomId: string;
-  responsibleUserId: string;
+  /** Optional employee assignment. Null explicitly leaves the item unassigned. */
+  responsibleUserId?: string | null;
   reason?: string | null;
   adminComment?: string | null;
   photo?: Omit<UpdateInventoryItemPhotoInput, "version">;

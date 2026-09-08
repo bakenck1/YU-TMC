@@ -816,9 +816,7 @@ export default function InventoryItemDetails({
                 value={responsible}
                 onChange={setResponsible}
                 employeeOnly
-                label={item.status !== "decommissioned_in_use" && status === "decommissioned_in_use"
-                  ? `${t("createItem.responsible")} (${t("createItem.required")})`
-                  : `${t("createItem.responsible")} (${t("createItem.optional")})`}
+                label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
               />
             </div>
             <label className="block text-sm">
@@ -917,7 +915,6 @@ export default function InventoryItemDetails({
                   saving ||
                   !protectedRoomId ||
                   !inventoryNumber.trim() ||
-                  (item.status !== "decommissioned_in_use" && status === "decommissioned_in_use" && !responsible) ||
                   ((item.status === "decommissioned" || item.status === "decommissioned_in_use") && status === "active" && !restoreReason.trim()) ||
                   (replaceQr && !qrReplaceReason.trim())
                 }

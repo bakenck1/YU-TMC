@@ -34,6 +34,16 @@ test("builds both stadium floor selectors even when no rooms are stored yet", ()
   assert.deepEqual(stadium?.floors.map((floor) => floor.roomCount), [0, 0]);
 });
 
+test("builds Main Campus floor selectors from zero through fifteen", () => {
+  const mainCampus = buildCampusMapData([], [], []).buildings["main-campus"];
+
+  assert.equal(mainCampus?.floorCount, 16);
+  assert.deepEqual(
+    mainCampus?.floors.map((floor) => floor.n),
+    Array.from({ length: 16 }, (_, index) => index),
+  );
+});
+
 test("renders the stadium and centers, removes the court, and shifts KGI west", () => {
   const source = readFileSync(
     new URL("../components/CampusMap.tsx", import.meta.url),

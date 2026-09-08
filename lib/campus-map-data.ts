@@ -1,6 +1,7 @@
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import {
+  campusBuildingFloorNumbers,
   CAMPUS_MAP_BUILDING_PRESETS,
   findCampusBuildingPreset,
 } from "@/lib/campus-directory";
@@ -59,8 +60,7 @@ export function buildCampusMapData(
     );
     const all: CampusItem[] = [];
 
-    const floors = Array.from({ length: preset.floorCount }, (_, index) => {
-      const floorNumber = index + 1;
+    const floors = campusBuildingFloorNumbers(preset).map((floorNumber) => {
       const floorRooms = buildingRooms
         .filter((room) => room.floorNumber === floorNumber)
         .sort((left, right) => left.designation.localeCompare(right.designation, "ru"));

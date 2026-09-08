@@ -97,8 +97,8 @@ test("the Next route delegates room POST to the tested handler", async () => {
     ),
   ]);
 
-  assert.match(form, /primaryResponsibleId: responsibleId \|\| null/);
-  assert.doesNotMatch(form, /!responsibleId/);
+  assert.match(form, /primaryResponsibleId: responsible\?\.id \?\? null/);
+  assert.doesNotMatch(form, /!responsible/);
   assert.match(
     route,
     /createInventoryRoomPostHandler/,
