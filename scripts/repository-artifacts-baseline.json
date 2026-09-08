@@ -120,6 +120,10 @@
       {
         "tag": "20260908150000_asset_loss_event_contract",
         "reason": "The forward-only raw SQL migration enforces an append-only, continuous state chain for the financial asset-loss audit log."
+      },
+      {
+        "tag": "20260908160000_asset_loss_case_event_consistency",
+        "reason": "The forward-only deferred constraint ensures every committed asset-loss case status matches the latest append-only event without rewriting the deployed event-contract migration."
       }
     ]
   },

@@ -315,7 +315,7 @@ export const dockflowOpenApiDocument = {
     },
     parameters: {
       Limit: { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } },
-      Cursor: { name: "cursor", in: "query", required: false, schema: { type: "string", maxLength: 64 } },
+      Cursor: { name: "cursor", in: "query", required: false, schema: { type: "string", maxLength: 256 } },
       Iin: {
         name: "iin",
         in: "path",

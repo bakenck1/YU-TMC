@@ -33,22 +33,51 @@ describe("PostgreSQL Dockflow projection", () => {
     const ids = await seed();
     const repository = createPostgresDockflowInventoryRepository(runtimePool);
 
-    const assigned = await repository.itemsForEmployee(ids.iin, { offset: 0, limit: 10 });
+    const assigned = await repository.itemsForEmployee(ids.iin, { after: null, limit: 10 });
     expect(assigned.map((item) => item.markingType).sort()).toEqual(["batch", "individual"]);
     expect(assigned.every((item) => item.responsible?.iin === ids.iin)).toBe(true);
-    expect(await repository.itemsForEmployee("999999999999", { offset: 0, limit: 10 })).toEqual([]);
+    expect(await repository.itemsForEmployee("999999999999", { after: null, limit: 10 })).toEqual([]);
     expect((await repository.itemCountsByIin()).get(ids.iin)).toBe(2);
 
-    const inventory = await repository.listItems({ offset: 0, limit: 10 });
+    const inventory = await repository.listItems({ after: null, limit: 10 });
     expect(inventory).toHaveLength(2);
     expect(inventory.every((item) => item.status === "assigned")).toBe(true);
+
+    await migrationPool.query(
+      `update "yu_inventory"."responsibility_periods" set started_at = '2026-08-28T10:00:00.123456Z' where item_id = $1`,
+      [ids.individualItemId],
+    );
+    await migrationPool.query(
+      `update "yu_inventory"."local_item_groups" set transferred_at = '2026-08-28T10:00:00.123789Z' where item_id = $1`,
+      [ids.batchItemId],
+    );
+    await migrationPool.query(
+      `update "yu_inventory"."items"
+          set updated_at = case id when $1 then '2026-08-28T10:00:00.123456Z'::timestamptz else '2026-08-28T10:00:00.123789Z'::timestamptz end
+        where id in ($1, $2)`,
+      [ids.individualItemId, ids.batchItemId],
+    );
+    const firstAssignmentPage = await repository.itemsForEmployee(ids.iin, { after: null, limit: 1 });
+    const assignmentCursor = firstAssignmentPage[0]!;
+    const secondAssignmentPage = await repository.itemsForEmployee(ids.iin, {
+      after: { sortValue: assignmentCursor.assignedAt, id: assignmentCursor.id },
+      limit: 1,
+    });
+    expect(new Set([...firstAssignmentPage, ...secondAssignmentPage].map((item) => item.id)).size).toBe(2);
+    const firstInventoryPage = await repository.listItems({ after: null, limit: 1 });
+    const inventoryCursor = firstInventoryPage[0]!;
+    const secondInventoryPage = await repository.listItems({
+      after: { sortValue: inventoryCursor.updatedAt, id: inventoryCursor.id },
+      limit: 1,
+    });
+    expect(new Set([...firstInventoryPage, ...secondInventoryPage].map((item) => item.id)).size).toBe(2);
 
     await migrationPool.query('update "yu_inventory"."items" set status = \'decommissioned\' where id = $1', [ids.batchItemId]);
     expect((await repository.itemCountsByIin()).get(ids.iin)).toBe(1);
 
     await migrationPool.query('update "yu_inventory"."users" set is_active = false, deactivated_at = now() where id = $1', [ids.employeeId]);
-    expect(await repository.itemsForEmployee(ids.iin, { offset: 0, limit: 10 })).toEqual([]);
-    expect(await repository.listItems({ offset: 0, limit: 10 })).toEqual([]);
+    expect(await repository.itemsForEmployee(ids.iin, { after: null, limit: 10 })).toEqual([]);
+    expect(await repository.listItems({ after: null, limit: 10 })).toEqual([]);
     expect((await repository.itemCountsByIin()).has(ids.iin)).toBe(false);
   });
 });
@@ -91,7 +120,7 @@ async function seed() {
      values ($1,$2,1,$3,$4,5,$5,$6,$6,$7)`,
     [randomUUID(), batchItemId, `BAT-${batchItemId}-0001`, `bat-${batchItemId}-0001`, employeeId, roomId, adminId],
   );
-  return { employeeId, batchItemId, iin };
+  return { employeeId, individualItemId, batchItemId, iin };
 }
 
 async function resetSchemas(config: DatabaseConfig) {

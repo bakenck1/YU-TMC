@@ -68,7 +68,10 @@ export interface DockflowItemPhoto {
   mimeType: "image/jpeg" | "image/png" | "image/webp";
 }
 
-export interface DockflowPageRequest { offset: number; limit: number; }
+export interface DockflowPageRequest {
+  after: { sortValue: string; id: string } | null;
+  limit: number;
+}
 
 export interface DockflowDataRepository {
   listEmployees(): Promise<Array<DockflowEmployee & { itemCount: number }>>;

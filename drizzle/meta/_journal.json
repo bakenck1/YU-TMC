@@ -267,6 +267,13 @@
       "when": 1788879600000,
       "tag": "20260908150000_asset_loss_event_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788883200000,
+      "tag": "20260908160000_asset_loss_case_event_consistency",
+      "breakpoints": true
     }
   ]
 }

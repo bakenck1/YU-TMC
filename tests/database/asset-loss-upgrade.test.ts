@@ -46,14 +46,77 @@ describe("asset-loss forward migration upgrade", () => {
     await seedLegacyCase({ withPeriod: true, discontinuous: true });
     await expect(migrateDatabase(config)).rejects.toThrow(/event history is discontinuous/);
   });
+
+  it("applies case-event consistency after the original event migration is already recorded", async () => {
+    await database.end();
+    await resetSchemas(config);
+    const throughOriginal = createMigrationFolderThrough(TARGET);
+    database = createPostgresPool(config, { max: 2 });
+    try {
+      await migrate(drizzle({ client: database }), { migrationsFolder: throughOriginal, migrationsSchema: "yu_migrations", migrationsTable: "__drizzle_migrations" });
+      await expect(migrateDatabase(config)).resolves.toMatchObject({ target: "test" });
+      await expect(database.query<{ exists: boolean }>(
+        `select exists(
+           select 1 from pg_trigger
+            where tgname = 'asset_loss_cases_event_consistency' and not tgisinternal
+         ) as exists`,
+      )).resolves.toMatchObject({ rows: [{ exists: true }] });
+    } finally {
+      rmSync(throughOriginal, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to install case-event consistency when deployed data already drifted", async () => {
+    const fixture = await seedLegacyCase({ withPeriod: true, discontinuous: false });
+    const throughOriginal = createMigrationFolderThrough(TARGET);
+    try {
+      await migrate(drizzle({ client: database }), { migrationsFolder: throughOriginal, migrationsSchema: "yu_migrations", migrationsTable: "__drizzle_migrations" });
+      const photoId = randomUUID();
+      await database.query(
+        `insert into "yu_inventory"."photos"
+          (id,purpose,status,uploaded_by,original_object_key,preview_object_key,trusted_mime_type,
+           byte_size,width,height,checksum_sha256,binary_data,reserved_at,expires_at,attached_at,item_id)
+         values ($1,'asset_loss_receipt','attached',$2,$3,$4,'image/jpeg',1,1,1,$5,$6,now(),now() + interval '1 hour',now(),$7)`,
+        [photoId, fixture.employeeId, `database://photos/${photoId}`, `database://photos/${photoId}/preview.jpg`, "0".repeat(64), Buffer.from([0]), fixture.itemId],
+      );
+      await database.query(
+        `update "yu_inventory"."asset_loss_cases"
+            set status = 'accounting_review', receipt_photo_id = $2,
+                submitted_by = $3, submitted_at = now()
+          where id = $1`,
+        [fixture.caseId, photoId, fixture.employeeId],
+      );
+
+      await expect(migrateDatabase(config)).rejects.toThrow(/existing asset loss case status must match latest event/);
+      await expect(database.query<{ exists: boolean }>(
+        `select exists(
+           select 1 from pg_trigger
+            where tgname = 'asset_loss_cases_event_consistency' and not tgisinternal
+         ) as exists`,
+      )).resolves.toMatchObject({ rows: [{ exists: false }] });
+    } finally {
+      rmSync(throughOriginal, { recursive: true, force: true });
+    }
+  });
 });
 
 function createPredecessorFolder() {
+  return createMigrationFolderThrough(null);
+}
+
+function createMigrationFolderThrough(lastIncludedTag: string | null) {
   const folder = mkdtempSync(path.join(tmpdir(), "asset-loss-predecessor-"));
   mkdirSync(path.join(folder, "meta"));
-  for (const name of readdirSync("drizzle").filter((name) => name.endsWith(".sql") && name !== `${TARGET}.sql`)) copyFileSync(path.join("drizzle", name), path.join(folder, name));
   const journal = JSON.parse(readFileSync(path.join("drizzle", "meta", "_journal.json"), "utf8")) as { version: string; dialect: string; entries: Array<{ tag: string }> };
-  journal.entries = journal.entries.filter((entry) => entry.tag !== TARGET);
+  const cutoff = lastIncludedTag
+    ? journal.entries.findIndex((entry) => entry.tag === lastIncludedTag) + 1
+    : journal.entries.findIndex((entry) => entry.tag === TARGET);
+  if (cutoff <= 0) throw new Error(`Migration boundary not found: ${lastIncludedTag ?? TARGET}`);
+  journal.entries = journal.entries.slice(0, cutoff);
+  const included = new Set(journal.entries.map((entry) => `${entry.tag}.sql`));
+  for (const name of readdirSync("drizzle").filter((name) => included.has(name))) {
+    copyFileSync(path.join("drizzle", name), path.join(folder, name));
+  }
   writeFileSync(path.join(folder, "meta", "_journal.json"), JSON.stringify(journal));
   return folder;
 }

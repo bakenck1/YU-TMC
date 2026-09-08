@@ -32,12 +32,21 @@ export async function listDockflowEmployees(request: Request, repository?: Dockf
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
   try {
-    const page = parsePage(request);
+    const page = parsePage(request, "employees");
     if (page instanceof Response) return page;
     repository ??= createPostgresDockflowRepository();
     const rows = await repository.listEmployees();
-    const employees = rows.slice(page.offset, page.offset + page.limit + 1);
-    return json({ employees: employees.slice(0, page.limit), nextCursor: employees.length > page.limit ? encodeOffset(page.offset + page.limit) : null });
+    const employees = rows
+      .filter((employee) => !page.after || employee.iin > page.after.sortValue)
+      .slice(0, page.limit + 1);
+    const returned = employees.slice(0, page.limit);
+    const last = returned.at(-1);
+    return json({
+      employees: returned,
+      nextCursor: employees.length > page.limit && last
+        ? encodeCursor("employees", null, last.iin, last.iin)
+        : null,
+    });
   } catch (error) {
     return dependencyErrorResponse(error);
   }
@@ -46,12 +55,19 @@ export async function listDockflowEmployees(request: Request, repository?: Dockf
 export async function listDockflowItems(request: Request, repository?: DockflowDataRepository) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
-  const page = parsePage(request);
+  const page = parsePage(request, "items");
   if (page instanceof Response) return page;
   try {
     repository ??= createPostgresDockflowRepository();
-    const items = await repository.listItems({ offset: page.offset, limit: page.limit + 1 });
-    return json({ items: items.slice(0, page.limit), nextCursor: items.length > page.limit ? encodeOffset(page.offset + page.limit) : null });
+    const items = await repository.listItems({ after: page.after, limit: page.limit + 1 });
+    const returned = items.slice(0, page.limit);
+    const last = returned.at(-1);
+    return json({
+      items: returned,
+      nextCursor: items.length > page.limit && last
+        ? encodeCursor("items", null, last.updatedAt, last.id)
+        : null,
+    });
   } catch { return errorResponse(503, "DEPENDENCY_UNAVAILABLE", "Dockflow dependency is unavailable.", { "Retry-After": "5" }); }
 }
 
@@ -89,18 +105,22 @@ export async function findDockflowEmployee(request: Request, iin: string, reposi
   if (unauthorized) return unauthorized;
   const validationError = validateIin(iin);
   if (validationError) return validationError;
-  const page = parsePage(request);
+  const page = parsePage(request, "employee_items", iin);
   if (page instanceof Response) return page;
 
   try {
     repository ??= createPostgresDockflowRepository();
     const employee = await repository.findEmployee(iin);
     if (!employee) return employeeNotFound();
-    const rows = await repository.itemsForEmployee(iin, { offset: page.offset, limit: page.limit + 1 });
+    const rows = await repository.itemsForEmployee(iin, { after: page.after, limit: page.limit + 1 });
+    const returned = rows.slice(0, page.limit);
+    const last = returned.at(-1);
     return json({
       employee,
-      items: applyDirectoryEmployeeName(rows.slice(0, page.limit), employee),
-      nextCursor: rows.length > page.limit ? encodeOffset(page.offset + page.limit) : null,
+      items: applyDirectoryEmployeeName(returned, employee),
+      nextCursor: rows.length > page.limit && last
+        ? encodeCursor("employee_items", iin, last.assignedAt, last.id)
+        : null,
     });
   } catch (error) {
     return dependencyErrorResponse(error);
@@ -112,16 +132,20 @@ export async function findDockflowEmployeeItems(request: Request, iin: string, r
   if (unauthorized) return unauthorized;
   const validationError = validateIin(iin);
   if (validationError) return validationError;
-  const page = parsePage(request);
+  const page = parsePage(request, "employee_items", iin);
   if (page instanceof Response) return page;
   try {
     repository ??= createPostgresDockflowRepository();
     const employee = await repository.findEmployee(iin);
     if (!employee) return employeeNotFound();
-    const rows = await repository.itemsForEmployee(iin, { offset: page.offset, limit: page.limit + 1 });
+    const rows = await repository.itemsForEmployee(iin, { after: page.after, limit: page.limit + 1 });
+    const returned = rows.slice(0, page.limit);
+    const last = returned.at(-1);
     return json({
-      items: applyDirectoryEmployeeName(rows.slice(0, page.limit), employee),
-      nextCursor: rows.length > page.limit ? encodeOffset(page.offset + page.limit) : null,
+      items: applyDirectoryEmployeeName(returned, employee),
+      nextCursor: rows.length > page.limit && last
+        ? encodeCursor("employee_items", iin, last.assignedAt, last.id)
+        : null,
     });
   } catch (error) {
     return dependencyErrorResponse(error);
@@ -180,22 +204,47 @@ export function createPostgresDockflowRepository(
 }
 
 
-function parsePage(request: Request): DockflowPageRequest | Response {
+type DockflowCursorKind = "employees" | "items" | "employee_items";
+
+function parsePage(request: Request, kind: DockflowCursorKind, scope: string | null = null): DockflowPageRequest | Response {
   const query = new URL(request.url).searchParams;
   if ([...query.keys()].some((key) => key !== "limit" && key !== "cursor") || query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
   const rawLimit = query.get("limit") ?? "100";
   if (!/^\d{1,3}$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200) return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
   const cursor = query.get("cursor");
-  let offset = 0;
+  let after: DockflowPageRequest["after"] = null;
   if (cursor) {
-    if (cursor.length > 64) return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
-    try { offset = Number(Buffer.from(cursor, "base64url").toString("utf8")); }
+    if (cursor.length > 256) return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
+    let payload: unknown;
+    try { payload = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")); }
     catch { return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters."); }
-    if (!Number.isSafeInteger(offset) || offset < 0 || encodeOffset(offset) !== cursor) return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
+    if (!isCursorPayload(payload, kind, scope) || encodeCursor(payload[1], payload[2], payload[3], payload[4]) !== cursor) {
+      return errorResponse(400, "INVALID_PAGE", "Invalid pagination parameters.");
+    }
+    after = { sortValue: payload[3], id: payload[4] };
   }
-  return { offset, limit: Number(rawLimit) };
+  return { after, limit: Number(rawLimit) };
 }
 
-function encodeOffset(offset: number) { return Buffer.from(String(offset)).toString("base64url"); }
+function encodeCursor(kind: DockflowCursorKind, scope: string | null, sortValue: string, id: string) {
+  return Buffer.from(JSON.stringify([1, kind, scope, sortValue, id])).toString("base64url");
+}
+
+function isCursorPayload(
+  value: unknown,
+  kind: DockflowCursorKind,
+  scope: string | null,
+): value is [1, DockflowCursorKind, string | null, string, string] {
+  if (!Array.isArray(value) || value.length !== 5 || value[0] !== 1 || value[1] !== kind || value[2] !== scope) return false;
+  const sortValue = value[3];
+  const id = value[4];
+  if (typeof sortValue !== "string" || typeof id !== "string") return false;
+  if (kind === "employees") return /^\d{12}$/.test(sortValue) && id === sortValue;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(sortValue)) return false;
+  const parsedSortValue = new Date(sortValue);
+  return !Number.isNaN(parsedSortValue.getTime())
+    && parsedSortValue.toISOString() === sortValue
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
 
 export type { DockflowDataRepository, DockflowEmployee, DockflowEmployeeItem, DockflowInventoryItem, DockflowInventoryRepository, DockflowItemPhoto, DockflowMarkingType, DockflowPageRequest } from "@/lib/contracts/dockflow";
