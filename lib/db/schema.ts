@@ -63,6 +63,21 @@ import { USER_ROLES } from "@/lib/contracts/users";
  */
 export const inventorySchema = pgSchema("yu_inventory");
 
+export const oneCFixedAssetInboxTable = inventorySchema.table(
+  "one_c_fixed_asset_inbox",
+  {
+    externalId: text().primaryKey(),
+    payloadHash: varchar({ length: 64 }).notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("one_c_fixed_asset_inbox_payload_hash_check", sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
+    index("one_c_fixed_asset_inbox_updated_at_idx").on(table.updatedAt),
+  ],
+);
+
 const binaryData = customType<{ data: Uint8Array; driverData: Uint8Array }>({
   dataType: () => "bytea",
 });

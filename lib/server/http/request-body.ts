@@ -26,6 +26,7 @@ function requireMediaType(request: Request, expected: string) {
 export async function readLimitedBody(
   request: Request,
   maximumBytes: number,
+  options: { timeoutMs?: number } = {},
 ): Promise<Uint8Array> {
   assertContentLength(request, maximumBytes);
   const reader = request.body?.getReader();
@@ -33,12 +34,13 @@ export async function readLimitedBody(
 
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
+  const deadline = options.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs;
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readWithDeadline(reader, deadline);
     if (done) break;
     byteLength += value.byteLength;
     if (byteLength > maximumBytes) {
-      await reader.cancel();
+      await reader.cancel().catch(() => undefined);
       throw new ApplicationError("payload_too_large", "payload_too_large");
     }
     chunks.push(value);
@@ -51,6 +53,34 @@ export async function readLimitedBody(
     offset += chunk.byteLength;
   }
   return bytes;
+}
+
+async function readWithDeadline(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  deadline: number | undefined,
+) {
+  if (deadline === undefined) return reader.read();
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    await reader.cancel().catch(() => undefined);
+    throw new ApplicationError("unavailable", "request_timeout");
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ApplicationError("unavailable", "request_timeout")), remaining);
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof ApplicationError && error.publicCode === "request_timeout") {
+      await reader.cancel().catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function readLimitedJson(

@@ -14,9 +14,11 @@ import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
 import { LocalBarcodeService } from "@/lib/application/services/local-barcode-service";
+import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { PostgresSettingsRepository } from "@/lib/server/persistence/postgres/postgres-settings-repository";
+import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
 import { createPostgresRoomWorkspaceRepositories } from "@/lib/server/persistence/postgres/postgres-room-workspace-repositories";
 import { createPostgresServiceRequestRepositories } from "@/lib/server/persistence/postgres/postgres-service-request-repositories";
@@ -51,6 +53,7 @@ export interface ApplicationServices {
   readonly users: UserService;
   readonly assetLosses: AssetLossService;
   readonly localBarcodes: LocalBarcodeService;
+  readonly oneCFixedAssets: OneCFixedAssetImportService;
 }
 
 const globalApplication = globalThis as typeof globalThis & {
@@ -160,6 +163,7 @@ function createApplicationServices(): ApplicationServices {
       { now: () => new Date() },
       { create: () => randomUUID() },
     ),
+    oneCFixedAssets: new OneCFixedAssetImportService(new PostgresOneCFixedAssetRepository()),
   };
 }
 
