@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { currentRequestId, requestIdFor } from "@/lib/server/observability";
 
 export interface ExternalRequestContext {
   requestId: string;
@@ -12,7 +13,7 @@ export function authorizeExternalBearer(
   secrets: { current?: string | null; next?: string | null },
 ): { context?: ExternalRequestContext; response?: Response } {
   const verification = verifyExternalBearer(request, secrets);
-  const requestId = request.headers.get("x-request-id")?.match(/^[A-Za-z0-9._-]{1,80}$/)?.[0] ?? randomUUID();
+  const requestId = currentRequestId() ?? requestIdFor(request);
   if (verification === "not_configured") return { response: externalJson({ error: "API_NOT_CONFIGURED", message: "External API is not configured." }, 503, { "X-Request-Id": requestId }) };
   if (verification === "unauthorized") return { response: externalJson({ error: "UNAUTHORIZED", message: "Missing or invalid API key." }, 401, { "WWW-Authenticate": "Bearer", "X-Request-Id": requestId }) };
   return { context: { requestId, credentialSlot: verification } };

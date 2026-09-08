@@ -1,6 +1,7 @@
 import { getApplicationServices } from "@/lib/server/application";
 import { createInventoryTransferOverridePostHandler } from "@/lib/server/http/inventory-transfer-override-handler";
 import { requireCurrentUser } from "@/lib/server/security/request-user";
+import { observeLegacyHttpRequest } from "@/lib/server/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,5 +20,5 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  return post(request, (await context.params).id);
+  return observeLegacyHttpRequest(request, "/api/inventory/transfers/:id/override", "override", async () => post(request, (await context.params).id));
 }

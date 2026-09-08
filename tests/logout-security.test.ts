@@ -21,7 +21,8 @@ test("logout rejects cross-site cookie-authenticated requests", async () => {
 
   assert.equal(response.status, 403);
   assert.equal(response.headers.get("set-cookie"), null);
-  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0, must-revalidate");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("logout clears the host-only root session cookie", async () => {

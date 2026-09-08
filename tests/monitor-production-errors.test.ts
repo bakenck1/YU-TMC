@@ -69,6 +69,72 @@ test("monitoring report keeps the thirty-minute default", async () => {
   }
 });
 
+test("monitor reads the structured envelope and old journal lines without sensitive context", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "yu-monitor-"));
+  try {
+    const sourceFile = path.join(directory, "logs.jsonl");
+    const timestamp = new Date().toISOString();
+    await writeFile(sourceFile, [
+      JSON.stringify({
+        timestamp,
+        level: "error",
+        event: "http.request.failed",
+        requestId: "safe-request-id",
+        route: "/api/auth/login",
+        status: 500,
+        duration: 12,
+        deploymentId: "deploy-safe",
+        errorCode: "internal_error",
+        email: "person@example.test",
+        iin: "123456789012",
+        body: "<xml>secret</xml>",
+        photo: "data:image/jpeg;base64,c2VjcmV0",
+        cause: { message: "nested secret" },
+        details: { authorization: "Bearer secret" },
+      }),
+      `[ERROR] ${timestamp} legacy journal failure route=/legacy status=500 request_id=legacy-safe body=<xml>secret</xml> fullName: Sensitive Person photo=raw-secret-photo`,
+    ].join("\n") + "\n", "utf8");
+
+    await runMonitor(["--source-file", sourceFile, "--output-dir", directory]);
+    const reports = await readReports(directory);
+    assert.equal(reports.length, 2);
+    const report = reports.find((value) => value.includes("http.request.failed"));
+    assert.ok(report);
+    assert.match(report, /Deployment ID: `deploy-safe`/);
+    assert.match(report, /Error code: `internal_error`/);
+    assert.doesNotMatch(reports.join("\n"), /person@example\.test|123456789012|<xml>|base64|nested secret|Bearer secret|Sensitive Person|raw-secret-photo/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("structured errors with different error codes remain separate incidents", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "yu-monitor-"));
+  try {
+    const sourceFile = path.join(directory, "logs.jsonl");
+    const timestamp = new Date().toISOString();
+    const base = {
+      timestamp,
+      level: "error",
+      event: "http.request.failed",
+      route: "/api/example",
+      status: 500,
+    };
+    await writeFile(sourceFile, [
+      JSON.stringify({ ...base, errorCode: "database_unavailable" }),
+      JSON.stringify({ ...base, errorCode: "dependency_timeout" }),
+    ].join("\n") + "\n", "utf8");
+
+    await runMonitor(["--source-file", sourceFile, "--output-dir", directory]);
+    const reports = await readReports(directory);
+    assert.equal(reports.length, 2);
+    assert.match(reports.join("\n"), /database_unavailable/);
+    assert.match(reports.join("\n"), /dependency_timeout/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a no-error run clears state without rewriting the previous report", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "yu-monitor-"));
   try {

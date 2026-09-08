@@ -17,15 +17,21 @@ import { PostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-u
 import { createPostgresUserRepositories } from "@/lib/server/persistence/postgres/postgres-user-repositories";
 import { readLegacyCredential } from "@/lib/server/persistence/legacy/legacy-credential-source";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
+import { emitLegacyUsage } from "@/lib/server/observability";
+
+const startedAt = Date.now();
+let legacySourceConfigured = false;
 
 async function main() {
   const target = parseTargetArgument(process.argv.slice(2));
   loadTargetEnvironment(target);
   const credential = await readLegacyCredential();
   if (!credential) {
+    emitLegacyUsage({ compatibilityId: "LEGACY-AUTH-IMPORT", variant: "not_configured", outcome: "not_configured" }, { duration: Date.now() - startedAt });
     console.log("No legacy credential source is configured; nothing to import.");
     return;
   }
+  legacySourceConfigured = true;
 
   const config = readDatabaseConfig({ purpose: "migration", target });
   const pool = createPostgresPool(config, { max: 1 });
@@ -49,6 +55,11 @@ async function main() {
       { create: () => randomUUID() },
     );
     const outcome = await service.importLegacyCredential(credential);
+    emitLegacyUsage({
+      compatibilityId: "LEGACY-AUTH-IMPORT",
+      variant: "configured",
+      outcome: outcome === "imported" ? "imported" : "already_imported",
+    }, { duration: Date.now() - startedAt });
     console.log(
       outcome === "imported"
         ? "Legacy credential imported."
@@ -60,6 +71,11 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
+  emitLegacyUsage({
+    compatibilityId: "LEGACY-AUTH-IMPORT",
+    variant: legacySourceConfigured ? "configured" : "not_configured",
+    outcome: "failed",
+  }, { duration: Date.now() - startedAt });
   console.error(formatDatabaseCommandError(error));
   process.exitCode = 1;
 });

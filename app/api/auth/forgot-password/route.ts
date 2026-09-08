@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { getApplicationServices } from "@/lib/server/application";
+import { observeHttpRequest } from "@/lib/server/observability";
 import { normalizeEmail } from "@/lib/security/login-protection";
 import {
   consumePasswordResetRequestLimits,
@@ -25,7 +26,11 @@ function validEmail(email: string) {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-export async function POST(request: Request) {
+export function POST(request: Request) {
+  return observeHttpRequest(request, "/api/auth/forgot-password", () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 

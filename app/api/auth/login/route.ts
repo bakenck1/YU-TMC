@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { observeHttpRequest } from "@/lib/server/observability";
 import { getApplicationServices } from "@/lib/server/application";
 import {
   clearFailedLogins,
@@ -33,7 +34,7 @@ function validEmail(email: string) {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
@@ -160,4 +161,8 @@ export async function POST(request: Request) {
     ...sessionCookieOptions(rememberMe ? { maxAge: ttlSeconds } : undefined),
   });
   return response;
+}
+
+export function POST(request: Request) {
+  return observeHttpRequest(request, "/api/auth/login", () => handlePost(request));
 }

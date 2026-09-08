@@ -1,5 +1,7 @@
 import { getApplicationServices } from "../lib/server/application";
 import { closeDatabase } from "../lib/db/client";
+import { emitStructuredEvent } from "../lib/server/observability";
+import { randomUUID } from "node:crypto";
 
 async function main() {
   const continuous = process.argv.includes("--loop");
@@ -18,7 +20,16 @@ async function main() {
   try {
     do {
       const result = await getApplicationServices().push.processTmcPushOutbox(Number(rawLimit));
-      process.stdout.write(`${JSON.stringify({ event: "tmc_push_outbox_cycle", ...result })}\n`);
+      emitStructuredEvent({
+        level: result.deadLettered > 0 ? "warn" : "info",
+        event: "tmc_push_outbox_cycle",
+        requestId: randomUUID(),
+        route: "worker:tmc-push",
+        status: result.deadLettered > 0 ? 503 : 200,
+        duration: 0,
+        errorCode: result.deadLettered > 0 ? "tmc_push_dead_lettered" : "none",
+        attributes: result,
+      });
       if (result.deadLettered > 0 && !continuous) process.exitCode = 2;
       if (!continuous || stopping) break;
       await new Promise<void>((resolve) => {
@@ -36,7 +47,15 @@ async function main() {
   }
 }
 
-void main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : "tmc_push_worker_failed"}\n`);
+void main().catch(() => {
+  emitStructuredEvent({
+    level: "error",
+    event: "tmc_push_worker_failed",
+    requestId: randomUUID(),
+    route: "worker:tmc-push",
+    status: 500,
+    duration: 0,
+    errorCode: "tmc_push_worker_failed",
+  });
   process.exitCode = 1;
 });

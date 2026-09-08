@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getApplicationServices } from "@/lib/server/application";
+import { observeHttpRequest } from "@/lib/server/observability";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -35,7 +36,11 @@ function validName(value: string) {
   return value.length >= 2 && value.length <= 60;
 }
 
-export async function POST(request: Request) {
+export function POST(request: Request) {
+  return observeHttpRequest(request, "/api/auth/register", () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createStructuredWorkerLogger } from "@/lib/server/observability";
 
 import { InventoryLocationService } from "@/lib/application/services/inventory-location-service";
 import { RoomWorkspaceService } from "@/lib/application/services/room-workspace-service";
@@ -93,6 +94,7 @@ function createApplicationServices(): ApplicationServices {
     readWebPushConfiguration(),
     { now: () => new Date() },
     { create: () => randomUUID() },
+    createStructuredWorkerLogger("worker:tmc-push"),
   );
 
   return {

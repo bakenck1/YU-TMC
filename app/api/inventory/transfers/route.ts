@@ -4,6 +4,7 @@ import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { createInventoryTransferListGetHandler } from "@/lib/server/http/inventory-transfer-list-handler";
 import { readLimitedJson } from "@/lib/server/http/request-body";
+import { observeLegacyHttpRequest } from "@/lib/server/observability";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -19,10 +20,14 @@ const get = createInventoryTransferListGetHandler({
 });
 
 export async function GET(request: Request) {
-  return get(request);
+  return observeLegacyHttpRequest(request, "/api/inventory/transfers", "collection.get", () => get(request));
 }
 
 export async function POST(request: Request) {
+  return observeLegacyHttpRequest(request, "/api/inventory/transfers", "collection.post", () => post(request));
+}
+
+async function post(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     const input = parseInput(await readLimitedJson(request));

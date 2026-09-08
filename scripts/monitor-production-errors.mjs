@@ -106,11 +106,15 @@ function parseLogEntries(rawText) {
 }
 
 function parseEntry(block) {
-  const trimmed = redactSensitiveText(block).trim();
+  const source = block.trim();
+  const parsed = tryParseJson(source);
+  const trimmed = parsed
+    ? JSON.stringify(sanitizeJsonLog(parsed))
+    : redactSensitiveText(source).trim();
   if (!trimmed) return null;
 
   const json = tryParseJson(trimmed);
-  const normalized = json ? normalizeJsonLog(json, block) : normalizeTextLog(block);
+  const normalized = json ? normalizeJsonLog(json, trimmed) : normalizeTextLog(trimmed);
   return normalized;
 }
 
@@ -118,29 +122,48 @@ function redactSensitiveText(value) {
   return String(value)
     .replace(/\b(authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "$1: [REDACTED]")
     .replace(/([?&](?:token|code|password|secret|key|email)=)[^&\s]+/gi, "$1[REDACTED]")
-    .replace(/("(?:password|token|secret|authorization|cookie|code|email)"\s*:\s*")[^"]*(")/gi, "$1[REDACTED]$2")
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]");
+    .replace(/("(?:password|token|secret|authorization|cookie|code|email|iin|fullName|fio|body|xml|imageDataUrl|photo)"\s*:\s*")[^"]*(")/gi, "$1[REDACTED]$2")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]")
+    .replace(/\b\d{12}\b/g, "[REDACTED_IIN]")
+    .replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=_-]+/gi, "[REDACTED_PHOTO]");
+}
+
+function sanitizeJsonLog(value) {
+  const safe = {};
+  for (const key of ["timestamp", "time", "ts", "@timestamp", "occurredAt", "createdAt", "level", "severity", "logLevel", "type", "event", "requestId", "request_id", "traceId", "trace_id", "route", "path", "pathname", "method", "status", "statusCode", "httpStatus", "duration", "deploymentId", "errorCode"]) {
+    const field = value?.[key];
+    if (typeof field === "string" || typeof field === "number" || typeof field === "boolean") safe[key] = redactSensitiveText(field);
+  }
+  if (value?.attributes && typeof value.attributes === "object" && !Array.isArray(value.attributes)) {
+    const attributes = {};
+    for (const key of ["compatibilityId", "variant", "outcome", "credentialSlot", "attempts", "failed", "total", "claimed", "completed", "retried", "deadLettered", "statusCode"]) {
+      const field = value.attributes[key];
+      if (typeof field === "string" || typeof field === "number" || typeof field === "boolean") attributes[key] = redactSensitiveText(field);
+    }
+    if (Object.keys(attributes).length) safe.attributes = attributes;
+  }
+  return safe;
 }
 
 function normalizeJsonLog(obj, raw) {
   const level = lower(obj.level ?? obj.severity ?? obj.logLevel ?? obj.type);
   const status = numberOrNull(obj.status ?? obj.statusCode ?? obj.httpStatus);
-  const message = firstString(
-    obj.message,
-    obj.msg,
-    obj.error?.message,
-    obj.err?.message,
-    obj.error,
-    obj.err,
-    obj.reason,
-  );
-  const stack = firstString(obj.stack, obj.error?.stack, obj.err?.stack);
+  const message = firstString(obj.event);
+  const stack = "";
   const trace = [message, stack, raw].filter(Boolean).join("\n");
   const route = firstString(obj.route, obj.path, obj.url, obj.pathname, obj.request?.path);
   const method = firstString(obj.method, obj.request?.method);
   const requestId = firstString(obj.requestId, obj.request_id, obj.traceId, obj.trace_id, obj.id);
   const timestamp = firstString(obj.timestamp, obj.time, obj.ts, obj["@timestamp"], obj.occurredAt, obj.createdAt);
-  const title = deriveTitle({ message, stack, raw, status, level });
+  const deploymentId = firstString(obj.deploymentId);
+  const errorCode = firstString(obj.errorCode);
+  const title = message
+    ? cleanupTitle(message)
+    : status && status >= 500
+      ? `HTTP ${status} server error`
+      : level && ERROR_LEVELS.has(level)
+        ? `JSON ${level} event`
+        : "JSON log event";
 
   return {
     raw,
@@ -154,34 +177,38 @@ function normalizeJsonLog(obj, raw) {
     status,
     level,
     timestamp,
+    deploymentId,
+    errorCode,
     fingerprint: makeFingerprint({
       title,
       stack,
       route,
       method,
       status,
+      errorCode,
     }),
   };
 }
 
 function normalizeTextLog(raw) {
-  const lines = raw.split(/\r?\n/).map((line) => line.trimEnd());
-  const firstLine = lines[0] ?? "";
   const level = deriveLevelFromText(raw);
   const status = deriveStatusFromText(raw);
-  const title = deriveTitle({ message: firstLine, stack: raw, raw, status, level });
-  const route = matchFirst(raw, /(?:route|path|url)=([^\s]+)/i);
+  const title = status && status >= 500
+    ? `Legacy journal HTTP ${status} error`
+    : level && ERROR_LEVELS.has(level)
+      ? `Legacy journal ${level} event`
+      : "Legacy journal event";
+  const route = sanitizeLegacyDimension(matchFirst(raw, /(?:route|path|url)=([^\s]+)/i));
   const method = matchFirst(raw, /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/);
-  const requestId = matchFirst(raw, /\b(?:request[_-]?id|trace[_-]?id|correlation[_-]?id)[:= ]([^\s]+)/i);
+  const requestId = sanitizeLegacyDimension(matchFirst(raw, /\b(?:request[_-]?id|trace[_-]?id|correlation[_-]?id)[:= ]([^\s]+)/i));
   const timestamp = matchFirst(raw, /(\d{4}-\d{2}-\d{2}T[^\s]+Z?)/);
-  const stackLine = lines.find((line) => line.trimStart().startsWith("at ")) ?? "";
 
   return {
     raw,
     title,
-    message: firstLine,
-    stack: stackLine || "",
-    trace: raw,
+    message: title,
+    stack: "",
+    trace: "Legacy journal content redacted; inspect the access-controlled source log with this correlation metadata.",
     route,
     method,
     requestId,
@@ -190,12 +217,19 @@ function normalizeTextLog(raw) {
     timestamp,
     fingerprint: makeFingerprint({
       title,
-      stack: stackLine || raw,
+      stack: "",
       route,
       method,
       status,
+      errorCode: "",
     }),
   };
+}
+
+function sanitizeLegacyDimension(value) {
+  return redactSensitiveText(value)
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, ":id")
+    .slice(0, 160);
 }
 
 function groupIncidents(entries, sinceMinutes) {
@@ -219,6 +253,8 @@ function groupIncidents(entries, sinceMinutes) {
       method: entry.method ?? "",
       status: entry.status ?? null,
       requestId: entry.requestId ?? "",
+      deploymentId: entry.deploymentId ?? "",
+      errorCode: entry.errorCode ?? "",
       sample: entry.trace,
       entries: [],
     };
@@ -229,6 +265,8 @@ function groupIncidents(entries, sinceMinutes) {
     if (!incident.method && entry.method) incident.method = entry.method;
     if (incident.status === null && entry.status !== null) incident.status = entry.status;
     if (!incident.requestId && entry.requestId) incident.requestId = entry.requestId;
+    if (!incident.deploymentId && entry.deploymentId) incident.deploymentId = entry.deploymentId;
+    if (!incident.errorCode && entry.errorCode) incident.errorCode = entry.errorCode;
     if (!incident.sample || entry.trace.length > incident.sample.length) incident.sample = entry.trace;
     incident.entries.push(entry);
 
@@ -272,6 +310,8 @@ source_window_minutes: ${sourceWindowMinutes}
 - Method: ${incident.method ? `\`${incident.method}\`` : "n/a"}
 - Status: ${incident.status ?? "n/a"}
 - Request ID: ${incident.requestId ? `\`${incident.requestId}\`` : "n/a"}
+- Deployment ID: ${incident.deploymentId ? `\`${incident.deploymentId}\`` : "n/a"}
+- Error code: ${incident.errorCode ? `\`${incident.errorCode}\`` : "n/a"}
 
 ## Trace
 
@@ -293,48 +333,16 @@ function makeFileName(title, fingerprint) {
   return `${slug}-${shortHash}.md`;
 }
 
-function makeFingerprint({ title, stack, route, method, status }) {
+function makeFingerprint({ title, stack, route, method, status, errorCode }) {
   const normalized = [
     normalizeFingerprintText(title),
     normalizeFingerprintText(stack),
     normalizeFingerprintText(route),
     normalizeFingerprintText(method),
     status === null || status === undefined ? "" : String(status),
+    normalizeFingerprintText(errorCode),
   ].join("|");
   return createHash("sha256").update(normalized).digest("hex");
-}
-
-function deriveTitle({ message, stack, raw, status, level }) {
-  const candidates = [message, stack, raw].filter(Boolean);
-  for (const candidate of candidates) {
-    const title = extractTitle(candidate);
-    if (title) return cleanupTitle(title);
-  }
-
-  if (status && status >= 500) return `HTTP ${status} server error`;
-  if (level === "fatal") return "Fatal error";
-  return "Unknown production error";
-}
-
-function extractTitle(text) {
-  const lines = String(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) return "";
-
-  const first = lines[0];
-  const stripped = first
-    .replace(/^\[[^\]]+\]\s*/, "")
-    .replace(/^\w+\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s*/, "")
-    .replace(/^\d{4}-\d{2}-\d{2}[T ]\S+\s*/, "")
-    .replace(/^(error|fatal|critical|alert|emergency|warn|warning)[:\]\-]?\s*/i, "")
-    .trim();
-
-  if (/^at\s+\S+/.test(stripped) || !stripped) {
-    const stackLine = lines.find((line) => /^([A-Za-z0-9_.-]+Error|Error|TypeError|ReferenceError|RangeError|SyntaxError|AggregateError)/.test(line));
-    if (stackLine) return stackLine.replace(/\s+at\s+.*/, "").trim();
-  }
-
-  if (/^error[:\s-]*$/i.test(stripped) && lines[1]) return lines[1];
-  return stripped;
 }
 
 function cleanupTitle(title) {

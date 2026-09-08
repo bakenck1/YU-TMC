@@ -58,9 +58,8 @@ test("register route rejects cross-site mutations before bootstrap checks", asyn
   );
 
   assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "cross_site_request_blocked",
-  });
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
+  assert.equal((await response.json() as { error: string }).error, "cross_site_request_blocked");
 });
 
 test("register route returns a neutral authorization error without a bootstrap token", async () => {
@@ -75,9 +74,7 @@ test("register route returns a neutral authorization error without a bootstrap t
     );
 
     assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "registration_not_authorized",
-    });
+    assert.equal((await response.json() as { error: string }).error, "registration_not_authorized");
   } finally {
     if (previousToken === undefined) {
       Reflect.deleteProperty(process.env, "AUTH_BOOTSTRAP_TOKEN");
@@ -99,9 +96,7 @@ test("register route rejects a missing bearer token when bootstrap is configured
     );
 
     assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "registration_not_authorized",
-    });
+    assert.equal((await response.json() as { error: string }).error, "registration_not_authorized");
   } finally {
     if (previousToken === undefined) {
       Reflect.deleteProperty(process.env, "AUTH_BOOTSTRAP_TOKEN");
@@ -126,9 +121,7 @@ test("register route rejects a wrong bearer token before reading registration st
     );
 
     assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "registration_not_authorized",
-    });
+    assert.equal((await response.json() as { error: string }).error, "registration_not_authorized");
   } finally {
     if (previousToken === undefined) {
       Reflect.deleteProperty(process.env, "AUTH_BOOTSTRAP_TOKEN");
@@ -176,9 +169,7 @@ test("register route maps an invalid public origin before registration state", a
     );
 
     assert.equal(response.status, 503);
-    assert.deepEqual(await response.json(), {
-      error: "public_origin_not_configured",
-    });
+    assert.equal((await response.json() as { error: string }).error, "public_origin_not_configured");
   } finally {
     if (previousOrigin === undefined) {
       Reflect.deleteProperty(process.env, "APP_PUBLIC_ORIGIN");

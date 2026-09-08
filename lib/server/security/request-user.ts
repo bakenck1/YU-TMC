@@ -11,6 +11,7 @@ import { sessionFromRequest } from "@/lib/security/session";
 import { verifySessionToken } from "@/lib/security/session";
 import { consumeApiRateLimit } from "@/lib/security/rate-limiter";
 import { requireSameOriginMutation } from "@/lib/security/request-integrity";
+import { emitLegacyUsage } from "@/lib/server/observability";
 
 export async function requireCurrentUser(request: Request) {
   requireSameOriginMutation(request);
@@ -54,22 +55,39 @@ async function resolveSessionSubject(subject: string, sessionVersion: number) {
   try {
     user = await getApplicationServices().users.resolveCurrentAccount(subject);
   } catch (error) {
+    emitLegacyUsage({ compatibilityId: "LEGACY-COOKIE-CONTRACT", variant: "v1", outcome: "failed" });
     throw new ApplicationError("unavailable", "authentication_unavailable", {
       cause: error,
     });
   }
-  return user?.sessionVersion === sessionVersion ? user : null;
+  const accepted = user?.sessionVersion === sessionVersion;
+  emitLegacyUsage({
+    compatibilityId: "LEGACY-COOKIE-CONTRACT",
+    variant: "v1",
+    outcome: accepted ? "accepted" : user ? "session_version_mismatch" : "rejected",
+  });
+  return accepted ? user : null;
 }
 
 export async function requirePermission(
   request: Request,
   permission: AppPermission,
 ) {
-  const user = await requireCurrentUser(request);
-  if (!hasPermission(user.role, permission)) {
-    throw new ApplicationError("forbidden", "forbidden");
+  try {
+    const user = await requireCurrentUser(request);
+    if (!hasPermission(user.role, permission)) {
+      throw new ApplicationError("forbidden", "forbidden");
+    }
+    if (permission.startsWith("legacy.")) {
+      emitLegacyUsage({ compatibilityId: "LEGACY-PERMISSIONS", variant: permission, outcome: "allowed" });
+    }
+    return user;
+  } catch (error) {
+    if (permission.startsWith("legacy.")) {
+      emitLegacyUsage({ compatibilityId: "LEGACY-PERMISSIONS", variant: permission, outcome: "denied" });
+    }
+    throw error;
   }
-  return user;
 }
 
 export function authorizationActor(user: {

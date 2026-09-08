@@ -1,5 +1,21 @@
 # P1 — structured observability и evidence для legacy sunset
 
+Статус: **Engineering Done (2026-09-08); 90-day evidence gate active**.
+
+Реализация: введён безопасный JSON envelope и request correlation для external API, всех auth
+routes, asset-loss и TMC worker; monitoring parser принимает structured и legacy journal input,
+редактирует чувствительные данные и разделяет incidents по stable error code. Для шести legacy
+контрактов добавлены строго allowlisted variant/outcome counters, воспроизводимый quarterly report
+и machine-checked owner/source baseline. До подтверждённого полного окна coverage и uptime отчёт
+остаётся `unknown` и не разрешает sunset. Текущий интервал начат 2026-08-14; operational acceptance
+может быть закрыт не раньше 2026-11-12 реальными production evidence.
+
+Независимые review-проходы: **6.5/10**, затем **7/10**. Все actionable comments обоих проходов
+исправлены; третий проход не выполнялся согласно лимиту в два review. Проверки после исправлений:
+678 server, 15 UI и 72 component tests, production build, lint (0 errors), `docs:check` и
+`legacy:check`. PostgreSQL suite не относится к изменённым SQL boundaries и локально пропущен без
+test database URLs.
+
 ## Корень долга
 
 Monitoring script агрегирует существующие строки, но приложение не задаёт единый

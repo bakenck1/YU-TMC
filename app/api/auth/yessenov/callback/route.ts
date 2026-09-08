@@ -26,11 +26,16 @@ import {
   consumeApiRateLimit,
   rateLimitedResponse,
 } from "@/lib/security/rate-limiter";
+import { observeHttpRequest } from "@/lib/server/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
+  return observeHttpRequest(request, "/api/auth/yessenov/callback", () => handleGet(request));
+}
+
+async function handleGet(request: NextRequest) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 

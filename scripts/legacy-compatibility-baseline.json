@@ -2,6 +2,57 @@
   "created": "2026-08-14",
   "nextReview": "2026-11-12",
   "evidenceRetentionDays": 90,
+  "telemetryEvent": "legacy.usage",
+  "owners": {
+    "LEGACY-PERMISSIONS": "Security/Auth maintainer",
+    "LEGACY-TRANSFER-ROUTES": "Inventory responsibility maintainer",
+    "LEGACY-QR-ALIASES": "Inventory/QR maintainer",
+    "LEGACY-AUTH-IMPORT": "Auth/DB migration maintainer",
+    "LEGACY-COOKIE-CONTRACT": "Auth maintainer",
+    "LEGACY-SEED-DATA": "Data migration maintainer"
+  },
+  "telemetryVariants": {
+    "LEGACY-PERMISSIONS": [
+      "legacy.dashboard.read",
+      "legacy.items.read",
+      "legacy.locations.read",
+      "legacy.analytics.read",
+      "legacy.users.read",
+      "legacy.users.manage",
+      "legacy.users.manage_privileged",
+      "legacy.settings.manage"
+    ],
+    "LEGACY-TRANSFER-ROUTES": ["collection.get", "collection.post", "cancel", "decision", "override"],
+    "LEGACY-QR-ALIASES": ["legacy_raw", "legacy_url"],
+    "LEGACY-AUTH-IMPORT": ["configured", "not_configured"],
+    "LEGACY-COOKIE-CONTRACT": ["v1"],
+    "LEGACY-SEED-DATA": ["development", "test"]
+  },
+  "telemetryOutcomes": {
+    "LEGACY-PERMISSIONS": ["allowed", "denied"],
+    "LEGACY-TRANSFER-ROUTES": ["accepted", "rejected", "failed"],
+    "LEGACY-QR-ALIASES": ["resolved", "not_found", "rejected", "failed"],
+    "LEGACY-AUTH-IMPORT": ["imported", "already_imported", "not_configured", "failed"],
+    "LEGACY-COOKIE-CONTRACT": ["token_valid", "token_invalid", "accepted", "rejected", "session_version_mismatch", "failed"],
+    "LEGACY-SEED-DATA": ["completed", "failed"]
+  },
+  "telemetrySources": {
+    "LEGACY-PERMISSIONS": ["lib/server/security/request-user.ts"],
+    "LEGACY-TRANSFER-ROUTES": [
+      "app/api/inventory/transfers/route.ts",
+      "app/api/inventory/transfers/[id]/cancel/route.ts",
+      "app/api/inventory/transfers/[id]/decision/route.ts",
+      "app/api/inventory/transfers/[id]/override/route.ts"
+    ],
+    "LEGACY-QR-ALIASES": ["app/api/inventory/qr/resolve/route.ts"],
+    "LEGACY-AUTH-IMPORT": ["scripts/db/import-legacy-auth.ts"],
+    "LEGACY-COOKIE-CONTRACT": [
+      "lib/security/session.ts",
+      "lib/server/security/request-user.ts",
+      "app/api/auth/session/route.ts"
+    ],
+    "LEGACY-SEED-DATA": ["scripts/db/seed.ts"]
+  },
   "inventoryIds": [
     "LEGACY-PERMISSIONS",
     "LEGACY-TRANSFER-ROUTES",
