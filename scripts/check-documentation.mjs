@@ -15,6 +15,7 @@ const documentationFiles = [
   "docs/test-coverage.md",
   "docs/legacy-compatibility.md",
   "docs/legacy-usage-report.md",
+  "docs/release-evidence.md",
   "docs/repository-artifacts.md",
   "TASKS.md",
 ];

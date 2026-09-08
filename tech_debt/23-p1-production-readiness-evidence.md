@@ -1,5 +1,20 @@
 # P1 — закрыть внешние production-readiness gates доказательствами
 
+Статус: **Engineering Done (2026-09-08); external gates blocked / NO-GO**.
+
+Реализация: добавлены machine-readable registry, проверяемый release evidence pack и подробный
+runbook. Checker связывает application/evidence commits, точный migration journal, deployment и
+artifact/registry digests; критические gates и prerequisites не допускают `not-applicable`, а `GO`
+требует проверяемые repository artifacts и Ed25519 deployment attestation с заранее закреплённым
+public-key fingerprint. Текущий датированный pack остаётся `NO-GO`: staging/production ingress,
+restore target, test identities, scanner, production-like capacity data и alert destination не были
+предоставлены и честно отмечены `blocked`.
+
+Независимые review-проходы: **5/10**, затем **6/10**. Все actionable findings обоих проходов
+устранены; третий проход не выполнялся согласно лимиту в два review. Финальная проверка: 680 server,
+15 UI и 72 component tests, production build, lint без ошибок, `docs:check`, evidence checker и
+`git diff --check`. PostgreSQL suite локально пропущен без test database URLs; SQL не изменялся.
+
 ## Корень долга
 
 Локальные checks зелёные, но это не доказывает свойства deployment environment.
