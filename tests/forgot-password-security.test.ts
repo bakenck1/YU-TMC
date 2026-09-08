@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { POST } from "../app/api/auth/forgot-password/route";
 
 import {
   commitPasswordResetCode,
@@ -38,6 +39,19 @@ test("forgot-password responds before delivery and rejects cross-site submission
   assert.match(source, /after\(\(\) => \{/);
   assert.doesNotMatch(source, /if \(user\) \{/);
   assert.doesNotMatch(source, /new URL\("\/reset-password", request\.url\)/);
+});
+
+test("forgot-password runtime response is correlated by the observer", async () => {
+  const response = await POST(new Request("https://inventory.example/api/auth/forgot-password", {
+    method: "POST",
+    headers: {
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site",
+    },
+  }));
+
+  assert.equal(response.status, 403);
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("newest delivered reset generation wins out-of-order webhook completion", async () => {

@@ -1,5 +1,6 @@
 import { getApplicationServices } from "@/lib/server/application";
 import { createAssetLossReviewHandler } from "@/lib/server/http/asset-loss-handlers";
+import { observeHttpRequest } from "@/lib/server/observability";
 import { authorizationActor, requirePermission } from "@/lib/server/security/request-user";
 
 export const runtime = "nodejs";
@@ -11,5 +12,5 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  return handler()(request, (await params).id);
+  return observeHttpRequest(request, "/api/inventory/loss-cases/:id/review", async () => handler()(request, (await params).id));
 }

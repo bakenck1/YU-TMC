@@ -10,11 +10,16 @@ import {
   verifySessionToken,
 } from "@/lib/security/session";
 import { getApplicationServices } from "@/lib/server/application";
+import { emitLegacyUsage, observeHttpRequest } from "@/lib/server/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
+  return observeHttpRequest(request, "/api/auth/session", () => readSession(request));
+}
+
+async function readSession(request: NextRequest) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
@@ -33,6 +38,7 @@ export async function GET(request: NextRequest) {
       session.sub,
     );
   } catch {
+    emitLegacyUsage({ compatibilityId: "LEGACY-COOKIE-CONTRACT", variant: "v1", outcome: "failed" });
     return Response.json(
       { error: "authentication_unavailable" },
       { status: 503, headers: rateLimitHeaders(apiLimit) },
@@ -40,6 +46,11 @@ export async function GET(request: NextRequest) {
   }
 
   if (!user || user.sessionVersion !== session.ver) {
+    emitLegacyUsage({
+      compatibilityId: "LEGACY-COOKIE-CONTRACT",
+      variant: "v1",
+      outcome: user ? "session_version_mismatch" : "rejected",
+    });
     const response = NextResponse.json(
       { authenticated: false },
       { status: 401, headers: rateLimitHeaders(apiLimit) },
@@ -51,6 +62,8 @@ export async function GET(request: NextRequest) {
     });
     return response;
   }
+
+  emitLegacyUsage({ compatibilityId: "LEGACY-COOKIE-CONTRACT", variant: "v1", outcome: "accepted" });
 
   return Response.json(
     {

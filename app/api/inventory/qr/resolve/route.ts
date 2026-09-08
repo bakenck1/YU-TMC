@@ -1,6 +1,8 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { parseQrIdentifierInput } from "@/lib/domain/qr-identifier";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { emitLegacyUsage, observeHttpRequest } from "@/lib/server/observability";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -12,11 +14,26 @@ const PRIVATE_HEADERS = {
   "cache-control": "private, no-store, max-age=0, must-revalidate",
 };
 
-export async function GET(request: Request) {
+export function GET(request: Request) {
+  return observeHttpRequest(request, "/api/inventory/qr/resolve", () => resolveQr(request));
+}
+
+async function resolveQr(request: Request) {
+  const url = new URL(request.url);
+  const value = url.searchParams.get("value");
+  let legacyVariant = legacyVariantFor(value);
+  let legacyUsageEmitted = false;
+  const emitQrUsage = (outcome: "resolved" | "not_found" | "rejected" | "failed") => {
+    if (!legacyVariant || legacyUsageEmitted) return;
+    legacyUsageEmitted = true;
+    emitLegacyUsage({
+      compatibilityId: "LEGACY-QR-ALIASES",
+      variant: legacyVariant,
+      outcome,
+    });
+  };
   try {
     const user = await requireCurrentUser(request);
-    const url = new URL(request.url);
-    const value = url.searchParams.get("value");
     if (!value) throw new ApplicationError("validation", "qr_value_required");
     const kindInput = url.searchParams.get("kind");
     const kind =
@@ -30,6 +47,7 @@ export async function GET(request: Request) {
         authorizationActor(user),
       );
       if (localGroup) {
+        emitQrUsage(localGroup.status === "cancelled" ? "rejected" : "resolved");
         const scannedPhotoUrl = localGroup.photoUrl
           ? `/api/inventory/qr/item-photo?value=${encodeURIComponent(localGroup.localBarcode)}&kind=barcode`
           : null;
@@ -85,6 +103,10 @@ export async function GET(request: Request) {
       kind,
       target,
     );
+    if (resolution.format === "legacy_raw" || resolution.format === "legacy_url") {
+      legacyVariant = resolution.format;
+      emitQrUsage(resolution.status === "resolved" ? "resolved" : "not_found");
+    }
     if (resolution.status === "resolved" && resolution.target?.kind === "item") {
       try {
         resolution.distribution = await getApplicationServices().localBarcodes.getDistribution(
@@ -97,8 +119,22 @@ export async function GET(request: Request) {
     }
     return Response.json({ resolution }, { headers: PRIVATE_HEADERS });
   } catch (error) {
+    emitQrUsage(error instanceof ApplicationError ? "rejected" : "failed");
     return error instanceof ApplicationError
       ? applicationErrorResponse(error)
       : Response.json({ error: "qr_resolver_unavailable" }, { status: 503 });
   }
+}
+
+function legacyVariantFor(value: string | null): "legacy_raw" | "legacy_url" | null {
+  if (!value) return null;
+  const parsed = parseQrIdentifierInput(value);
+  if (parsed.ok) {
+    return parsed.format === "legacy_raw" || parsed.format === "legacy_url"
+      ? parsed.format
+      : null;
+  }
+  const trimmed = value.trim();
+  if (/^YUQ/i.test(trimmed) || /^[0-9A-Z]{26}$/i.test(trimmed)) return null;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? "legacy_url" : "legacy_raw";
 }

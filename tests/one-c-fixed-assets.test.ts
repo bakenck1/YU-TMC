@@ -8,6 +8,7 @@ import type { OneCFixedAssetImportService } from "@/lib/application/services/one
 import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { MAX_ONE_C_RECORDS, MAX_ONE_C_TEXT_LENGTH, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
+import { observeHttpRequest } from "@/lib/server/observability";
 
 const API_KEY = "test-one-c-key";
 const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
@@ -94,6 +95,21 @@ describe("1C fixed assets HTTP boundary", () => {
     })(request(XML));
     assert.equal(unavailable.status, 503);
     assert.equal((await unavailable.json()).error, "store_unavailable");
+  });
+
+  it("reuses the observer request ID in successful response bodies", async () => {
+    const handler = createOneCFixedAssetsPostHandler({
+      service: serviceThat(async () => ({ received: 1, created: 1, updated: 0, unchanged: 0 })),
+      apiKey: () => API_KEY,
+    });
+    const response = await observeHttpRequest(
+      request(XML),
+      "/api/integrations/1c/fixed-assets",
+      () => handler(request(XML)),
+      { sink: () => undefined },
+    );
+    const body = await response.json() as { requestId: string };
+    assert.equal(body.requestId, response.headers.get("x-request-id"));
   });
 
   it("allows only one in-flight import for the configured key", async () => {

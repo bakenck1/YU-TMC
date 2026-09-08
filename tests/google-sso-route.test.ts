@@ -23,6 +23,7 @@ test("unconfigured Google SSO uses a host-independent login redirect", async () 
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "/login?error=google_not_configured");
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("unconfigured Google callback uses a host-independent login redirect", async () => {
@@ -41,6 +42,7 @@ test("unconfigured Google callback uses a host-independent login redirect", asyn
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "/login?error=google_not_configured");
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
   assert.match(
     response.headers.get("set-cookie") ?? "",
     new RegExp(`${GOOGLE_SSO_TRANSACTION_COOKIE}=;`),

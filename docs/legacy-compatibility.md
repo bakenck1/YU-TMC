@@ -28,6 +28,10 @@ legacy permission IDs и QR formats, новые файлы старого transf
   `2026-11-12`, то есть не позднее 90 дней после создания inventory.
 - Если structured telemetry ещё не подключена, `evidence_status=unknown`.
   Это блокирует sunset, но не является доказательством отсутствия usage.
+- С 2026-09-08 все шесть boundaries пишут allowlisted `legacy.usage` envelope,
+  а `npm run legacy:report` воспроизводимо агрегирует `variant × outcome`.
+  Production coverage/uptime и полный 90-дневный интервал ещё не подтверждены,
+  поэтому текущий evidence status остаётся `unknown` и код удалять нельзя.
 - Sunset decision требует owner, полные 90 дней evidence, announcement для
   пользователей/операторов и regression run на миграционных fixtures.
 
@@ -218,3 +222,5 @@ legacy permission IDs и QR formats, новые файлы старого transf
 sunset owner прикладывает migration announcement, 90-дневный evidence window,
 fixture/regression output и отдельную задачу удаления. `legacy:check` выполняется
 в CI до тестов и не позволяет silently добавить новый compatibility surface.
+Текущий промежуточный отчёт и operational gate зафиксированы в
+[`legacy-usage-report.md`](./legacy-usage-report.md).

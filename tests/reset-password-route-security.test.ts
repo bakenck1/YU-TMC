@@ -25,8 +25,7 @@ test("password reset rejects cross-site credential changes", async () => {
   );
 
   assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "cross_site_request_blocked",
-  });
-  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
+  assert.equal((await response.json() as { error: string }).error, "cross_site_request_blocked");
+  assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0, must-revalidate");
 });

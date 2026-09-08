@@ -20,6 +20,7 @@ import {
 } from "./authorization";
 import { isSecureSecretValue } from "./secret-configuration";
 import { SESSION_COOKIE_NAME } from "./session-constants";
+import { emitLegacyUsage } from "../server/observability";
 
 export { SESSION_COOKIE_NAME } from "./session-constants";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -179,6 +180,16 @@ export function createSessionToken(
 }
 
 export function verifySessionToken(token: string): SessionPayload | null {
+  const payload = verifySessionTokenValue(token);
+  emitLegacyUsage({
+    compatibilityId: "LEGACY-COOKIE-CONTRACT",
+    variant: "v1",
+    outcome: payload ? "token_valid" : "token_invalid",
+  });
+  return payload;
+}
+
+function verifySessionTokenValue(token: string): SessionPayload | null {
   const secret = sessionSecret();
   if (!secret) return null;
 

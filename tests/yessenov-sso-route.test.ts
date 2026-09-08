@@ -20,6 +20,7 @@ test("unconfigured Yessenov SSO uses a host-independent login redirect", async (
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "/login?error=yessenov_not_configured");
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
 });
 
 test("unconfigured Yessenov callback clears state without trusting Host", async () => {
@@ -37,6 +38,7 @@ test("unconfigured Yessenov callback clears state without trusting Host", async 
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "/login?error=yessenov_not_configured");
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
   assert.match(
     response.headers.get("set-cookie") ?? "",
     new RegExp(`${YESSENOV_SSO_TRANSACTION_COOKIE}=;`),

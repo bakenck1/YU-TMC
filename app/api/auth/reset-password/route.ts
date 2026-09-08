@@ -16,6 +16,7 @@ import {
 } from "@/lib/security/rate-limiter";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
+import { observeHttpRequest } from "@/lib/server/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,11 @@ function validEmail(email: string) {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-export async function POST(request: Request) {
+export function POST(request: Request) {
+  return observeHttpRequest(request, "/api/auth/reset-password", () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   const apiLimit = await consumeApiRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 

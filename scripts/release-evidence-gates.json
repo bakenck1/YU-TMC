@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "signingKeyId": "release-platform-v1",
+  "signingPublicKeySha256": "UNCONFIGURED",
+  "prerequisites": [
+    { "id": "tech-debt-14-events", "owner": "server-platform" },
+    { "id": "tech-debt-20-capacity-baseline", "owner": "release/platform" }
+  ],
+  "gates": [
+    { "id": "trusted-proxy-tls", "owner": "release/platform", "critical": true },
+    { "id": "backup-restore", "owner": "database/platform", "critical": true },
+    { "id": "staging-auth-pwa-push", "owner": "product/auth", "critical": true },
+    { "id": "authenticated-runtime-scan", "owner": "security", "critical": true },
+    { "id": "capacity-smoke", "owner": "release/platform", "critical": true, "requires": ["tech-debt-20-capacity-baseline"] },
+    { "id": "rollback-rehearsal", "owner": "release/platform", "critical": true },
+    { "id": "alert-delivery", "owner": "on-call/platform", "critical": true, "requires": ["tech-debt-14-events"] }
+  ]
+}

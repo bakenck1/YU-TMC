@@ -20,9 +20,12 @@ import {
   legacyQrKey,
   usableLegacyQr,
 } from "@/lib/server/seed/legacy-normalization";
+import { emitLegacyUsage } from "@/lib/server/observability";
 
 const SCHEMA = '"yu_inventory"';
 const SEED_YEAR = 2026;
+const startedAt = Date.now();
+let seedTarget: "development" | "test" | null = null;
 
 async function main() {
   const target = parseTargetArgument(process.argv.slice(2));
@@ -31,6 +34,7 @@ async function main() {
       "Refusing to seed production. Seed data is for development and test only.",
     );
   }
+  seedTarget = target;
   loadTargetEnvironment(target);
   const config = readDatabaseConfig({ purpose: "migration", target });
   const pool = createPostgresPool(config, { max: 1 });
@@ -51,6 +55,7 @@ async function main() {
          where singleton = true`, [actor],
       );
       await client.query("commit");
+      emitLegacyUsage({ compatibilityId: "LEGACY-SEED-DATA", variant: target, outcome: "completed" }, { duration: Date.now() - startedAt });
       console.log(`Seeded ${users.length} users and ${items.length} legacy inventory items.`);
     } catch (error) {
       await client.query("rollback").catch(() => undefined);
@@ -191,4 +196,8 @@ async function seedLocationsAndItems(
 function limit(value: string, size: number) { return value.slice(0, size); }
 function seedId(value: string) { const hash = createHash("sha256").update(`yu-inventory-seed:${value}`).digest("hex"); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`; }
 
-main().catch((error: unknown) => { console.error(formatDatabaseCommandError(error)); process.exitCode = 1; });
+main().catch((error: unknown) => {
+  if (seedTarget) emitLegacyUsage({ compatibilityId: "LEGACY-SEED-DATA", variant: seedTarget, outcome: "failed" }, { duration: Date.now() - startedAt });
+  console.error(formatDatabaseCommandError(error));
+  process.exitCode = 1;
+});

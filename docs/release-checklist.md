@@ -37,3 +37,7 @@
 - [ ] rollback/runbook проверен: для БД используется forward-fix или restore бэкапа.
 
 Если любой пункт нельзя подтвердить, релиз остаётся NO-GO до устранения причины.
+
+Результаты manual gates фиксируются по [release evidence runbook](./release-evidence.md) и
+проверяются командой `npm run release:evidence:check -- --file release-evidence/<deployment-id>.json`.
+Checklist без датированного evidence pack не меняет production verdict.

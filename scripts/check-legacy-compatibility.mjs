@@ -124,11 +124,30 @@ async function assertSourceBoundaries() {
       source: await readFile(filename, "utf8"),
     })),
   );
+  const sourceByName = new Map(sources.map((entry) => [entry.relative, entry.source]));
+
+  for (const id of manifest.inventoryIds) {
+    const telemetrySources = manifest.telemetrySources?.[id];
+    const variants = manifest.telemetryVariants?.[id];
+    const outcomes = manifest.telemetryOutcomes?.[id];
+    if (!manifest.owners?.[id] || !Array.isArray(telemetrySources) || telemetrySources.length === 0 || !Array.isArray(variants) || variants.length === 0 || !Array.isArray(outcomes) || outcomes.length === 0) {
+      problems.push(`baseline: ${id} requires owner, telemetry variants, telemetry outcomes and telemetry sources`);
+      continue;
+    }
+    for (const relative of telemetrySources) {
+      const source = sourceByName.get(relative);
+      if (!source) problems.push(`baseline: missing telemetry source ${relative} for ${id}`);
+      else {
+        const marker = id === "LEGACY-TRANSFER-ROUTES" ? "observeLegacyHttpRequest" : `"${id}"`;
+        if (!source.includes(marker)) problems.push(`${relative}: missing structured legacy usage event for ${id}`);
+      }
+    }
+  }
 
   const permissionValues = new Set();
   for (const entry of sources) {
     for (const match of entry.source.matchAll(/["'](legacy\.[a-z][a-z0-9_.]*)["']/g)) {
-      permissionValues.add(match[1]);
+      if (match[1] !== manifest.telemetryEvent) permissionValues.add(match[1]);
     }
   }
   assertAllowlistedValues(permissionValues, manifest.legacyPermissions, "permission");

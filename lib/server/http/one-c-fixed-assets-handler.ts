@@ -6,6 +6,7 @@ import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-
 import { ApplicationError } from "@/lib/domain/application-error";
 import { readLimitedBody } from "@/lib/server/http/request-body";
 import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
+import { currentRequestId } from "@/lib/server/observability";
 import { MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 
 const ACCEPTED_MEDIA_TYPES = ["application/xml", "text/xml"];
@@ -31,7 +32,7 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
     if (!mediaType || !ACCEPTED_MEDIA_TYPES.includes(mediaType)) return json({ error: "unsupported_media_type", expected: ACCEPTED_MEDIA_TYPES }, 415);
 
     const keyId = createHash("sha256").update(expected).digest("hex");
-    const requestId = randomUUID();
+    const requestId = currentRequestId() ?? randomUUID();
     let lease: Awaited<ReturnType<OneCFixedAssetImportService["tryAcquireLease"]>> | null = null;
     try {
       lease = await dependencies.service.tryAcquireLease(keyId);
