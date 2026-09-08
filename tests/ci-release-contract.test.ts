@@ -290,5 +290,5 @@ test("test runner requires paired database credentials and reports skipped cover
   const runner = await readFile("scripts/test-all.mjs", "utf8");
   assert.match(runner, /TEST_DATABASE_URL and TEST_DATABASE_MIGRATOR_URL must be provided together/);
   assert.match(runner, /required in CI/);
-  assert.match(runner, /database=\$\{hasRuntimeDatabase \? "ran" : "SKIPPED"\}/);
+  assert.match(runner, /unit-route=ran, ui=ran, component=ran, postgresql=\$\{hasRuntimeDatabase \? "ran" : "SKIPPED"\}/);
 });

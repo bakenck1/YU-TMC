@@ -1,5 +1,16 @@
 # P1 — выровнять функциональное TDD-покрытие
 
+Статус: **Done (2026-09-08)**.
+
+Решение: матрица покрытия теперь связывает production-вертикали и инварианты с
+route/application/PostgreSQL/component/browser evidence и честно отмечает пробелы.
+Крупные TMC service и PostgreSQL transaction suites разбиты по use case с общими
+fixtures без изменения 55 service- и 6 database-сценариев. `test:all` явно выводит
+`ran/skipped` для `unit-route`, `ui`, `component` и `postgresql`, а CI запрещает
+пропуск обязательного PostgreSQL-контура. Независимые ревью: **9/10**, затем
+**10/10**; единственное замечание первого прохода о drift названий test lanes в
+документации устранено.
+
 ## Корень долга
 
 Матрица тестов не включает новые вертикали: asset-loss, локальные штрихкоды,

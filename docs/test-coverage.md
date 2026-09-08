@@ -7,22 +7,49 @@ constraints, transaction rollback and privilege-sensitive behavior.
 
 ## Matrix
 
-| Vertical | Evidence | Status / deliberate gap |
-| --- | --- | --- |
-| Auth, session and reset | [`tests/login-security.test.ts`](../tests/login-security.test.ts), [`tests/session-secret.test.ts`](../tests/session-secret.test.ts), [`tests/forgot-password-security.test.ts`](../tests/forgot-password-security.test.ts), [`tests/reset-password-route-security.test.ts`](../tests/reset-password-route-security.test.ts) | Covered for current flows; OAuth provider behavior remains a staging gate |
-| Inventory item | [`tests/inventory-list-repository.test.ts`](../tests/inventory-list-repository.test.ts), [`tests/inventory-item-photo-access.test.ts`](../tests/inventory-item-photo-access.test.ts), [`tests/item-detail-page-idor.test.ts`](../tests/item-detail-page-idor.test.ts), [`tests/inventory-item-components.test.ts`](../tests/inventory-item-components.test.ts), [`tests/inventory-item-details-presentation.test.ts`](../tests/inventory-item-details-presentation.test.ts) | Covered at route/repository/presentation boundaries; large mutation orchestration stays in route/database suites |
-| QR and barcode resolution | [`tests/tmc-qr-flow.test.ts`](../tests/tmc-qr-flow.test.ts), [`tests/item-qr-page-idor.test.ts`](../tests/item-qr-page-idor.test.ts), [`tests/inventory-item-qr-size.test.ts`](../tests/inventory-item-qr-size.test.ts), [`tests/application-service-contracts.test.ts`](../tests/application-service-contracts.test.ts) | Covered for privacy, revoked/out-of-scope and malformed-input contracts; hardware scanning remains staging-only |
-| Buildings, rooms and workspace | [`tests/off-campus-dormitories.test.ts`](../tests/off-campus-dormitories.test.ts), [`tests/room-service-requests.test.ts`](../tests/room-service-requests.test.ts), [`tests/application-service-contracts.test.ts`](../tests/application-service-contracts.test.ts) | Direct create/update/archive mutations and projections are covered; route-level error mapping, list/find branches and browser empty/loading states remain explicit follow-up |
-| Responsibility and ownership | [`tests/employee-owned-items-service.test.ts`](../tests/employee-owned-items-service.test.ts), [`tests/inventory-responsibility-repositories.test.ts`](../tests/inventory-responsibility-repositories.test.ts), [`tests/database/persistent-users.test.ts`](../tests/database/persistent-users.test.ts) | Covered where ownership changes visibility; remaining UI empty/loading states are follow-up |
-| Inspections and results | [`tests/inventory-inspection-admin.test.ts`](../tests/inventory-inspection-admin.test.ts), [`tests/inventory-inspection-result-route.test.ts`](../tests/inventory-inspection-result-route.test.ts), [`tests/inventory-inspection-room-bola.test.ts`](../tests/inventory-inspection-room-bola.test.ts) | Covered for authorization and critical mutations; representative browser smoke is manual |
-| Transfer and TMC | [`tests/tmc-transfer-request-service.test.ts`](../tests/tmc-transfer-request-service.test.ts), [`tests/tmc-transfer-request-route.test.ts`](../tests/tmc-transfer-request-route.test.ts), [`tests/tmc-operation-permissions.test.ts`](../tests/tmc-operation-permissions.test.ts), [`tests/database/tmc-transfer-request-transactions.test.ts`](../tests/database/tmc-transfer-request-transactions.test.ts) | Covered for service, route, permission, transaction and rollback; no duplicate unit tests for SQL invariants |
-| Service requests | [`tests/service-requests-collection-bola.test.ts`](../tests/service-requests-collection-bola.test.ts), [`tests/service-request-status-route.test.ts`](../tests/service-request-status-route.test.ts), [`tests/employee-service-request.test.ts`](../tests/employee-service-request.test.ts) | Covered for collection authorization, status transitions, photos and employee UI |
-| Photos and attachments | [`tests/comment-attachment-idor.test.ts`](../tests/comment-attachment-idor.test.ts), [`tests/inventory-item-photo-access.test.ts`](../tests/inventory-item-photo-access.test.ts) | Covered for access control; object-storage outage behavior is an operational gate |
-| Asset loss | [`tests/asset-loss-service.test.ts`](../tests/asset-loss-service.test.ts), [`tests/asset-loss-route.test.ts`](../tests/asset-loss-route.test.ts), [`tests/database/asset-loss.test.ts`](../tests/database/asset-loss.test.ts) | API-only employee/accounting workflow covered at service, HTTP and real PostgreSQL boundaries; browser UI is deliberately out of scope until a consumer journey is approved |
-| Push and outbox | [`tests/web-push-service.test.ts`](../tests/web-push-service.test.ts), [`tests/tmc-push-outbox.test.ts`](../tests/tmc-push-outbox.test.ts), [`tests/database/web-push-repositories.test.ts`](../tests/database/web-push-repositories.test.ts) | Covered for lease/retry/dead-letter and repository behavior; provider delivery is staging-only |
-| Settings persistence | [`tests/settings-repository.test.ts`](../tests/settings-repository.test.ts), [`tests/settings-import.test.ts`](../tests/settings-import.test.ts), [`tests/database/settings-persistence.test.ts`](../tests/database/settings-persistence.test.ts) | Covered for singleton defaults, guarded import, malformed payloads, row locking, read-after-write and cross-connection concurrency; UI switch geometry remains in [`tests/settings-toggle.test.ts`](../tests/settings-toggle.test.ts) |
-| Production monitoring | [`tests/monitor-production-errors.test.ts`](../tests/monitor-production-errors.test.ts) | Covered for separate incidents, actual source window and cleared state; alert routing is manual |
-| Release/toolchain contracts | [`tests/ci-release-contract.test.ts`](../tests/ci-release-contract.test.ts), [`tests/toolchain-contract.test.ts`](../tests/toolchain-contract.test.ts), [`tests/documentation-consistency.test.ts`](../tests/documentation-consistency.test.ts) | Covered statically plus CI execution for the Node.js production runtime |
+Уровни: **R** — выполненный route/HTTP boundary, **A** — application/service,
+**P** — реальный PostgreSQL/runtime-role, **C** — component interaction,
+**B** — browser. «—» означает осознанный gap, а не покрытие соседним grep-тестом.
+
+| Production vertical | Критичный invariant | R | A | P | C | B / честный gap |
+| --- | --- | :---: | :---: | :---: | :---: | --- |
+| Auth/session/reset/OAuth | origin, token binding, revocation, no account takeover | ✓ | ✓ | ✓ | — | OAuth-provider staging gate |
+| Users/provisioning | live role/session, active/deleted visibility, concurrent first login | ✓ | ✓ | ✓ | ✓ | — |
+| Inventory items/import/export/analytics | validation, scope, atomic mutations, bounded datasets | ✓ | ✓ | ✓ | ✓ | file download/import browser journey остаётся gap |
+| Buildings/rooms/workspace | authorization, normalization, QR/audit atomicity | частично | ✓ | ✓ | ✓ | empty/loading browser states — gap |
+| QR/barcode resolution | namespace, revoked/out-of-scope masking, malformed input | ✓ | ✓ | ✓ | ✓ | hardware camera — staging gate |
+| Responsibility/ownership | exact active period, visibility and atomic reassignment | ✓ | ✓ | ✓ | ✓ | — |
+| Inspections/results | admin authorization, BOLA, result persistence | ✓ | ✓ | ✓ | ✓ | representative browser smoke — task 22 |
+| TMC transfer requests | participant BOLA, idempotency, rollback and races | ✓ | ✓ | ✓ | ✓ | journey smoke — task 22 |
+| Local barcodes/groups | shared namespace, quantity bound, append-only lifecycle | ✓ | ✓ | ✓ | ✓ | printer/device staging gate |
+| Decommissioned-in-use | lifecycle visibility and nullable responsibility | ✓ | ✓ | ✓ | ✓ | — |
+| Service requests | collection BOLA, required photo, status transition | ✓ | ✓ | ✓ | ✓ | — |
+| Photos/attachments | parent scope, MIME/size, lifecycle and byte serving | ✓ | ✓ | ✓ | ✓ | object-store outage is operational |
+| Asset loss (P0) | actor/BOLA, body bounds, exact period, receipt rollback/race | ✓ | ✓ | ✓ | n/a | API-only by recorded decision |
+| 1C fixed-assets inbox (P0) | auth-before-body, 10 MiB/deadline, lease, atomic upsert | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
+| Dockflow external API | key rotation, bounded cursor, safe errors, public projection | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
+| Push/outbox | lease, retry/dead-letter, ownership and stale cleanup | ✓ | ✓ | ✓ | ✓ | provider delivery staging gate |
+| Settings | singleton, guarded import, locking/concurrency | ✓ | ✓ | ✓ | ✓ | — |
+| Monitoring/release/toolchain | incident window and fail-closed release gates | n/a | ✓ | n/a | n/a | production routing/restore/load gates — task 23 |
+
+Ключевые behavioral evidence: asset-loss —
+[route](../tests/asset-loss-route.test.ts),
+[application](../tests/asset-loss-service.test.ts),
+[PostgreSQL](../tests/database/asset-loss.test.ts) и
+[upgrade](../tests/database/asset-loss-upgrade.test.ts); 1С —
+[HTTP/application](../tests/one-c-fixed-assets.test.ts) и
+[PostgreSQL](../tests/database/one-c-fixed-assets.test.ts); Dockflow —
+[HTTP/application/OpenAPI](../tests/dockflow-test-api.test.ts) и
+[PostgreSQL runtime role](../tests/database/dockflow-api.test.ts); local barcode —
+[service/route](../tests/local-barcode.test.ts) и
+[PostgreSQL](../tests/database/local-barcodes.test.ts); decommissioned-in-use —
+[service/presentation](../tests/decommissioned-items-service.test.ts) и связанные
+inventory PostgreSQL suites.
+
+Source-based architecture assertions для asset-loss, 1С, Dockflow, attachment,
+transfer и collection boundaries больше не являются единственным доказательством:
+рядом выполняются handlers/services, а SQL/rollback/race проверяются отдельным
+PostgreSQL-процессом. Browser coverage намеренно не приписывается этой задаче.
 
 ## Direct service seams added by this task
 
@@ -52,9 +79,9 @@ where the guarantee is observable, then implement the minimum change:
 
 Do not introduce a coverage percentage gate. The required gate is one contract
 test for every critical mutation and one integration assertion for every
-database invariant. The runner reports server, UI, component and database
-suites separately, so a skipped database suite cannot be presented as a green
-full run.
+database invariant. The runner reports the `unit-route`, `ui`, `component` and
+`postgresql` lanes separately, so a locally skipped PostgreSQL lane cannot be
+presented as a green full run in CI.
 
 ## Commands
 

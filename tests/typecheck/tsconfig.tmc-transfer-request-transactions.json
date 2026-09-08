@@ -8,7 +8,8 @@
     "types": ["node"]
   },
   "include": [
-    "../database/tmc-transfer-request-transactions.test.ts"
+    "../database/tmc-transfer-request-*-transactions.test.ts",
+    "../database/support/tmc-transfer-request-database.ts"
   ],
   "exclude": ["../../node_modules"]
 }

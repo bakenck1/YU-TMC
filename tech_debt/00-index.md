@@ -29,7 +29,7 @@
 | 1 | P0 | [Безопасный ingestion 1С — Done](10-p0-one-c-ingestion-hardening.md) | Закрыты unbounded body, утечка DB errors и недоказанная запись | M |
 | 2 | P0 | [Asset-loss vertical slice — Done](11-p0-asset-loss-vertical-slice.md) | Закрыты ABA ответственности, lifecycle квитанций, audit chain и coverage | L |
 | 3 | P1 | [Периметр внешних API — Done](12-p1-external-api-boundaries.md) | Выровнены Dockflow/1С auth, errors, limits и observability | M |
-| 4 | P1 | [Функциональное покрытие и TDD](13-p1-functional-tdd-coverage.md) | Убирает ложную уверенность зелёного source-text suite | M |
+| 4 | P1 | [Функциональное покрытие и TDD — Done](13-p1-functional-tdd-coverage.md) | Убирает ложную уверенность зелёного source-text suite | M |
 | 5 | P1 | [Structured observability и legacy evidence](14-p1-observability-and-legacy-evidence.md) | Делает ошибки и sunset измеримыми | M, 2 slices |
 | 6 | P1 | [Production-readiness evidence](23-p1-production-readiness-evidence.md) | Закрывает внешние NO-GO gates проверяемым артефактом | M / operational |
 | 7 | P1 quick win | [Repository/dependency hygiene](21-p1-repository-hygiene.md) | Убирает warnings, scratch noise и лишние зависимости | S |
