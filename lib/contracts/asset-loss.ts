@@ -20,3 +20,8 @@ export interface AssetLossCaseDto {
   reviewComment: string | null;
   closedAt: string | null;
 }
+
+export interface AssetLossPageDto {
+  lossCases: AssetLossCaseDto[];
+  nextCursor: string | null;
+}

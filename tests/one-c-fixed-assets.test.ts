@@ -163,7 +163,8 @@ describe("1C fixed assets XML contract", () => {
     const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8")) as { entries: Array<{ tag: string }> };
     assert.doesNotMatch(original, /payload_hash_check/);
     assert.match(forward, /ADD CONSTRAINT "one_c_fixed_asset_inbox_payload_hash_check"/);
-    assert.deepEqual(journal.entries.slice(-2).map((entry) => entry.tag), ["20260907123710_elite_vulcan", "20260908113000_one_c_fixed_asset_inbox_contract"]);
+    const contractIndex = journal.entries.findIndex((entry) => entry.tag === "20260908113000_one_c_fixed_asset_inbox_contract");
+    assert.equal(journal.entries[contractIndex - 1]?.tag, "20260907123710_elite_vulcan");
   });
 
   it("discards PostgreSQL clients when advisory unlock or rollback cleanup fails", async () => {
