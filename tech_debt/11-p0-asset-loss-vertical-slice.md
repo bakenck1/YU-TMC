@@ -1,5 +1,16 @@
 # P0 — выровнять asset-loss как полноценный vertical slice
 
+Статус: **Done (2026-09-08)**.
+
+Решение: workflow сохранён как API-only для сотрудника и бухгалтерии; owner и
+контракт зафиксированы в `docs/asset-loss-api.md`. Реализация разделена на
+application service, repository port и PostgreSQL adapter; case хранит точный
+snapshot периода ответственности, receipt replacement атомарно supersede-ит
+старое фото, list использует cursor, а event history защищена append-only и
+continuous-chain ограничениями. Fresh/upgrade PostgreSQL, HTTP и service
+сценарии покрыты тестами. Независимые ревью: **7.0/10**, затем **8.5/10**;
+замечания обоих проходов устранены в пределах согласованных двух итераций.
+
 ## Корень долга
 
 Финансово значимый workflow утраты имущества реализован одним

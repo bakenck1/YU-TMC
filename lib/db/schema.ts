@@ -296,6 +296,10 @@ export const assetLossCasesTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    responsibilityPeriodId: uuid().references(() => responsibilityPeriodsTable.id, {
+      onDelete: "restrict",
+      onUpdate: "restrict",
+    }),
     status: varchar({ length: 32 }).notNull().default("payment_pending"),
     amount: numeric({ precision: 14, scale: 2 }).notNull(),
     currency: varchar({ length: 3 }).notNull().default("KZT"),
@@ -321,6 +325,10 @@ export const assetLossCasesTable = inventorySchema.table(
   (table) => [
     check("asset_loss_cases_amount_check", sql`${table.amount} >= 0`),
     check("asset_loss_cases_currency_check", sql`${table.currency} = 'KZT'`),
+    check(
+      "asset_loss_cases_open_responsibility_snapshot_check",
+      sql`${table.status} = 'closed' OR ${table.responsibilityPeriodId} IS NOT NULL`,
+    ),
     check(
       "asset_loss_cases_status_check",
       sql`${table.status} IN ('payment_pending', 'accounting_review', 'rejected', 'closed')`,
@@ -378,7 +386,15 @@ export const assetLossCaseEventsTable = inventorySchema.table(
     comment: varchar({ length: 1000 }),
     occurredAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [index("asset_loss_case_events_case_time_idx").on(table.lossCaseId, table.occurredAt)],
+  (table) => [
+    check(
+      "asset_loss_case_events_status_check",
+      sql`(${table.fromStatus} IS NULL OR ${table.fromStatus} IN ('payment_pending', 'accounting_review', 'rejected', 'closed'))
+          AND ${table.toStatus} IN ('payment_pending', 'accounting_review', 'rejected', 'closed')
+          AND ${table.fromStatus} IS DISTINCT FROM ${table.toStatus}`,
+    ),
+    index("asset_loss_case_events_case_time_idx").on(table.lossCaseId, table.occurredAt),
+  ],
 );
 
 export const userExternalIdentitiesTable = inventorySchema.table(

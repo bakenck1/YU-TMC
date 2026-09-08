@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { InventoryLocationService } from "@/lib/application/services/inventory-location-service";
 import { RoomWorkspaceService } from "@/lib/application/services/room-workspace-service";
@@ -15,10 +15,12 @@ import { UserService } from "@/lib/application/services/user-service";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
 import { LocalBarcodeService } from "@/lib/application/services/local-barcode-service";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
+import { AssetLossService } from "@/lib/application/services/asset-loss-service";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { PostgresSettingsRepository } from "@/lib/server/persistence/postgres/postgres-settings-repository";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
+import { createPostgresAssetLossRepositories } from "@/lib/server/persistence/postgres/postgres-asset-loss-repository";
 import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
 import { createPostgresRoomWorkspaceRepositories } from "@/lib/server/persistence/postgres/postgres-room-workspace-repositories";
 import { createPostgresServiceRequestRepositories } from "@/lib/server/persistence/postgres/postgres-service-request-repositories";
@@ -33,7 +35,6 @@ import { createYessenovDirectoryClient } from "@/lib/yessenov-directory";
 import { createPostgresTmcOperationRepositories } from "@/lib/server/persistence/postgres/postgres-tmc-operation-repositories";
 import { createPostgresLocalBarcodeRepositories } from "@/lib/server/persistence/postgres/postgres-local-barcode-repositories";
 import { ScryptPasswordHasher } from "@/lib/server/security/scrypt-password-hasher";
-import { AssetLossService } from "@/lib/server/asset-loss-service";
 import {
   NodeWebPushSender,
   readWebPushConfiguration,
@@ -157,7 +158,10 @@ function createApplicationServices(): ApplicationServices {
         ? undefined
         : createYessenovDirectoryClient(),
     ),
-    assetLosses: new AssetLossService(),
+    assetLosses: new AssetLossService(
+      createPostgresUnitOfWork(createPostgresAssetLossRepositories),
+      { now: () => new Date(), id: () => randomUUID(), checksum: (bytes) => createHash("sha256").update(bytes).digest("hex") },
+    ),
     localBarcodes: new LocalBarcodeService(
       createPostgresUnitOfWork(createPostgresLocalBarcodeRepositories),
       { now: () => new Date() },

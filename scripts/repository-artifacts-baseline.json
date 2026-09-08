@@ -116,6 +116,10 @@
       {
         "tag": "20260908113000_one_c_fixed_asset_inbox_contract",
         "reason": "The forward-only raw SQL migration adds a payload-hash check to the already-deployed 1C inbox without rewriting its historical migration."
+      },
+      {
+        "tag": "20260908150000_asset_loss_event_contract",
+        "reason": "The forward-only raw SQL migration enforces an append-only, continuous state chain for the financial asset-loss audit log."
       }
     ]
   },

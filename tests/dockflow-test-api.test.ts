@@ -13,6 +13,7 @@ import {
   listDockflowItems,
 } from "../lib/dockflow-api";
 import { YessenovDirectoryError } from "../lib/yessenov-directory";
+import { externalJson } from "../lib/server/http/external-api";
 
 const API_KEY = "dockflow-key-for-automated-tests";
 function request(path: string, key = API_KEY) {
@@ -51,6 +52,7 @@ const repository: DockflowDataRepository = {
 };
 
 test.beforeEach(() => { process.env.DOCKFLOW_API_KEY = API_KEY; });
+test.afterEach(() => { delete process.env.DOCKFLOW_API_KEY_NEXT; });
 test.after(() => { delete process.env.DOCKFLOW_API_KEY; });
 
 test("checks the Bearer API key without caching the response", async () => {
@@ -59,6 +61,23 @@ test("checks the Bearer API key without caching the response", async () => {
   assert.deepEqual(await valid.json(), { valid: true });
   assert.match(valid.headers.get("cache-control") ?? "", /no-store/);
   assert.equal(dockflowAuthCheck(new Request("http://localhost/api/v1/auth/check")).status, 401);
+  assert.equal((await listDockflowItems(new Request("http://localhost/api/v1/items"))).status, 401);
+});
+
+test("external responses normalize request IDs and allowlist Retry-After", () => {
+  const unsafe = externalJson({}, 503, { "X-Request-Id": "request-1", "Retry-After": "secret" });
+  assert.equal(unsafe.headers.get("x-request-id"), "request-1");
+  assert.equal(unsafe.headers.get("retry-after"), null);
+  assert.equal(externalJson({}, 503, { "Retry-After": "5" }).headers.get("retry-after"), "5");
+});
+
+test("accepts current and next keys during rotation and rejects both after cutover", () => {
+  process.env.DOCKFLOW_API_KEY_NEXT = "dockflow-next-key";
+  assert.equal(dockflowAuthCheck(request("/api/v1/auth/check", API_KEY)).status, 200);
+  assert.equal(dockflowAuthCheck(request("/api/v1/auth/check", "dockflow-next-key")).status, 200);
+  process.env.DOCKFLOW_API_KEY = "dockflow-next-key";
+  delete process.env.DOCKFLOW_API_KEY_NEXT;
+  assert.equal(dockflowAuthCheck(request("/api/v1/auth/check", API_KEY)).status, 401);
 });
 
 test("returns registered employees and their current TMC by real IIN", async () => {
@@ -82,13 +101,58 @@ test("protects real employee and inventory collections", async () => {
   assert.equal((await (await listDockflowItems(request("/api/v1/items"), repository)).json()).items[0].assignments[0].employeeIin, "000000000000");
 });
 
+test("collection pagination is bounded, deterministic at the repository seam, and explicit", async () => {
+  const seen: unknown[] = [];
+  const paged = { ...repository, async listItems(page?: unknown) { seen.push(page); return [...await repository.listItems(), ...await repository.listItems()]; } };
+  const first = await listDockflowItems(request("/api/v1/items?limit=1"), paged);
+  const firstBody = await first.json();
+  assert.equal(firstBody.items.length, 1); assert.equal(typeof firstBody.nextCursor, "string");
+  assert.deepEqual(seen[0], { offset: 0, limit: 2 });
+  const second = await listDockflowItems(request(`/api/v1/items?limit=1&cursor=${firstBody.nextCursor}`), paged);
+  assert.equal(second.status, 200); assert.deepEqual(seen[1], { offset: 1, limit: 2 });
+  assert.equal((await listDockflowItems(request("/api/v1/items?limit=201"), paged)).status, 400);
+  assert.equal((await listDockflowItems(request("/api/v1/items?unknown=1"), paged)).status, 400);
+});
+
+test("employee item envelopes are bounded and expose continuation", async () => {
+  const seen: unknown[] = [];
+  const paged = {
+    ...repository,
+    async itemsForEmployee(_iin: string, page?: unknown) {
+      seen.push(page);
+      return [...await repository.itemsForEmployee(employee.iin), ...await repository.itemsForEmployee(employee.iin)];
+    },
+  };
+  const detail = await findDockflowEmployee(request(`/api/v1/employees/${employee.iin}?limit=1`), employee.iin, paged);
+  const body = await detail.json();
+  assert.equal(body.items.length, 1);
+  assert.equal(typeof body.nextCursor, "string");
+  assert.deepEqual(seen[0], { offset: 0, limit: 2 });
+  const items = await findDockflowEmployeeItems(request(`/api/v1/employees/${employee.iin}/items?limit=1&cursor=${body.nextCursor}`), employee.iin, paged);
+  assert.equal(items.status, 200);
+  assert.deepEqual(seen[1], { offset: 1, limit: 2 });
+});
+
+test("unexpected inventory and photo failures use stable retryable JSON without details", async () => {
+  const broken = { ...repository, async listItems() { throw new Error("password=secret"); }, async findItemPhoto() { throw new Error("binary detail"); } };
+  const list = await listDockflowItems(request("/api/v1/items"), broken);
+  assert.equal(list.status, 503); assert.deepEqual(await list.json(), { error: "DEPENDENCY_UNAVAILABLE", message: "Dockflow dependency is unavailable." });
+  assert.equal(list.headers.get("retry-after"), "5"); assert.ok(list.headers.get("x-request-id"));
+  const photoResponse = await findDockflowItemPhoto(request(`/api/v1/items/00000000-0000-4000-8000-000000000001/photo`), "00000000-0000-4000-8000-000000000001", broken);
+  assert.equal(photoResponse.status, 503); assert.doesNotMatch(await photoResponse.text(), /binary detail/);
+});
+
 test("serves item photos through the Dockflow application facade", async () => {
   const id = "00000000-0000-4000-8000-000000000001";
   const response = await findDockflowItemPhoto(request(`/api/v1/items/${id}/photo`), id, repository);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/jpeg");
+  assert.equal(response.headers.get("accept-ranges"), "none");
+  assert.ok(response.headers.get("x-request-id"));
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([1, 2, 3]));
   assert.equal((await findDockflowItemPhoto(request("/api/v1/items/invalid/photo"), "invalid", repository)).status, 404);
+  const ranged = await findDockflowItemPhoto(new Request(`http://localhost/api/v1/items/${id}/photo`, { headers: { Authorization: `Bearer ${API_KEY}`, Range: "bytes=0-1" } }), id, repository);
+  assert.equal(ranged.status, 416);
 });
 
 test("joins Yessenov directory profiles to local item counts by IIN", async () => {
@@ -129,4 +193,50 @@ test("publishes an OpenAPI contract for bearer authorization", async () => {
   const document = await openApi().json();
   assert.equal(document.info.title, "Dockflow API");
   assert.equal(document.components.securitySchemes.bearerAuth.scheme, "bearer");
+  for (const path of ["/api/v1/employees", "/api/v1/employees/{iin}", "/api/v1/employees/{iin}/items", "/api/v1/items"]) {
+    const names = document.paths[path].get.parameters.map((entry: { $ref: string }) => entry.$ref);
+    assert.ok(names.includes("#/components/parameters/Limit"));
+    assert.ok(names.includes("#/components/parameters/Cursor"));
+  }
+  assert.ok(document.paths["/api/v1/items/{id}/photo"].get.responses["416"]);
+  for (const path of Object.values(document.paths) as Array<{ get?: { responses?: Record<string, { content?: Record<string, { schema?: unknown; example?: unknown }> }> } }>) {
+    for (const response of Object.values(path.get?.responses ?? {})) {
+      for (const media of Object.values(response.content ?? {})) {
+        if (media.example !== undefined && media.schema) assertSchemaExample(document, media.schema, media.example);
+      }
+    }
+  }
 });
+
+interface ExampleSchema {
+  $ref?: string;
+  allOf?: ExampleSchema[];
+  type?: string | string[];
+  required?: string[];
+  properties?: Record<string, ExampleSchema>;
+  items?: ExampleSchema;
+}
+
+function assertSchemaExample(
+  document: { components: { schemas: Record<string, ExampleSchema> } },
+  schema: ExampleSchema,
+  value: unknown,
+): void {
+  if (schema.$ref) {
+    const name = schema.$ref.split("/").at(-1);
+    assert.ok(name && document.components.schemas[name], `Unknown OpenAPI schema ${schema.$ref}`);
+    const resolved = document.components.schemas[name];
+    assertSchemaExample(document, resolved, value);
+    return;
+  }
+  for (const part of schema.allOf ?? []) assertSchemaExample(document, part, value);
+  if (schema.type === "object" || schema.properties) {
+    assert.ok(value && typeof value === "object" && !Array.isArray(value));
+    const record = value as Record<string, unknown>;
+    for (const key of schema.required ?? []) assert.ok(Object.prototype.hasOwnProperty.call(record, key), `OpenAPI example misses required ${key}`);
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      if (Object.prototype.hasOwnProperty.call(record, key)) assertSchemaExample(document, property, record[key]);
+    }
+  }
+  if (schema.type === "array" && Array.isArray(value) && schema.items) for (const item of value) assertSchemaExample(document, schema.items, item);
+}
