@@ -37,6 +37,13 @@ const assignedItemExample = {
   assignedAt: "2026-08-28T10:00:00Z",
   cost: 45000,
   markingType: "batch",
+  photoUrl: null,
+  itemType: "furniture",
+  brand: null,
+  model: null,
+  inventoryStatus: "active",
+  responsible: { iin: "000000000000", fullName: "Сотрудников Тест Тестович" },
+  updatedAt: "2026-08-28T10:00:00Z",
   issueHistory: [],
 };
 
@@ -138,14 +145,14 @@ export const dockflowOpenApiDocument = {
         summary: "Получить сотрудника и закреплённые ТМЦ",
         description: "Профиль загружается из https://api.yu.edu.kz/api/v2/personnels/, ТМЦ — из YU Inventory.",
         security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/Iin" }],
+        parameters: [{ $ref: "#/components/parameters/Iin" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/Cursor" }],
         responses: {
           "200": {
             description: "Сотрудник найден",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/EmployeeWithItems" },
-                example: { employee: employeeExample, items: [assignedItemExample] },
+                example: { employee: employeeExample, items: [assignedItemExample], nextCursor: null },
               },
             },
           },
@@ -170,7 +177,7 @@ export const dockflowOpenApiDocument = {
         tags: ["Inventory"],
         summary: "Получить только ТМЦ сотрудника",
         security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/Iin" }],
+        parameters: [{ $ref: "#/components/parameters/Iin" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/Cursor" }],
         responses: {
           "200": {
             description: "Список закреплённых ТМЦ",
@@ -178,15 +185,16 @@ export const dockflowOpenApiDocument = {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["items"],
+                  required: ["items", "nextCursor"],
                   properties: {
                     items: {
                       type: "array",
                       items: { $ref: "#/components/schemas/AssignedItem" },
                     },
+                    nextCursor: { type: ["string", "null"] },
                   },
                 },
-                example: { items: [assignedItemExample] },
+                example: { items: [assignedItemExample], nextCursor: null },
               },
             },
           },
@@ -207,6 +215,7 @@ export const dockflowOpenApiDocument = {
         tags: ["Employees"],
         summary: "Получить список сотрудников Yessenov ID",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/Cursor" }],
         responses: {
           "200": {
             description: "Список активных сотрудников Yessenov ID с валидным ИИН",
@@ -214,19 +223,21 @@ export const dockflowOpenApiDocument = {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["employees"],
+                  required: ["employees", "nextCursor"],
                   properties: {
                     employees: {
                       type: "array",
                       items: { $ref: "#/components/schemas/EmployeeListEntry" },
                     },
+                    nextCursor: { type: ["string", "null"] },
                   },
                 },
-                example: { employees: [{ ...employeeExample, itemCount: 1 }] },
+                example: { employees: [{ ...employeeExample, itemCount: 1 }], nextCursor: null },
               },
             },
           },
           "401": errorResponses["401"],
+          "400": { description: "Некорректная пагинация", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "502": errorResponses["502"],
           "503": errorResponses["503"],
         },
@@ -239,6 +250,7 @@ export const dockflowOpenApiDocument = {
         description:
           "Партия представлена одной карточкой. Количество партии может быть любым, assignments содержит произвольные частичные выдачи нескольким получателям, а availableQuantity — оставшийся свободный остаток.",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/Cursor" }],
         responses: {
           "200": {
             description: "Полный список текущих карточек ТМЦ",
@@ -246,18 +258,24 @@ export const dockflowOpenApiDocument = {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["items"],
+                  required: ["items", "nextCursor"],
                   properties: {
                     items: {
                       type: "array",
                       items: { $ref: "#/components/schemas/InventoryItem" },
                     },
+                    nextCursor: { type: ["string", "null"] },
                   },
+                },
+                example: {
+                  items: [{ ...assignedItemExample, availableQuantity: 0, assignments: [{ employeeIin: "000000000000", quantity: 38, assignedAt: "2026-08-28T10:00:00Z" }] }],
+                  nextCursor: null,
                 },
               },
             },
           },
           "401": errorResponses["401"],
+          "400": { description: "Некорректная пагинация", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "503": errorResponses["503"],
         },
       },
@@ -273,9 +291,15 @@ export const dockflowOpenApiDocument = {
           schema: { type: "string", format: "uuid" },
         }],
         responses: {
-          "200": { description: "Фото ТМЦ", content: { "image/jpeg": { schema: { type: "string", format: "binary" } } } },
+          "416": { description: "Byte ranges are not supported", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "200": { description: "Фото ТМЦ", content: {
+            "image/jpeg": { schema: { type: "string", format: "binary" } },
+            "image/png": { schema: { type: "string", format: "binary" } },
+            "image/webp": { schema: { type: "string", format: "binary" } },
+          } },
           "401": errorResponses["401"],
           "404": { description: "Фото или ТМЦ не найдено" },
+          "503": errorResponses["503"],
         },
       },
     },
@@ -290,6 +314,8 @@ export const dockflowOpenApiDocument = {
       },
     },
     parameters: {
+      Limit: { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 200, default: 100 } },
+      Cursor: { name: "cursor", in: "query", required: false, schema: { type: "string", maxLength: 64 } },
       Iin: {
         name: "iin",
         in: "path",
@@ -441,13 +467,14 @@ export const dockflowOpenApiDocument = {
       },
       EmployeeWithItems: {
         type: "object",
-        required: ["employee", "items"],
+        required: ["employee", "items", "nextCursor"],
         properties: {
           employee: { $ref: "#/components/schemas/Employee" },
           items: {
             type: "array",
             items: { $ref: "#/components/schemas/AssignedItem" },
           },
+          nextCursor: { type: ["string", "null"] },
         },
       },
       MarkingType: {

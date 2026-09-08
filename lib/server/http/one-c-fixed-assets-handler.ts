@@ -1,10 +1,11 @@
 import "server-only";
 
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { readLimitedBody } from "@/lib/server/http/request-body";
+import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
 import { MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 
 const ACCEPTED_MEDIA_TYPES = ["application/xml", "text/xml"];
@@ -25,7 +26,7 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
   return async function post(request: Request): Promise<Response> {
     const expected = dependencies.apiKey?.()?.trim() ?? process.env.ONE_C_FIXED_ASSETS_API_KEY?.trim();
     if (!expected) return json({ error: "integration_not_configured" }, 503);
-    if (!authorized(request, expected)) return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+    if (verifyExternalBearer(request, { current: expected }) === "unauthorized") return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
     const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
     if (!mediaType || !ACCEPTED_MEDIA_TYPES.includes(mediaType)) return json({ error: "unsupported_media_type", expected: ACCEPTED_MEDIA_TYPES }, 415);
 
@@ -58,11 +59,10 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
   };
 }
 
-function authorized(request: Request, expected: string) {
-  const value = request.headers.get("authorization")?.match(/^Bearer\s+([^\s]+)$/i)?.[1] ?? "";
-  return timingSafeEqual(createHash("sha256").update(value).digest(), createHash("sha256").update(expected).digest());
+function json(body: unknown, status = 200, headers: HeadersInit = {}) {
+  const requestId = typeof body === "object" && body && "requestId" in body && typeof body.requestId === "string" ? body.requestId : undefined;
+  return externalJson(body, status, { "Cache-Control": "no-store", ...Object.fromEntries(new Headers(headers)), ...(requestId ? { "X-Request-Id": requestId } : {}) });
 }
-function json(body: unknown, status = 200, headers: HeadersInit = {}) { return Response.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } }); }
 function logSafeFailure(dependencies: Dependencies, requestId: string, errorCode: string, errorName: string) {
   (dependencies.logFailure ?? defaultLogFailure)({ requestId, errorCode, errorName });
 }

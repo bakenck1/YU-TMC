@@ -1,5 +1,18 @@
 # P1 — выровнять внешний API-периметр Dockflow после P0 1С
 
+Статус: **Done (2026-09-08)**.
+
+Решение: Dockflow разделён на публичные contracts, application service,
+PostgreSQL adapter и HTTP boundary. Общий с 1С bearer/response baseline
+поддерживает current/next key slots, constant-time проверки, request ID,
+`no-store` и allowlisted `Retry-After`. Все коллекции ограничены cursor-
+пагинацией, фото имеет явную range policy, OpenAPI examples проверяются против
+required schema-полей. Runtime-role PostgreSQL test доказывает individual/local
+group projections, mixed counts, empty/inactive/decommissioned visibility и
+гранты. Owner/SLA/data classes и rotation/revocation runbook зафиксированы в
+`docs/dockflow-test-api.md`. Независимые ревью: **5/10**, затем **6/10**;
+все actionable замечания обоих проходов устранены в пределах двух итераций.
+
 ## Evidence
 
 `lib/dockflow-api.ts` объединяет HTTP responses, API-key auth, Yessenov client,
