@@ -7,6 +7,7 @@ import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
+import { createPostgresInventoryLocationRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-location-repositories";
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
 import { PostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import type { Pool } from "pg";
@@ -123,11 +124,11 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     const inUse = await service.markDecommissionedInUse(created.id, {
       version: created.version,
       roomId,
-      responsibleUserId: secondEmployeeId,
+      responsibleUserId: null,
     }, actor);
 
     expect(inUse.status).toBe("decommissioned_in_use");
-    expect(inUse.responsible?.id).toBe(secondEmployeeId);
+    expect(inUse.responsible).toBeNull();
     expect(inUse.decommissionedUsage).toMatchObject({
       reason: null,
       adminComment: null,
@@ -160,6 +161,38 @@ describe("PostgreSQL item-form responsibility assignment", () => {
       { action: "item.decommissioned_usage_started", reason: null },
       { action: "item.restored_from_decommission", reason: "Accounting cancelled the write-off" },
     ]);
+  });
+
+  it("returns the responsible employee name immediately after a room assignment", async () => {
+    const adminId = randomUUID();
+    const firstEmployeeId = randomUUID();
+    const secondEmployeeId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, firstEmployeeId, secondEmployeeId);
+    await seedRoom(adminId, buildingId, roomId);
+    const repository = createPostgresInventoryLocationRepositories(database).locations;
+
+    const updated = await repository.updateRoom({
+      id: roomId,
+      designation: "Form Room",
+      designationKey: `form-${roomId}`,
+      floorNumber: 1,
+      floorLabel: null,
+      primaryResponsibleId: secondEmployeeId,
+      actorId: adminId,
+      expectedVersion: 1,
+      occurredAt: new Date(),
+    });
+
+    expect(updated).toMatchObject({
+      primaryResponsibleId: secondEmployeeId,
+      primaryResponsibleName: "Second Employee",
+    });
+    await expect(repository.findRoomById(roomId)).resolves.toMatchObject({
+      primaryResponsibleId: secondEmployeeId,
+      primaryResponsibleName: "Second Employee",
+    });
   });
 });
 

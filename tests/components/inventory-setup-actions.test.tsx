@@ -64,7 +64,10 @@ const ROOM: RoomDto = {
 };
 
 describe("inventory setup actions", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
 
   it("creates a room when no responsible employee exists yet", async () => {
     const onSave = vi.fn();
@@ -150,6 +153,85 @@ describe("inventory setup actions", () => {
     expect((responsibleInput as HTMLInputElement).labels?.item(0)?.textContent).toContain(
       "createItem.optional",
     );
+  });
+
+  it("allows creating a room on floor zero in the Main Campus", async () => {
+    const onSave = vi.fn();
+    const mainCampus = { ...BUILDING, name: "The Main Campus" };
+    const groundFloorRoom = { ...ROOM, floorNumber: 0 };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      if (String(input) === "/api/users") {
+        return { ok: true, json: async () => ({ users: [] }) } as Response;
+      }
+      return { ok: true, json: async () => ({ room: groundFloorRoom }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InventoryRoomFormModal
+        building={mainCampus}
+        room={null}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("inventory.roomDesignation"), {
+      target: { value: "001" },
+    });
+    fireEvent.change(screen.getByLabelText("inventory.floor"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(groundFloorRoom));
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes(`/api/inventory/buildings/${BUILDING.id}/rooms`),
+    );
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      designation: "001",
+      floorNumber: 0,
+    });
+  });
+
+  it("searches after two characters and assigns the selected responsible employee to a room", async () => {
+    const employee = {
+      id: "33333333-3333-4333-8333-333333333333",
+      fullName: "Алия Серикова",
+      email: "aliya@example.test",
+      role: "employee" as const,
+    };
+    const onSave = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      if (String(input).startsWith("/api/inventory/transfer-recipient-candidates")) {
+        return { ok: true, json: async () => ({ users: [employee] }) } as Response;
+      }
+      return { ok: true, json: async () => ({ room: ROOM }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InventoryRoomFormModal building={BUILDING} room={null} onClose={vi.fn()} onSave={onSave} />);
+
+    const responsibleInput = screen.getByLabelText("room.responsible");
+    fireEvent.focus(responsibleInput);
+    fireEvent.change(responsibleInput, { target: { value: "А" } });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(responsibleInput, { target: { value: "Ал" } });
+    const option = await screen.findByRole("option", { name: /Алия Серикова/ });
+    fireEvent.click(option);
+    fireEvent.change(screen.getByLabelText("inventory.roomDesignation"), {
+      target: { value: "101" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(ROOM));
+    const createCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes(`/api/inventory/buildings/${BUILDING.id}/rooms`),
+    );
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      primaryResponsibleId: employee.id,
+    });
   });
 
   it("searches after two characters and submits the selected responsible employee", async () => {

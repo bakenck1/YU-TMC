@@ -1000,10 +1000,9 @@ export class InventoryItemService {
       throw new ApplicationError("validation", "invalid_version");
     }
     const roomId = normalizeId(input.roomId, "invalid_room_id");
-    const responsibleUserId = normalizeId(
+    const responsibleUserId = normalizeOptionalResponsibleUserId(
       input.responsibleUserId,
-      "invalid_responsible_user_id",
-    ).toLowerCase();
+    );
     const reason = normalizeOptionalBlankText(
       input.reason,
       1_000,

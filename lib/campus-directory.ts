@@ -7,6 +7,7 @@ export interface CampusBuildingPreset {
   mapVisible?: boolean;
   inventoryVisible?: boolean;
   address: string;
+  firstFloor?: number;
   floorCount: number;
 }
 
@@ -15,7 +16,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     id: "main-campus",
     name: "The Main Campus",
     address: CAMPUS_ADDRESS,
-    floorCount: 15,
+    firstFloor: 0,
+    floorCount: 16,
   },
   {
     id: "kgise",
@@ -111,4 +113,14 @@ export function findCampusBuildingPreset(
 
 export function isInventoryBuildingName(name: string): boolean {
   return findCampusBuildingPreset(name)?.inventoryVisible !== false;
+}
+
+export function campusBuildingFloorNumbers(
+  preset: CampusBuildingPreset,
+): number[] {
+  const firstFloor = preset.firstFloor ?? 1;
+  return Array.from(
+    { length: preset.floorCount },
+    (_, index) => firstFloor + index,
+  );
 }

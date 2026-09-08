@@ -112,7 +112,7 @@ function isMarkDecommissionedInUsePatch(value: unknown): value is {
   operation: "mark_decommissioned_in_use";
   version: number;
   roomId: string;
-  responsibleUserId: string;
+  responsibleUserId?: string | null;
   reason?: string | null;
   adminComment?: string | null;
   photo?: { imageDataUrl: string; width: number; height: number };
@@ -122,7 +122,9 @@ function isMarkDecommissionedInUsePatch(value: unknown): value is {
   return body.operation === "mark_decommissioned_in_use" &&
     Number.isInteger(body.version) &&
     typeof body.roomId === "string" &&
-    typeof body.responsibleUserId === "string" &&
+    (body.responsibleUserId === undefined ||
+      body.responsibleUserId === null ||
+      typeof body.responsibleUserId === "string") &&
     (body.reason === undefined || body.reason === null || typeof body.reason === "string") &&
     (body.adminComment === undefined || body.adminComment === null || typeof body.adminComment === "string") &&
     (body.photo === undefined || body.photo === null || isCameraPhoto(body.photo));

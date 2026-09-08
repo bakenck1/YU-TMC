@@ -346,6 +346,24 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   );
 });
 
+test("decommissioned-in-use items can be saved without a responsible employee", () => {
+  const componentSource = readFileSync(
+    "components/InventoryItemDetails.tsx",
+    "utf8",
+  );
+  const routeSource = readFileSync(
+    "app/api/inventory/items/[id]/route.ts",
+    "utf8",
+  );
+
+  assert.match(
+    componentSource,
+    /label=\{`\$\{t\("createItem\.responsible"\)\} \(\$\{t\("createItem\.optional"\)\}\)`\}/,
+  );
+  assert.doesNotMatch(componentSource, /status === "decommissioned_in_use" && !responsible/);
+  assert.match(routeSource, /body\.responsibleUserId === null/);
+});
+
 test("archive route is visible to administrators and warehouse staff", () => {
   assert.equal(canAccessPath("admin", "/items/decommissioned"), true);
   assert.equal(canAccessPath("warehouse", "/items/decommissioned"), true);

@@ -253,13 +253,16 @@ class PostgresInventoryLocationRepository
 
   async insertRoom(input: InsertRoomRecord): Promise<RoomRecord> {
     const result = await this.source.query<RoomRow>(
-      `insert into ${ROOMS}
+      `insert into ${ROOMS} as room
          (id, building_id, designation, designation_key, floor_number,
           floor_label, primary_responsible_id, created_by, updated_by,
           created_at, updated_at)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9)
-       returning *, ''::text as qr_code,
-         null::text as primary_responsible_name`,
+       returning room.*, ''::text as qr_code,
+         (select responsible.full_name
+            from ${USERS} responsible
+           where responsible.id = room.primary_responsible_id)
+           as primary_responsible_name`,
       [
         input.id,
         input.buildingId,
@@ -277,7 +280,7 @@ class PostgresInventoryLocationRepository
 
   async updateRoom(input: UpdateRoomRecord): Promise<RoomRecord | null> {
     const result = await this.source.query<RoomRow>(
-      `update ${ROOMS}
+      `update ${ROOMS} as room
        set designation = $2,
            designation_key = $3,
            floor_number = $4,
@@ -286,9 +289,12 @@ class PostgresInventoryLocationRepository
            updated_by = $7,
            updated_at = $8,
            version = version + 1
-       where id = $1 and version = $9 and status = 'active'
-       returning *, ''::text as qr_code,
-         null::text as primary_responsible_name`,
+       where room.id = $1 and room.version = $9 and room.status = 'active'
+       returning room.*, ''::text as qr_code,
+         (select responsible.full_name
+            from ${USERS} responsible
+           where responsible.id = room.primary_responsible_id)
+           as primary_responsible_name`,
       [
         input.id,
         input.designation,
