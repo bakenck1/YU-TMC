@@ -12,11 +12,13 @@
 
 # next.js
 /.next/
+/.next-e2e/
 /out/
 
 # production
 /build
 /storybook-static/
+/.artifacts/browser-smoke/
 
 # Container runtimes are intentionally not part of this project.
 Dockerfile

@@ -33,7 +33,7 @@
 | 5 | P1 | [Structured observability и legacy evidence — Engineering Done; evidence gate active](14-p1-observability-and-legacy-evidence.md) | Код закрыт; честный 90-day production interval завершится не раньше 2026-11-12 | M, operational gate |
 | 6 | P1 | [Production-readiness evidence — Engineering Done; external gates blocked](23-p1-production-readiness-evidence.md) | Проверяемый pack готов; production verdict остаётся NO-GO без внешних evidence | M / operational |
 | 7 | P1 quick win | [Repository/dependency hygiene — Done](21-p1-repository-hygiene.md) | Убраны warnings, scratch noise и лишние зависимости | S |
-| 8 | P2 | [Минимальный browser smoke](22-p2-browser-smoke.md) | Проверяет 1–2 критических пути в собранном приложении | M / decision |
+| 8 | P2 | [Минимальный browser smoke — Done](22-p2-browser-smoke.md) | Проверяет 2 критических пути в собранном приложении | M / decision |
 | 9 | P2 | [Декомпозиция application services](15-p2-application-service-decomposition.md) | Снижает риск изменений inventory/TMC/users/push | L, incremental |
 | 10 | P2 | [Декомпозиция god-components](16-p2-god-components.md) | Изолирует async workflows и делает UI тестируемым | L, incremental |
 | 11 | P2 | [Единый HTTP contract](17-p2-http-boundary-consistency.md) | Убирает точечный drift validation/cache/error headers | M |

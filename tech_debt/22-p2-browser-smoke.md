@@ -1,4 +1,18 @@
-# P2 — пилот browser smoke для критических journeys
+# P2 — пилот browser smoke для критических journeys — Done
+
+## Статус на 2026-09-09
+
+- `npm run test:browser-smoke` собирает production Next.js bundle и выполняет два
+  последовательных Chromium journey: lifecycle сессии и передачу ТМЦ между сотрудниками;
+- Windows x64 использует временный embedded PostgreSQL, а CI — отдельный service container;
+  внешняя test-БД допускается только на loopback, с совпадающей runtime/migrator identity,
+  разными ролями и явным подтверждением destructive reset;
+- build/server получают allowlisted environment с отключёнными SSO, webhook, push, 1С и
+  Dockflow; teardown идемпотентен при ошибках и SIGINT/SIGTERM;
+- failure evidence ограничен screenshot, очищенным server log и трассой
+  `method/path/status/request-id` без headers, cookies, query и body;
+- CI-пилот non-blocking до 2026-09-22; owner и порог `<1%` для перевода в blocking
+  зафиксированы в `docs/browser-smoke.md`.
 
 ## Сначала решение, затем инструмент
 

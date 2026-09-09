@@ -85,3 +85,62 @@ jobs:
         run: |
           npm run build
           npm run security:check
+
+  browser-smoke:
+    name: Browser smoke baseline (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      TEST_DATABASE_URL: postgresql://yu_inventory_test_runtime:local-runtime-test-password@127.0.0.1:55434/yu_inventory_browser_test
+      TEST_DATABASE_MIGRATOR_URL: postgresql://yu_inventory_test_migrator:local-migrator-test-password@127.0.0.1:55434/yu_inventory_browser_test
+      BROWSER_SMOKE_DATABASE_RESET_CONFIRMATION: reset:127.0.0.1:55434/yu_inventory_browser_test
+      TEST_DATABASE_SSL_MODE: disable
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: yu_inventory_browser_test
+          POSTGRES_PASSWORD: local-postgres-admin-password
+          POSTGRES_USER: postgres
+        ports:
+          - 55434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yu_inventory_browser_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Create restricted PostgreSQL roles
+        run: >-
+          PGPASSWORD=local-postgres-admin-password psql
+          --host 127.0.0.1
+          --port 55434
+          --set ON_ERROR_STOP=1
+          --username postgres
+          --dbname yu_inventory_browser_test
+          --command
+          "CREATE ROLE yu_inventory_test_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD 'local-migrator-test-password';
+          CREATE ROLE yu_inventory_test_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD 'local-runtime-test-password';
+          GRANT CONNECT ON DATABASE yu_inventory_browser_test TO yu_inventory_test_migrator, yu_inventory_test_runtime;
+          GRANT CREATE ON DATABASE yu_inventory_browser_test TO yu_inventory_test_migrator"
+      - name: Run production browser smoke
+        run: npm run test:browser-smoke
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/browser-smoke
+          if-no-files-found: error
+          retention-days: 7
