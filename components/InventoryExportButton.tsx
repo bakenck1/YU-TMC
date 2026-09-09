@@ -62,7 +62,7 @@ export default function InventoryExportButton({
   }
   return (
     <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-      <button type="button" onClick={() => void exportItems()} disabled={busy} aria-busy={busy} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-50 sm:w-auto">
+      <button type="button" onClick={() => void exportItems()} disabled={busy} aria-busy={busy} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 hover:shadow focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100 disabled:cursor-wait disabled:opacity-50 sm:w-auto">
         <Download className="h-4 w-4" />
         {busy ? t("excel.exporting") : t("excel.exportItems")}
       </button>

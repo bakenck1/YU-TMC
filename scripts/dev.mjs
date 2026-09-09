@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   cpSync,
@@ -49,9 +50,14 @@ async function runWithEmbeddedPostgres() {
   const databaseName = "yu_inventory_dev";
   const databaseUser = "yu_inventory";
   const databasePassword = "local-development-password";
+  const runtimeUser = "yu_inventory_runtime";
+  const runtimePassword = randomBytes(24).toString("hex");
   const databasePort = 5432;
-  const databaseUrl =
+  const migratorUrl =
     `postgresql://${databaseUser}:${databasePassword}` +
+    `@127.0.0.1:${databasePort}/${databaseName}`;
+  const runtimeUrl =
+    `postgresql://${runtimeUser}:${runtimePassword}` +
     `@127.0.0.1:${databasePort}/${databaseName}`;
   const environment = {
     ...process.env,
@@ -59,11 +65,11 @@ async function runWithEmbeddedPostgres() {
     DATABASE_DEPLOYMENT_ID: "yu-inventory-local-development",
     DATABASE_IDLE_TIMEOUT_MS: "30000",
     DATABASE_MIGRATION_LOCK_TIMEOUT_MS: "60000",
-    DATABASE_MIGRATOR_URL: databaseUrl,
+    DATABASE_MIGRATOR_URL: migratorUrl,
     DATABASE_POOL_MAX: "5",
     DATABASE_SSL_MODE: "disable",
     DATABASE_STATEMENT_TIMEOUT_MS: "30000",
-    DATABASE_URL: databaseUrl,
+    DATABASE_URL: runtimeUrl,
   };
   const postgres = new WindowsEmbeddedPostgres({
     databaseDir: databaseDirectory,
@@ -78,7 +84,7 @@ async function runWithEmbeddedPostgres() {
       await postgres.initialise();
     }
 
-    const databaseAlreadyRunning = await isDatabaseAvailable(databaseUrl);
+    const databaseAlreadyRunning = await isDatabaseAvailable(migratorUrl);
     if (databaseAlreadyRunning) {
       console.log("Using the existing local PostgreSQL database...");
     } else {
@@ -86,6 +92,7 @@ async function runWithEmbeddedPostgres() {
       await postgres.start();
     }
     await ensureDatabase(postgres, databaseName);
+    await ensureRuntimeRole(postgres, runtimeUser, runtimePassword);
 
     const startupCommands = [
       ["run", "db:migrate", "--", "--target=development"],
@@ -145,6 +152,28 @@ async function ensureDatabase(postgres, databaseName) {
   }
   if (!databaseExists) {
     await postgres.createDatabase(databaseName);
+  }
+}
+
+async function ensureRuntimeRole(postgres, roleName, password) {
+  const client = postgres.getPgClient();
+  await client.connect();
+  try {
+    const role = client.escapeIdentifier(roleName);
+    const escapedPassword = client.escapeLiteral(password);
+    const result = await client.query(
+      "select 1 from pg_roles where rolname = $1",
+      [roleName],
+    );
+    if (result.rowCount === 0) {
+      await client.query(`create role ${role} login password ${escapedPassword}`);
+    } else {
+      await client.query(
+        `alter role ${role} with login nosuperuser nocreatedb nocreaterole noinherit password ${escapedPassword}`,
+      );
+    }
+  } finally {
+    await client.end();
   }
 }
 
