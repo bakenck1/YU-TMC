@@ -29,10 +29,7 @@ export function createPostgresDockflowInventoryRepository(pool = getDatabasePool
     },
     async listItems(page = { after: null, limit: 101 }) {
       const result = await pool.query<InventoryItemRow>(
-        `select * from (${inventoryItemsSelect}) inventory_items
-          where ($1::timestamptz is null or updated_at < $1 or (updated_at = $1 and id > $2::uuid))
-          order by updated_at desc, id
-          limit $3`,
+        inventoryItemsSelect,
         [page.after?.sortValue ?? null, page.after?.id ?? null, page.limit],
       );
       return result.rows.map(mapInventoryItem);
@@ -138,16 +135,61 @@ const assignedItemsSelect = (employeePredicate: string) => `
     ) assigned_items`;
 
 const inventoryItemsSelect = `
-  select i.id, i.name, coalesce(barcode.original_value, i.inventory_number) as barcode,
-         i.inventory_number, i.quantity, i.quantity as available_quantity,
-         'in_stock'::text as status, concat_ws(', ', b.name, r.designation) as storage_location,
-         i.unit_price as cost, 'individual'::text as marking_type,
-         '[]'::json as assignments, photo.url as photo_url, i.item_type,
-         i.brand, i.model, i.status::text as inventory_status,
-         null::text as responsible_iin, null::text as responsible_name,
-         date_trunc('milliseconds', i.updated_at) as updated_at
-    from "yu_inventory"."items" i
-    join "yu_inventory"."rooms" r on r.id = i.room_id
+  with candidates as materialized (
+    select i.id, i.id as item_id, null::uuid as group_id,
+           null::uuid as responsible_user_id, null::timestamptz as assigned_at,
+           'available'::text as source_kind,
+           date_trunc('milliseconds', i.updated_at) as updated_at
+      from "yu_inventory"."items" i
+     where i.archived_at is null and i.status <> 'decommissioned'
+       and not exists (select 1 from "yu_inventory"."responsibility_periods" rp where rp.item_id = i.id and rp.ended_at is null)
+       and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
+    union all
+    select i.id, i.id, null::uuid, u.id, rp.started_at, 'responsibility'::text,
+           date_trunc('milliseconds', i.updated_at)
+      from "yu_inventory"."responsibility_periods" rp
+      join "yu_inventory"."users" u on u.id = rp.responsible_user_id
+      join "yu_inventory"."items" i on i.id = rp.item_id
+     where rp.ended_at is null and u.is_active = true and u.deleted_at is null and u.iin is not null
+       and i.archived_at is null and i.status <> 'decommissioned'
+       and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
+    union all
+    select g.id, i.id, g.id, u.id, g.transferred_at, 'group'::text,
+           date_trunc('milliseconds', i.updated_at)
+      from "yu_inventory"."local_item_groups" g
+      join "yu_inventory"."users" u on u.id = g.responsible_user_id
+      join "yu_inventory"."items" i on i.id = g.item_id
+     where g.status = 'active' and u.is_active = true and u.deleted_at is null and u.iin is not null
+       and i.archived_at is null and i.status <> 'decommissioned'
+  ), selected as materialized (
+    select * from candidates
+     where ($1::timestamptz is null or updated_at < $1 or (updated_at = $1 and id > $2::uuid))
+     order by updated_at desc, id
+     limit $3
+  )
+  select selected.id, i.name,
+         case when selected.source_kind = 'group' then g.barcode_value
+              else coalesce(barcode.original_value, i.inventory_number) end as barcode,
+         i.inventory_number,
+         case when selected.source_kind = 'group' then g.quantity else i.quantity end as quantity,
+         case when selected.source_kind = 'available' then i.quantity else 0 end as available_quantity,
+         case when selected.source_kind = 'available' then 'in_stock' else 'assigned' end as status,
+         concat_ws(', ', b.name, r.designation) as storage_location,
+         i.unit_price as cost,
+         case when selected.source_kind = 'group' and g.quantity > 1 then 'batch' else 'individual' end as marking_type,
+         case when selected.source_kind = 'available' then '[]'::json
+              else json_build_array(json_build_object(
+                'employeeIin', u.iin,
+                'quantity', case when selected.source_kind = 'group' then g.quantity else i.quantity end,
+                'assignedAt', selected.assigned_at)) end as assignments,
+         photo.url as photo_url, i.item_type, i.brand, i.model,
+         i.status::text as inventory_status, u.iin as responsible_iin,
+         u.full_name as responsible_name, selected.updated_at
+    from selected
+    join "yu_inventory"."items" i on i.id = selected.item_id
+    left join "yu_inventory"."local_item_groups" g on g.id = selected.group_id
+    left join "yu_inventory"."users" u on u.id = selected.responsible_user_id
+    join "yu_inventory"."rooms" r on r.id = case when selected.source_kind = 'group' then g.room_id else i.room_id end
     join "yu_inventory"."buildings" b on b.id = r.building_id
     left join lateral (
       select original_value from "yu_inventory"."barcode_registry"
@@ -159,58 +201,7 @@ const inventoryItemsSelect = `
        where item_id = i.id and purpose = 'item' and status = 'attached' and binary_data is not null
        order by attached_at desc nulls last limit 1
     ) photo on true
-   where i.archived_at is null and i.status <> 'decommissioned'
-     and not exists (select 1 from "yu_inventory"."responsibility_periods" rp where rp.item_id = i.id and rp.ended_at is null)
-     and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
-  union all
-  select i.id, i.name, coalesce(barcode.original_value, i.inventory_number) as barcode,
-         i.inventory_number, i.quantity, 0 as available_quantity,
-         'assigned'::text as status, concat_ws(', ', b.name, r.designation) as storage_location,
-         i.unit_price as cost, 'individual'::text as marking_type,
-         json_build_array(json_build_object('employeeIin', u.iin, 'quantity', i.quantity, 'assignedAt', rp.started_at)) as assignments,
-         photo.url as photo_url, i.item_type, i.brand, i.model, i.status::text as inventory_status,
-         u.iin as responsible_iin, u.full_name as responsible_name,
-         date_trunc('milliseconds', i.updated_at) as updated_at
-    from "yu_inventory"."responsibility_periods" rp
-    join "yu_inventory"."users" u on u.id = rp.responsible_user_id
-    join "yu_inventory"."items" i on i.id = rp.item_id
-    join "yu_inventory"."rooms" r on r.id = i.room_id
-    join "yu_inventory"."buildings" b on b.id = r.building_id
-    left join lateral (
-      select original_value from "yu_inventory"."barcode_registry"
-       where item_id = i.id and kind = 'official' limit 1
-    ) barcode on true
-    left join lateral (
-      select concat('/api/v1/items/', i.id, '/photo') as url
-        from "yu_inventory"."photos"
-       where item_id = i.id and purpose = 'item' and status = 'attached' and binary_data is not null
-       order by attached_at desc nulls last limit 1
-    ) photo on true
-   where rp.ended_at is null and u.is_active = true and u.deleted_at is null and u.iin is not null
-     and i.archived_at is null and i.status <> 'decommissioned'
-     and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
-  union all
-  select g.id, i.name, g.barcode_value as barcode, i.inventory_number, g.quantity,
-         0 as available_quantity, 'assigned'::text as status,
-         concat_ws(', ', b.name, r.designation) as storage_location, i.unit_price as cost,
-         case when g.quantity > 1 then 'batch' else 'individual' end as marking_type,
-         json_build_array(json_build_object('employeeIin', u.iin, 'quantity', g.quantity, 'assignedAt', g.transferred_at)) as assignments,
-         photo.url as photo_url, i.item_type, i.brand, i.model, i.status::text as inventory_status,
-         u.iin as responsible_iin, u.full_name as responsible_name,
-         date_trunc('milliseconds', i.updated_at) as updated_at
-    from "yu_inventory"."local_item_groups" g
-    join "yu_inventory"."users" u on u.id = g.responsible_user_id
-    join "yu_inventory"."items" i on i.id = g.item_id
-    join "yu_inventory"."rooms" r on r.id = g.room_id
-    join "yu_inventory"."buildings" b on b.id = r.building_id
-    left join lateral (
-      select concat('/api/v1/items/', i.id, '/photo') as url
-        from "yu_inventory"."photos"
-       where item_id = i.id and purpose = 'item' and status = 'attached' and binary_data is not null
-       order by attached_at desc nulls last limit 1
-    ) photo on true
-   where g.status = 'active' and u.is_active = true and u.deleted_at is null and u.iin is not null
-     and i.archived_at is null and i.status <> 'decommissioned'`;
+   order by selected.updated_at desc, selected.id`;
 
 interface EmployeeItemCountRow { iin: string; item_count: number; }
 interface AssignedItemRow { id: string; name: string; barcode: string; inventory_number: string; quantity: number; storage_location: string; assigned_at: Date; cost: string | number; marking_type: DockflowMarkingType; photo_url: string | null; item_type: string; brand: string | null; model: string | null; inventory_status: string; responsible_iin: string; responsible_name: string; updated_at: Date; }

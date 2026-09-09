@@ -3,8 +3,8 @@
 ## Evidence
 
 Baseline `capacity-v1` (2026-09-09): the exact production repository projection recorded P95
-**252.61 ms** against a **250 ms** budget. The next repeat recorded **246.55 ms**, so one more
-sub-budget repeat is required before treating the original 1% breach as measurement noise.
+**252.61 ms** against a **250 ms** budget. A candidate-first projection introduced for task 24 now
+records **56.14 ms**; this task still requires its own verification/review before closure.
 
 ## Expected gain and rollback
 

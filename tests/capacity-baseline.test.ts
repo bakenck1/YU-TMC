@@ -28,7 +28,7 @@ test("capacity SQL is captured from production repositories and stays read-only"
     assert.ok(statements.length > 0, name);
     for (const { sql } of statements) {
       const normalized = sql.replace(/--.*$/gm, " ").replace(/\s+/g, " ").trim();
-      assert.match(normalized, /^select\b/i, name);
+      assert.match(normalized, /^(?:select|with)\b/i, name);
       assert.doesNotMatch(normalized, /\b(?:insert|update|delete|merge|truncate|alter|drop|create|copy|call)\b/i, name);
     }
   }
@@ -76,6 +76,12 @@ test("committed baseline contains complete, credential-free evidence and actiona
   assert.equal(report.collectionOutcomes.inventory_list.withinLimit, true);
   assert.ok(report.collectionOutcomes.inventory_list.elapsedMs > 0);
   assert.equal(report.collectionOutcomes.export_source.withinLimit, true);
+  assert.ok(report.queries.dockflow_projection.p95Ms <= report.queries.dockflow_projection.sloMs);
+  assert.ok(report.poolSaturation.p95Ms <= 500);
+  assert.equal(report.poolSaturation.errors, 0);
+  assert.equal(report.poolSaturation.concurrentScanners, 16);
+  assert.equal(report.poolSaturation.poolSize, 8);
+  assert.ok(report.poolSaturation.maxWaiting <= 8);
   assert.equal(report.bottlenecks.every((item: { followUp?: string }) => /rollback/i.test(item.followUp ?? "")), true);
   assert.doesNotMatch(raw, /postgres(?:ql)?:\/\/|SESSION_SECRET|VAPID|password/i);
 
@@ -91,6 +97,7 @@ test("committed baseline contains complete, credential-free evidence and actiona
     pool_saturation: "tech_debt/24-p2-capacity-pool-saturation.md",
     export_memory: "tech_debt/25-p2-capacity-export-memory.md",
     dockflow_projection: "tech_debt/26-p3-capacity-dockflow-projection.md",
+    inventory_list: "tech_debt/28-p2-inventory-list-projection.md",
   };
   assert.equal(report.bottlenecks.some((item: { id: string }) =>
     item.id === "inventory_list_capacity" || item.id === "export_source_capacity"), false);

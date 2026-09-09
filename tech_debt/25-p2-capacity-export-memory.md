@@ -3,8 +3,8 @@
 ## Evidence
 
 Baseline `capacity-v1` (2026-09-09): the isolated 25,000-row production workbook workload reached
-**1,173.43 MiB** peak RSS growth, exceeding the **256 MiB** budget. The measured workload P95 itself
-was 1,952.06 ms.
+**1,123.84 MiB** peak RSS growth, exceeding the **256 MiB** budget. The measured workload remains
+within its 3,000 ms latency SLO.
 
 ## Expected gain and rollback
 
