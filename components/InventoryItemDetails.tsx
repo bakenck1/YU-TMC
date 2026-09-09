@@ -4,7 +4,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
@@ -13,12 +12,9 @@ import {
   Check,
   FileText,
   Image as ImageIcon,
-  MessageSquare,
-  Paperclip,
   Pencil,
   QrCode,
   Save,
-  Send,
   ShieldCheck,
   Trash2,
   Wrench,
@@ -38,6 +34,7 @@ import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog"
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
+import InventoryItemComments from "@/components/InventoryItemComments";
 import InventoryOverviewRow from "@/components/InventoryOverviewRow";
 import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
 import {
@@ -154,10 +151,6 @@ export default function InventoryItemDetails({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
-  const [comments, setComments] = useState(initialComments);
-  const [comment, setComment] = useState("");
-  const [commentAttachment, setCommentAttachment] = useState<File | null>(null);
-  const [commentSaving, setCommentSaving] = useState(false);
   const editDialogRef = useRef<HTMLDivElement>(null);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const protectedDialogRef = useRef<HTMLDivElement>(null);
@@ -637,39 +630,6 @@ export default function InventoryItemDetails({
       setError(localizeItemError(cause, t));
     } finally {
       setCapturingPhoto(false);
-    }
-  }
-
-  async function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!comment.trim() || commentSaving) return;
-    setCommentSaving(true);
-    setError("");
-    try {
-      const formData = new FormData();
-      formData.set("message", comment);
-      if (commentAttachment) formData.set("attachment", commentAttachment);
-      const response = await fetch(`/api/inventory/items/${commentItemId ?? item.id}/comments`, {
-        method: "POST",
-        body: formData,
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        comments?: InventoryItemCommentDto[];
-        error?: string;
-      };
-      if (!response.ok || !body.comments) {
-        throw new Error(body.error ?? responseErrorCode(response.status));
-      }
-      setComments(body.comments);
-      setComment("");
-      setCommentAttachment(null);
-      const attachmentInput = document.getElementById("item-comment-attachment");
-      if (attachmentInput instanceof HTMLInputElement) attachmentInput.value = "";
-      router.refresh();
-    } catch (cause) {
-      setError(localizeItemError(cause, t));
-    } finally {
-      setCommentSaving(false);
     }
   }
 
@@ -1258,85 +1218,12 @@ export default function InventoryItemDetails({
             </p>
           )}
         </section>
-        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-sky-600" />
-            <h2 className="text-lg font-semibold text-zinc-800">
-              {t("itemDetails.comments")} ({comments.length})
-            </h2>
-          </div>
-          {canComment ? (
-            <form className="mt-4 space-y-2" onSubmit={submitComment}>
-              <label className="sr-only" htmlFor="item-comment">
-                {t("itemDetails.commentPlaceholder")}
-              </label>
-              <textarea
-                id="item-comment"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                maxLength={2000}
-                rows={2}
-                placeholder={t("itemDetails.commentPlaceholder")}
-                className="min-h-12 flex-1 resize-y rounded-xl border border-black/10 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-sky-500"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-sm font-medium text-zinc-600">
-                  <Paperclip className="h-4 w-4" />
-                  {t("itemDetails.commentAttach")}
-                  <input
-                    id="item-comment-attachment"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-                    className="sr-only"
-                    onChange={(event) => setCommentAttachment(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                {commentAttachment ? <span className="text-xs text-zinc-500">{commentAttachment.name}</span> : null}
-                <button
-                  type="submit"
-                  disabled={commentSaving || !comment.trim()}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  <Send className="h-4 w-4" />
-                  {commentSaving ? t("itemDetails.saving") : t("itemDetails.commentSend")}
-                </button>
-              </div>
-            </form>
-          ) : null}
-          {comments.length ? (
-            <ol className="mt-4 space-y-3">
-              {comments.map((entry) => (
-                <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="font-medium text-zinc-800">
-                      {entry.authorName}
-                      {entry.authorEmail ? (
-                        <span className="font-normal text-zinc-400">· {entry.authorEmail}</span>
-                      ) : null}
-                    </p>
-                    <time dateTime={entry.createdAt} className="text-xs text-zinc-400">
-                      {new Date(entry.createdAt).toLocaleString(locale)}
-                    </time>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-zinc-600">{entry.message}</p>
-                  {entry.attachment ? (
-                    <a
-                      href={entry.attachment.downloadUrl}
-                      className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-sky-700 hover:underline"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                      {entry.attachment.fileName}
-                    </a>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-sm text-zinc-500">
-              {t("itemDetails.commentsEmpty")}
-            </p>
-          )}
-        </section>
+        <InventoryItemComments
+          key={commentItemId ?? item.id}
+          itemId={commentItemId ?? item.id}
+          initialComments={initialComments}
+          canComment={canComment}
+        />
         </div>
       </div>
 

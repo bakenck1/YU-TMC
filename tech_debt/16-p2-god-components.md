@@ -1,4 +1,17 @@
-# P2 — декомпозиция god-components по пользовательским workflow
+# P2 — декомпозиция god-components по пользовательским workflow — Done
+
+## Статус на 2026-09-09
+
+- comments/attachments вынесены из `InventoryItemDetails` в самостоятельную
+  `InventoryItemComments` feature-панель и use-case hook/controller;
+- родитель сохранил публичные props и layout, но больше не владеет comment draft,
+  attachment, saving/error state или POST handler;
+- сохранены URL, multipart payload, response/error semantics и `router.refresh()`;
+  смена item identity/unmount отменяет pending mutation и блокирует late response;
+- focused component suite покрывает initial render, permission gating, upload failure,
+  сохранение draft для retry, успешный retry/refresh и abort при смене item;
+- после первого seam дальнейшие extraction остаются по одному и только вместе с
+  ближайшей продуктовой доработкой, как предусмотрено задачей.
 
 ## Evidence и корень долга
 

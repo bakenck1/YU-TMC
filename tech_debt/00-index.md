@@ -35,7 +35,7 @@
 | 7 | P1 quick win | [Repository/dependency hygiene — Done](21-p1-repository-hygiene.md) | Убраны warnings, scratch noise и лишние зависимости | S |
 | 8 | P2 | [Минимальный browser smoke — Done](22-p2-browser-smoke.md) | Проверяет 2 критических пути в собранном приложении | M / decision |
 | 9 | P2 | [Декомпозиция application services — Done](15-p2-application-service-decomposition.md) | Первый cohesion-seam извлечён; остальные зафиксированы trigger-only | L, incremental |
-| 10 | P2 | [Декомпозиция god-components](16-p2-god-components.md) | Изолирует async workflows и делает UI тестируемым | L, incremental |
+| 10 | P2 | [Декомпозиция god-components — Done](16-p2-god-components.md) | Comments workflow изолирован и покрыт component tests | L, incremental |
 | 11 | P2 | [Единый HTTP contract](17-p2-http-boundary-consistency.md) | Убирает точечный drift validation/cache/error headers | M |
 | 12 | P3 | [Legacy и рудименты](19-p3-legacy-and-dead-code.md) | Удаляет orphaned code, остальное готовит к sunset | S–M |
 | 13 | P3 trigger-only | [Schema, contracts и i18n](18-p3-schema-contract-i18n-modules.md) | Уменьшает конфликтность только при измеренной боли | L, optional |
