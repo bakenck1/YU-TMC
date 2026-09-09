@@ -1,4 +1,17 @@
-# P2 — единые внутренние HTTP boundary primitives
+# P2 — единые внутренние HTTP boundary primitives — Done
+
+## Статус на 2026-09-09
+
+- три legacy transfer handler используют общий узкий boundary для canonical UUID,
+  no-store JSON responses и безопасного error mapping;
+- порядок `authenticate -> parse ID -> parse body -> use case` и существующие
+  status/body/header contracts сохранены без изменения внешних API;
+- table-driven route contract покрывает success, malformed ID, `401`, `403`, `404`,
+  `409`, `429`, unexpected `503`, canonical ID и safe/unsafe `Retry-After` для всех
+  трёх handlers;
+- source guard запрещает вернуть локальные копии ID/error/cache primitives;
+- full test suite, lint и production build проходят; дальнейшее расширение helper
+  остаётся только по факту второго совместимого семейства routes.
 
 ## Корень долга
 
