@@ -15,6 +15,7 @@ import InventoryInspectionsManager from "@/components/InventoryInspectionsManage
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
+import InventoryItemComments from "@/components/InventoryItemComments";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryItemDetails from "@/components/InventoryItemDetails";
@@ -137,6 +138,7 @@ export const InventoryInspectionsManagerStory: Story = { name: "InventoryInspect
 export const InventoryItemArchiveDialogStory: Story = { name: "InventoryItemArchiveDialog", render: () => <InventoryItemArchiveDialog itemName={STORY_ITEM_DTO.name} open saving={false} onClose={() => undefined} onConfirm={() => undefined} /> };
 export const InventoryItemCameraCaptureStory: Story = { name: "InventoryItemCameraCapture", render: () => <InventoryItemCameraCapture open onClose={() => undefined} onCapture={() => undefined} /> };
 export const InventoryItemCodeScannerStory: Story = { name: "InventoryItemCodeScanner", render: () => <InventoryItemCodeScanner onClose={() => undefined} onCodeSelected={() => undefined} /> };
+export const InventoryItemCommentsStory: Story = { name: "InventoryItemComments", render: () => <InventoryItemComments itemId={STORY_ITEM_DTO.id} initialComments={[]} canComment /> };
 export const InventoryItemCompositionStory: Story = { name: "InventoryItemComposition", render: () => <InventoryItemComposition itemId={STORY_ITEM_DTO.id} initialComponents={[]} canManage /> };
 export const InventoryItemCreateFormStory: Story = { name: "InventoryItemCreateForm", render: () => <InventoryItemCreateForm rooms={[STORY_ROOM]} buildings={[STORY_BUILDING]} initialRoomId={STORY_ROOM.id} openInitially hideTrigger /> };
 export const InventoryItemDetailsStory: Story = { name: "InventoryItemDetails", render: () => <InventoryItemDetails initialItem={STORY_ITEM_DTO} canEditContent canSendToService requiresServicePhoto={false} canManageCode operations={[]} initialComments={[]} canComment canManageProtected rooms={[{ ...STORY_ROOM, buildingName: STORY_BUILDING.name }]} initialComponents={[]} canManageComponents actorId="10000000-0000-4000-8000-000000000001" actorRole="admin" /> };
