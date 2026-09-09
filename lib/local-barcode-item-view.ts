@@ -18,7 +18,10 @@ export function toLocalBarcodeInventoryItem(
     building: group.location.buildingName,
     roomId: group.location.roomId,
     room: group.location.roomDesignation,
-    location: `${group.location.buildingName} / ${group.location.roomDesignation}`,
+    floorNumber: group.location.floorNumber,
+    location: group.location.floorNumber === undefined
+      ? `${group.location.buildingName} / ${group.location.roomDesignation}`
+      : `${group.location.buildingName} / ${group.location.floorNumber} этаж / ${group.location.roomDesignation}`,
     responsibleId: group.responsible.id,
     responsible: group.responsible.fullName,
     status: "active",

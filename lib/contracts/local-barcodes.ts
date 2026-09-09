@@ -3,6 +3,7 @@ export type LocalBarcodeStatus = "active" | "cancelled";
 export interface LocalBarcodeLocationDto {
   roomId: string;
   roomDesignation: string;
+  floorNumber?: number;
   buildingId: string;
   buildingName: string;
 }

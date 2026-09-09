@@ -6,6 +6,7 @@ import {
   filterInventoryItems,
   inventoryStatusOptions,
 } from "../lib/inventory-list";
+import { toLocalBarcodeInventoryItem } from "../lib/local-barcode-item-view";
 import type { InventoryItem } from "../lib/types";
 import type { InventoryListFilters } from "../lib/inventory-list";
 
@@ -79,7 +80,7 @@ const FILTER_CASES: Array<{
   { name: "model", filter: { model: "x49" }, mismatch: { model: "ProOne" } },
   { name: "item type", filter: { itemType: "проек" }, mismatch: { itemType: "Моноблок" } },
   { name: "building", filter: { building: "main" }, mismatch: { building: "Technopark" } },
-  { name: "room", filter: { location: "301" }, mismatch: { room: "205" } },
+  { name: "room", filter: { location: "301" }, mismatch: { room: "205", location: "Main / 205" } },
   { name: "responsible", filter: { responsible: "employee" }, mismatch: { responsible: "Technician" } },
 ];
 
@@ -119,6 +120,101 @@ test("advanced filters support legacy combined item fields", () => {
     responsible: "employee",
   });
   assert.deepEqual(result, [legacy]);
+});
+
+test("location filter finds a floor in the full location when a separate room is present", () => {
+  const thirteenthFloor: InventoryItem = {
+    ...BASE_ITEM,
+    id: "floor-13",
+    inventoryNumber: "INV-13",
+    room: "1301",
+    location: "The Main Campus / 13 этаж / 1301",
+  };
+  const twelfthFloor: InventoryItem = {
+    ...BASE_ITEM,
+    id: "floor-12",
+    inventoryNumber: "INV-12",
+    room: "1201",
+    location: "The Main Campus / 12 этаж / 1201",
+  };
+
+  const result = filterInventoryItems([thirteenthFloor, twelfthFloor], {
+    query: "",
+    category: "all",
+    location: "  13   ЭТАЖ ",
+    statusKey: "all",
+  });
+
+  assert.deepEqual(result.map((item) => item.id), ["floor-13"]);
+});
+
+test("location filter treats hyphenated floor input as an inclusive range", () => {
+  const floorItems = Array.from({ length: 16 }, (_, floorNumber): InventoryItem => ({
+    ...BASE_ITEM,
+    id: `floor-${floorNumber}`,
+    inventoryNumber: `INV-${floorNumber}`,
+    floorNumber,
+    room: `${floorNumber}01`,
+    location: `The Main Campus / ${floorNumber} этаж / ${floorNumber}01`,
+  }));
+  const filters: InventoryListFilters = {
+    query: "",
+    category: "all",
+    location: "14-15",
+    statusKey: "all",
+  };
+
+  assert.deepEqual(
+    filterInventoryItems(floorItems, filters).map((item) => item.floorNumber),
+    [14, 15],
+  );
+  assert.deepEqual(
+    filterInventoryItems(floorItems, { ...filters, location: "15–14 этажи" }).map((item) => item.floorNumber),
+    [14, 15],
+  );
+});
+
+test("floor range also finds locally distributed inventory through the database DTO mapping", () => {
+  const localItem = toLocalBarcodeInventoryItem({
+    id: "local-group-15",
+    itemId: "item-15",
+    itemName: "Моноблок",
+    originalBarcode: "INV-15",
+    itemType: "electronics",
+    brand: "Lenovo",
+    model: null,
+    description: null,
+    unitPrice: 100,
+    photoUrl: null,
+    localBarcode: "INV-15-0001",
+    parentGroupId: null,
+    quantity: 1,
+    responsible: { id: "employee-1", fullName: "Employee" },
+    previousResponsible: null,
+    location: {
+      roomId: "room-1501",
+      roomDesignation: "1501",
+      floorNumber: 15,
+      buildingId: "main-campus",
+      buildingName: "The Main Campus",
+    },
+    transferredAt: "2026-09-09T00:00:00.000Z",
+    status: "active",
+    version: 1,
+    cancellation: null,
+  });
+
+  assert.equal(localItem.floorNumber, 15);
+  assert.equal(localItem.location, "The Main Campus / 15 этаж / 1501");
+  assert.deepEqual(
+    filterInventoryItems([localItem], {
+      query: "",
+      category: "all",
+      location: "14-15",
+      statusKey: "all",
+    }).map((item) => item.id),
+    ["local-group-15"],
+  );
 });
 
 test("filter panel keeps draft state separate and restores focus after apply", async () => {

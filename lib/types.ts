@@ -15,6 +15,7 @@ export interface InventoryItem {
   building?: string;
   roomId?: string;
   room?: string;
+  floorNumber?: number;
   location: string;
   responsibleId?: string;
   responsible: string;
