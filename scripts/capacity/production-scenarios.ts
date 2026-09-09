@@ -8,7 +8,7 @@ import { createPostgresTmcOperationRepositories } from "../../lib/server/persist
 import type { PostgresRepositorySource } from "../../lib/server/persistence/postgres/postgres-unit-of-work";
 import { COLLECTION_LIMITS } from "../../lib/server/persistence/collection-limits";
 export { TMC_PUSH_WORKER_LEASE_MS } from "../../lib/application/services/web-push-service";
-export const INVENTORY_COLLECTION_LIMIT = COLLECTION_LIMITS.inventoryItems;
+export const INVENTORY_COLLECTION_BATCH = COLLECTION_LIMITS.inventoryItemsPage;
 
 export interface CapacityStatement {
   sql: string;
@@ -19,12 +19,45 @@ export type CapacityScenarios = Record<string, CapacityStatement[]>;
 
 const ACTOR_ID = deterministicUuid("capacity:user:2");
 
+export async function measureProductionInventoryCollection(pool: Pool) {
+  const client = await pool.connect();
+  const startedAt = performance.now();
+  let began = false;
+  let pageCount = 0;
+  try {
+    await client.query("begin isolation level repeatable read, read only");
+    began = true;
+    const source = {
+      query: (...args: Parameters<typeof client.query>) => {
+        pageCount += 1;
+        return client.query(...args);
+      },
+    } as unknown as PostgresRepositorySource;
+    const rows = await createPostgresInventoryItemRepositories(source).items.listItems();
+    await client.query("commit");
+    began = false;
+    return {
+      rows: rows.length,
+      batchLimit: INVENTORY_COLLECTION_BATCH,
+      pageCount,
+      withinLimit: true,
+      elapsedMs: Math.round((performance.now() - startedAt) * 100) / 100,
+    };
+  } finally {
+    if (began) await client.query("rollback");
+    client.release();
+  }
+}
+
 /**
  * Capture SQL through the real adapters so performance evidence cannot drift
  * into a hand-written approximation of a production collection query.
  */
 export async function captureProductionCapacityScenarios(epoch: string): Promise<CapacityScenarios> {
-  const inventory = captureSource();
+  let inventoryPage = 0;
+  const inventory = captureSource(() => inventoryPage++ === 0
+    ? capacityInventoryPage(epoch, INVENTORY_COLLECTION_BATCH)
+    : []);
   await createPostgresInventoryItemRepositories(inventory.source).items.listItems();
 
   const dockflow = capturePool();
@@ -65,6 +98,20 @@ export async function captureProductionCapacityScenarios(epoch: string): Promise
       values: [50],
     }],
   };
+}
+
+function capacityInventoryPage(epoch: string, count: number): QueryResultRow[] {
+  const epochMs = new Date(epoch).getTime();
+  return Array.from({ length: count }, (_, index) => {
+    const updatedAt = new Date(epochMs - (index + 1));
+    return {
+      id: deterministicUuid(`capacity:item:${index + 1}`),
+      updated_at: updatedAt,
+      updated_at_cursor: updatedAt.toISOString(),
+      quantity: 1,
+      unit_price: 1,
+    };
+  });
 }
 
 function captureSource(respond: ((sql: string) => QueryResultRow[]) | QueryResultRow[] = []) {

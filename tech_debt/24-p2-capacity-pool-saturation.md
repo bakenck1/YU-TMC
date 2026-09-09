@@ -3,7 +3,7 @@
 ## Evidence
 
 Baseline `capacity-v1` (2026-09-09): 16 simultaneous Dockflow scanners through an 8-connection
-pool produced P95 **964.27 ms** against the **500 ms** budget, with 8 requests waiting.
+pool produced P95 **972.03 ms** against the **500 ms** budget, with 8 requests waiting.
 
 ## Expected gain and rollback
 

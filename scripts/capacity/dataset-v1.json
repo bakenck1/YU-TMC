@@ -30,7 +30,7 @@
   },
   "applicationWorkloads": {
     "xmlRecords": 5000,
-    "exportRows": 10000
+    "exportRows": 25000
   },
   "budgets": {
     "poolP95Ms": 500,

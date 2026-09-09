@@ -70,6 +70,12 @@ test("committed baseline contains complete, credential-free evidence and actiona
   assert.ok(report.productionRouteChunks["/(protected)/items/page"].client.bytes > 0);
   assert.ok(report.applicationWorkloads.xml_parse.records > 0);
   assert.ok(report.applicationWorkloads.export_workbook.records > 0);
+  assert.equal(report.collectionOutcomes.inventory_list.rows, 25_000);
+  assert.equal(report.collectionOutcomes.inventory_list.batchLimit, 500);
+  assert.equal(report.collectionOutcomes.inventory_list.pageCount, 51);
+  assert.equal(report.collectionOutcomes.inventory_list.withinLimit, true);
+  assert.ok(report.collectionOutcomes.inventory_list.elapsedMs > 0);
+  assert.equal(report.collectionOutcomes.export_source.withinLimit, true);
   assert.equal(report.bottlenecks.every((item: { followUp?: string }) => /rollback/i.test(item.followUp ?? "")), true);
   assert.doesNotMatch(raw, /postgres(?:ql)?:\/\/|SESSION_SECRET|VAPID|password/i);
 
@@ -82,15 +88,15 @@ test("committed baseline contains complete, credential-free evidence and actiona
   }
 
   const followUps: Record<string, string> = {
-    inventory_list_capacity: "tech_debt/27-p1-inventory-collection-capacity.md",
-    export_source_capacity: "tech_debt/27-p1-inventory-collection-capacity.md",
     pool_saturation: "tech_debt/24-p2-capacity-pool-saturation.md",
     export_memory: "tech_debt/25-p2-capacity-export-memory.md",
     dockflow_projection: "tech_debt/26-p3-capacity-dockflow-projection.md",
   };
-  assert.deepEqual(report.bottlenecks.map((item: { id: string }) => item.id).sort(), Object.keys(followUps).sort());
+  assert.equal(report.bottlenecks.some((item: { id: string }) =>
+    item.id === "inventory_list_capacity" || item.id === "export_source_capacity"), false);
   for (const item of report.bottlenecks as Array<{ id: string; budget: number }>) {
-    const task = await readFile(followUps[item.id], "utf8");
+    assert.ok(followUps[item.id], `missing follow-up for ${item.id}`);
+    const task = await readFile(followUps[item.id]!, "utf8");
     const formattedBudget = String(item.budget).replace(/\B(?=(\d{3})+(?!\d))/g, ",?");
     assert.match(task, new RegExp(formattedBudget));
     assert.match(task, /rollback/i);

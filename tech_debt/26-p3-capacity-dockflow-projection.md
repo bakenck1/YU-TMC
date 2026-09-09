@@ -3,8 +3,8 @@
 ## Evidence
 
 Baseline `capacity-v1` (2026-09-09): the exact production repository projection recorded P95
-**255.47 ms** against a **250 ms** budget. The 2% breach is small enough that repeated evidence is
-required before changing SQL or indexes.
+**252.61 ms** against a **250 ms** budget. The next repeat recorded **246.55 ms**, so one more
+sub-budget repeat is required before treating the original 1% breach as measurement noise.
 
 ## Expected gain and rollback
 

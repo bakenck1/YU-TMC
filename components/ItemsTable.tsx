@@ -20,6 +20,7 @@ import {
   type InventoryColumnKey,
 } from "@/lib/inventory-columns";
 import InventoryExportButton from "@/components/InventoryExportButton";
+import { isCompleteInventoryExport } from "@/lib/inventory-export";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import TmcBulkActions from "@/components/TmcBulkActions";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
@@ -137,6 +138,7 @@ export default function ItemsTable({
   searchHistoryScope,
   columnSettingsScope,
   excelDataset,
+  completeDataset = true,
   itemCreation,
   bulkActions,
 }: {
@@ -146,6 +148,7 @@ export default function ItemsTable({
   searchHistoryScope?: string;
   columnSettingsScope?: string;
   excelDataset?: "items" | "decommissioned" | "decommissioned_in_use";
+  completeDataset?: boolean;
   itemCreation?: {
     rooms: RoomDto[];
     buildings: BuildingDto[];
@@ -358,6 +361,7 @@ export default function ItemsTable({
             <InventoryExportButton
               dataset={excelDataset}
               itemIds={filtered.map((item) => item.id)}
+              completeDataset={isCompleteInventoryExport(completeDataset, query, activeFilterCount)}
               columns={visibleColumns}
             />
           ) : null}

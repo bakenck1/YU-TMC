@@ -1,13 +1,25 @@
 import type { InventoryColumnVisibility } from "@/lib/inventory-columns";
 
+export function isCompleteInventoryExport(
+  completeDataset: boolean,
+  query: string,
+  activeFilterCount: number,
+): boolean {
+  return completeDataset && query.trim() === "" && activeFilterCount === 0;
+}
+
 export function createInventoryExportPayload(
   dataset: "items" | "decommissioned" | "decommissioned_in_use",
   itemIds: readonly string[],
   columns: InventoryColumnVisibility,
+  completeDataset = false,
 ) {
+  if (!completeDataset && itemIds.length > 2_000) {
+    throw new Error("inventory_export_selection_too_large");
+  }
   return {
     dataset,
-    itemIds: [...itemIds],
+    ...(completeDataset ? {} : { itemIds: [...itemIds] }),
     columns: exportColumnKeys(columns),
   };
 }

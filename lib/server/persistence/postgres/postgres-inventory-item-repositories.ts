@@ -81,6 +81,7 @@ interface ItemRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  updated_at_cursor: string;
   maintenance_started_at: Date | null;
   archived_at: Date | null;
 }
@@ -105,46 +106,70 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect("", sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems)),
-      [],
-    );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
+    return this.listItemCollection("", []);
   }
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
       [userId],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where i.status in ('decommissioned', 'decommissioned_in_use')",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "i.status in ('decommissioned', 'decommissioned_in_use')",
       [],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItemsAssignedTo(
     userId: string,
   ): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "(rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
       [userId],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
+  }
+
+  private async listItemCollection(
+    predicate: string,
+    baseValues: readonly unknown[],
+  ): Promise<InventoryItemRecord[]> {
+    const records: InventoryItemRecord[] = [];
+    let cursor: { updatedAt: string; id: string } | null = null;
+
+    for (;;) {
+      const cursorOffset = baseValues.length;
+      const cursorPredicate: string = cursor
+        ? `(i.updated_at < $${cursorOffset + 1} or (i.updated_at = $${cursorOffset + 1} and i.id > $${cursorOffset + 2}))`
+        : "";
+      const where = [predicate, cursorPredicate].filter(Boolean).map((part) => `(${part})`).join(" and ");
+      const values: unknown[] = cursor
+        ? [...baseValues, cursor.updatedAt, cursor.id]
+        : [...baseValues];
+      const queryLimit = Math.min(
+        COLLECTION_LIMITS.inventoryItemsPage,
+        COLLECTION_LIMITS.inventoryItems - records.length + 1,
+      );
+      const result = await this.source.query<ItemRow>(
+        itemSelect(where ? `where ${where}` : "", `limit ${queryLimit}`),
+        values,
+      );
+      records.push(...result.rows.map(mapItem));
+      assertCollectionSize(
+        records,
+        COLLECTION_LIMITS.inventoryItems,
+        "inventory_collection_requires_async_export",
+      );
+      if (result.rows.length < queryLimit) return records;
+
+      const last = result.rows.at(-1)!;
+      if (cursor && last.updated_at_cursor === cursor.updatedAt && last.id === cursor.id) {
+        throw new Error("Inventory collection cursor did not advance.");
+      }
+      cursor = { updatedAt: last.updated_at_cursor, id: last.id };
+    }
   }
 
   async findItemById(id: string): Promise<InventoryItemRecord | null> {
@@ -995,6 +1020,7 @@ function itemSelect(where: string, limit = "") {
            i.decommissioned_usage_comment,
            i.decommissioned_usage_started_at,
            i.version, i.created_at, i.updated_at,
+           i.updated_at::text as updated_at_cursor,
            service_move.occurred_at as maintenance_started_at, i.archived_at
       from ${ITEMS} i
       join ${ROOMS} r on r.id = i.room_id

@@ -40,7 +40,7 @@
 | 12 | P3 | [Legacy и рудименты — Done](19-p3-legacy-and-dead-code.md) | Доказанный orphan удалён; шесть legacy boundaries остаются под evidence policy | S–M |
 | 13 | P3 trigger-only | [Schema, contracts и i18n — Done](18-p3-schema-contract-i18n-modules.md) | TMC command DTO локализованы после подтверждённого change-frequency trigger | L, optional |
 | 14 | P3 | [Capacity и производительность — Done](20-p3-capacity-and-performance.md) | Зафиксирован capacity-v1; пять измеренных bottleneck вынесены в follow-up | M |
-| 15 | P1 | [Inventory/export collection capacity](27-p1-inventory-collection-capacity.md) | Убирает отказ whole-collection операций выше 10 000 строк | L |
+| 15 | P1 | [Inventory/export collection capacity — Done](27-p1-inventory-collection-capacity.md) | 25 000 строк читаются keyset-порциями; overflow завершается явной ошибкой | L |
 | 16 | P2 | [Pool saturation](24-p2-capacity-pool-saturation.md) | Снижает P95 при 16 параллельных запросах | M |
 | 17 | P2 | [Export memory](25-p2-capacity-export-memory.md) | Ограничивает пиковый рост памяти Excel export | M |
 | 18 | P3 | [Dockflow projection](26-p3-capacity-dockflow-projection.md) | Возвращает projection P95 в измеренный бюджет | S–M |

@@ -2,9 +2,9 @@
 
 ## Evidence
 
-Baseline `capacity-v1` (2026-09-09): the isolated 10,000-row production workbook workload reached
-**334.26 MiB** peak RSS growth, exceeding the **256 MiB** budget. The measured workload P95 itself
-was 765.35 ms.
+Baseline `capacity-v1` (2026-09-09): the isolated 25,000-row production workbook workload reached
+**1,173.43 MiB** peak RSS growth, exceeding the **256 MiB** budget. The measured workload P95 itself
+was 1,952.06 ms.
 
 ## Expected gain and rollback
 
@@ -14,5 +14,5 @@ compatibility, latency SLO (3,000 ms), or generated content regresses.
 
 ## Acceptance
 
-A repeated production-like baseline records RSS growth ≤ 256 MiB for 10,000 rows, export P95 ≤
+A repeated production-like baseline records RSS growth ≤ 256 MiB for 25,000 rows, export P95 ≤
 3,000 ms, and byte-level/workbook-level functional tests confirm the existing export contract.

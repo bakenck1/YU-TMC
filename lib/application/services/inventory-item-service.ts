@@ -97,7 +97,7 @@ export class InventoryItemService {
   }
 
   async listItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
-    const repositories = await this.unitOfWork.read(async (repos) => {
+    const repositories = await this.unitOfWork.transaction(async (repos) => {
       if (hasPermission(actor.role, "inventory.item.read_all")) {
         return repos.items.listItems();
       }
@@ -105,7 +105,7 @@ export class InventoryItemService {
         return repos.items.listItemsAssignedTo(actor.userId);
       }
       throw forbidden();
-    });
+    }, { isolation: "repeatable-read", readOnly: true });
     // The repository query is already scoped to the employee's current
     // responsibility. Keep every lifecycle state in that scoped result so
     // the employee tabs and summary cards can show their own decommissioned
@@ -116,7 +116,7 @@ export class InventoryItemService {
   async listDecommissionedItems(
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto[]> {
-    const records = await this.unitOfWork.read(async (repos) => {
+    const records = await this.unitOfWork.transaction(async (repos) => {
       if (hasPermission(actor.role, "inventory.item.read_all")) {
         return repos.items.listDecommissionedItems();
       }
@@ -124,7 +124,7 @@ export class InventoryItemService {
         return repos.items.listDecommissionedItemsAssignedTo(actor.userId);
       }
       throw forbidden();
-    });
+    }, { isolation: "repeatable-read", readOnly: true });
     return records.map(toItemDto);
   }
 
