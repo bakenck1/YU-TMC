@@ -100,6 +100,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "storybook-static/**",
+    ".tmp-dockflow-deploy/**",
     ".claude/worktrees/**",
     "next-env.d.ts",
   ]),

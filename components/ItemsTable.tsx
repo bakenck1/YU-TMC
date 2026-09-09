@@ -68,14 +68,6 @@ function saveColumnVisibility(
   }
 }
 
-function itemDetails(item: InventoryItem) {
-  const words = item.name.split(" ");
-  const type = words[0] || item.category;
-  const model = words.slice(1).join(" ") || "вЂ”";
-
-  return { type, model };
-}
-
 function itemLinkLabel(item: InventoryItem) {
   const identifier = item.inventoryNumber !== "-" && !isTemporaryBarcode(item.inventoryNumber)
     ? item.inventoryNumber

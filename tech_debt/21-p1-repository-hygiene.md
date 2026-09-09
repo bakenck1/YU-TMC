@@ -1,4 +1,20 @@
-# P1 quick win — repository и dependency hygiene
+# P1 quick win — repository и dependency hygiene — Done
+
+## Статус на 2026-09-09
+
+- удалён неиспользуемый `itemDetails`, а lint теперь завершает CI с ошибкой при любом warning;
+- `.tmp-dockflow-deploy/` точечно исключён из Git, ESLint и TypeScript, а
+  `.data/postgres-development.log` — только из Git; пользовательские артефакты не удалялись;
+- подтверждено отсутствие source/config/dynamic consumers, после чего `recharts` и
+  `swagger-ui-react` последовательно удалены из manifest и lockfile; orphan type shim удалён;
+- clean install, production build, Storybook build, lint и полный test suite прошли;
+  PostgreSQL integration штатно пропущен без пары test database URL, SQL не менялся;
+- независимые review-проходы: **9/10**, затем **10/10** после усиления regression-теста;
+  итог — no actionable findings.
+
+Свежий `npm audit` отдельно сообщает об advisories для неизменённых `next@16.2.11` и
+`sharp@0.35.3`; reviewer подтвердил, что это отдельное обновление зависимостей, а не
+регрессия и не блокер этой cleanup-задачи.
 
 ## Evidence
 
