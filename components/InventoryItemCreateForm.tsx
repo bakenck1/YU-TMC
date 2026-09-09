@@ -67,7 +67,7 @@ export default function InventoryItemCreateForm({
           type="button"
           disabled
           aria-describedby="create-item-no-rooms"
-          className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white opacity-50 shadow-sm"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-600 px-4 text-sm font-semibold text-white opacity-50 shadow-sm sm:w-auto"
         >
           <Plus className="h-4 w-4" /> {t("createItem.add")}
         </button>
@@ -146,7 +146,7 @@ export default function InventoryItemCreateForm({
   return (
     <>
       {!hideTrigger ? (
-      <button type="button" onClick={() => setOpen(true)} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition-all hover:border-emerald-700 hover:bg-emerald-700 hover:shadow focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 sm:w-auto">
         <Plus className="h-4 w-4" /> {t("createItem.add")}
       </button>
       ) : null}

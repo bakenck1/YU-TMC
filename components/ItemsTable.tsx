@@ -362,7 +362,7 @@ export default function ItemsTable({
   return (
     <div className="space-y-4">
       {excelDataset || itemCreation || invoiceActions ? (
-        <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
+        <div className="flex flex-col-reverse items-stretch justify-end gap-2.5 sm:flex-row sm:items-center">
           {invoiceActions ? (
             <InventoryInvoiceActions items={selectedItems} recipientName={invoiceActions.recipientName} />
           ) : null}

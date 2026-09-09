@@ -65,9 +65,9 @@ export default function InventoryInvoiceActions({
       <button
         type="button"
         onClick={openDialog}
-        className="inline-flex min-h-12 items-center gap-2.5 rounded-xl border border-sky-300 bg-sky-50 px-4 text-sm font-semibold text-sky-800 shadow-sm transition hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-100"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-200/70 sm:w-auto"
       >
-        <FileText className="h-4 w-4" aria-hidden="true" />
+        <FileText className="h-4 w-4 text-zinc-500" aria-hidden="true" />
         {t("invoice.action")}
       </button>
 
