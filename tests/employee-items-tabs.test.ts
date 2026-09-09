@@ -79,5 +79,16 @@ test("only employees receive the tabbed inventory interface", async () => {
   assert.match(source, /user\.role === "employee"/);
   assert.match(source, /<EmployeeItemsTabs/);
   assert.match(source, /<EmployeeItemsTabs[\s\S]*items=\{items\}/);
+  assert.match(source, /recipientName=\{user\.name\}/);
   assert.doesNotMatch(source, /items\/active|items\/maintenance|items\/decommissioned/);
+});
+
+test("the invoice action is shown to an employee only when they have assigned inventory", async () => {
+  const source = await readFile(
+    new URL("../components/EmployeeItemsTabs.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /const invoiceActions = items\.length > 0 \? \{ recipientName \} : undefined;/);
+  assert.match(source, /invoiceActions=\{invoiceActions\}/);
 });

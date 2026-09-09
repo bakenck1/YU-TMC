@@ -20,6 +20,7 @@ import {
   type InventoryColumnKey,
 } from "@/lib/inventory-columns";
 import InventoryExportButton from "@/components/InventoryExportButton";
+import InventoryInvoiceActions from "@/components/InventoryInvoiceActions";
 import { isCompleteInventoryExport } from "@/lib/inventory-export";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import TmcBulkActions from "@/components/TmcBulkActions";
@@ -141,6 +142,7 @@ export default function ItemsTable({
   completeDataset = true,
   itemCreation,
   bulkActions,
+  invoiceActions,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
@@ -160,6 +162,9 @@ export default function ItemsTable({
     buildings: BuildingDto[];
     rooms: RoomDto[];
     variant?: "transfer" | "issue";
+  };
+  invoiceActions?: {
+    recipientName: string;
   };
 }) {
   const { t, dataLabel } = useAppSettings();
@@ -254,11 +259,12 @@ export default function ItemsTable({
     to: lastRecord,
   } = pagination;
 
-  const selectablePageItems = pageItems.filter((item) => !item.localGroupId);
+  const selectablePageItems = pageItems.filter((item) => invoiceActions || !item.localGroupId);
   const allVisibleSelected =
     selectablePageItems.length > 0 && selectablePageItems.every((item) => selected.has(item.id));
   const someVisibleSelected = selectablePageItems.some((item) => selected.has(item.id));
-  const selectedItems = items.filter((item) => !item.localGroupId && selected.has(item.id));
+  const selectedItems = items.filter((item) => selected.has(item.id));
+  const bulkSelectedItems = selectedItems.filter((item) => !item.localGroupId);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -355,8 +361,11 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
-      {excelDataset || itemCreation ? (
+      {excelDataset || itemCreation || invoiceActions ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2 sm:flex-row sm:items-start">
+          {invoiceActions ? (
+            <InventoryInvoiceActions items={selectedItems} recipientName={invoiceActions.recipientName} />
+          ) : null}
           {excelDataset ? (
             <InventoryExportButton
               dataset={excelDataset}
@@ -517,12 +526,12 @@ export default function ItemsTable({
       </div>
       ) : null}
 
-      <div className={`flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400 ${bulkActions && selectedItems.length > 0 ? "sticky top-2 z-30 rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 shadow-lg backdrop-blur" : ""}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400 ${bulkActions && bulkSelectedItems.length > 0 ? "sticky top-2 z-30 rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 shadow-lg backdrop-blur" : ""}`}>
         <div className="flex flex-wrap items-center gap-3">
           <p>{t("items.found", { count: filtered.length })}</p>
-          {bulkActions && selectedItems.length > 0 ? (
+          {bulkActions && bulkSelectedItems.length > 0 ? (
             <TmcBulkActions
-              items={selectedItems}
+              items={bulkSelectedItems}
               actorUserId={bulkActions.actorUserId}
               actorRole={bulkActions.actorRole}
               buildings={bulkActions.buildings}
@@ -564,7 +573,7 @@ export default function ItemsTable({
                   onClick={() => router.push(itemHref(item))}
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
-                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={Boolean(item.localGroupId)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
+                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
                   {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
                   {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
@@ -601,7 +610,7 @@ export default function ItemsTable({
             <article key={item.id} onClick={() => router.push(itemHref(item))} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
                 <label onClick={(event) => event.stopPropagation()} className="-ml-2 -mt-2 inline-flex min-h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl active:bg-zinc-100">
-                  <input type="checkbox" disabled={Boolean(item.localGroupId)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
+                  <input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
                 </label>
                 {visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">

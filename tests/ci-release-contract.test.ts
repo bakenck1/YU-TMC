@@ -276,6 +276,17 @@ test("external development startup prepares the database before Next.js", async 
   assert.ok(nextIndex > smokeIndex);
 });
 
+test("embedded development startup separates runtime and migration database roles", async () => {
+  const devScript = await readFile("scripts/dev.mjs", "utf8");
+
+  assert.match(devScript, /const runtimeUser = "yu_inventory_runtime"/);
+  assert.match(devScript, /const runtimePassword = randomBytes\(24\)\.toString\("hex"\)/);
+  assert.match(devScript, /DATABASE_MIGRATOR_URL: migratorUrl/);
+  assert.match(devScript, /DATABASE_URL: runtimeUrl/);
+  assert.match(devScript, /await ensureRuntimeRole\(postgres, runtimeUser, runtimePassword\)/);
+  assert.match(devScript, /nosuperuser nocreatedb nocreaterole noinherit/);
+});
+
 test("the database runner discovers every committed database test", () => {
   const expected = readdirSync(path.join(process.cwd(), "tests", "database"))
     .filter((name) => name.endsWith(".test.ts"))
