@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { createBrowserSmokeEnvironment } from "../scripts/browser-smoke-environment.mjs";
 import { assertDisposableDatabasePair } from "../scripts/browser-smoke-safety.mjs";
 
 test("browser smoke is a narrow production-build Chromium gate", async () => {
@@ -25,7 +26,7 @@ test("browser smoke is a narrow production-build Chromium gate", async () => {
   assert.match(config, /screenshot: "only-on-failure"/);
   assert.match(config, /trace: "off"/);
   assert.match(runner, /assertDisposableDatabasePair/);
-  assert.match(runner, /safeBaseEnvironment/);
+  assert.match(runner, /createBrowserSmokeEnvironment\(process\.env\)/);
   assert.match(runner, /process\.once\(signal/);
   assert.match(runner, /cleanupResources/);
   assert.match(runner, /NEXT_DIST_DIR: "\.next-e2e"/);
@@ -35,6 +36,22 @@ test("browser smoke is a narrow production-build Chromium gate", async () => {
   assert.match(workflow, /continue-on-error: true/);
   assert.match(documentation, /Inventory Platform maintainers/);
   assert.match(documentation, /below 1%/);
+});
+
+test("browser smoke blanks dotenv integrations and drops unrelated inherited secrets", () => {
+  const environment = createBrowserSmokeEnvironment({
+    PATH: "safe-path",
+    AUTH_ADMIN_EMAIL: "legacy-admin@example.test",
+    GOOGLE_CLIENT_SECRET: "google-secret",
+    ONE_C_FIXED_ASSETS_API_KEY: "one-c-secret",
+    UNRELATED_SECRET: "must-not-be-inherited",
+  });
+
+  assert.equal(environment.PATH, "safe-path");
+  assert.equal(environment.AUTH_ADMIN_EMAIL, "");
+  assert.equal(environment.GOOGLE_CLIENT_SECRET, "");
+  assert.equal(environment.ONE_C_FIXED_ASSETS_API_KEY, "");
+  assert.equal(environment.UNRELATED_SECRET, undefined);
 });
 
 test("browser smoke accepts only an explicitly acknowledged disposable database pair", () => {

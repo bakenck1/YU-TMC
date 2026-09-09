@@ -39,6 +39,8 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-PERMISSIONS
 
+- **Status:** `supported`.
+- **Evidence status:** `unknown`.
 - **Owner:** Security/Auth maintainer; release owner отвечает за общий review.
 - **Consumer:** `lib/security/permissions.ts`,
   `lib/security/authorization.ts`, старые users/settings routes и страницы,
@@ -70,6 +72,8 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-TRANSFER-ROUTES
 
+- **Status:** `supported`.
+- **Evidence status:** `unknown`.
 - **Owner:** Inventory responsibility maintainer; release owner контролирует
   переключение clients.
 - **Consumer:** старый single-item API под `/api/inventory/transfers` и его
@@ -104,6 +108,8 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-QR-ALIASES
 
+- **Status:** `supported`.
+- **Evidence status:** `unknown`.
 - **Owner:** Inventory/QR maintainer.
 - **Consumer:** `lib/domain/qr-identifier.ts`,
   `lib/server/seed/legacy-normalization.ts`, QR resolver/repository и уже
@@ -132,13 +138,18 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-AUTH-IMPORT
 
+- **Status:** `import-only`.
+- **Evidence status:** `unknown`.
 - **Owner:** Auth/DB migration maintainer.
 - **Consumer:** `scripts/db/import-legacy-auth.ts` и
   `lib/server/persistence/legacy/legacy-credential-source.ts`; это import-only
   boundary для `auth-credentials.json` и `AUTH_ADMIN_*`.
 - **Tracked values:** `scripts/db/import-legacy-auth.ts`,
   `lib/server/persistence/legacy/legacy-credential-source.ts`,
-  `auth-credentials.json`, `AUTH_ADMIN_*`.
+  `scripts/browser-smoke-environment.mjs`, `auth-credentials.json`,
+  `AUTH_ADMIN_*`. Browser smoke helper не читает legacy credentials: это
+  зарегистрированный sanitizer, который ставит пустые process values, чтобы Next
+  не загрузил секреты обратно из `.env*` во время isolated build/start.
 - **Introduced:** до PostgreSQL users/auth migration; причина — перенести
   существующий scrypt salt/hash и role без принудительного reset паролей.
 - **Security:** credential file/env никогда не являются runtime fallback после
@@ -161,6 +172,8 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-COOKIE-CONTRACT
 
+- **Status:** `supported`.
+- **Evidence status:** `unknown`.
 - **Owner:** Auth maintainer.
 - **Consumer:** signed `yu_inventory_session` cookie с payload fields
   `{sub,name,role,iat,exp,jti,ver}` в фактической реализации
@@ -189,6 +202,8 @@ legacy permission IDs и QR formats, новые файлы старого transf
 
 ### LEGACY-SEED-DATA
 
+- **Status:** `import-only`.
+- **Evidence status:** `unknown`.
 - **Owner:** Data migration maintainer.
 - **Consumer:** только `scripts/db/seed.ts` импортирует `lib/data.ts`; source
   содержит development/test seed records и не должен попадать в request/runtime

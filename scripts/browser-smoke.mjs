@@ -7,6 +7,7 @@ import path from "node:path";
 
 import pg from "pg";
 
+import { createBrowserSmokeEnvironment } from "./browser-smoke-environment.mjs";
 import { assertDisposableDatabasePair } from "./browser-smoke-safety.mjs";
 
 const root = process.cwd();
@@ -38,7 +39,7 @@ try {
 
   const deploymentId = `browser-smoke-${Date.now()}`;
   const testEnvironment = {
-    ...safeBaseEnvironment(),
+    ...createBrowserSmokeEnvironment(process.env),
     ...database.environment,
     NODE_ENV: "test",
     NODE_OPTIONS: "--conditions=react-server",
@@ -58,7 +59,6 @@ try {
   const baseURL = `http://127.0.0.1:${applicationPort}`;
   const productionEnvironment = {
     ...testEnvironment,
-    ...disabledExternalEnvironment(),
     ...fixtureEnvironment,
     NODE_ENV: "production",
     NEXT_TELEMETRY_DISABLED: "1",
@@ -152,9 +152,9 @@ async function provisionEmbeddedWindowsDatabase() {
   const migratorPassword = randomBytes(24).toString("hex");
   const runtimePassword = randomBytes(24).toString("hex");
   const processEnvironment = {
-    ...safeBaseEnvironment(),
+    ...createBrowserSmokeEnvironment(process.env),
     LC_MESSAGES: "C",
-    PATH: `${binaryRoot};${safeBaseEnvironment().PATH ?? ""}`,
+    PATH: `${binaryRoot};${createBrowserSmokeEnvironment(process.env).PATH ?? ""}`,
   };
   let started = false;
 
@@ -304,73 +304,6 @@ function sanitizeLog(value) {
     .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "postgresql://[redacted]")
     .replaceAll(fixtureEnvironment.BROWSER_SMOKE_PASSWORD, "[redacted]")
     .replace(/(password|secret|token)=([^\s&]+)/gi, "$1=[redacted]");
-}
-
-function safeBaseEnvironment() {
-  const allowed = [
-    "APPDATA",
-    "CI",
-    "COMSPEC",
-    "FORCE_COLOR",
-    "GITHUB_ACTIONS",
-    "HOME",
-    "LOCALAPPDATA",
-    "NO_COLOR",
-    "NUMBER_OF_PROCESSORS",
-    "PATH",
-    "PATHEXT",
-    "PLAYWRIGHT_BROWSERS_PATH",
-    "PROCESSOR_ARCHITECTURE",
-    "PROGRAMDATA",
-    "SYSTEMROOT",
-    "TEMP",
-    "TMP",
-    "TMPDIR",
-    "TZ",
-    "USERPROFILE",
-    "WINDIR",
-  ];
-  return Object.fromEntries(
-    allowed.flatMap((key) => process.env[key] === undefined ? [] : [[key, process.env[key]]]),
-  );
-}
-
-function disabledExternalEnvironment() {
-  return Object.fromEntries([
-    "AUTH_ADMIN_BLOCKED",
-    "AUTH_ADMIN_EMAIL",
-    "AUTH_ADMIN_NAME",
-    "AUTH_ADMIN_PASSWORD_HASH",
-    "AUTH_ADMIN_PASSWORD_SALT",
-    "AUTH_ADMIN_ROLE",
-    "AUTH_BOOTSTRAP_TOKEN",
-    "AUTH_PASSWORD_RESET_PUBLIC_ORIGIN",
-    "AUTH_PASSWORD_RESET_WEBHOOK_SECRET",
-    "AUTH_PASSWORD_RESET_WEBHOOK_URL",
-    "DATABASE_ALLOW_UNVERIFIED_TLS",
-    "DATABASE_DEPLOYMENT_ID",
-    "DATABASE_MIGRATOR_URL",
-    "DATABASE_TARGET",
-    "DATABASE_URL",
-    "DOCKFLOW_API_KEY",
-    "DOCKFLOW_API_KEY_NEXT",
-    "DOCKFLOW_TEST_API_KEY",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
-    "GOOGLE_REDIRECT_URI",
-    "GOOGLE_WORKSPACE_DOMAIN",
-    "ONE_C_FIXED_ASSETS_API_KEY",
-    "TMC_PUSH_WORKER_INTERVAL_MS",
-    "TRUSTED_CLIENT_IP_HEADER",
-    "WEB_PUSH_VAPID_PRIVATE_KEY",
-    "WEB_PUSH_VAPID_PUBLIC_KEY",
-    "WEB_PUSH_VAPID_SUBJECT",
-    "YESSENOV_DIRECTORY_API_TOKEN",
-    "YESSENOV_OIDC_CLIENT_ID",
-    "YESSENOV_OIDC_CLIENT_SECRET",
-    "YESSENOV_OIDC_REDIRECT_URI",
-    "YU_INVENTORY_IMPORT_LEGACY_AUTH",
-  ].map((key) => [key, ""]));
 }
 
 function errorMessage(error) {

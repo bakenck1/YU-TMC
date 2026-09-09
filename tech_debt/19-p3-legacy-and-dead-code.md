@@ -1,4 +1,18 @@
-# P3 — управляемый sunset legacy и доказанные рудименты
+# P3 — управляемый sunset legacy и доказанные рудименты — Done
+
+## Выполненный orphan cleanup — 2026-09-09
+
+- `lib/items-21-110.ts` удалён как отдельный обратимый git change; воспроизводимые
+  проверки consumer/operator usage, история и owner approval записаны в
+  `docs/orphan-cleanup-2026-09-09.md`;
+- история показала, что это отдельный старый demo dataset; актуальный seed продолжает
+  владеть `lib/data.ts`, который этим change set не меняется;
+- guard запрещает вернуть удалённый файл как параллельный inventory source;
+- browser smoke сохраняет dotenv isolation через зарегистрированный и проверяемый
+  empty-value sanitizer; checker отклоняет sanitizer, наследующий credential values;
+- шесть поддерживаемых compatibility boundaries не удалены: baseline по-прежнему
+  фиксирует owner, telemetry counters/variants, 90-дневное окно и review date
+  `2026-11-12`; до production evidence их статус остаётся `unknown`.
 
 ## Поддерживаемый legacy
 
@@ -7,9 +21,8 @@
 cookie shape с email `sub` и seed-only `lib/data.ts`. До 90-дневного evidence из задачи
 14 ни один путь удалять нельзя.
 
-## Кандидаты, а не доказанный dead code
+## Оставшиеся кандидаты, а не доказанный dead code
 
-- `lib/items-21-110.ts`: imports не найдены, но надо исключить operator/file usage;
 - часть exports `lib/data.ts` не используется seed script;
 - `FileSettingsRepository`: source consumers не найдены, однако документация называет
   его rollback compatibility — требуется явное подтверждение recovery owner;

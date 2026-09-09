@@ -37,6 +37,10 @@ test("legacy compatibility policy is discoverable and part of the CI contract", 
   assert.match(packageJson, /"legacy:check"\s*:/);
 });
 
+test("the retired 21-110 demo dataset cannot return as a parallel inventory source", () => {
+  assert.equal(existsSync("lib/items-21-110.ts"), false);
+});
+
 test("legacy compatibility checker rejects new registry values and runtime imports", () => {
   const cases = [
     {
@@ -81,6 +85,36 @@ test("legacy compatibility checker rejects new registry values and runtime impor
       expected: /direct legacy credential file\/environment access/,
     },
     {
+      name: "credential sanitizer inheriting values",
+      relativeFile: "scripts/browser-smoke-environment.mjs",
+      mutate: (source: string) =>
+        source.replace(
+          'DISABLED_EXTERNAL_KEYS.map((key) => [key, ""])',
+          "DISABLED_EXTERNAL_KEYS.map((key) => [key, sourceEnvironment[key]])",
+        ),
+      expected: /credential sanitizer must force legacy credential markers to empty strings/,
+    },
+    {
+      name: "credential sanitizer restoring one protected value",
+      relativeFile: "scripts/browser-smoke-environment.mjs",
+      mutate: (source: string) =>
+        source.replace(
+          '...DISABLED_EXTERNAL_KEYS.map((key) => [key, ""]),',
+          '...DISABLED_EXTERNAL_KEYS.map((key) => [key, key === "AUTH_ADMIN_PASSWORD_HASH" ? sourceEnvironment[key] : ""]),',
+        ),
+      expected: /credential sanitizer must force legacy credential markers to empty strings/,
+    },
+    {
+      name: "premature evidence decision",
+      relativeFile: "scripts/legacy-compatibility-baseline.json",
+      mutate: (source: string) => {
+        const baseline = JSON.parse(source);
+        baseline.evidenceStatus["LEGACY-PERMISSIONS"] = "zero-usage";
+        return JSON.stringify(baseline, null, 2);
+      },
+      expected: /evidence status must remain unknown before owner review/,
+    },
+    {
       name: "undocumented cookie claim",
       relativeFile: "lib/security/session.ts",
       mutate: (source: string) => source.replace("  ver: number;", "  ver: number;\n  legacyExtra: string;"),
@@ -120,6 +154,7 @@ const CHECKER_FIXTURE_FILES = [
   "lib/security/permissions.ts",
   "lib/security/session.ts",
   "scripts/db/seed.ts",
+  "scripts/browser-smoke-environment.mjs",
   "app/api/inventory/transfers/route.ts",
   "app/api/inventory/transfers/[id]/cancel/route.ts",
   "app/api/inventory/transfers/[id]/decision/route.ts",
