@@ -40,38 +40,76 @@ export function inventoryStatusOptions(
 }
 
 export function filterInventoryItems(items: InventoryItem[], filters: InventoryListFilters) {
-  const query = filters.query.trim().toLowerCase();
-  const brand = filters.brand?.trim().toLowerCase() ?? "";
-  const model = filters.model?.trim().toLowerCase() ?? "";
-  const itemType = filters.itemType?.trim().toLowerCase() ?? "";
-  const building = filters.building?.trim().toLowerCase() ?? "";
-  const responsible = filters.responsible?.trim().toLowerCase() ?? "";
+  const query = normalizeFilterText(filters.query);
+  const location = filters.location === "all" ? "" : normalizeFilterText(filters.location);
+  const floorRange = parseFloorRange(location);
+  const brand = normalizeFilterText(filters.brand);
+  const model = normalizeFilterText(filters.model);
+  const itemType = normalizeFilterText(filters.itemType);
+  const building = normalizeFilterText(filters.building);
+  const responsible = normalizeFilterText(filters.responsible);
   return items.filter((item) => {
     const matchesQuery =
       !query ||
-      item.name.toLowerCase().includes(query) ||
-      item.inventoryNumber.toLowerCase().includes(query) ||
-      item.qrCode?.toLowerCase().includes(query);
-    const itemBrand = (item.brand ?? item.brandModel ?? "").toLowerCase();
-    const itemModel = (item.model ?? item.brandModel ?? "").toLowerCase();
-    const itemBuilding = (item.building ?? item.location.split("/")[0] ?? "").trim().toLowerCase();
+      normalizeFilterText(item.name).includes(query) ||
+      normalizeFilterText(item.inventoryNumber).includes(query) ||
+      normalizeFilterText(item.qrCode).includes(query);
+    const itemBrand = normalizeFilterText(item.brand ?? item.brandModel);
+    const itemModel = normalizeFilterText(item.model ?? item.brandModel);
+    const itemBuilding = normalizeFilterText(item.building ?? item.location.split("/")[0]);
+    const itemLocation = [item.location, item.room]
+      .map(normalizeFilterText)
+      .filter(Boolean)
+      .join(" ");
     return Boolean(
       matchesQuery &&
         (filters.category === "all" || item.category === filters.category) &&
-        (filters.location === "all" ||
-          (item.room ?? item.location)
-            .toLowerCase()
-            .includes(filters.location.trim().toLowerCase())) &&
+        (!location ||
+          itemLocation.includes(location) ||
+          (floorRange !== null && itemMatchesFloorRange(item, floorRange))) &&
         (!brand || itemBrand.includes(brand)) &&
         (!model || itemModel.includes(model)) &&
         (!itemType ||
-          item.name.toLowerCase().includes(itemType) ||
-          (item.itemType ?? item.category).toLowerCase().includes(itemType)) &&
+          normalizeFilterText(item.name).includes(itemType) ||
+          normalizeFilterText(item.itemType ?? item.category).includes(itemType)) &&
         (!building || itemBuilding.includes(building)) &&
-        (!responsible || item.responsible.toLowerCase().includes(responsible)) &&
+        (!responsible || normalizeFilterText(item.responsible).includes(responsible)) &&
         matchesStatusFilter(item, filters.statusKey),
     );
   });
+}
+
+function normalizeFilterText(value: string | undefined): string {
+  return (value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function parseFloorRange(value: string): { from: number; to: number } | null {
+  const match = value.match(
+    /^(\d{1,2})\s*[-–—]\s*(\d{1,2})(?:\s*(?:этаж(?:а|ей|и)?|қабат(?:тар)?|floors?))?$/u,
+  );
+  if (!match) return null;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  return { from: Math.min(first, second), to: Math.max(first, second) };
+}
+
+function itemMatchesFloorRange(
+  item: InventoryItem,
+  range: { from: number; to: number },
+): boolean {
+  const floorNumber = item.floorNumber ?? floorNumberFromLocation(item.location);
+  return floorNumber !== null && floorNumber >= range.from && floorNumber <= range.to;
+}
+
+function floorNumberFromLocation(location: string): number | null {
+  const match = normalizeFilterText(location).match(
+    /(?:^|\/)\s*(\d{1,2})\s*(?:этаж|қабат|floor)(?:\s|\/|$)/u,
+  );
+  return match ? Number(match[1]) : null;
 }
 
 function matchesStatusFilter(item: InventoryItem, statusKey: string) {

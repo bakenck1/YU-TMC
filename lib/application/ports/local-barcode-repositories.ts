@@ -50,6 +50,7 @@ export interface LocalBarcodeGroupRecord {
   responsibleName: string;
   roomId: string;
   roomDesignation: string;
+  floorNumber?: number;
   buildingId: string;
   buildingName: string;
   previousResponsibleUserId: string | null;

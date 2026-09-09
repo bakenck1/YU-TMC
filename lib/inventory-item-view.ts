@@ -14,6 +14,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     building: item.room.buildingName,
     roomId: item.room.id,
     room: item.room.designation,
+    floorNumber: item.room.floorNumber,
     location: `${item.room.buildingName} / ${item.room.floorNumber} этаж / ${item.room.designation}`,
     responsibleId: item.responsible?.id,
     responsible: item.responsible?.name ?? "",

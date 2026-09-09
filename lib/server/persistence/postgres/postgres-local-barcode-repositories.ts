@@ -54,6 +54,7 @@ type GroupRow = QueryResultRow & {
   responsible_name: string;
   room_id: string;
   room_designation: string;
+  room_floor_number: number;
   building_id: string;
   building_name: string;
   previous_responsible_user_id: string | null;
@@ -168,7 +169,8 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
               photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
               previous.full_name as previous_responsible_name,
-              r.designation as room_designation, b.id as building_id, b.name as building_name
+              r.designation as room_designation, r.floor_number as room_floor_number,
+              b.id as building_id, b.name as building_name
          from ${S}."local_item_groups" g
          join ${S}."items" i on i.id = g.item_id
          join ${S}."users" responsible on responsible.id = g.responsible_user_id
@@ -193,7 +195,8 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
               i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
               previous.full_name as previous_responsible_name,
-              r.designation as room_designation, b.id as building_id, b.name as building_name
+              r.designation as room_designation, r.floor_number as room_floor_number,
+              b.id as building_id, b.name as building_name
          from ${S}."local_item_groups" g
          join ${S}."items" i on i.id = g.item_id
          join ${S}."users" responsible on responsible.id = g.responsible_user_id
@@ -218,7 +221,8 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
               i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
               previous.full_name as previous_responsible_name,
-              r.designation as room_designation, b.id as building_id, b.name as building_name
+              r.designation as room_designation, r.floor_number as room_floor_number,
+              b.id as building_id, b.name as building_name
          from ${S}."local_item_groups" g
          join ${S}."items" i on i.id = g.item_id
          join ${S}."users" responsible on responsible.id = g.responsible_user_id
@@ -308,5 +312,5 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
 }
 
 function mapGroup(row: GroupRow): LocalBarcodeGroupRecord {
-  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, itemType: row.item_type, itemBrand: row.item_brand, itemModel: row.item_model, itemDescription: row.item_description, unitPrice: Number(row.unit_price), itemCondition: row.item_condition, itemConnectionStatus: row.item_connection_status, itemPhotoId: row.item_photo_id, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousResponsibleName: row.previous_responsible_name, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version) };
+  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, itemType: row.item_type, itemBrand: row.item_brand, itemModel: row.item_model, itemDescription: row.item_description, unitPrice: Number(row.unit_price), itemCondition: row.item_condition, itemConnectionStatus: row.item_connection_status, itemPhotoId: row.item_photo_id, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, floorNumber: Number(row.room_floor_number), buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousResponsibleName: row.previous_responsible_name, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version) };
 }
