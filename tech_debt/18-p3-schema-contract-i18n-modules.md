@@ -1,4 +1,17 @@
-# P3 — trigger-only разбиение schema, contracts и i18n
+# P3 — trigger-only разбиение schema, contracts и i18n — Done
+
+## Статус на 2026-09-09
+
+- trigger подтверждён: `lib/contracts/tmc-operations.ts` менялся 6 раз за 30 дней;
+- один move-only slice вынес все 7 уникальных mutation command DTO в независимый
+  `tmc-operation-commands.ts`, сохранив прежний `tmc-operations.ts` barrel API;
+- type tests доказывают двустороннюю эквивалентность direct/barrel imports для всех
+  exports, а source guard запрещает imports, `server-only`, Zod и DB dependencies в
+  client-safe command module;
+- read DTO, Zod runtime, schema, migrations, i18n, wire semantics и остальные 41
+  top-level statement исходного контракта не изменены;
+- full test suite, focused typecheck, lint, `db:check` и production build проходят;
+  schema migration diff отсутствует, второй slice остаётся trigger-only.
 
 ## Почему это не срочно
 

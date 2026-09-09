@@ -38,7 +38,7 @@
 | 10 | P2 | [Декомпозиция god-components — Done](16-p2-god-components.md) | Comments workflow изолирован и покрыт component tests | L, incremental |
 | 11 | P2 | [Единый HTTP contract — Done](17-p2-http-boundary-consistency.md) | Общий узкий boundary выровнял ID/error/cache contract трёх legacy handlers | M |
 | 12 | P3 | [Legacy и рудименты — Done](19-p3-legacy-and-dead-code.md) | Доказанный orphan удалён; шесть legacy boundaries остаются под evidence policy | S–M |
-| 13 | P3 trigger-only | [Schema, contracts и i18n](18-p3-schema-contract-i18n-modules.md) | Уменьшает конфликтность только при измеренной боли | L, optional |
+| 13 | P3 trigger-only | [Schema, contracts и i18n — Done](18-p3-schema-contract-i18n-modules.md) | TMC command DTO локализованы после подтверждённого change-frequency trigger | L, optional |
 | 14 | P3 | [Capacity и производительность](20-p3-capacity-and-performance.md) | Измеряет коллекции/export на реальном объёме | M, needs data |
 
 ## Два этапа
