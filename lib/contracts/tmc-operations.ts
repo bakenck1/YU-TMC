@@ -13,6 +13,15 @@ export type {
   TmcTransferItemResult,
   TmcTransferRequestStatus,
 } from "@/lib/contracts/inventory-domain";
+export type {
+  AcceptUnassignedTmcInput,
+  BulkChangeTmcLocationInput,
+  CancelTmcTransferRequestInput,
+  CreateTmcTransferRequestInput,
+  DecideTmcTransferRequestInput,
+  TmcOperationItemReference,
+  TmcTransferItemDecision,
+} from "@/lib/contracts/tmc-operation-commands";
 
 export const TMC_OPERATION_PROBLEM_CODES = [
   "item_not_found",
@@ -153,30 +162,6 @@ export interface TmcTransferRequestBaseDto {
 export type TmcTransferRequestDto =
   TmcTransferRequestBaseDto & TmcTransferRequestState;
 
-export interface CreateTmcTransferRequestInput {
-  recipientId: string;
-  itemIds: readonly string[];
-  requestKind?: "handover" | "claim";
-  quantityTransfers?: readonly {
-    itemId: string;
-    sourceLocalGroupId: string | null;
-    sourceVersion: number;
-    quantity: number;
-  }[];
-  comment?: string | null;
-}
-
-export interface TmcTransferItemDecision {
-  itemId: string;
-  itemVersion: number;
-  decision: "accept" | "reject";
-}
-
-export interface CancelTmcTransferRequestInput {
-  requestVersion: number;
-  administrativeReason?: string | null;
-}
-
 export interface TmcTransferHistoryFilters {
   status?: TmcTransferRequestStatus;
   createdFrom?: string;
@@ -232,19 +217,6 @@ export interface TmcNotificationDto {
 export interface TmcNotificationFeedDto {
   notifications: TmcNotificationDto[];
   unreadCount: number;
-}
-
-export interface TmcOperationItemReference {
-  itemId: string;
-  itemVersion: number;
-}
-
-export type AcceptUnassignedTmcInput = TmcOperationItemReference;
-
-export interface BulkChangeTmcLocationInput {
-  items: readonly TmcOperationItemReference[];
-  roomId: string;
-  comment?: string | null;
 }
 
 export interface TmcOperationSuccessItemOutcomeDto {
@@ -490,17 +462,4 @@ export interface TmcBulkOperationResultDto {
   succeeded: number;
   problems: number;
   items: TmcOperationItemOutcomeDto[];
-}
-
-export interface DecideTmcTransferRequestInput {
-  requestVersion: number;
-  decisions: readonly TmcTransferItemDecision[];
-  /** Used only when server-side authorization identifies an admin override. */
-  administrativeReason?: string | null;
-}
-
-export interface CancelTmcTransferRequestInput {
-  requestVersion: number;
-  /** Used only when server-side authorization identifies an admin override. */
-  administrativeReason?: string | null;
 }

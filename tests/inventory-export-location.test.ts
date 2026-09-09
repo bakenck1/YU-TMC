@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-import { createInventoryExportPayload } from "../lib/inventory-export";
+import { createInventoryExportPayload, isCompleteInventoryExport } from "../lib/inventory-export";
 import { DEFAULT_INVENTORY_COLUMNS } from "../lib/inventory-columns";
 import { filterInventoryItems } from "../lib/inventory-list";
 import { hasPermission } from "../lib/security/permissions";
@@ -79,10 +79,41 @@ test("POST payload contains only filtered item ids and visible columns", () => {
   );
 });
 
+test("complete dataset export omits the bounded selection list", () => {
+  const payload = createInventoryExportPayload(
+    "items",
+    Array.from({ length: 25_000 }, (_, index) => `item-${index}`),
+    DEFAULT_INVENTORY_COLUMNS,
+    true,
+  );
+  assert.equal("itemIds" in payload, false);
+});
+
+test("inventory export never broadens an active filter that currently matches every row", () => {
+  assert.equal(isCompleteInventoryExport(true, "", 0), true);
+  assert.equal(isCompleteInventoryExport(true, "projector", 0), false);
+  assert.equal(isCompleteInventoryExport(true, "", 1), false);
+  assert.equal(isCompleteInventoryExport(false, "", 0), false);
+});
+
+test("filtered export fails explicitly instead of silently truncating ids", () => {
+  assert.throws(
+    () => createInventoryExportPayload(
+      "items",
+      Array.from({ length: 2_001 }, (_, index) => `item-${index}`),
+      DEFAULT_INVENTORY_COLUMNS,
+    ),
+    /inventory_export_selection_too_large/,
+  );
+  assert.doesNotMatch(excelRoute, /rawItemIds\.filter\(isUuid\)\.slice/);
+  assert.match(excelRoute, /rawItemIds\.length > 2_000/);
+});
+
 test("inventory export reports progress and errors and downloads the workbook", () => {
   assert.match(exportButton, /disabled=\{busy\} aria-busy=\{busy\}/);
   assert.match(exportButton, /busy \? t\("excel\.exporting"\) : t\("excel\.exportItems"\)/);
-  assert.match(exportButton, /if \(!response\.ok\) throw new Error\("export_failed"\)/);
+  assert.match(exportButton, /throw new Error\("export_failed"\)/);
+  assert.match(exportButton, /excel\.asyncExportRequired/);
   assert.match(exportButton, /<p role="alert"/);
   assert.match(exportButton, /URL\.createObjectURL\(await response\.blob\(\)\)/);
   assert.match(exportButton, /anchor\.download = dataset === "items" \? "inventory-items\.xlsx"/);

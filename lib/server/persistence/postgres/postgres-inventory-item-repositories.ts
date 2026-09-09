@@ -73,6 +73,7 @@ interface ItemRow extends QueryResultRow {
   room_responsible_id: string | null;
   photo_url: string | null;
   photo_id: string | null;
+  photo_ids: string[] | null;
   service_photo_id: string | null;
   decommissioned_usage_photo_id: string | null;
   decommissioned_usage_reason: string | null;
@@ -81,6 +82,7 @@ interface ItemRow extends QueryResultRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  updated_at_cursor: string;
   maintenance_started_at: Date | null;
   archived_at: Date | null;
 }
@@ -105,46 +107,70 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect("", sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems)),
-      [],
-    );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
+    return this.listItemCollection("", []);
   }
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
       [userId],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where i.status in ('decommissioned', 'decommissioned_in_use')",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "i.status in ('decommissioned', 'decommissioned_in_use')",
       [],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
   }
 
   async listDecommissionedItemsAssignedTo(
     userId: string,
   ): Promise<InventoryItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      itemSelect(
-        "where (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
-        sqlCollectionLimit(COLLECTION_LIMITS.inventoryItems),
-      ),
+    return this.listItemCollection(
+      "(rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
       [userId],
     );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.inventoryItems).map(mapItem);
+  }
+
+  private async listItemCollection(
+    predicate: string,
+    baseValues: readonly unknown[],
+  ): Promise<InventoryItemRecord[]> {
+    const records: InventoryItemRecord[] = [];
+    let cursor: { updatedAt: string; id: string } | null = null;
+
+    for (;;) {
+      const cursorOffset = baseValues.length;
+      const cursorPredicate: string = cursor
+        ? `(i.updated_at < $${cursorOffset + 1} or (i.updated_at = $${cursorOffset + 1} and i.id > $${cursorOffset + 2}))`
+        : "";
+      const where = [predicate, cursorPredicate].filter(Boolean).map((part) => `(${part})`).join(" and ");
+      const values: unknown[] = cursor
+        ? [...baseValues, cursor.updatedAt, cursor.id]
+        : [...baseValues];
+      const queryLimit = Math.min(
+        COLLECTION_LIMITS.inventoryItemsPage,
+        COLLECTION_LIMITS.inventoryItems - records.length + 1,
+      );
+      const result = await this.source.query<ItemRow>(
+        itemSelect(where ? `where ${where}` : "", `limit ${queryLimit}`),
+        values,
+      );
+      records.push(...result.rows.map(mapItem));
+      assertCollectionSize(
+        records,
+        COLLECTION_LIMITS.inventoryItems,
+        "inventory_collection_requires_async_export",
+      );
+      if (result.rows.length < queryLimit) return records;
+
+      const last = result.rows.at(-1)!;
+      if (cursor && last.updated_at_cursor === cursor.updatedAt && last.id === cursor.id) {
+        throw new Error("Inventory collection cursor did not advance.");
+      }
+      cursor = { updatedAt: last.updated_at_cursor, id: last.id };
+    }
   }
 
   async findItemById(id: string): Promise<InventoryItemRecord | null> {
@@ -536,17 +562,18 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const itemUpdate = await this.source.query<{ id: string }>(
       `update ${ITEMS}
        set updated_by = $2, updated_at = $3, version = version + 1
-       where id = $1 and version = $4 and status not in ('decommissioned', 'decommissioned_in_use')`,
+       where id = $1 and version = $4 and status <> 'decommissioned'`,
       [input.id, input.actorId, input.occurredAt, input.expectedVersion],
     );
     if (itemUpdate.rowCount !== 1) return null;
-
-    await this.source.query(
-      `update ${PHOTOS}
-       set status = 'superseded', superseded_at = $2, version = version + 1
-       where item_id = $1 and purpose = 'item' and status = 'attached'`,
-      [input.id, input.occurredAt],
+    const count = await this.source.query<{ count: string }>(
+      `select count(*)::text as count from ${PHOTOS}
+        where item_id = $1 and purpose = 'item' and status = 'attached'`,
+      [input.id],
     );
+    if (Number(count.rows[0]?.count ?? 0) >= 4) {
+      throw new ApplicationError("conflict", "photo_limit_reached");
+    }
     const objectKey = `database://items/${input.id}/${input.photoId}.jpg`;
     const checksum = createHash("sha256").update(input.bytes).digest("hex");
     await this.source.query(
@@ -579,21 +606,22 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     const itemUpdate = await this.source.query(
       `update ${ITEMS}
           set updated_by = $2, updated_at = $3, version = version + 1
-        where id = $1 and version = $4 and status not in ('decommissioned', 'decommissioned_in_use')`,
+        where id = $1 and version = $4 and status <> 'decommissioned'`,
       [input.id, input.actorId, input.occurredAt, input.expectedVersion],
     );
     if (itemUpdate.rowCount !== 1) return null;
     const removed = await this.source.query(
       `update ${PHOTOS}
           set status = 'removed', removed_at = $2, version = version + 1
-        where item_id = $1 and purpose = 'item' and status = 'attached'`,
-      [input.id, input.occurredAt],
+        where item_id = $1 and purpose = 'item' and status = 'attached'
+          and ($3::uuid is null or id = $3::uuid)`,
+      [input.id, input.occurredAt, input.photoId ?? null],
     );
-    if (removed.rowCount !== 1) return null;
+    if ((removed.rowCount ?? 0) < 1) return null;
     return this.findItemById(input.id);
   }
 
-  async findItemPhoto(id: string) {
+  async findItemPhoto(id: string, photoId?: string) {
     const result = await this.source.query<{
       binary_data: Buffer | null;
       trusted_mime_type: string | null;
@@ -601,9 +629,10 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       `select binary_data, trusted_mime_type
          from ${PHOTOS}
         where item_id = $1 and purpose = 'item' and status = 'attached'
-        order by attached_at desc
+          and ($2::uuid is null or id = $2::uuid)
+        order by attached_at asc, id asc
         limit 1`,
-      [id],
+      [id, photoId ?? null],
     );
     const row = result.rows[0];
     if (!row?.binary_data || row.trusted_mime_type !== "image/jpeg") return null;
@@ -713,6 +742,33 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         ],
       );
       if (result.rowCount !== 1) return null;
+      if (input.inventoryNumberHistoryId && input.inventoryNumberChangeReason) {
+        await this.source.query(
+          `update ${HISTORY}
+              set replaced_at = $2, replaced_by = $3, reason = $4
+            where item_id = $1 and replaced_at is null`,
+          [
+            input.id,
+            input.occurredAt,
+            input.actorId,
+            input.inventoryNumberChangeReason,
+          ],
+        );
+        await this.source.query(
+          `insert into ${HISTORY}
+             (id, item_id, kind, value, comparison_key, assigned_at, assigned_by)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            input.inventoryNumberHistoryId,
+            input.id,
+            input.inventoryNumberKind,
+            input.inventoryNumber,
+            input.inventoryNumberKey,
+            input.occurredAt,
+            input.actorId,
+          ],
+        );
+      }
       return this.findItemById(input.id);
     } catch (error) {
       if (postgresCode(error) === "23505") {
@@ -988,13 +1044,14 @@ function itemSelect(where: string, limit = "") {
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
            r.primary_responsible_id as room_responsible_id,
-           p.preview_object_key as photo_url, p.id as photo_id,
+           p.preview_object_key as photo_url, p.photo_id, p.photo_ids,
            service_photo.id as service_photo_id,
            usage_photo.id as decommissioned_usage_photo_id,
            i.decommissioned_usage_reason,
            i.decommissioned_usage_comment,
            i.decommissioned_usage_started_at,
            i.version, i.created_at, i.updated_at,
+           i.updated_at::text as updated_at_cursor,
            service_move.occurred_at as maintenance_started_at, i.archived_at
       from ${ITEMS} i
       join ${ROOMS} r on r.id = i.room_id
@@ -1022,12 +1079,11 @@ function itemSelect(where: string, limit = "") {
       ) rp on true
       left join ${USERS} u on u.id = rp.responsible_user_id
       left join lateral (
-        select id, preview_object_key
-         from ${PHOTOS}
-         where item_id = i.id and purpose = 'item'
-           and status = 'attached'
-         order by attached_at desc nulls last
-         limit 1
+        select (array_agg(id order by attached_at asc, id asc))[1] as photo_id,
+               (array_agg(preview_object_key order by attached_at asc, id asc))[1] as preview_object_key,
+               array_agg(id order by attached_at asc, id asc) as photo_ids
+          from ${PHOTOS}
+         where item_id = i.id and purpose = 'item' and status = 'attached'
       ) p on true
       left join lateral (
         select id
@@ -1077,6 +1133,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     photoUrl: row.photo_id
       ? `/api/inventory/items/${row.id}/photo?v=${row.version}`
       : row.photo_url,
+    photoIds: row.photo_ids ?? (row.photo_id ? [row.photo_id] : []),
     servicePhotoUrl: row.service_photo_id
       ? `/api/inventory/items/${row.id}/service-photo?v=${row.version}`
       : null,

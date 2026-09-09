@@ -12,6 +12,11 @@ export function inventoryItemBuilding(item: InventoryItem): string {
   return item.location.split(" / ", 1)[0] ?? item.location;
 }
 
+export function hasActiveDecommissionedFilters(filters: DecommissionedItemFilters): boolean {
+  return filters.query.trim() !== "" || filters.building !== "all" ||
+    filters.responsible !== "all" || filters.dateFrom !== "" || filters.dateTo !== "";
+}
+
 export function filterDecommissionedItems(
   items: InventoryItem[],
   filters: DecommissionedItemFilters,

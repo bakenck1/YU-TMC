@@ -1,7 +1,6 @@
 import type {
   CreateInventoryItemInput,
   InventoryItemAuditDto,
-  InventoryItemCommentDto,
   InventoryItemDto,
   InventoryItemOperationDto,
   MarkDecommissionedItemInUseInput,
@@ -18,11 +17,9 @@ import type {
 import type {
   AppendItemAuditRecord,
   InventoryItemAuditRecord,
-  InventoryItemCommentRecord,
   InventoryItemOperationRecord,
   InventoryItemRecord,
   InventoryItemRepositories,
-  StoredInventoryItemCommentAttachment,
   StoredItemPhoto,
 } from "@/lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
@@ -46,6 +43,12 @@ import {
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import sharp from "sharp";
+import {
+  InventoryItemCommentService,
+  type InventoryItemCommentAttachmentInput,
+} from "@/lib/application/services/inventory-item-comment-service";
+
+export type { InventoryItemCommentAttachmentInput } from "@/lib/application/services/inventory-item-comment-service";
 
 const ITEM_FORM_RESPONSIBILITY_REASON = "inventory_item_form_assignment";
 
@@ -65,12 +68,6 @@ export interface TemporaryNumberSource {
   next(year: number): string;
 }
 
-export interface InventoryItemCommentAttachmentInput {
-  fileName: unknown;
-  mediaType: unknown;
-  binaryData: Uint8Array;
-}
-
 export interface SendItemToServiceInput {
   serviceName: string;
   reason: string;
@@ -87,16 +84,20 @@ export interface ResolveMaintenanceItemInput {
 }
 
 export class InventoryItemService {
+  private readonly comments: InventoryItemCommentService;
+
   constructor(
     private readonly unitOfWork: UnitOfWork<InventoryItemRepositories>,
     private readonly clock: InventoryItemClock,
     private readonly ids: InventoryItemIds,
     private readonly qrEntropy: InventoryItemQrEntropy,
     private readonly temporaryNumbers: TemporaryNumberSource,
-  ) {}
+  ) {
+    this.comments = new InventoryItemCommentService(unitOfWork, clock, ids);
+  }
 
   async listItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
-    const repositories = await this.unitOfWork.read(async (repos) => {
+    const repositories = await this.unitOfWork.transaction(async (repos) => {
       if (hasPermission(actor.role, "inventory.item.read_all")) {
         return repos.items.listItems();
       }
@@ -104,7 +105,7 @@ export class InventoryItemService {
         return repos.items.listItemsAssignedTo(actor.userId);
       }
       throw forbidden();
-    });
+    }, { isolation: "repeatable-read", readOnly: true });
     // The repository query is already scoped to the employee's current
     // responsibility. Keep every lifecycle state in that scoped result so
     // the employee tabs and summary cards can show their own decommissioned
@@ -115,7 +116,7 @@ export class InventoryItemService {
   async listDecommissionedItems(
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto[]> {
-    const records = await this.unitOfWork.read(async (repos) => {
+    const records = await this.unitOfWork.transaction(async (repos) => {
       if (hasPermission(actor.role, "inventory.item.read_all")) {
         return repos.items.listDecommissionedItems();
       }
@@ -123,7 +124,7 @@ export class InventoryItemService {
         return repos.items.listDecommissionedItemsAssignedTo(actor.userId);
       }
       throw forbidden();
-    });
+    }, { isolation: "repeatable-read", readOnly: true });
     return records.map(toItemDto);
   }
 
@@ -314,18 +315,8 @@ export class InventoryItemService {
   async listComments(
     id: string,
     actor: AuthorizationActor,
-  ): Promise<InventoryItemCommentDto[]> {
-    if (!hasPermission(actor.role, "inventory.item.comment.read")) throw forbidden();
-    const normalizedId = normalizeItemId(id);
-    const records = await this.unitOfWork.read(async ({ items }) => {
-      const item = await items.findItemById(normalizedId);
-      if (!item) throw new ApplicationError("not_found", "item_not_found");
-      assertItemReadable(item, actor);
-      return items.listComments(normalizedId);
-    });
-    return records.map((record) =>
-      toCommentDto(normalizedId, record, actor.role === "admin"),
-    );
+  ) {
+    return this.comments.listComments(id, actor);
   }
 
   async addComment(
@@ -333,43 +324,8 @@ export class InventoryItemService {
     message: unknown,
     actor: AuthorizationActor,
     attachment?: InventoryItemCommentAttachmentInput,
-  ): Promise<InventoryItemCommentDto[]> {
-    if (!hasPermission(actor.role, "inventory.item.comment")) throw forbidden();
-    const normalizedId = normalizeItemId(id);
-    const normalizedMessage = normalizeText(message, 2_000, "invalid_comment");
-    const normalizedAttachment = attachment
-      ? normalizeCommentAttachment(attachment)
-      : null;
-    const occurredAt = this.clock.now();
-    const commentId = this.ids.create();
-    const records = await this.unitOfWork.transaction(async ({ items }) => {
-      const item = await items.findItemById(normalizedId);
-      if (!item) throw new ApplicationError("not_found", "item_not_found");
-      assertItemReadable(item, actor);
-      await items.appendAudit(
-        createAudit({
-          id: commentId,
-          actor,
-          subjectId: normalizedId,
-          subjectRevision: item.version,
-          action: "item.comment_added",
-          afterValues: { message: normalizedMessage },
-          occurredAt,
-        }),
-      );
-      if (normalizedAttachment) {
-        await items.insertCommentAttachment({
-          id: this.ids.create(),
-          commentId,
-          ...normalizedAttachment,
-          createdAt: occurredAt,
-        });
-      }
-      return items.listComments(normalizedId);
-    });
-    return records.map((record) =>
-      toCommentDto(normalizedId, record, actor.role === "admin"),
-    );
+  ) {
+    return this.comments.addComment(id, message, actor, attachment);
   }
 
   async findCommentAttachment(
@@ -377,23 +333,13 @@ export class InventoryItemService {
     commentId: string,
     attachmentId: string,
     actor: AuthorizationActor,
-  ): Promise<StoredInventoryItemCommentAttachment> {
-    if (!hasPermission(actor.role, "inventory.item.comment.read")) throw forbidden();
-    const normalizedItemId = normalizeItemId(itemId);
-    const normalizedCommentId = normalizeId(commentId, "invalid_comment_id");
-    const normalizedAttachmentId = normalizeId(attachmentId, "invalid_attachment_id");
-    return this.unitOfWork.read(async ({ items }) => {
-      const item = await items.findItemById(normalizedItemId);
-      if (!item) throw new ApplicationError("not_found", "item_not_found");
-      assertItemReadable(item, actor);
-      const attachment = await items.findCommentAttachment(
-        normalizedItemId,
-        normalizedCommentId,
-        normalizedAttachmentId,
-      );
-      if (!attachment) throw new ApplicationError("not_found", "attachment_not_found");
-      return attachment;
-    });
+  ) {
+    return this.comments.findCommentAttachment(
+      itemId,
+      commentId,
+      attachmentId,
+      actor,
+    );
   }
 
   async createItem(
@@ -408,9 +354,13 @@ export class InventoryItemService {
     if (values.responsibleUserId) {
       requirePermission(actor, "inventory.item.manage_protected_fields");
     }
-    const photo = authorizedInput.photo
-      ? await normalizeCameraPhoto({ version: 1, ...authorizedInput.photo })
-      : null;
+    const requestedPhotos = authorizedInput.photos ?? (authorizedInput.photo ? [authorizedInput.photo] : []);
+    if (requestedPhotos.length > 4) {
+      throw new ApplicationError("validation", "photo_limit_reached");
+    }
+    const photos = await Promise.all(
+      requestedPhotos.map((photo) => normalizeCameraPhoto({ version: 1, ...photo })),
+    );
     const occurredAt = this.clock.now();
     const itemId = this.ids.create();
     const qrId = this.ids.create();
@@ -482,35 +432,31 @@ export class InventoryItemService {
         ? await items.findItemById(itemId)
         : created;
       if (!assigned) throw new Error("item_refresh_failed");
-      if (!photo) return toItemDto({ ...assigned, qrCode });
-      const photographed = await items.updateItemPhoto({
-        id: itemId,
-        photoId: this.ids.create(),
-        bytes: photo.bytes,
-        width: photo.width,
-        height: photo.height,
-        actorId: actor.userId,
-        expectedVersion: created.version,
-        occurredAt,
-      });
-      if (!photographed) throw versionConflict();
-      await items.appendAudit(
-        createAudit({
-          id: this.ids.create(),
-          actor,
-          subjectId: itemId,
-          subjectRevision: photographed.version,
-          action: "item.photo_captured",
-          beforeValues: { photo: null },
-          afterValues: {
-            photo: "attached",
-            width: photo.width,
-            height: photo.height,
-            byteSize: photo.bytes.byteLength,
-          },
+      let photographed = assigned;
+      for (const [index, photo] of photos.entries()) {
+        const updated = await items.updateItemPhoto({
+          id: itemId,
+          photoId: this.ids.create(),
+          bytes: photo.bytes,
+          width: photo.width,
+          height: photo.height,
+          actorId: actor.userId,
+          expectedVersion: photographed.version,
           occurredAt,
-        }),
-      );
+        });
+        if (!updated) throw versionConflict();
+        photographed = updated;
+        await items.appendAudit(
+          createAudit({
+            id: this.ids.create(), actor, subjectId: itemId,
+            subjectRevision: photographed.version,
+            action: "item.photo_captured",
+            beforeValues: { photoCount: index },
+            afterValues: { photoCount: index + 1, width: photo.width, height: photo.height, byteSize: photo.bytes.byteLength },
+            occurredAt,
+          }),
+        );
+      }
       return toItemDto({ ...photographed, qrCode });
     });
   }
@@ -855,6 +801,9 @@ export class InventoryItemService {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== input.version) throw versionConflict();
+      if ((current.photoIds?.length ?? (current.photoUrl ? 1 : 0)) >= 4) {
+        throw new ApplicationError("conflict", "photo_limit_reached");
+      }
       const updated = await items.updateItemPhoto({
         id,
         photoId: this.ids.create(),
@@ -890,6 +839,7 @@ export class InventoryItemService {
     id: string,
     version: number,
     actor: AuthorizationActor,
+    photoId?: string,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.edit_content");
     if (!Number.isInteger(version) || version < 1) {
@@ -905,6 +855,7 @@ export class InventoryItemService {
       }
       const updated = await items.removeItemPhoto({
         id,
+        photoId,
         actorId: actor.userId,
         expectedVersion: version,
         occurredAt,
@@ -917,8 +868,8 @@ export class InventoryItemService {
           subjectId: id,
           subjectRevision: updated.version,
           action: "item.photo_removed",
-          beforeValues: { photo: "attached" },
-          afterValues: { photo: null },
+          beforeValues: { photoCount: current.photoIds?.length ?? 1 },
+          afterValues: { photoCount: Math.max(0, (current.photoIds?.length ?? 1) - (photoId ? 1 : (current.photoIds?.length ?? 1))) },
           occurredAt,
         }),
       );
@@ -929,8 +880,9 @@ export class InventoryItemService {
   async getItemPhoto(
     id: string,
     actor: AuthorizationActor,
+    photoId?: string,
   ): Promise<StoredItemPhoto> {
-    return this.getItemPhotoByPurpose(id, actor, "item");
+    return this.getItemPhotoByPurpose(id, actor, "item", photoId);
   }
 
   async getServiceItemPhoto(
@@ -951,6 +903,7 @@ export class InventoryItemService {
     id: string,
     actor: AuthorizationActor,
     purpose: "item" | "service_request" | "decommissioned_usage",
+    photoId?: string,
   ): Promise<StoredItemPhoto> {
     return this.unitOfWork.read(async ({ items }) => {
       const item = await items.findItemById(id);
@@ -977,7 +930,7 @@ export class InventoryItemService {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
       const photo = purpose === "item"
-        ? await items.findItemPhoto(id)
+        ? await items.findItemPhoto(id, photoId)
         : purpose === "service_request"
           ? await items.findServiceItemPhoto(id)
           : items.findDecommissionedUsagePhoto
@@ -1138,6 +1091,7 @@ export class InventoryItemService {
         values.inventoryNumber === current.inventoryNumber
           ? current.inventoryNumberKind
           : "official";
+      const inventoryNumberChanged = values.inventoryNumber !== current.inventoryNumber;
       const occurredAt = this.clock.now();
       const updated = await items.updateItemProtected({
         id,
@@ -1146,6 +1100,12 @@ export class InventoryItemService {
         connectionStatus:
           values.connectionStatus ?? current.connectionStatus ?? "not_applicable",
         inventoryNumberKind,
+        ...(inventoryNumberChanged
+          ? {
+              inventoryNumberHistoryId: this.ids.create(),
+              inventoryNumberChangeReason: "Исправление номера / штрих-кода ТМЦ",
+            }
+          : {}),
         actorId: actor.userId,
         expectedVersion: input.version,
         occurredAt,
@@ -1193,6 +1153,9 @@ export class InventoryItemService {
             roomId: updated.roomId,
             roomLabel: itemLocationLabel(updated),
             inventoryNumber: updated.inventoryNumber,
+            ...(inventoryNumberChanged
+              ? { inventoryNumberChangeReason: "Исправление номера / штрих-кода ТМЦ" }
+              : {}),
             status: updated.status,
             ...(current.condition || updated.condition
               ? { condition: updated.condition }
@@ -1410,6 +1373,7 @@ function normalizeWarehouseCreateInput(
     description: input.description,
     roomId: input.roomId,
     photo: input.photo,
+    photos: input.photos,
     brand: null,
     model: null,
     quantity: 1,
@@ -1676,96 +1640,6 @@ function normalizeText(value: unknown, max: number, code: string) {
   return normalized;
 }
 
-const COMMENT_ATTACHMENT_MEDIA_TYPES = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "text/plain",
-]);
-
-function normalizeCommentAttachment(input: InventoryItemCommentAttachmentInput) {
-  const rawName = normalizeText(input.fileName, 255, "invalid_comment_attachment");
-  const fileName = rawName
-    .replace(/.*[\\/]/, "")
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .trim();
-  const mediaType = normalizeText(input.mediaType, 127, "invalid_comment_attachment")
-    .toLocaleLowerCase("en-US");
-  if (
-    !fileName ||
-    [...fileName].length > 180 ||
-    !COMMENT_ATTACHMENT_MEDIA_TYPES.has(mediaType) ||
-    !(input.binaryData instanceof Uint8Array) ||
-    input.binaryData.byteLength < 1 ||
-    input.binaryData.byteLength > 2 * 1024 * 1024
-  ) {
-    throw new ApplicationError("validation", "invalid_comment_attachment");
-  }
-  const extension = fileName.split(".").at(-1)?.toLowerCase() ?? "";
-  if (!attachmentContentMatches(mediaType, extension, input.binaryData)) {
-    throw new ApplicationError("validation", "invalid_comment_attachment");
-  }
-  return {
-    fileName,
-    mediaType,
-    sizeBytes: input.binaryData.byteLength,
-    binaryData: input.binaryData,
-  };
-}
-
-function attachmentContentMatches(
-  mediaType: string,
-  extension: string,
-  bytes: Uint8Array,
-) {
-  const startsWith = (...signature: number[]) =>
-    signature.every((value, index) => bytes[index] === value);
-  const asciiPrefix = (length: number) =>
-    new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(length, bytes.length)));
-  switch (mediaType) {
-    case "application/pdf": {
-      if (extension !== "pdf" || asciiPrefix(5) !== "%PDF-") return false;
-      const content = asciiPrefix(bytes.length).toLowerCase();
-      return !["/javascript", "/js", "/launch", "/embeddedfile"].some((marker) =>
-        content.includes(marker),
-      );
-    }
-    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-      const expectedExtension = mediaType.includes("wordprocessingml") ? "docx" : "xlsx";
-      if (extension !== expectedExtension || !startsWith(0x50, 0x4b)) return false;
-      const directoryText = asciiPrefix(bytes.length).toLowerCase();
-      const expectedRoot = expectedExtension === "docx" ? "word/" : "xl/";
-      return (
-        directoryText.includes("[content_types].xml") &&
-        directoryText.includes(expectedRoot) &&
-        !["vbaproject.bin", "oleobject", "embeddings/", "externallink"].some((marker) =>
-          directoryText.includes(marker),
-        )
-      );
-    }
-    case "image/jpeg":
-      return ["jpg", "jpeg"].includes(extension) && startsWith(0xff, 0xd8, 0xff);
-    case "image/png":
-      return extension === "png" && startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
-    case "image/webp":
-      return extension === "webp" && asciiPrefix(4) === "RIFF" && asciiPrefix(12).slice(8) === "WEBP";
-    case "text/plain":
-      if (extension !== "txt" || bytes.includes(0)) return false;
-      try {
-        new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        return true;
-      } catch {
-        return false;
-      }
-    default:
-      return false;
-  }
-}
-
 function normalizeId(value: unknown, code: string) {
   const normalized = normalizeText(value, 64, code);
   if (!isUuid(normalized)) {
@@ -1948,6 +1822,9 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       ? { id: record.responsibleId, name: record.responsibleName ?? "" }
       : null,
     photoUrl: record.photoUrl,
+    photoUrls: record.photoIds?.map(
+      (photoId) => `/api/inventory/items/${record.id}/photo?photoId=${encodeURIComponent(photoId)}&v=${record.version}`,
+    ) ?? (record.photoUrl ? [record.photoUrl] : []),
     servicePhotoUrl: record.servicePhotoUrl ?? null,
     version: record.version,
     createdAt: record.createdAt.toISOString(),
@@ -1997,26 +1874,6 @@ function toAuditDto(record: InventoryItemAuditRecord): InventoryItemAuditDto {
     beforeValues: record.beforeValues,
     afterValues: record.afterValues,
     occurredAt: record.occurredAt.toISOString(),
-  };
-}
-
-function toCommentDto(
-  itemId: string,
-  record: InventoryItemCommentRecord,
-  includeAuthorEmail: boolean,
-): InventoryItemCommentDto {
-  return {
-    id: record.id,
-    authorName: record.authorName,
-    authorEmail: includeAuthorEmail ? record.authorEmail : null,
-    message: record.message,
-    createdAt: record.createdAt.toISOString(),
-    attachment: record.attachment
-      ? {
-          ...record.attachment,
-          downloadUrl: `/api/inventory/items/${itemId}/comments/${record.id}/attachments/${record.attachment.id}`,
-        }
-      : null,
   };
 }
 

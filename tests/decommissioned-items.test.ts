@@ -3,8 +3,14 @@ import test from "node:test";
 
 import {
   filterDecommissionedItems,
+  hasActiveDecommissionedFilters,
   inventoryItemBuilding,
 } from "../lib/decommissioned-items";
+
+test("decommissioned export can distinguish a complete dataset from a filtered subset", () => {
+  assert.equal(hasActiveDecommissionedFilters({ query: "", building: "all", responsible: "all", dateFrom: "", dateTo: "" }), false);
+  assert.equal(hasActiveDecommissionedFilters({ query: " chair ", building: "all", responsible: "all", dateFrom: "", dateTo: "" }), true);
+});
 import type { InventoryItem } from "../lib/types";
 
 const BASE_ITEM: InventoryItem = {

@@ -13,6 +13,32 @@ import type {
   TmcTransferRequestStatus,
   TmcBulkOperationResultDto,
 } from "@/lib/contracts/tmc-operations";
+import type {
+  AcceptUnassignedTmcInput as DirectAcceptUnassignedTmcInput,
+  BulkChangeTmcLocationInput as DirectBulkChangeTmcLocationInput,
+  CancelTmcTransferRequestInput as DirectCancelTmcTransferRequestInput,
+  CreateTmcTransferRequestInput as DirectCreateTmcTransferRequestInput,
+  DecideTmcTransferRequestInput as DirectDecideTmcTransferRequestInput,
+  TmcOperationItemReference as DirectTmcOperationItemReference,
+  TmcTransferItemDecision as DirectTmcTransferItemDecision,
+} from "@/lib/contracts/tmc-operation-commands";
+
+type Equal<Left, Right> =
+  (<Value>() => Value extends Left ? 1 : 2) extends
+  (<Value>() => Value extends Right ? 1 : 2)
+    ? (<Value>() => Value extends Right ? 1 : 2) extends
+      (<Value>() => Value extends Left ? 1 : 2)
+      ? true
+      : false
+    : false;
+type Assert<Condition extends true> = Condition;
+type BarrelKeepsCreateCommand = Assert<Equal<CreateTmcTransferRequestInput, DirectCreateTmcTransferRequestInput>>;
+type BarrelKeepsDecisionCommand = Assert<Equal<DecideTmcTransferRequestInput, DirectDecideTmcTransferRequestInput>>;
+type BarrelKeepsCancelCommand = Assert<Equal<CancelTmcTransferRequestInput, DirectCancelTmcTransferRequestInput>>;
+type BarrelKeepsItemDecision = Assert<Equal<import("@/lib/contracts/tmc-operations").TmcTransferItemDecision, DirectTmcTransferItemDecision>>;
+type BarrelKeepsAcceptCommand = Assert<Equal<AcceptUnassignedTmcInput, DirectAcceptUnassignedTmcInput>>;
+type BarrelKeepsBulkCommand = Assert<Equal<BulkChangeTmcLocationInput, DirectBulkChangeTmcLocationInput>>;
+type BarrelKeepsItemReference = Assert<Equal<import("@/lib/contracts/tmc-operations").TmcOperationItemReference, DirectTmcOperationItemReference>>;
 
 // Requests are immutable: editing means cancelling and creating a new request.
 // @ts-expect-error no update command is part of the public domain contract
@@ -347,3 +373,10 @@ void problemWithoutCode;
 void problemWithVersion;
 void unknownProblemCode;
 void (null as unknown as UpdateTmcTransferRequestInput);
+void (null as unknown as BarrelKeepsCreateCommand);
+void (null as unknown as BarrelKeepsDecisionCommand);
+void (null as unknown as BarrelKeepsCancelCommand);
+void (null as unknown as BarrelKeepsItemDecision);
+void (null as unknown as BarrelKeepsAcceptCommand);
+void (null as unknown as BarrelKeepsBulkCommand);
+void (null as unknown as BarrelKeepsItemReference);

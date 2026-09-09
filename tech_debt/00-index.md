@@ -33,13 +33,18 @@
 | 5 | P1 | [Structured observability и legacy evidence — Engineering Done; evidence gate active](14-p1-observability-and-legacy-evidence.md) | Код закрыт; честный 90-day production interval завершится не раньше 2026-11-12 | M, operational gate |
 | 6 | P1 | [Production-readiness evidence — Engineering Done; external gates blocked](23-p1-production-readiness-evidence.md) | Проверяемый pack готов; production verdict остаётся NO-GO без внешних evidence | M / operational |
 | 7 | P1 quick win | [Repository/dependency hygiene — Done](21-p1-repository-hygiene.md) | Убраны warnings, scratch noise и лишние зависимости | S |
-| 8 | P2 | [Минимальный browser smoke](22-p2-browser-smoke.md) | Проверяет 1–2 критических пути в собранном приложении | M / decision |
-| 9 | P2 | [Декомпозиция application services](15-p2-application-service-decomposition.md) | Снижает риск изменений inventory/TMC/users/push | L, incremental |
-| 10 | P2 | [Декомпозиция god-components](16-p2-god-components.md) | Изолирует async workflows и делает UI тестируемым | L, incremental |
-| 11 | P2 | [Единый HTTP contract](17-p2-http-boundary-consistency.md) | Убирает точечный drift validation/cache/error headers | M |
-| 12 | P3 | [Legacy и рудименты](19-p3-legacy-and-dead-code.md) | Удаляет orphaned code, остальное готовит к sunset | S–M |
-| 13 | P3 trigger-only | [Schema, contracts и i18n](18-p3-schema-contract-i18n-modules.md) | Уменьшает конфликтность только при измеренной боли | L, optional |
-| 14 | P3 | [Capacity и производительность](20-p3-capacity-and-performance.md) | Измеряет коллекции/export на реальном объёме | M, needs data |
+| 8 | P2 | [Минимальный browser smoke — Done](22-p2-browser-smoke.md) | Проверяет 2 критических пути в собранном приложении | M / decision |
+| 9 | P2 | [Декомпозиция application services — Done](15-p2-application-service-decomposition.md) | Первый cohesion-seam извлечён; остальные зафиксированы trigger-only | L, incremental |
+| 10 | P2 | [Декомпозиция god-components — Done](16-p2-god-components.md) | Comments workflow изолирован и покрыт component tests | L, incremental |
+| 11 | P2 | [Единый HTTP contract — Done](17-p2-http-boundary-consistency.md) | Общий узкий boundary выровнял ID/error/cache contract трёх legacy handlers | M |
+| 12 | P3 | [Legacy и рудименты — Done](19-p3-legacy-and-dead-code.md) | Доказанный orphan удалён; шесть legacy boundaries остаются под evidence policy | S–M |
+| 13 | P3 trigger-only | [Schema, contracts и i18n — Done](18-p3-schema-contract-i18n-modules.md) | TMC command DTO локализованы после подтверждённого change-frequency trigger | L, optional |
+| 14 | P3 | [Capacity и производительность — Done](20-p3-capacity-and-performance.md) | Зафиксирован capacity-v1; пять измеренных bottleneck вынесены в follow-up | M |
+| 15 | P1 | [Inventory/export collection capacity — Done](27-p1-inventory-collection-capacity.md) | 25 000 строк читаются keyset-порциями; overflow завершается явной ошибкой | L |
+| 16 | P2 | [Pool saturation — Done](24-p2-capacity-pool-saturation.md) | P95 252.83 мс при 16 запросах без увеличения pool | M |
+| 17 | P2 | [Export memory](25-p2-capacity-export-memory.md) | Ограничивает пиковый рост памяти Excel export | M |
+| 18 | P3 | [Dockflow projection](26-p3-capacity-dockflow-projection.md) | Возвращает projection P95 в измеренный бюджет | S–M |
+| 19 | P2 | [Inventory list projection](28-p2-inventory-list-projection.md) | Снижает P95 двух keyset-форм ниже 750 мс | M |
 
 ## Два этапа
 

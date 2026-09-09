@@ -93,7 +93,10 @@ export async function POST(request: Request) {
       ) throw invalidRequest();
       const itemIdsProvided = Array.isArray(body.itemIds);
       const rawItemIds: unknown[] = itemIdsProvided ? (body.itemIds as unknown[]) : [];
-      const itemIds = rawItemIds.filter(isUuid).slice(0, 2_000);
+      if (rawItemIds.length > 2_000 || rawItemIds.some((value) => !isUuid(value))) {
+        throw invalidRequest();
+      }
+      const itemIds = rawItemIds as string[];
       const rawColumns: unknown[] = Array.isArray(body.columns) ? (body.columns as unknown[]) : [];
       const columns = Array.isArray(body.columns)
         ? rawColumns.filter((value): value is string => typeof value === "string" && value.length <= 40).slice(0, 30)

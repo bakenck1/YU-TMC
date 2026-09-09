@@ -3,7 +3,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 export const MAX_PHOTO_JSON_BYTES = Math.ceil(MAX_PHOTO_BYTES / 3) * 4 + 1024;
 
-export function assertPhotoJsonRequest(request: Request): void {
+export function assertPhotoJsonRequest(request: Request, photoCount = 1): void {
   const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim();
   if (mediaType?.toLowerCase() !== "application/json") {
     throw new ApplicationError("unsupported_media_type", "unsupported_media_type");
@@ -18,12 +18,12 @@ export function assertPhotoJsonRequest(request: Request): void {
   if (!Number.isSafeInteger(length)) {
     throw new ApplicationError("payload_too_large", "payload_too_large");
   }
-  if (length > MAX_PHOTO_JSON_BYTES) {
+  if (length > MAX_PHOTO_JSON_BYTES * photoCount) {
     throw new ApplicationError("payload_too_large", "payload_too_large");
   }
 }
 
-export async function readPhotoJsonRequest(request: Request): Promise<unknown> {
+export async function readPhotoJsonRequest(request: Request, photoCount = 1): Promise<unknown> {
   const reader = request.body?.getReader();
   if (!reader) throw new SyntaxError("Missing JSON request body");
 
@@ -33,7 +33,7 @@ export async function readPhotoJsonRequest(request: Request): Promise<unknown> {
     const { done, value } = await reader.read();
     if (done) break;
     byteLength += value.byteLength;
-    if (byteLength > MAX_PHOTO_JSON_BYTES) {
+    if (byteLength > MAX_PHOTO_JSON_BYTES * photoCount) {
       await reader.cancel();
       throw new ApplicationError("payload_too_large", "payload_too_large");
     }

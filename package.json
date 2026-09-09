@@ -14,6 +14,9 @@
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "test:all": "node scripts/test-all.mjs",
+    "test:browser-smoke": "node scripts/browser-smoke.mjs",
+    "capacity:baseline": "node --conditions=react-server --import tsx scripts/capacity/measure.mjs",
+    "capacity:baseline:local": "npm run build && node scripts/capacity/run-local.mjs",
     "test:components": "tsc --project tests/typecheck/tsconfig.components.json --pretty false && vitest run --config vitest.components.config.mts",
     "ui:check": "node scripts/check-ui-architecture.mjs",
     "docs:check": "node scripts/check-documentation.mjs",
@@ -55,6 +58,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@storybook/addon-a11y": "^10.5.7",
     "@storybook/nextjs-vite": "^10.5.7",
     "@tailwindcss/postcss": "^4",

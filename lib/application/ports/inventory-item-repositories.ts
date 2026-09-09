@@ -32,6 +32,7 @@ export interface InventoryItemRecord {
   responsibleName: string | null;
   roomResponsibleId?: string | null;
   photoUrl: string | null;
+  photoIds?: string[];
   servicePhotoUrl?: string | null;
   version: number;
   createdAt: Date;
@@ -95,6 +96,7 @@ export interface UpdateInventoryItemPhotoRecord {
 
 export interface RemoveInventoryItemPhotoRecord {
   id: string;
+  photoId?: string;
   actorId: string;
   expectedVersion: number;
   occurredAt: Date;
@@ -121,6 +123,9 @@ export interface UpdateInventoryItemProtectedRecord {
   inventoryNumberKind: InventoryNumberKind;
   inventoryNumber: string;
   inventoryNumberKey: string;
+  /** Present only when an administrator corrects the official number/barcode. */
+  inventoryNumberHistoryId?: string;
+  inventoryNumberChangeReason?: string;
   status: ItemStatus;
   condition: ItemCondition;
   connectionStatus: ConnectionStatus;
@@ -307,7 +312,7 @@ export interface InventoryItemRepository {
   removeItemPhoto(
     input: RemoveInventoryItemPhotoRecord,
   ): Promise<InventoryItemRecord | null>;
-  findItemPhoto(id: string): Promise<StoredItemPhoto | null>;
+  findItemPhoto(id: string, photoId?: string): Promise<StoredItemPhoto | null>;
   insertServiceItemPhoto(input: InsertServiceItemPhotoRecord): Promise<void>;
   findServiceItemPhoto(id: string): Promise<StoredItemPhoto | null>;
   findDecommissionedUsagePhoto?(id: string): Promise<StoredItemPhoto | null>;

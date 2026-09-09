@@ -4,21 +4,20 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
   Barcode,
   Camera,
   Check,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Image as ImageIcon,
-  MessageSquare,
-  Paperclip,
   Pencil,
+  Plus,
   QrCode,
   Save,
-  Send,
   ShieldCheck,
   Trash2,
   Wrench,
@@ -38,6 +37,7 @@ import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog"
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
+import InventoryItemComments from "@/components/InventoryItemComments";
 import InventoryOverviewRow from "@/components/InventoryOverviewRow";
 import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
 import {
@@ -56,6 +56,7 @@ import {
   inventoryItemCategoryTranslationKey,
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
+import { addItemPhotoWithRefresh } from "@/lib/inventory-item-photo-client";
 
 type ResponsiblePickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
   Partial<Pick<TmcOperationUserDto, "email" | "role">>;
@@ -154,10 +155,7 @@ export default function InventoryItemDetails({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
-  const [comments, setComments] = useState(initialComments);
-  const [comment, setComment] = useState("");
-  const [commentAttachment, setCommentAttachment] = useState<File | null>(null);
-  const [commentSaving, setCommentSaving] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const editDialogRef = useRef<HTMLDivElement>(null);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const protectedDialogRef = useRef<HTMLDivElement>(null);
@@ -176,6 +174,10 @@ export default function InventoryItemDetails({
   const protectedBuildingRooms = rooms.filter(
     (room) => room.buildingId === protectedBuildingId,
   );
+  const itemPhotoUrls = item.photoUrls?.length
+    ? item.photoUrls
+    : item.photoUrl ? [item.photoUrl] : [];
+  const selectedPhotoUrl = itemPhotoUrls[Math.min(selectedPhotoIndex, itemPhotoUrls.length - 1)];
 
   useEffect(() => {
     if (!editing) return;
@@ -595,20 +597,15 @@ export default function InventoryItemDetails({
     width: number;
     height: number;
   }) {
+    if (itemPhotoUrls.length >= 4) return;
     setCapturingPhoto(true);
     setError("");
     setSaved(false);
     try {
-      const response = await fetch(`/api/inventory/items/${item.id}/photo`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ version: item.version, ...photo }),
-      });
-      const body = (await response.json().catch(() => ({}))) as { item?: InventoryItemDto; error?: string };
-      if (!response.ok || !body.item) {
-        throw new Error(body.error ?? responseErrorCode(response.status));
-      }
-      setItem(body.item);
+      const updatedItem = await addItemPhotoWithRefresh(fetch, item, photo);
+      setItem(updatedItem);
+      setSelectedPhotoIndex(Math.max(0, (updatedItem.photoUrls?.length ?? 1) - 1));
+      setPhotoOpen(true);
       setSaved(true);
       router.refresh();
     } catch (cause) {
@@ -618,58 +615,27 @@ export default function InventoryItemDetails({
     }
   }
 
-  async function deletePhoto() {
-    if (!item.photoUrl || !window.confirm(t("item.deletePhotoConfirm"))) return;
+  async function deletePhoto(photoUrl = selectedPhotoUrl) {
+    if (!photoUrl || !window.confirm(t("item.deletePhotoConfirm"))) return;
     setCapturingPhoto(true);
     setError("");
     try {
       const response = await fetch(`/api/inventory/items/${item.id}/photo`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ version: item.version }),
+        body: JSON.stringify({ version: item.version, photoId: photoIdFromUrl(photoUrl) }),
       });
       const body = await response.json().catch(() => ({})) as { item?: InventoryItemDto; error?: string };
       if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
       setItem(body.item);
+      if ((body.item.photoUrls?.length ?? (body.item.photoUrl ? 1 : 0)) === 0) setPhotoOpen(false);
+      setSelectedPhotoIndex((current) => Math.max(0, Math.min(current, (body.item?.photoUrls?.length ?? 1) - 1)));
       setSaved(true);
       router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
     } finally {
       setCapturingPhoto(false);
-    }
-  }
-
-  async function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!comment.trim() || commentSaving) return;
-    setCommentSaving(true);
-    setError("");
-    try {
-      const formData = new FormData();
-      formData.set("message", comment);
-      if (commentAttachment) formData.set("attachment", commentAttachment);
-      const response = await fetch(`/api/inventory/items/${commentItemId ?? item.id}/comments`, {
-        method: "POST",
-        body: formData,
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        comments?: InventoryItemCommentDto[];
-        error?: string;
-      };
-      if (!response.ok || !body.comments) {
-        throw new Error(body.error ?? responseErrorCode(response.status));
-      }
-      setComments(body.comments);
-      setComment("");
-      setCommentAttachment(null);
-      const attachmentInput = document.getElementById("item-comment-attachment");
-      if (attachmentInput instanceof HTMLInputElement) attachmentInput.value = "";
-      router.refresh();
-    } catch (cause) {
-      setError(localizeItemError(cause, t));
-    } finally {
-      setCommentSaving(false);
     }
   }
 
@@ -824,8 +790,13 @@ export default function InventoryItemDetails({
               <input
                 value={inventoryNumber}
                 onChange={(event) => setInventoryNumber(event.target.value)}
+                maxLength={64}
+                aria-describedby="official-number-hint"
                 className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
               />
+              <span id="official-number-hint" className="mt-1 block text-xs text-zinc-500">
+                {t("itemDetails.officialNumberHint")}
+              </span>
             </label>
             <label className="block text-sm">
               <span className="text-zinc-600">{t("items.status")}</span>
@@ -1062,7 +1033,7 @@ export default function InventoryItemDetails({
           </div>
         </div>
       ) : null}
-      {photoOpen && item.photoUrl ? (
+      {photoOpen && selectedPhotoUrl ? (
         <div
           ref={photoDialogRef}
           role="dialog"
@@ -1080,15 +1051,29 @@ export default function InventoryItemDetails({
           >
             <X className="h-5 w-5" />
           </button>
-          <Image
-            src={item.photoUrl}
-            alt={item.name}
-            width={1600}
-            height={1200}
-            unoptimized
-            className="max-h-[92vh] max-w-[92vw] object-contain"
-            onClick={(event) => event.stopPropagation()}
-          />
+          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+            <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+              <Image src={selectedPhotoUrl} alt={`${item.name} — ${selectedPhotoIndex + 1}`} width={1600} height={1200} unoptimized className="max-h-[76vh] max-w-full object-contain" />
+              {itemPhotoUrls.length > 1 ? (
+                <>
+                  <button type="button" onClick={() => setSelectedPhotoIndex((selectedPhotoIndex - 1 + itemPhotoUrls.length) % itemPhotoUrls.length)} aria-label={t("itemPhotos.previous")} className="absolute left-1 rounded-full bg-white/90 p-3 text-zinc-900 shadow-lg"><ChevronLeft className="h-6 w-6" /></button>
+                  <button type="button" onClick={() => setSelectedPhotoIndex((selectedPhotoIndex + 1) % itemPhotoUrls.length)} aria-label={t("itemPhotos.next")} className="absolute right-1 rounded-full bg-white/90 p-3 text-zinc-900 shadow-lg"><ChevronRight className="h-6 w-6" /></button>
+                </>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {itemPhotoUrls.map((photoUrl, index) => (
+                <button key={photoUrl} type="button" onClick={() => setSelectedPhotoIndex(index)} aria-label={`${t("items.photo")} ${index + 1}`} className={`relative h-14 w-14 overflow-hidden rounded-lg border-2 ${index === selectedPhotoIndex ? "border-emerald-400" : "border-white/50"}`}><Image src={photoUrl} alt="" fill unoptimized className="object-cover" /></button>
+              ))}
+            </div>
+            {canEditContent ? (
+              <div className="flex items-center gap-2">
+                {itemPhotoUrls.length < 4 ? <button type="button" onClick={() => { setCameraTarget("item"); setCameraOpen(true); }} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />{t("itemPhotos.add")}</button> : null}
+                <button type="button" onClick={() => void deletePhoto(selectedPhotoUrl)} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("item.deletePhoto")}</button>
+              </div>
+            ) : null}
+            <p className="text-sm font-medium text-white">{selectedPhotoIndex + 1} / {itemPhotoUrls.length}</p>
+          </div>
         </div>
       ) : null}
 
@@ -1101,11 +1086,12 @@ export default function InventoryItemDetails({
                 <button
                   ref={photoTriggerRef}
                   type="button"
-                  onClick={() => setPhotoOpen(true)}
+                  onClick={() => { setSelectedPhotoIndex(0); setPhotoOpen(true); }}
                   className="absolute inset-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
                   aria-label={t("itemDetails.openPhoto")}
                 >
                   <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
+                  {itemPhotoUrls.length > 1 ? <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-1 text-xs font-semibold text-white">{itemPhotoUrls.length} / 4</span> : null}
                 </button>
               ) : (
                 <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-zinc-400">
@@ -1116,16 +1102,16 @@ export default function InventoryItemDetails({
               {canEditContent ? (
                 <button
                   type="button"
-                  onClick={() => { setCameraTarget("item"); setCameraOpen(true); }}
+                  onClick={() => { if (itemPhotoUrls.length < 4) { setCameraTarget("item"); setCameraOpen(true); } else { setSelectedPhotoIndex(0); setPhotoOpen(true); } }}
                   disabled={capturingPhoto}
                   className="absolute bottom-2 right-2 inline-flex h-11 items-center gap-2 rounded-full bg-white px-3 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
                 >
                   <Camera className="h-4 w-4" />
-                  {capturingPhoto ? t("itemDetails.saving") : t("items.photo")}
+                  {capturingPhoto ? t("itemDetails.saving") : itemPhotoUrls.length < 4 ? t("itemPhotos.add") : t("items.photo")}
                 </button>
               ) : null}
               {canEditContent && item.photoUrl ? (
-                <button type="button" onClick={() => void deletePhoto()} disabled={capturingPhoto} aria-label={t("item.deletePhoto")} className="absolute bottom-2 left-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-red-600 shadow-lg hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-5 w-5" /></button>
+                <button type="button" onClick={() => void deletePhoto(itemPhotoUrls[0])} disabled={capturingPhoto} aria-label={t("item.deletePhoto")} className="absolute bottom-2 left-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-red-600 shadow-lg hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-5 w-5" /></button>
               ) : null}
             </div>
 
@@ -1258,88 +1244,23 @@ export default function InventoryItemDetails({
             </p>
           )}
         </section>
-        <section className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-sky-600" />
-            <h2 className="text-lg font-semibold text-zinc-800">
-              {t("itemDetails.comments")} ({comments.length})
-            </h2>
-          </div>
-          {canComment ? (
-            <form className="mt-4 space-y-2" onSubmit={submitComment}>
-              <label className="sr-only" htmlFor="item-comment">
-                {t("itemDetails.commentPlaceholder")}
-              </label>
-              <textarea
-                id="item-comment"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                maxLength={2000}
-                rows={2}
-                placeholder={t("itemDetails.commentPlaceholder")}
-                className="min-h-12 flex-1 resize-y rounded-xl border border-black/10 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-sky-500"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-sm font-medium text-zinc-600">
-                  <Paperclip className="h-4 w-4" />
-                  {t("itemDetails.commentAttach")}
-                  <input
-                    id="item-comment-attachment"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-                    className="sr-only"
-                    onChange={(event) => setCommentAttachment(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                {commentAttachment ? <span className="text-xs text-zinc-500">{commentAttachment.name}</span> : null}
-                <button
-                  type="submit"
-                  disabled={commentSaving || !comment.trim()}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  <Send className="h-4 w-4" />
-                  {commentSaving ? t("itemDetails.saving") : t("itemDetails.commentSend")}
-                </button>
-              </div>
-            </form>
-          ) : null}
-          {comments.length ? (
-            <ol className="mt-4 space-y-3">
-              {comments.map((entry) => (
-                <li key={entry.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="font-medium text-zinc-800">
-                      {entry.authorName}
-                      {entry.authorEmail ? (
-                        <span className="font-normal text-zinc-400">· {entry.authorEmail}</span>
-                      ) : null}
-                    </p>
-                    <time dateTime={entry.createdAt} className="text-xs text-zinc-400">
-                      {new Date(entry.createdAt).toLocaleString(locale)}
-                    </time>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-zinc-600">{entry.message}</p>
-                  {entry.attachment ? (
-                    <a
-                      href={entry.attachment.downloadUrl}
-                      className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-sky-700 hover:underline"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                      {entry.attachment.fileName}
-                    </a>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-sm text-zinc-500">
-              {t("itemDetails.commentsEmpty")}
-            </p>
-          )}
-        </section>
+        <InventoryItemComments
+          key={commentItemId ?? item.id}
+          itemId={commentItemId ?? item.id}
+          initialComments={initialComments}
+          canComment={canComment}
+        />
         </div>
       </div>
 
     </div>
   );
+}
+
+function photoIdFromUrl(photoUrl: string): string | undefined {
+  try {
+    return new URL(photoUrl, window.location.origin).searchParams.get("photoId") ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

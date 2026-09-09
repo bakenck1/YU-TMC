@@ -300,7 +300,7 @@ export class WebPushService {
       return tmcPushOutbox.claim({
         workerId,
         now,
-        lockedUntil: new Date(now.getTime() + 5 * 60_000),
+        lockedUntil: new Date(now.getTime() + TMC_PUSH_WORKER_LEASE_MS),
         limit,
       });
     });
@@ -328,7 +328,7 @@ export class WebPushService {
               subscriptionUpdatedAt: subscription.updatedAt,
               workerId,
               now: deliveryNow,
-              lockedUntil: new Date(deliveryNow.getTime() + 5 * 60_000),
+              lockedUntil: new Date(deliveryNow.getTime() + TMC_PUSH_WORKER_LEASE_MS),
             });
           });
           if (reservation === "delivered") continue;
@@ -604,6 +604,8 @@ function tmcTransferRequestPayload(
     url: `/tmc/transfer-requests/${encodeURIComponent(input.requestId)}`,
   });
 }
+
+export const TMC_PUSH_WORKER_LEASE_MS = 5 * 60_000;
 
 const TMC_OUTBOX_BODY_KEYS = {
   "tmc_transfer.requested": "tmc.notifications.requested",

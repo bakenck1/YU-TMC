@@ -10,12 +10,14 @@ import { createInventoryExportPayload } from "@/lib/inventory-export";
 type InventoryExportButtonProps = {
   dataset: "items" | "decommissioned" | "decommissioned_in_use";
   itemIds: string[];
+  completeDataset?: boolean;
   columns: InventoryColumnVisibility;
 };
 
 export default function InventoryExportButton({
   dataset,
   itemIds,
+  completeDataset = false,
   columns,
 }: InventoryExportButtonProps) {
   const { t } = useAppSettings();
@@ -30,10 +32,16 @@ export default function InventoryExportButton({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          createInventoryExportPayload(dataset, itemIds, columns),
+          createInventoryExportPayload(dataset, itemIds, columns, completeDataset),
         ),
       });
-      if (!response.ok) throw new Error("export_failed");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: unknown } | null;
+        if (body?.error === "inventory_collection_requires_async_export") {
+          throw new Error("inventory_collection_requires_async_export");
+        }
+        throw new Error("export_failed");
+      }
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -44,8 +52,10 @@ export default function InventoryExportButton({
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch {
-      setError(t("excel.requestFailed"));
+    } catch (exportError) {
+      setError(exportError instanceof Error && exportError.message === "inventory_collection_requires_async_export"
+        ? t("excel.asyncExportRequired")
+        : t("excel.requestFailed"));
     } finally {
       setBusy(false);
     }

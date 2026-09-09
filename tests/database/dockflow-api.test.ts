@@ -40,8 +40,17 @@ describe("PostgreSQL Dockflow projection", () => {
     expect((await repository.itemCountsByIin()).get(ids.iin)).toBe(2);
 
     const inventory = await repository.listItems({ after: null, limit: 10 });
-    expect(inventory).toHaveLength(2);
-    expect(inventory.every((item) => item.status === "assigned")).toBe(true);
+    expect(inventory).toHaveLength(3);
+    expect(inventory.filter((item) => item.status === "assigned")).toHaveLength(2);
+    expect(inventory).toContainEqual(expect.objectContaining({
+      id: ids.availableItemId,
+      status: "in_stock",
+      availableQuantity: 3,
+      responsible: null,
+      assignments: [],
+    }));
+    const expectedInventoryIds = inventory.map((item) => item.id);
+    const expectedAssignedIds = inventory.filter((item) => item.status === "assigned").map((item) => item.id);
 
     await migrationPool.query(
       `update "yu_inventory"."responsibility_periods" set started_at = '2026-08-28T10:00:00.123456Z' where item_id = $1`,
@@ -57,6 +66,10 @@ describe("PostgreSQL Dockflow projection", () => {
         where id in ($1, $2)`,
       [ids.individualItemId, ids.batchItemId],
     );
+    await migrationPool.query(
+      `update "yu_inventory"."items" set updated_at = '2026-08-27T10:00:00Z'::timestamptz where id = $1`,
+      [ids.availableItemId],
+    );
     const firstAssignmentPage = await repository.itemsForEmployee(ids.iin, { after: null, limit: 1 });
     const assignmentCursor = firstAssignmentPage[0]!;
     const secondAssignmentPage = await repository.itemsForEmployee(ids.iin, {
@@ -64,20 +77,27 @@ describe("PostgreSQL Dockflow projection", () => {
       limit: 1,
     });
     expect(new Set([...firstAssignmentPage, ...secondAssignmentPage].map((item) => item.id)).size).toBe(2);
-    const firstInventoryPage = await repository.listItems({ after: null, limit: 1 });
-    const inventoryCursor = firstInventoryPage[0]!;
-    const secondInventoryPage = await repository.listItems({
-      after: { sortValue: inventoryCursor.updatedAt, id: inventoryCursor.id },
-      limit: 1,
-    });
-    expect(new Set([...firstInventoryPage, ...secondInventoryPage].map((item) => item.id)).size).toBe(2);
+    const inventoryPages = [];
+    let after: { sortValue: string; id: string } | null = null;
+    for (let page = 0; page < 3; page += 1) {
+      const [item] = await repository.listItems({ after, limit: 1 });
+      expect(item).toBeDefined();
+      inventoryPages.push(item!);
+      after = { sortValue: item!.updatedAt, id: item!.id };
+    }
+    expect(inventoryPages.slice(0, 2).map((item) => item.id)).toEqual(expect.arrayContaining(expectedAssignedIds));
+    expect(inventoryPages.map((item) => item.id)).toEqual(expect.arrayContaining(expectedInventoryIds));
+    expect(new Set(inventoryPages.map((item) => item.id)).size).toBe(3);
+    expect(await repository.listItems({ after, limit: 1 })).toEqual([]);
 
     await migrationPool.query('update "yu_inventory"."items" set status = \'decommissioned\' where id = $1', [ids.batchItemId]);
     expect((await repository.itemCountsByIin()).get(ids.iin)).toBe(1);
 
     await migrationPool.query('update "yu_inventory"."users" set is_active = false, deactivated_at = now() where id = $1', [ids.employeeId]);
     expect(await repository.itemsForEmployee(ids.iin, { after: null, limit: 10 })).toEqual([]);
-    expect(await repository.listItems({ after: null, limit: 10 })).toEqual([]);
+    expect(await repository.listItems({ after: null, limit: 10 })).toEqual([
+      expect.objectContaining({ id: ids.availableItemId, status: "in_stock" }),
+    ]);
     expect((await repository.itemCountsByIin()).has(ids.iin)).toBe(false);
   });
 });
@@ -89,6 +109,7 @@ async function seed() {
   const roomId = randomUUID();
   const individualItemId = randomUUID();
   const batchItemId = randomUUID();
+  const availableItemId = randomUUID();
   const iin = "900101400000";
   await migrationPool.query(
     `insert into "yu_inventory"."users" (id,code,email,full_name,role,iin,created_at,updated_at)
@@ -107,8 +128,13 @@ async function seed() {
   );
   await migrationPool.query(
     `insert into "yu_inventory"."items" (id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
-     values ($1,'Individual',1,100,$3,'official',$4,$5,$6,$6),($2,'Batch',5,200,$3,'official',$7,$8,$6,$6)`,
-    [individualItemId, batchItemId, roomId, `IND-${individualItemId}`, `ind-${individualItemId}`, adminId, `BAT-${batchItemId}`, `bat-${batchItemId}`],
+     values ($1,'Individual',1,100,$4,'official',$5,$6,$7,$7),
+            ($2,'Batch',5,200,$4,'official',$8,$9,$7,$7),
+            ($3,'Available',3,300,$4,'official',$10,$11,$7,$7)`,
+    [individualItemId, batchItemId, availableItemId, roomId,
+     `IND-${individualItemId}`, `ind-${individualItemId}`, adminId,
+     `BAT-${batchItemId}`, `bat-${batchItemId}`,
+     `AVL-${availableItemId}`, `avl-${availableItemId}`],
   );
   await migrationPool.query(
     `insert into "yu_inventory"."responsibility_periods" (id,item_id,responsible_user_id,source,started_at,started_by)
@@ -120,7 +146,7 @@ async function seed() {
      values ($1,$2,1,$3,$4,5,$5,$6,$6,$7)`,
     [randomUUID(), batchItemId, `BAT-${batchItemId}-0001`, `bat-${batchItemId}-0001`, employeeId, roomId, adminId],
   );
-  return { employeeId, individualItemId, batchItemId, iin };
+  return { employeeId, individualItemId, batchItemId, availableItemId, iin };
 }
 
 async function resetSchemas(config: DatabaseConfig) {

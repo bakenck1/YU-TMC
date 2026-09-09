@@ -3,6 +3,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const root = parseRoot(process.argv.slice(2));
 const manifestPath = path.join(root, "scripts", "legacy-compatibility-baseline.json");
@@ -48,6 +49,18 @@ function assertInventory(source) {
         problems.push(`docs/legacy-compatibility.md: ${id} is missing inventory field ${field}`);
       }
     }
+    const status = manifest.statuses?.[id];
+    const evidenceStatus = manifest.evidenceStatus?.[id];
+    if (!["supported", "import-only"].includes(status)) {
+      problems.push(`baseline: ${id} requires supported or import-only status`);
+    } else if (!section.includes(`- **Status:** \`${status}\`.`)) {
+      problems.push(`docs/legacy-compatibility.md: ${id} status must match the baseline`);
+    }
+    if (evidenceStatus !== "unknown") {
+      problems.push(`baseline: ${id} evidence status must remain unknown before owner review`);
+    } else if (!section.includes("- **Evidence status:** `unknown`.")) {
+      problems.push(`docs/legacy-compatibility.md: ${id} evidence status must match the baseline`);
+    }
 
     const documentedValues = manifest.documentedValues?.[id];
     if (!Array.isArray(documentedValues)) {
@@ -80,6 +93,8 @@ function assertInventory(source) {
     manifest.documentedValues?.["LEGACY-COOKIE-CONTRACT"],
     "LEGACY-COOKIE-CONTRACT",
   );
+  assertInventoryMapKeys(manifest.statuses, "statuses");
+  assertInventoryMapKeys(manifest.evidenceStatus, "evidenceStatus");
   if (!source.includes(manifest.created) || !source.includes(manifest.nextReview)) {
     problems.push("docs/legacy-compatibility.md: review dates must match the machine baseline");
   }
@@ -125,6 +140,16 @@ async function assertSourceBoundaries() {
     })),
   );
   const sourceByName = new Map(sources.map((entry) => [entry.relative, entry.source]));
+  const credentialSanitizers = new Set(manifest.credentialSanitizers ?? []);
+
+  for (const relative of credentialSanitizers) {
+    const source = sourceByName.get(relative);
+    if (!source) {
+      problems.push(`baseline: missing credential sanitizer ${relative}`);
+    } else if (!(await isEmptyCredentialSanitizer(path.join(root, relative), source))) {
+      problems.push(`${relative}: credential sanitizer must force legacy credential markers to empty strings`);
+    }
+  }
 
   for (const id of manifest.inventoryIds) {
     const telemetrySources = manifest.telemetrySources?.[id];
@@ -182,7 +207,8 @@ async function assertSourceBoundaries() {
       ![
         manifest.credentialImportOnly,
         "lib/server/persistence/legacy/legacy-credential-source.ts",
-      ].includes(entry.relative)
+      ].includes(entry.relative) &&
+      !credentialSanitizers.has(entry.relative)
     ) {
       problems.push(
         `${entry.relative}: direct legacy credential file/environment access is import-only and must not enter runtime code`,
@@ -249,6 +275,32 @@ function importsLegacyCredentials(source) {
 
 function hasLegacyCredentialMarker(source) {
   return /(?:auth-credentials\.json|AUTH_ADMIN_[A-Z0-9_*]+)/.test(source);
+}
+
+async function isEmptyCredentialSanitizer(filename, source) {
+  if (!hasLegacyCredentialMarker(source)) return false;
+  try {
+    const sanitizer = await import(
+      `${pathToFileURL(filename).href}?legacy-check=${Date.now()}`
+    );
+    if (typeof sanitizer.createBrowserSmokeEnvironment !== "function") return false;
+    const sentinel = "must-not-survive";
+    const input = Object.fromEntries([
+      ["PATH", "safe-path"],
+      ["UNRELATED_SECRET", sentinel],
+      ...(manifest.credentialSanitizerKeys ?? []).map((key) => [key, sentinel]),
+    ]);
+    const output = sanitizer.createBrowserSmokeEnvironment(input);
+    return (
+      output?.PATH === "safe-path" &&
+      output?.UNRELATED_SECRET === undefined &&
+      Array.isArray(manifest.credentialSanitizerKeys) &&
+      manifest.credentialSanitizerKeys.length > 0 &&
+      manifest.credentialSanitizerKeys.every((key) => output?.[key] === "")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function moduleSpecifiers(source) {
@@ -325,6 +377,14 @@ function assertMatchingLists(actual, documented, id) {
   const right = [...documented].sort();
   if (JSON.stringify(left) !== JSON.stringify(right)) {
     problems.push(`baseline: ${id} allowlist and documentedValues must match exactly`);
+  }
+}
+
+function assertInventoryMapKeys(value, name) {
+  const actual = value && typeof value === "object" ? Object.keys(value).sort() : [];
+  const expected = [...manifest.inventoryIds].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    problems.push(`baseline: ${name} must cover every inventory ID exactly`);
   }
 }
 

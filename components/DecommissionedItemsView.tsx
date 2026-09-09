@@ -7,6 +7,7 @@ import ItemsTable from "@/components/ItemsTable";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import {
   filterDecommissionedItems,
+  hasActiveDecommissionedFilters,
   inventoryItemBuilding,
 } from "@/lib/decommissioned-items";
 import type { InventoryItem } from "@/lib/types";
@@ -50,6 +51,9 @@ export default function DecommissionedItemsView({
   }, [building, dateFrom, dateTo, items, query, responsible]);
   const inUse = filtered.filter((item) => item.status === "decommissioned_in_use");
   const archived = filtered.filter((item) => item.status === "decommissioned");
+  const completeDataset = !hasActiveDecommissionedFilters({
+    query, building, responsible, dateFrom, dateTo,
+  });
 
   return (
     <div className="space-y-4">
@@ -142,6 +146,7 @@ export default function DecommissionedItemsView({
         showFilters={false}
         dateLabel={t("decommissioned.decommissionedAt")}
         excelDataset={canExport ? "decommissioned_in_use" : undefined}
+        completeDataset={completeDataset}
       />
 
       <h2 className="pt-2 text-lg font-semibold text-zinc-800">
@@ -152,6 +157,7 @@ export default function DecommissionedItemsView({
         showFilters={false}
         dateLabel={t("decommissioned.decommissionedAt")}
         excelDataset={canExport ? "decommissioned" : undefined}
+        completeDataset={completeDataset}
       />
     </div>
   );

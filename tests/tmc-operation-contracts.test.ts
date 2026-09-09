@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -75,4 +76,19 @@ test("TMC request contracts enforce state and command invariants", () => {
     0,
     [result.stdout, result.stderr].filter(Boolean).join("\n"),
   );
+});
+
+test("TMC mutation commands live in a client-safe module behind the old barrel", async () => {
+  const [barrel, commands] = await Promise.all([
+    readFile("lib/contracts/tmc-operations.ts", "utf8"),
+    readFile("lib/contracts/tmc-operation-commands.ts", "utf8"),
+  ]);
+
+  assert.match(barrel, /export type \{[\s\S]*?CreateTmcTransferRequestInput[\s\S]*?from "@\/lib\/contracts\/tmc-operation-commands"/);
+  assert.doesNotMatch(barrel, /export interface (?:Create|Decide|Cancel)TmcTransferRequestInput/);
+  assert.match(commands, /export interface CreateTmcTransferRequestInput/);
+  assert.match(commands, /export interface DecideTmcTransferRequestInput/);
+  assert.match(commands, /export interface CancelTmcTransferRequestInput/);
+  assert.doesNotMatch(commands, /^\s*import\b/m);
+  assert.doesNotMatch(commands, /(?:server-only|from "zod"|@\/lib\/db)/);
 });
