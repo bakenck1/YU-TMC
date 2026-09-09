@@ -45,6 +45,7 @@ yarn-error.log*
 /.data/auth-credentials.json
 /.data/session-secret
 /.data/postgres-development/
+/.data/postgres-development.log
 /.data/backups/
 /.data/caddy-public/
 /.settings-import/
@@ -56,6 +57,7 @@ yarn-error.log*
 
 # local agent/editor state and deployment bundles
 /.claude/
+/.tmp-dockflow-deploy/
 *.bundle
 
 # vercel
