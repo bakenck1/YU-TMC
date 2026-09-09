@@ -1,4 +1,17 @@
-# P2 — пошаговая декомпозиция application services и adapters
+# P2 — пошаговая декомпозиция application services и adapters — Done
+
+## Статус на 2026-09-09
+
+- первый самостоятельный seam завершён: comments/attachments вынесены в
+  `InventoryItemCommentService`, прежний `InventoryItemService` сохранил публичный API
+  и делегирует три workflow;
+- новый service зависит от узкого port из пяти repository-методов; его test double не
+  реализует photo, lifecycle, composition или bulk APIs;
+- сохранены точные UUID semantics, authorization/BOLA, audit payload/order,
+  transaction boundary, attachment validation и DTO privacy mapping;
+- regression-тест доказывает rollback audit при сбое attachment и порядок операций;
+- после переоценки остальные перечисленные seams остаются trigger-only: без ближайшей
+  продуктовой доработки их превентивное дробление не окупает churn и merge-риск.
 
 ## Evidence и корень долга
 
