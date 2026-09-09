@@ -25,9 +25,12 @@ export async function GET(
     const user = await requireCurrentUser(request);
     const { id } = await context.params;
     assertId(id);
+    const photoId = new URL(request.url).searchParams.get("photoId") ?? undefined;
+    if (photoId) assertId(photoId);
     const photo = await getApplicationServices().items.getItemPhoto(
       id,
       authorizationActor(user),
+      photoId,
     );
     return itemPhotoResponse(photo.bytes, photo.mimeType);
   } catch (error) {
@@ -67,12 +70,17 @@ export async function DELETE(
     if (
       !body ||
       typeof body !== "object" ||
-      !Number.isInteger((body as Record<string, unknown>).version)
+      !Number.isInteger((body as Record<string, unknown>).version) ||
+      ((body as Record<string, unknown>).photoId !== undefined &&
+        typeof (body as Record<string, unknown>).photoId !== "string")
     ) throw invalidRequest();
+    const photoId = (body as Record<string, unknown>).photoId as string | undefined;
+    if (photoId) assertId(photoId);
     const item = await getApplicationServices().items.removePhoto(
       id,
       (body as { version: number }).version,
       authorizationActor(user),
+      photoId,
     );
     return Response.json({ item });
   } catch (error) {

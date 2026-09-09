@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import sharp from "sharp";
 
 import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
 import { closeDatabase } from "@/lib/db/client";
@@ -105,6 +106,89 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     )).toBe(true);
   });
 
+  it("allows an administrator to correct an official number and preserves its history", async () => {
+    const adminId = randomUUID();
+    const employeeId = randomUUID();
+    const otherEmployeeId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, employeeId, otherEmployeeId);
+    await seedRoom(adminId, buildingId, roomId);
+    const service = createService();
+    const actor = { userId: adminId, role: "admin" as const };
+    const originalNumber = `ERR-${randomUUID()}`;
+    const correctedNumber = `FIX-${randomUUID()}`;
+
+    const created = await service.createItem({
+      name: "Number correction test item",
+      category: "electronics",
+      roomId,
+      barcode: originalNumber,
+    }, actor);
+    const corrected = await service.updateProtected(created.id, {
+      version: created.version,
+      roomId,
+      inventoryNumber: correctedNumber,
+      status: "active",
+    }, actor);
+
+    expect(corrected.inventoryNumber).toBe(correctedNumber);
+    const history = await database.query<{
+      value: string;
+      replaced_at: Date | null;
+      reason: string | null;
+    }>(
+      `select value, replaced_at, reason
+         from "yu_inventory"."item_inventory_number_history"
+        where item_id = $1
+        order by assigned_at, id`,
+      [created.id],
+    );
+    expect(history.rows).toEqual([
+      {
+        value: correctedNumber,
+        replaced_at: null,
+        reason: null,
+      },
+    ]);
+    const registry = await database.query<{ original_value: string }>(
+      `select original_value from "yu_inventory"."barcode_registry"
+        where item_id = $1 and kind = 'official'`,
+      [created.id],
+    );
+    expect(registry.rows).toEqual([{ original_value: correctedNumber }]);
+
+    const correctedAgain = await service.updateProtected(corrected.id, {
+      version: corrected.version,
+      roomId,
+      inventoryNumber: `${correctedNumber}-2`,
+      status: "active",
+    }, actor);
+    expect(correctedAgain.inventoryNumber).toBe(`${correctedNumber}-2`);
+    const updatedHistory = await database.query<{
+      value: string;
+      replaced_at: Date | null;
+      reason: string | null;
+    }>(
+      `select value, replaced_at, reason
+         from "yu_inventory"."item_inventory_number_history"
+        where item_id = $1
+        order by assigned_at, id`,
+      [created.id],
+    );
+    expect(updatedHistory.rows).toHaveLength(2);
+    expect(updatedHistory.rows[0]).toMatchObject({
+      value: correctedNumber,
+      reason: "Исправление номера / штрих-кода ТМЦ",
+    });
+    expect(updatedHistory.rows[0]!.replaced_at).not.toBeNull();
+    expect(updatedHistory.rows[1]).toEqual({
+      value: `${correctedNumber}-2`,
+      replaced_at: null,
+      reason: null,
+    });
+  });
+
   it("records decommissioned use without optional evidence and restores the item only through audited actions", async () => {
     const adminId = randomUUID();
     const firstEmployeeId = randomUUID();
@@ -135,15 +219,37 @@ describe("PostgreSQL item-form responsibility assignment", () => {
       photoUrl: null,
     });
     await expect(service.getDecommissionedUsagePhoto(created.id, actor)).rejects.toThrow("item_photo_not_found");
-    await expect(service.updateProtected(created.id, {
+
+    const jpeg = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: "white" },
+    }).jpeg().toBuffer();
+    const withItemPhoto = await service.updatePhoto(created.id, {
       version: inUse.version,
+      imageDataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}`,
+      width: 2,
+      height: 2,
+    }, actor);
+    expect(withItemPhoto.status).toBe("decommissioned_in_use");
+    expect(withItemPhoto.photoUrls).toHaveLength(1);
+    await expect(service.getItemPhoto(created.id, actor)).resolves.toMatchObject({
+      mimeType: "image/jpeg",
+    });
+
+    const withoutItemPhoto = await service.removePhoto(
+      created.id,
+      withItemPhoto.version,
+      actor,
+    );
+    expect(withoutItemPhoto.photoUrls).toEqual([]);
+    await expect(service.updateProtected(created.id, {
+      version: withoutItemPhoto.version,
       roomId,
       inventoryNumber: inUse.inventoryNumber,
       status: "active",
     }, actor)).rejects.toThrow("decommissioned_workflow_required");
 
     const restored = await service.restoreDecommissionedItem(created.id, {
-      version: inUse.version,
+      version: withoutItemPhoto.version,
       reason: "Accounting cancelled the write-off",
     }, actor);
     expect(restored.status).toBe("active");

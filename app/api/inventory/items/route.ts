@@ -34,9 +34,9 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     const actor = authorizationActor(user);
-    assertPhotoJsonRequest(request);
+    assertPhotoJsonRequest(request, 4);
     const input = parseCreate(
-      await readPhotoJsonRequest(request),
+      await readPhotoJsonRequest(request, 4),
       actor.role === "warehouse",
     );
     const item = await getApplicationServices().items.createItem(
@@ -59,7 +59,7 @@ function parseCreate(
     typeof body.name !== "string" ||
     !isInventoryItemCategory(body.category) ||
     typeof body.roomId !== "string" ||
-    (!restricted && (!body.photo || typeof body.photo !== "object")) ||
+    (!restricted && !body.photo && !body.photos) ||
     (body.description !== undefined &&
       body.description !== null &&
       typeof body.description !== "string") ||
@@ -96,6 +96,25 @@ function parseCreate(
   if (photo && !ALLOWED_DATA_URL_PREFIXES.some((prefix) => (photo.imageDataUrl as string).startsWith(prefix))) {
     throw invalidRequest();
   }
+  const photosValue = body.photos === undefined ? (photo ? [photo] : []) : body.photos;
+  if (!Array.isArray(photosValue) || photosValue.length > 4 || (!restricted && photosValue.length < 1)) {
+    throw invalidRequest();
+  }
+  const photos = photosValue.map((value) => {
+    if (!value || typeof value !== "object") throw invalidRequest();
+    const candidate = value as Record<string, unknown>;
+    if (
+      typeof candidate.imageDataUrl !== "string" ||
+      !Number.isInteger(candidate.width) ||
+      !Number.isInteger(candidate.height) ||
+      !ALLOWED_DATA_URL_PREFIXES.some((prefix) => (candidate.imageDataUrl as string).startsWith(prefix))
+    ) throw invalidRequest();
+    return {
+      imageDataUrl: candidate.imageDataUrl as string,
+      width: candidate.width as number,
+      height: candidate.height as number,
+    };
+  });
   return {
     name: body.name,
     category: body.category as InventoryItemCategory,
@@ -108,11 +127,7 @@ function parseCreate(
     barcode: body.barcode as string | null | undefined,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
     responsibleUserId: body.responsibleUserId as string | null | undefined,
-    photo: photo ? {
-      imageDataUrl: photo.imageDataUrl as string,
-      width: photo.width as number,
-      height: photo.height as number,
-    } : undefined,
+    photos,
   };
 }
 

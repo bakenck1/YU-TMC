@@ -36,6 +36,8 @@ export interface InventoryItemDto {
     name: string;
   } | null;
   photoUrl: string | null;
+  /** Ordered item gallery. The first entry is the primary photo used in lists. */
+  photoUrls?: string[];
   /** Photograph attached to the latest service request; it never replaces photoUrl. */
   servicePhotoUrl?: string | null;
   version: number;
@@ -126,6 +128,12 @@ export interface CreateInventoryItemInput {
     width: number;
     height: number;
   };
+  /** Up to four photos. `photo` remains accepted for older clients. */
+  photos?: Array<{
+    imageDataUrl: string;
+    width: number;
+    height: number;
+  }>;
 }
 
 export interface UpdateInventoryItemContentInput {

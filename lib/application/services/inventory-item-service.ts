@@ -354,9 +354,13 @@ export class InventoryItemService {
     if (values.responsibleUserId) {
       requirePermission(actor, "inventory.item.manage_protected_fields");
     }
-    const photo = authorizedInput.photo
-      ? await normalizeCameraPhoto({ version: 1, ...authorizedInput.photo })
-      : null;
+    const requestedPhotos = authorizedInput.photos ?? (authorizedInput.photo ? [authorizedInput.photo] : []);
+    if (requestedPhotos.length > 4) {
+      throw new ApplicationError("validation", "photo_limit_reached");
+    }
+    const photos = await Promise.all(
+      requestedPhotos.map((photo) => normalizeCameraPhoto({ version: 1, ...photo })),
+    );
     const occurredAt = this.clock.now();
     const itemId = this.ids.create();
     const qrId = this.ids.create();
@@ -428,35 +432,31 @@ export class InventoryItemService {
         ? await items.findItemById(itemId)
         : created;
       if (!assigned) throw new Error("item_refresh_failed");
-      if (!photo) return toItemDto({ ...assigned, qrCode });
-      const photographed = await items.updateItemPhoto({
-        id: itemId,
-        photoId: this.ids.create(),
-        bytes: photo.bytes,
-        width: photo.width,
-        height: photo.height,
-        actorId: actor.userId,
-        expectedVersion: created.version,
-        occurredAt,
-      });
-      if (!photographed) throw versionConflict();
-      await items.appendAudit(
-        createAudit({
-          id: this.ids.create(),
-          actor,
-          subjectId: itemId,
-          subjectRevision: photographed.version,
-          action: "item.photo_captured",
-          beforeValues: { photo: null },
-          afterValues: {
-            photo: "attached",
-            width: photo.width,
-            height: photo.height,
-            byteSize: photo.bytes.byteLength,
-          },
+      let photographed = assigned;
+      for (const [index, photo] of photos.entries()) {
+        const updated = await items.updateItemPhoto({
+          id: itemId,
+          photoId: this.ids.create(),
+          bytes: photo.bytes,
+          width: photo.width,
+          height: photo.height,
+          actorId: actor.userId,
+          expectedVersion: photographed.version,
           occurredAt,
-        }),
-      );
+        });
+        if (!updated) throw versionConflict();
+        photographed = updated;
+        await items.appendAudit(
+          createAudit({
+            id: this.ids.create(), actor, subjectId: itemId,
+            subjectRevision: photographed.version,
+            action: "item.photo_captured",
+            beforeValues: { photoCount: index },
+            afterValues: { photoCount: index + 1, width: photo.width, height: photo.height, byteSize: photo.bytes.byteLength },
+            occurredAt,
+          }),
+        );
+      }
       return toItemDto({ ...photographed, qrCode });
     });
   }
@@ -801,6 +801,9 @@ export class InventoryItemService {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== input.version) throw versionConflict();
+      if ((current.photoIds?.length ?? (current.photoUrl ? 1 : 0)) >= 4) {
+        throw new ApplicationError("conflict", "photo_limit_reached");
+      }
       const updated = await items.updateItemPhoto({
         id,
         photoId: this.ids.create(),
@@ -836,6 +839,7 @@ export class InventoryItemService {
     id: string,
     version: number,
     actor: AuthorizationActor,
+    photoId?: string,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.edit_content");
     if (!Number.isInteger(version) || version < 1) {
@@ -851,6 +855,7 @@ export class InventoryItemService {
       }
       const updated = await items.removeItemPhoto({
         id,
+        photoId,
         actorId: actor.userId,
         expectedVersion: version,
         occurredAt,
@@ -863,8 +868,8 @@ export class InventoryItemService {
           subjectId: id,
           subjectRevision: updated.version,
           action: "item.photo_removed",
-          beforeValues: { photo: "attached" },
-          afterValues: { photo: null },
+          beforeValues: { photoCount: current.photoIds?.length ?? 1 },
+          afterValues: { photoCount: Math.max(0, (current.photoIds?.length ?? 1) - (photoId ? 1 : (current.photoIds?.length ?? 1))) },
           occurredAt,
         }),
       );
@@ -875,8 +880,9 @@ export class InventoryItemService {
   async getItemPhoto(
     id: string,
     actor: AuthorizationActor,
+    photoId?: string,
   ): Promise<StoredItemPhoto> {
-    return this.getItemPhotoByPurpose(id, actor, "item");
+    return this.getItemPhotoByPurpose(id, actor, "item", photoId);
   }
 
   async getServiceItemPhoto(
@@ -897,6 +903,7 @@ export class InventoryItemService {
     id: string,
     actor: AuthorizationActor,
     purpose: "item" | "service_request" | "decommissioned_usage",
+    photoId?: string,
   ): Promise<StoredItemPhoto> {
     return this.unitOfWork.read(async ({ items }) => {
       const item = await items.findItemById(id);
@@ -923,7 +930,7 @@ export class InventoryItemService {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
       const photo = purpose === "item"
-        ? await items.findItemPhoto(id)
+        ? await items.findItemPhoto(id, photoId)
         : purpose === "service_request"
           ? await items.findServiceItemPhoto(id)
           : items.findDecommissionedUsagePhoto
@@ -1084,6 +1091,7 @@ export class InventoryItemService {
         values.inventoryNumber === current.inventoryNumber
           ? current.inventoryNumberKind
           : "official";
+      const inventoryNumberChanged = values.inventoryNumber !== current.inventoryNumber;
       const occurredAt = this.clock.now();
       const updated = await items.updateItemProtected({
         id,
@@ -1092,6 +1100,12 @@ export class InventoryItemService {
         connectionStatus:
           values.connectionStatus ?? current.connectionStatus ?? "not_applicable",
         inventoryNumberKind,
+        ...(inventoryNumberChanged
+          ? {
+              inventoryNumberHistoryId: this.ids.create(),
+              inventoryNumberChangeReason: "Исправление номера / штрих-кода ТМЦ",
+            }
+          : {}),
         actorId: actor.userId,
         expectedVersion: input.version,
         occurredAt,
@@ -1139,6 +1153,9 @@ export class InventoryItemService {
             roomId: updated.roomId,
             roomLabel: itemLocationLabel(updated),
             inventoryNumber: updated.inventoryNumber,
+            ...(inventoryNumberChanged
+              ? { inventoryNumberChangeReason: "Исправление номера / штрих-кода ТМЦ" }
+              : {}),
             status: updated.status,
             ...(current.condition || updated.condition
               ? { condition: updated.condition }
@@ -1356,6 +1373,7 @@ function normalizeWarehouseCreateInput(
     description: input.description,
     roomId: input.roomId,
     photo: input.photo,
+    photos: input.photos,
     brand: null,
     model: null,
     quantity: 1,
@@ -1804,6 +1822,9 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       ? { id: record.responsibleId, name: record.responsibleName ?? "" }
       : null,
     photoUrl: record.photoUrl,
+    photoUrls: record.photoIds?.map(
+      (photoId) => `/api/inventory/items/${record.id}/photo?photoId=${encodeURIComponent(photoId)}&v=${record.version}`,
+    ) ?? (record.photoUrl ? [record.photoUrl] : []),
     servicePhotoUrl: record.servicePhotoUrl ?? null,
     version: record.version,
     createdAt: record.createdAt.toISOString(),

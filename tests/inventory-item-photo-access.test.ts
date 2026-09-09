@@ -101,6 +101,68 @@ test("returns an item photo to its current responsible employee", async () => {
   assert.deepEqual(photo.bytes, new Uint8Array([0xff, 0xd8, 0xff]));
 });
 
+test("loads a selected gallery photo without weakening item access checks", async () => {
+  const photoId = "55555555-5555-4555-8555-555555555555";
+  let selectedPhotoId: string | undefined;
+  const service = createService({
+    findItemById: async () => item("employee-1"),
+    findItemPhoto: async (_itemId, requestedPhotoId) => {
+      selectedPhotoId = requestedPhotoId;
+      return { bytes: new Uint8Array([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" };
+    },
+  });
+
+  await service.getItemPhoto(
+    ITEM_ID,
+    { userId: "employee-1", role: "employee" },
+    photoId,
+  );
+
+  assert.equal(selectedPhotoId, photoId);
+});
+
+test("rejects a fifth item photo before writing it", async () => {
+  const jpeg = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).jpeg().toBuffer();
+  let photoWrite = false;
+  const service = createService({
+    findItemById: async () => ({ ...item(null), photoIds: ["1", "2", "3", "4"] }),
+    updateItemPhoto: async () => { photoWrite = true; return item(null); },
+  });
+
+  await assert.rejects(
+    service.updatePhoto(
+      ITEM_ID,
+      { version: 1, imageDataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}`, width: 2, height: 2 },
+      { userId: "admin-1", role: "admin" },
+    ),
+    (error: unknown) => error instanceof ApplicationError && error.publicCode === "photo_limit_reached",
+  );
+  assert.equal(photoWrite, false);
+});
+
+test("removes only the selected gallery photo", async () => {
+  const selected = "55555555-5555-4555-8555-555555555555";
+  let removedPhotoId: string | undefined;
+  const service = createService({
+    findItemById: async () => ({ ...item(null), photoIds: [selected, "other"] }),
+    removeItemPhoto: async (input) => {
+      removedPhotoId = input.photoId;
+      return { ...item(null), photoIds: ["other"], version: 2 };
+    },
+    appendAudit: async () => undefined,
+  });
+
+  const updated = await service.removePhoto(
+    ITEM_ID,
+    1,
+    { userId: "admin-1", role: "admin" },
+    selected,
+  );
+
+  assert.equal(removedPhotoId, selected);
+  assert.equal(updated.photoUrls?.length, 1);
+});
+
 test("rejects bytes labelled as JPEG when the image cannot be decoded", async () => {
   let photoWrite = false;
   const service = createService({

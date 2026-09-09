@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, RefreshCw, X } from "lucide-react";
+import { Camera, ImagePlus, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 
@@ -82,6 +82,44 @@ export default function InventoryItemCameraCapture({
     onCapture({ imageDataUrl, width, height });
   }
 
+  async function choosePhoto(file: File | undefined) {
+    if (!file || !file.type.startsWith("image/") || file.size > 20 * 1024 * 1024) {
+      setMessageKey("camera.fileInvalid");
+      return;
+    }
+    setStarting(true);
+    setMessageKey("camera.fileReading");
+    try {
+      const source = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const candidate = new window.Image();
+        candidate.onload = () => resolve(candidate);
+        candidate.onerror = reject;
+        candidate.src = source;
+      });
+      const scale = Math.min(1, 1280 / Math.max(image.naturalWidth, image.naturalHeight));
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("canvas_unavailable");
+      context.drawImage(image, 0, 0, width, height);
+      stopCamera();
+      onCapture({ imageDataUrl: canvas.toDataURL("image/jpeg", 0.82), width, height });
+    } catch {
+      setMessageKey("camera.fileInvalid");
+    } finally {
+      setStarting(false);
+    }
+  }
+
   useEffect(() => () => stopCamera(), []);
 
   if (!open) return null;
@@ -91,7 +129,7 @@ export default function InventoryItemCameraCapture({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="item-camera-title" className="text-lg font-semibold text-zinc-900">{t("camera.itemTitle")}</h2>
-            <p className="mt-1 text-sm text-zinc-500">{t("camera.onlyDevice")}</p>
+            <p className="mt-1 text-sm text-zinc-500">{t("camera.cameraOrGallery")}</p>
           </div>
           <button type="button" onClick={close} aria-label={t("common.close")} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
         </div>
@@ -103,6 +141,21 @@ export default function InventoryItemCameraCapture({
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button type="button" onClick={() => void startCamera()} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"><RefreshCw className="h-4 w-4" />{t("camera.open")}</button>
           <button type="button" onClick={capture} disabled={starting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><Camera className="h-4 w-4" />{t("camera.capture")}</button>
+          <label className={`col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 ${starting ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
+            <ImagePlus className="h-4 w-4" />
+            {t("camera.chooseGallery")}
+            <input
+              type="file"
+              accept="image/*"
+              disabled={starting}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                void choosePhoto(file);
+              }}
+            />
+          </label>
         </div>
       </section>
     </div>

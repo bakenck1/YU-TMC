@@ -70,6 +70,7 @@ export function localizeItemError(
     invalid_camera_photo_size: "itemDetails.errorPhoto",
     invalid_photo_dimensions: "itemDetails.errorPhoto",
     photo_save_failed: "itemDetails.errorPhoto",
+    photo_limit_reached: "itemDetails.errorPhotoLimit",
     invalid_comment: "itemDetails.errorComment",
     invalid_comment_attachment: "itemDetails.errorComment",
     invalid_service_name: "itemDetails.errorService",
