@@ -1,4 +1,4 @@
-# P3 — измерить capacity на production-like данных
+# P3 — измерить capacity на production-like данных — Done
 
 ## Корень долга
 
@@ -28,6 +28,20 @@
 - performance threshold — nightly/release signal, не flaky PR unit gate;
 - не публиковать raw production dump или PII;
 - не вводить cache, index, keyset pagination, streaming/queue без измеренной причины.
+
+## Статус
+
+Закрыто 2026-09-09 воспроизводимым baseline `capacity-v1` на локальной disposable PostgreSQL 17.
+Сохранены полный JSON с `EXPLAIN (ANALYZE, BUFFERS)`, компактный Markdown-отчёт, production
+route chunks, P50/P95, pool/timeout, XML/Excel memory и конкурентный one-cycle worker probe.
+Пять подтверждённых нарушений бюджетов вынесены в задачи 24–27; measurement change не содержит
+спекулятивных оптимизаций.
+
+Два независимых review-прохода дали 4/10 (tests 3/10) и 5/10 (tests 4/10). После второго прохода
+закрыты основные замечания: production SQL теперь снимается через реальные adapters, TMC N+1
+учтён, timestamps детерминированы, непустые notification/location ветки измерены, collection ceiling
+и изолированный export memory отражены как FAIL/follow-up. Лимит пользователя — два прохода,
+поэтому финальная переоценка после этих исправлений не выполнялась.
 
 ## Acceptance
 

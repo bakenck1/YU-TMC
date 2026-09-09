@@ -1,0 +1,51 @@
+{
+  "version": "capacity-v1",
+  "epoch": "2026-09-09T12:00:00.000Z",
+  "description": "Deterministic synthetic production-like cardinality; contains no copied user or production values.",
+  "cardinality": {
+    "users": 5000,
+    "oneCInbox": 40000,
+    "buildings": 25,
+    "rooms": 250,
+    "items": 25000,
+    "photos": 12500,
+    "legacyTransfers": 40000,
+    "tmcTransferRequests": 40000,
+    "tmcTransferRequestItems": 40000,
+    "assetLossCases": 5000,
+    "notificationEvents": 40000,
+    "auditEvents": 40000,
+    "webPushOutbox": 40000
+  },
+  "load": {
+    "samples": 7,
+    "warmups": 2,
+    "concurrentScanners": 16,
+    "poolSize": 8,
+    "workerConcurrency": 4,
+    "workerBatchSize": 50,
+    "workerLeaseSeconds": 300,
+    "gracefulShutdownBudgetMs": 2000,
+    "statementTimeoutMs": 2000
+  },
+  "applicationWorkloads": {
+    "xmlRecords": 5000,
+    "exportRows": 10000
+  },
+  "budgets": {
+    "poolP95Ms": 500,
+    "processRssGrowthMiB": 256,
+    "routeClientKiB": 2500
+  },
+  "sloMs": {
+    "inventory_list": 750,
+    "dockflow_projection": 250,
+    "tmc_history": 250,
+    "tmc_notifications": 250,
+    "asset_loss_list": 250,
+    "export_source": 750,
+    "worker_due_scan": 250,
+    "xml_parse": 1000,
+    "export_workbook": 3000
+  }
+}
