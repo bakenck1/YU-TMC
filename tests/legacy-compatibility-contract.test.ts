@@ -15,8 +15,11 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 test("legacy compatibility policy is discoverable and part of the CI contract", async () => {
-  const [documentation, workflow, packageJson] = await Promise.all([
+  const [documentation, usageReport, task, backlog, workflow, packageJson] = await Promise.all([
     readFileAsync("docs/legacy-compatibility.md", "utf8"),
+    readFileAsync("docs/legacy-usage-report.md", "utf8"),
+    readFileAsync("tech_debt/14-p1-observability-and-legacy-evidence.md", "utf8"),
+    readFileAsync("tech_debt/00-index.md", "utf8"),
     readFileAsync(".github/workflows/tests.yml", "utf8"),
     readFileAsync("package.json", "utf8"),
   ]);
@@ -33,6 +36,16 @@ test("legacy compatibility policy is discoverable and part of the CI contract", 
   }
   assert.match(documentation, /90 (?:days|дней)/);
   assert.match(documentation, /evidence_status=unknown/);
+  assert.match(documentation, /это не начало и не\s+окончание production evidence window/);
+  assert.match(usageReport, /Production observation period: not established/);
+  assert.match(task, /Дата начала production-наблюдения пока не подтверждена/);
+  assert.match(backlog, /старт production window не подтверждён/);
+  assert.doesNotMatch(task, /Текущий интервал начат 2026-08-14/);
+  assert.doesNotMatch(backlog, /production interval завершится не раньше 2026-11-12/);
+  assert.doesNotMatch(
+    usageReport,
+    /Period: 2026-08-14T00:00:00\.000Z — 2026-09-08T00:00:00\.000Z/,
+  );
   assert.match(workflow, /npm run legacy:check/);
   assert.match(packageJson, /"legacy:check"\s*:/);
 });

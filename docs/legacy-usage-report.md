@@ -1,16 +1,18 @@
 # Legacy usage evidence report
 
-- Period: 2026-08-14T00:00:00.000Z — 2026-09-08T00:00:00.000Z
+- Production observation period: not established (no production export attached)
 - Required window: 90 days
 - Full window: no
 - Collection coverage confirmed: no
 - Observation uptime confirmed: no
 - Evidence status: unknown
 
-Instrumentation and the reproducible report command are available from
-2026-09-08, but no production journal export is attached to this repository.
-Therefore the table intentionally does not claim zero usage. The next scheduled
-review is 2026-11-12, after a complete retained interval can exist.
+Instrumentation and the reproducible report command exist in repository history
+from 2026-09-08, but no production deployment timestamp or journal export is
+attached. Therefore the table intentionally does not claim zero usage. The
+scheduled policy review on 2026-11-12 does not complete the evidence gate: the
+90-day interval starts only at a verified production deployment with owner-confirmed
+coverage and uptime.
 
 | Compatibility ID | Owner | Observed events | Evidence | Decision |
 | --- | --- | ---: | --- | --- |

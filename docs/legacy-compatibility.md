@@ -24,14 +24,17 @@ legacy permission IDs и QR formats, новые файлы старого transf
 - Для import-only участков источник — sanitized migration output и количество
   успешно обработанных fixture records; содержимое секретных файлов в отчёт не
   попадает.
-- Counters хранятся минимум 90 дней. Следующий review всех записей —
-  `2026-11-12`, то есть не позднее 90 дней после создания inventory.
+- Counters хранятся минимум 90 дней. `2026-11-12` — дата следующего policy
+  review, вычисленная от создания inventory `2026-08-14`; это не начало и не
+  окончание production evidence window.
 - Если structured telemetry ещё не подключена, `evidence_status=unknown`.
   Это блокирует sunset, но не является доказательством отсутствия usage.
 - С 2026-09-08 все шесть boundaries пишут allowlisted `legacy.usage` envelope,
   а `npm run legacy:report` воспроизводимо агрегирует `variant × outcome`.
-  Production coverage/uptime и полный 90-дневный интервал ещё не подтверждены,
-  поэтому текущий evidence status остаётся `unknown` и код удалять нельзя.
+  Production deployment date, coverage/uptime и полный 90-дневный интервал ещё
+  не подтверждены. Evidence window начинается только после подтверждённого
+  deployment инструментации; поэтому текущий evidence status остаётся `unknown`
+  и код удалять нельзя.
 - Sunset decision требует owner, полные 90 дней evidence, announcement для
   пользователей/операторов и regression run на миграционных fixtures.
 
