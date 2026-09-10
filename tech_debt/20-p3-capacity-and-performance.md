@@ -34,7 +34,10 @@
 Закрыто 2026-09-09 воспроизводимым baseline `capacity-v1` на локальной disposable PostgreSQL 17.
 Сохранены полный JSON с `EXPLAIN (ANALYZE, BUFFERS)`, компактный Markdown-отчёт, production
 route chunks, P50/P95, pool/timeout, XML/Excel memory и конкурентный one-cycle worker probe.
-Пять подтверждённых нарушений бюджетов вынесены в задачи 24–27; measurement change не содержит
+Пять подтверждённых нарушений бюджетов исходного baseline распределены по четырём
+follow-up задачам 24–27: inventory-list и export-source capacity закрывались
+одной задачей 27. Задача 28 появилась позже для list-projection edge, измеренного
+после перехода на bounded collection; measurement change не содержит
 спекулятивных оптимизаций.
 
 Два независимых review-прохода дали 4/10 (tests 3/10) и 5/10 (tests 4/10). После второго прохода
@@ -42,6 +45,11 @@ route chunks, P50/P95, pool/timeout, XML/Excel memory и конкурентны�
 учтён, timestamps детерминированы, непустые notification/location ветки измерены, collection ceiling
 и изолированный export memory отражены как FAIL/follow-up. Лимит пользователя — два прохода,
 поэтому финальная переоценка после этих исправлений не выполнялась.
+
+Reconciliation provenance прошёл fresh review без контекста: **10/10**,
+evidence/tests **9.8/10**, actionable findings отсутствуют. Reviewer подтвердил
+пять исходных breaches в `2fa9847`, их распределение по задачам 24–27 и более
+позднее появление задачи 28 после bounded-collection change.
 
 ## Acceptance
 

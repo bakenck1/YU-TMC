@@ -55,13 +55,26 @@ test("blocked, missing, forged and secret-bearing evidence cannot manufacture GO
   }
 });
 
+test("the committed NO-GO pack resolves its pinned historical evidence", async () => {
+  const output = await run(path.resolve("release-evidence/local-2026-09-08-no-go.json"));
+  assert.match(output, /\(NO-GO\)/);
+});
+
 async function validPack() {
-  const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8")) as { entries: Array<{ tag: string }> };
+  const commitSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    windowsHide: true,
+  }).trim();
+  const journal = JSON.parse(execFileSync(
+    "git",
+    ["show", `${commitSha}:drizzle/meta/_journal.json`],
+    { cwd: process.cwd(), encoding: "utf8", windowsHide: true },
+  )) as { entries: Array<{ tag: string }> };
   const baseline = JSON.parse(await readFile("scripts/release-evidence-gates.json", "utf8")) as {
     prerequisites: Array<{ id: string; owner: string }>;
     gates: Array<{ id: string; owner: string }>;
   };
-  const commitSha = "119e547bfe4fd7eaf1152f35a7237032a24f8703";
   const localEvidence = execFileSync("git", ["show", `${commitSha}:docs/release-checklist.md`], { cwd: process.cwd(), windowsHide: true });
   const localEvidenceHash = createHash("sha256").update(localEvidence).digest("hex");
   const baselineBytes = await readFile("scripts/release-evidence-gates.json");

@@ -319,7 +319,10 @@ test("item detail UI wires photo modal and recent operation rendering", () => {
   assert.match(componentSource, /ref=\{photoCloseButtonRef\}/);
   assert.match(componentSource, /ref=\{photoTriggerRef\}/);
   assert.match(componentSource, /aria-label=\{t\("itemDetails\.photoFullSize"\)\}/);
-  assert.match(componentSource, /onClick=\{\(\) => setPhotoOpen\(true\)\}/);
+  assert.match(
+    componentSource,
+    /ref=\{photoTriggerRef\}[\s\S]{0,300}?onClick=\{\(\) => \{[\s\S]*?setSelectedPhotoIndex\(0\);[\s\S]*?setPhotoOpen\(true\);[\s\S]*?\}\}/,
+  );
   assert.match(componentSource, /operations\.map\(\(entry\) =>/);
   assert.match(componentSource, /operationTitle\(entry, t\)/);
   assert.match(componentSource, /operationDetail\(entry, t\)/);
