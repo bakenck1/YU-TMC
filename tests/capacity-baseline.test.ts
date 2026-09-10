@@ -81,7 +81,8 @@ test("committed baseline contains complete, credential-free evidence and actiona
   assert.ok(report.applicationWorkloads.export_workbook.p95Ms <= 3_000);
   assert.ok(report.applicationWorkloads.export_workbook.peakBaselineRssMiB > 0);
   assert.equal(report.applicationWorkloads.export_workbook.measurementMode, "isolated_child_process_maxrss");
-  assert.ok(report.queries.dockflow_projection.p95Ms <= report.queries.dockflow_projection.sloMs);
+  assert.equal(report.queries.dockflow_projection.sloMs, 250);
+  assert.ok(report.queries.dockflow_projection.p95Ms <= 250);
   assert.ok(report.poolSaturation.p95Ms <= 500);
   assert.equal(report.poolSaturation.errors, 0);
   assert.equal(report.poolSaturation.concurrentScanners, 16);

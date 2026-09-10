@@ -43,7 +43,7 @@
 | 15 | P1 | [Inventory/export collection capacity — Done](27-p1-inventory-collection-capacity.md) | 25 000 строк читаются keyset-порциями; overflow завершается явной ошибкой | L |
 | 16 | P2 | [Pool saturation — Done](24-p2-capacity-pool-saturation.md) | P95 252.83 мс при 16 запросах без увеличения pool | M |
 | 17 | P2 | [Export memory — Done](25-p2-capacity-export-memory.md) | RSS growth 89.34 MiB на 25 000 строк при сохранённом XLSX-контракте | M |
-| 18 | P3 | [Dockflow projection](26-p3-capacity-dockflow-projection.md) | Возвращает projection P95 в измеренный бюджет | S–M |
+| 18 | P3 | [Dockflow projection — Done](26-p3-capacity-dockflow-projection.md) | Два repeat baseline: P95 56.14 и 47.50 мс при бюджете 250 мс | S–M |
 | 19 | P2 | [Inventory/export list projection](28-p2-inventory-list-projection.md) | Снижает P95 inventory/export keyset-форм ниже 750 мс | M |
 
 ## Два этапа
