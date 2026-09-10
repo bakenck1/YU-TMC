@@ -1,20 +1,30 @@
 # P1 — structured observability и evidence для legacy sunset
 
-Статус: **Engineering Done (2026-09-08); 90-day evidence gate active**.
+Статус: **Engineering Done (2026-09-08); evidence gate pending production deployment evidence**.
 
 Реализация: введён безопасный JSON envelope и request correlation для external API, всех auth
 routes, asset-loss и TMC worker; monitoring parser принимает structured и legacy journal input,
 редактирует чувствительные данные и разделяет incidents по stable error code. Для шести legacy
 контрактов добавлены строго allowlisted variant/outcome counters, воспроизводимый quarterly report
 и machine-checked owner/source baseline. До подтверждённого полного окна coverage и uptime отчёт
-остаётся `unknown` и не разрешает sunset. Текущий интервал начат 2026-08-14; operational acceptance
-может быть закрыт не раньше 2026-11-12 реальными production evidence.
+остаётся `unknown` и не разрешает sunset. Дата начала production-наблюдения пока не подтверждена:
+90-дневное окно начинается только после документированного production deployment инструментации
+с подтверждёнными coverage и uptime. Поэтому календарную дату operational acceptance до получения
+такого deployment evidence фиксировать нельзя.
 
 Независимые review-проходы: **6.5/10**, затем **7/10**. Все actionable comments обоих проходов
 исправлены; третий проход не выполнялся согласно лимиту в два review. Проверки после исправлений:
 678 server, 15 UI и 72 component tests, production build, lint (0 errors), `docs:check` и
 `legacy:check`. PostgreSQL suite не относится к изменённым SQL boundaries и локально пропущен без
 test database URLs.
+
+Уточнение evidence window от 2026-09-10 прошло два fresh review без контекста:
+**9/10** для документации и **6.5/10** для тестов, затем **10/10** и **9.5/10**
+без actionable findings. Первый проход потребовал убрать двусмысленный `active`
+из статуса и добавить negative regression assertions против возврата ложных дат;
+обе правки внесены. Локальная инженерная часть подтверждена, но operational gate
+остаётся pending до реального production deployment timestamp и полного 90-дневного
+интервала с подтверждёнными coverage и uptime.
 
 ## Корень долга
 

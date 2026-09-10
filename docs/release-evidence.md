@@ -19,7 +19,7 @@ immutable evidence reference: repository-relative sanitized artifact, SHA-256 с
 получения. Repository evidence читается из дерева `release.evidenceCommitSha`, а не из текущего
 worktree; непроверяемые remote URL запрещены.
 Остальные статусы требуют rationale. Все текущие gates критические и требуют `pass`: для них
-`not-applicable` запрещён. Отсутствие доступа, staging credentials или production-like данных
+`not-applicable` запрещён. Отсутствие доступа, staging credentials или release environment
 остаётся `blocked` и даёт `NO-GO`.
 
 Минимальный gate set: trusted proxy/TLS; изолированный backup restore drill; staging auth/PWA/push;
@@ -37,6 +37,10 @@ SHA-256 DER public key обязан быть заранее закреплён �
 reviewed change. Test-only key override принимается только при `NODE_ENV=test`.
 `NO-GO` pack подписи не требует и может хранить `artifactSha256: null`: он ничего не разрешает и
 не должен выдумывать digest ещё не собранного deployment artifact.
+
+Текущий append-only snapshot — `release-evidence/local-2026-09-10-no-go.json`.
+Он подтверждает repository prerequisites для event contract и capacity baseline,
+но не подменяет ими семь deployment-specific gates; поэтому verdict остаётся `NO-GO`.
 
 ## Gate runbook
 

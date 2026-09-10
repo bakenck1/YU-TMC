@@ -30,7 +30,7 @@
 | 2 | P0 | [Asset-loss vertical slice — Done](11-p0-asset-loss-vertical-slice.md) | Закрыты ABA ответственности, lifecycle квитанций, audit chain и coverage | L |
 | 3 | P1 | [Периметр внешних API — Done](12-p1-external-api-boundaries.md) | Выровнены Dockflow/1С auth, errors, limits и observability | M |
 | 4 | P1 | [Функциональное покрытие и TDD — Done](13-p1-functional-tdd-coverage.md) | Убирает ложную уверенность зелёного source-text suite | M |
-| 5 | P1 | [Structured observability и legacy evidence — Engineering Done; evidence gate active](14-p1-observability-and-legacy-evidence.md) | Код закрыт; честный 90-day production interval завершится не раньше 2026-11-12 | M, operational gate |
+| 5 | P1 | [Structured observability и legacy evidence — Engineering Done; evidence gate pending](14-p1-observability-and-legacy-evidence.md) | Код закрыт; старт production window не подтверждён, закрытие возможно через 90 дней после него | M, operational gate |
 | 6 | P1 | [Production-readiness evidence — Engineering Done; external gates blocked](23-p1-production-readiness-evidence.md) | Проверяемый pack готов; production verdict остаётся NO-GO без внешних evidence | M / operational |
 | 7 | P1 quick win | [Repository/dependency hygiene — Done](21-p1-repository-hygiene.md) | Убраны warnings, scratch noise и лишние зависимости | S |
 | 8 | P2 | [Минимальный browser smoke — Done](22-p2-browser-smoke.md) | Проверяет 2 критических пути в собранном приложении | M / decision |

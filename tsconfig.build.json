@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "scripts/**/*.ts",
+    "proxy.ts",
+    "next.config.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next-e2e/types/**/*.ts",
+    ".next-e2e/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    ".tmp-dockflow-deploy"
+  ]
+}

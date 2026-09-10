@@ -151,6 +151,23 @@ to two passes: **4/10** implementation and **5/10** tests on the first pass, the
 **10/10** and **10/10** with no actionable findings after correcting the checkout
 placement and the job-scoped assertion.
 
+### Security gate repair (2026-09-10)
+
+Run `34444604841` подтвердил, что history regression устранена, и обнаружил новый
+блокер на следующем CI-шаге: production audit отклонил `next@16.2.11` и
+`sharp@0.35.3` из-за high/critical advisories. Framework, согласованный ESLint config
+и Sharp обновлены до `16.3.4` / `0.35.4`; `npm audit --omit=dev` снова сообщает
+0 vulnerabilities. Документированный `typescript.tsconfigPath` отделяет production
+build roots от test fixtures, сохраняя строгий typecheck всего приложения,
+`proxy.ts`, Next config и operational `scripts/**/*.ts`; тесты остаются в полном
+`test:all` и профильных typecheck-проектах.
+
+Validation: физически установлен Next.js 16.3.4, production build/typecheck, lint,
+719 unit/route, 16 UI и 77 component tests проходят; PostgreSQL suite штатно
+пропущен без test URLs. Fresh reviews: **8.3/10** implementation и **7.2/10** tests,
+затем **10/10** и **10/10** без actionable findings после восстановления typecheck
+operational scripts и проверки точного lockfile/build-root contract.
+
 Основной CI/release-контур закрыт: обязательные source/UI/database checks, lint,
 мigrations, runtime smoke, полный test runner, Storybook, audit, production build
 и security invariants теперь выполняются в одном workflow; database integration не

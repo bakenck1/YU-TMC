@@ -1,0 +1,87 @@
+{
+  "formatVersion": 1,
+  "packId": "local-2026-09-10-no-go",
+  "release": {
+    "commitSha": "20fcf3d6bcc5fbb1417b95c332523250fa637f3c",
+    "evidenceCommitSha": "20fcf3d6bcc5fbb1417b95c332523250fa637f3c",
+    "artifactSha256": null,
+    "gateRegistrySha256": "f612b0db94dc4e91aa2efbdbb6cc8bc11d610040cd05eed83d05680c45d34ba3",
+    "deploymentId": "not-deployed",
+    "environment": "local-evidence-preparation",
+    "timestamp": "2026-09-10T06:24:18.484Z",
+    "executor": "Codex-local-workspace",
+    "migrationSet": [
+      "20260728041347_bootstrap",
+      "20260728055715_hesitant_wong",
+      "20260728100226_tiny_callisto",
+      "20260728104851_domain-concurrency-and-audit",
+      "20260729122929_kind_black_tom",
+      "20260729130803_ordinary_tarantula",
+      "20260731092658_dashing_scarlet_spider",
+      "20260731095626_rare_beyonder",
+      "20260731104926_lethal_malice",
+      "20260731143508_odd_omega_red",
+      "20260801112258_brainy_magdalene",
+      "20260802075859_sticky_sally_floyd",
+      "20260802090714_clammy_monster_badoon",
+      "20260806063905_wet_spacker_dave",
+      "20260806070000_service_request_photo_constraint",
+      "20260807094906_graceful_thanos",
+      "20260808110000_tmc_operation_requests",
+      "20260808120000_security_resource_quotas",
+      "20260810140000_tmc_stage_four",
+      "20260811045420_mysterious_wind_dancer",
+      "20260811045927_mean_wonder_man",
+      "20260814105617_settings-persistence",
+      "20260826120000_photo_lifecycle_guard",
+      "20260826112221_overconfident_ironclad",
+      "20260827143000_dockflow_integration",
+      "20260827150000_asset_loss_receipt_enum",
+      "20260827150100_asset_loss_receipt_constraint",
+      "20260827170000_yessenov_sso",
+      "20260827180000_yessenov_profile_claims",
+      "20260831120000_remove_dockflow_integration",
+      "20260831130000_local_item_barcodes",
+      "20260901123000_tmc_quantity_transfer_requests",
+      "20260903120000_one_c_fixed_asset_inbox",
+      "20260907113517_electrical_equipment_category",
+      "20260907121653_simple_whizzer",
+      "20260907123710_elite_vulcan",
+      "20260908113000_one_c_fixed_asset_inbox_contract",
+      "20260908150000_asset_loss_event_contract",
+      "20260908160000_asset_loss_case_event_consistency"
+    ]
+  },
+  "prerequisites": [
+    {
+      "id": "tech-debt-14-events",
+      "status": "pass",
+      "owner": "server-platform",
+      "rationale": "Repository event contract and monitoring runbook are complete; alert delivery remains a separate release gate.",
+      "evidence": [
+        { "uri": "docs/production-monitoring.md", "sha256": "5b1dfcacb57137b28dd920266d33a5046bdb25dc31586751af884853b237b8a7", "capturedAt": "2026-09-10T06:24:18.484Z" },
+        { "uri": "docs/legacy-compatibility.md", "sha256": "aa2c36bfbf435543c4a98edeecc7f09d02bfadcde3653fe6e6759a5a9ed26188", "capturedAt": "2026-09-10T06:24:18.484Z" }
+      ]
+    },
+    {
+      "id": "tech-debt-20-capacity-baseline",
+      "status": "pass",
+      "owner": "release/platform",
+      "rationale": "The deterministic production-like capacity baseline and full result artifact are committed.",
+      "evidence": [
+        { "uri": "docs/capacity-baseline-v1.md", "sha256": "99fe80961943fb0ce7dbb0b88f2fe2b412d2dd3ee2dd2037b931c42fc7602821", "capturedAt": "2026-09-10T06:24:18.484Z" },
+        { "uri": "docs/capacity-baseline-v1.json", "sha256": "91804240de81739eb78f3acd4df63e4004459db49bd8fdb0440066ca598b33e9", "capturedAt": "2026-09-10T06:24:18.484Z" }
+      ]
+    }
+  ],
+  "gates": [
+    { "id": "trusted-proxy-tls", "status": "blocked", "owner": "release/platform", "rationale": "No deployed ingress was placed in scope for verification.", "evidence": [] },
+    { "id": "backup-restore", "status": "blocked", "owner": "database/platform", "rationale": "No isolated restore target or production backup was placed in scope.", "evidence": [] },
+    { "id": "staging-auth-pwa-push", "status": "blocked", "owner": "product/auth", "rationale": "No staging URL or test identities were placed in scope.", "evidence": [] },
+    { "id": "authenticated-runtime-scan", "status": "blocked", "owner": "security", "rationale": "Authenticated staging scan scope and credentials are unavailable.", "evidence": [] },
+    { "id": "capacity-smoke", "status": "blocked", "owner": "release/platform", "rationale": "The baseline passes, but no target release environment was provided for the release-specific smoke.", "evidence": [] },
+    { "id": "rollback-rehearsal", "status": "blocked", "owner": "release/platform", "rationale": "No release environment was placed in scope for a rehearsal.", "evidence": [] },
+    { "id": "alert-delivery", "status": "blocked", "owner": "on-call/platform", "rationale": "No alert destination and on-call recipient were placed in scope.", "evidence": [] }
+  ],
+  "verdict": "NO-GO"
+}
