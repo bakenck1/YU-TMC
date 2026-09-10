@@ -109,7 +109,7 @@ read/write errors и подтверждённый backup DB row.
 - Нельзя просто заменить repository без migration ordering.
 - Нельзя делать fallback на file после ошибки PostgreSQL: это создаст два
   источника истины.
-- Нельзя считать process-local lock защитой между workers/containers.
+- Нельзя считать process-local lock защитой между workers/processes.
 - Read-after-write должен быть проверен через разные database connections.
 - При rolling deploy старый код не должен ломаться из-за новой таблицы.
 
@@ -138,9 +138,9 @@ read/write errors и подтверждённый backup DB row.
 - `db:import-settings` выполняет одноразовый guarded import старого
   `.data/settings.json`, поддерживает явный `--source`, fail-closed для
   повреждённого/невалидного файла и безопасен при повторном запуске;
-- production Compose выполняет migration → import → smoke и монтирует только
-  `./.settings-import`; mobile и оба режима `npm run dev` выполняют ту же
-  подготовку до запуска приложения;
+- direct production runbook выполняет migration → import → smoke до запуска
+  systemd services; оба режима `npm run dev` выполняют ту же подготовку до
+  запуска приложения;
 - runtime/migrator privileges, reset/smoke checks, release checklist, database
   runbook и test-coverage documentation синхронизированы с контрактом.
 
@@ -150,13 +150,15 @@ read/write errors и подтверждённый backup DB row.
 - `npm.cmd run test:database:local`: все локальные PostgreSQL suites, включая
   4 settings integration tests;
 - focused settings/release tests: 16/16; `lint`, `docs:check`, `ui:check`,
-  `db:check`, `security:check`, `build`, Compose config и `git diff --check` —
-  green;
+  `db:check`, `security:check`, `build`, direct deployment contract checks и
+  `git diff --check` — green;
 - первый независимый review: 7/10 (tests 8/10); исправлены production import,
   strict payload guard, нормализация ошибок repository и regression coverage;
 - второй независимый review: 7/10 (tests 8/10); исправлены production smoke,
   внешний `DATABASE_URL` dev startup и отдельный mobile import mount. По
   договорённости выполнено два review-прохода, третий не запускается.
+- reconciliation после удаления container runtime: fresh review без контекста
+  — **10/10**, evidence **9.8/10**, actionable findings отсутствуют.
 
 ### Оставленные осознанные границы
 
