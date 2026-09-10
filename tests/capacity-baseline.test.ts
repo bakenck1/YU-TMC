@@ -76,6 +76,16 @@ test("committed baseline contains complete, credential-free evidence and actiona
   assert.equal(report.collectionOutcomes.inventory_list.withinLimit, true);
   assert.ok(report.collectionOutcomes.inventory_list.elapsedMs > 0);
   assert.equal(report.collectionOutcomes.export_source.withinLimit, true);
+  assert.equal(report.queries.inventory_list.sloMs, 750);
+  assert.ok(report.queries.inventory_list.p95Ms <= 750);
+  assert.equal(report.queries.export_source.sloMs, 750);
+  assert.ok(report.queries.export_source.p95Ms <= 750);
+  for (const scenario of ["inventory_list", "export_source"] as const) {
+    assert.equal(report.queries[scenario].planSummary.length, 2);
+    assert.ok(report.queries[scenario].planSummary.every(
+      (plan: { sharedHitBlocks: number }) => plan.sharedHitBlocks <= 1_600_000,
+    ));
+  }
   assert.ok(report.applicationWorkloads.export_workbook.peakGrowthMiB <= 256);
   assert.equal(report.applicationWorkloads.export_workbook.sloMs, 3_000);
   assert.ok(report.applicationWorkloads.export_workbook.p95Ms <= 3_000);

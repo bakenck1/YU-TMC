@@ -61,6 +61,80 @@ describe("PostgreSQL inventory collection cursor", () => {
     expect(items).toHaveLength(501);
     expect(new Set(items.map((item) => item.id)).size).toBe(501);
   });
+
+  it("applies direct, room, and decommissioned assignment scopes before hydration", async () => {
+    const actorId = randomUUID();
+    const employeeId = randomUUID();
+    const buildingId = randomUUID();
+    const assignedRoomId = randomUUID();
+    const unrelatedRoomId = randomUUID();
+    await database.query(
+      `insert into yu_inventory.users (id, code, email, full_name, role, created_at, updated_at)
+       values ($1,$3,$4,'Scope Admin','admin',now(),now()),
+              ($2,$5,$6,'Scoped Employee','employee',now(),now())`,
+      [actorId, employeeId, `SA-${actorId.slice(0, 8)}`, `${actorId}@example.com`,
+       `SE-${employeeId.slice(0, 8)}`, `${employeeId}@example.com`],
+    );
+    await database.query(
+      `insert into yu_inventory.buildings
+         (id,name,name_key,address,address_key,created_by,updated_by)
+       values ($1,'Scope Building',$2,'Scope Address',$2,$3,$3)`,
+      [buildingId, `scope-${buildingId}`, actorId],
+    );
+    await database.query(
+      `insert into yu_inventory.rooms
+         (id,building_id,designation,designation_key,floor_number,primary_responsible_id,created_by,updated_by)
+       values ($1,$3,'A',$4,1,$6,$7,$7),($2,$3,'B',$5,1,null,$7,$7)`,
+      [assignedRoomId, unrelatedRoomId, buildingId, `scope-${assignedRoomId}`,
+       `scope-${unrelatedRoomId}`, employeeId, actorId],
+    );
+    const directActive = randomUUID();
+    const roomActive = randomUUID();
+    const unrelatedDecommissioned = randomUUID();
+    const directDecommissioned = randomUUID();
+    const roomDecommissionedInUse = randomUUID();
+    await database.query(
+      `insert into yu_inventory.items
+         (id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,status,created_by,updated_by)
+       values ($1,'Direct active',1,1,$6,'official',$9::varchar,$9::varchar,'active',$8,$8),
+              ($2,'Room active',1,1,$7,'official',$10::varchar,$10::varchar,'active',$8,$8),
+              ($3,'Unrelated decommissioned',1,1,$6,'official',$11::varchar,$11::varchar,'decommissioned',$8,$8),
+              ($4,'Direct decommissioned',1,1,$6,'official',$12::varchar,$12::varchar,'decommissioned',$8,$8),
+              ($5,'Room decommissioned',1,1,$7,'official',$13::varchar,$13::varchar,'decommissioned',$8,$8)`,
+      [directActive, roomActive, unrelatedDecommissioned, directDecommissioned, roomDecommissionedInUse,
+       unrelatedRoomId, assignedRoomId, actorId,
+       `scope-${directActive}`, `scope-${roomActive}`, `scope-${unrelatedDecommissioned}`,
+       `scope-${directDecommissioned}`, `scope-${roomDecommissionedInUse}`],
+    );
+    await database.query(
+      `update yu_inventory.items
+          set updated_at = '2020-01-01T00:00:00Z'
+        where id = $1`,
+      [directActive],
+    );
+    await database.query(
+      `update yu_inventory.items
+          set status = 'decommissioned_in_use', archived_by = $2, archived_at = now(),
+              decommissioned_usage_started_at = now(), decommissioned_usage_started_by = $2
+        where id = $1`,
+      [roomDecommissionedInUse, actorId],
+    );
+    await database.query(
+      `insert into yu_inventory.responsibility_periods
+         (id,item_id,responsible_user_id,source,started_at,started_by)
+       values ($1,$2,$5,'transfer',now(),$6),($3,$4,$5,'transfer',now(),$6)`,
+      [randomUUID(), directActive, randomUUID(), directDecommissioned, employeeId, actorId],
+    );
+
+    const repository = createPostgresInventoryItemRepositories(database).items;
+    expect(new Set((await repository.listItemsAssignedTo(employeeId)).map((item) => item.id))).toEqual(
+      new Set([directActive, roomActive, directDecommissioned, roomDecommissionedInUse]),
+    );
+    expect(new Set((await repository.listDecommissionedItemsAssignedTo(employeeId)).map((item) => item.id))).toEqual(
+      new Set([directDecommissioned, roomDecommissionedInUse]),
+    );
+    expect((await repository.listDecommissionedItems()).map((item) => item.id)).toContain(unrelatedDecommissioned);
+  });
 });
 
 async function resetSchemas(databaseConfig: DatabaseConfig) {
