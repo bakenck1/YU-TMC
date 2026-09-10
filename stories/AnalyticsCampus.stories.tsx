@@ -78,7 +78,7 @@ export const AnalyticsPercentRingStory: Story = {
 };
 export const AnalyticsSummaryCardStory: Story = {
   name: "AnalyticsSummaryCard",
-  render: () => <AnalyticsSummaryCard label="Все ТМЦ" value="1 248" hint="из 2 000" progress={62.4} icon={Boxes} />,
+  render: () => <AnalyticsSummaryCard label="Все ТМЦ" value="1 248" hint="из 5 000" progress={24.96} icon={Boxes} />,
 };
 export const AnalyticsDonutChartStory: Story = {
   name: "AnalyticsDonutChart",

@@ -84,7 +84,6 @@ export function EmployeeItemsTabPanels({
   columnSettingsScope,
   actorUserId,
   actorRole,
-  recipientName,
 }: {
   activeStatus: ItemStatus;
   items: InventoryItem[];
@@ -92,9 +91,8 @@ export function EmployeeItemsTabPanels({
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
-  recipientName: string;
 }) {
-  const invoiceActions = items.length > 0 ? { recipientName } : undefined;
+  const invoiceActions = items.length > 0;
 
   return EMPLOYEE_ITEM_STATUSES.map((status) => {
     const selected = status === activeStatus;
@@ -133,7 +131,6 @@ export function EmployeeItemsTabsView({
   columnSettingsScope,
   actorUserId,
   actorRole,
-  recipientName,
 }: {
   items: InventoryItem[];
   activeStatus: ItemStatus;
@@ -145,7 +142,6 @@ export function EmployeeItemsTabsView({
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
-  recipientName: string;
 }) {
   return (
     <>
@@ -163,7 +159,6 @@ export function EmployeeItemsTabsView({
         columnSettingsScope={columnSettingsScope}
         actorUserId={actorUserId}
         actorRole={actorRole}
-        recipientName={recipientName}
       />
     </>
   );
@@ -175,14 +170,12 @@ export default function EmployeeItemsTabs({
   columnSettingsScope,
   actorUserId,
   actorRole,
-  recipientName,
 }: {
   items: InventoryItem[];
   searchHistoryScope: string;
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
-  recipientName: string;
 }) {
   const { t } = useAppSettings();
   const [activeStatus, setActiveStatus] = useState<ItemStatus>("active");
@@ -204,7 +197,6 @@ export default function EmployeeItemsTabs({
         columnSettingsScope={columnSettingsScope}
         actorUserId={actorUserId}
         actorRole={actorRole}
-        recipientName={recipientName}
       />
     </section>
   );

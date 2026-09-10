@@ -65,7 +65,6 @@ export default async function ItemsPage() {
           columnSettingsScope={user.userId}
           actorUserId={user.userId}
           actorRole={user.role}
-          recipientName={user.name}
         />
       ) : (
         <ItemsTable
@@ -84,7 +83,7 @@ export default async function ItemsPage() {
             buildings,
             mode: user.role === "warehouse" ? "restricted" : "full",
           } : undefined}
-          invoiceActions={{ recipientName: user.name }}
+          invoiceActions
         />
       )}
     </Wrapper>

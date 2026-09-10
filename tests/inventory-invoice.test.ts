@@ -30,8 +30,6 @@ test("invoice carries the full selected quantity and calculated amount", () => {
     items: selected,
     invoiceNumber: "42",
     date: "2026-09-09",
-    supplier: "Yessenov University",
-    recipient: "Иванов Иван",
   });
 
   assert.equal(inventoryInvoiceQuantity(selected), 20);
@@ -39,6 +37,8 @@ test("invoice carries the full selected quantity and calculated amount", () => {
   assert.match(html, /2(?:&nbsp;|\u00a0|\s)500(?:&nbsp;|\u00a0|\s)000,00/);
   assert.match(html, /«<span class="line day">09<\/span>»/);
   assert.match(html, /сентября/);
+  assert.match(html, /Дата выписки:/);
+  assert.doesNotMatch(html, /Поставщик|Получатель|Принял\(а\)|Отпустил\(а\)|Подпись/);
 });
 
 test("small invoice prints two copies and paginates selections by twelve lines", () => {
@@ -51,8 +51,6 @@ test("small invoice prints two copies and paginates selections by twelve lines",
     items,
     invoiceNumber: "",
     date: "",
-    supplier: "",
-    recipient: "",
   });
 
   assert.equal((html.match(/data-invoice-page=/g) ?? []).length, 2);
@@ -64,14 +62,11 @@ test("invoice escapes values before writing the printable document", () => {
   const html = buildInventoryInvoiceHtml({
     variant: "large",
     items: [item({ name: "<script>alert(1)</script>" })],
-    invoiceNumber: "<42>",
+    invoiceNumber: '<42>&"',
     date: "2026-09-09",
-    supplier: "A & B",
-    recipient: 'Иванов "И.И."',
   });
 
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(html, /A &amp; B/);
-  assert.match(html, /Иванов &quot;И\.И\.&quot;/);
+  assert.match(html, /&lt;42&gt;&amp;&quot;/);
 });
