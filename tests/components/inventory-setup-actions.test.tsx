@@ -281,6 +281,13 @@ describe("inventory setup actions", () => {
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
         category: "electrical_equipment",
         responsibleUserId: employee.id,
+        photos: [
+          {
+            imageDataUrl: "data:image/jpeg;base64,/9j/",
+            width: 1,
+            height: 1,
+          },
+        ],
       });
     });
   });
