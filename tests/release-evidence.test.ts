@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
@@ -55,9 +55,18 @@ test("blocked, missing, forged and secret-bearing evidence cannot manufacture GO
   }
 });
 
-test("the committed NO-GO pack resolves its pinned historical evidence", async () => {
-  const output = await run(path.resolve("release-evidence/local-2026-09-08-no-go.json"));
-  assert.match(output, /\(NO-GO\)/);
+test("every committed NO-GO pack resolves its pinned historical evidence", async () => {
+  const packs = (await readdir("release-evidence"))
+    .filter((entry) => entry.endsWith("-no-go.json"))
+    .sort();
+  assert.deepEqual(packs, [
+    "local-2026-09-08-no-go.json",
+    "local-2026-09-10-no-go.json",
+  ]);
+  for (const pack of packs) {
+    const output = await run(path.resolve("release-evidence", pack));
+    assert.match(output, /\(NO-GO\)/, pack);
+  }
 });
 
 async function validPack() {

@@ -6,14 +6,22 @@
 runbook. Checker связывает application/evidence commits, точный migration journal, deployment и
 artifact/registry digests; критические gates и prerequisites не допускают `not-applicable`, а `GO`
 требует проверяемые repository artifacts и Ed25519 deployment attestation с заранее закреплённым
-public-key fingerprint. Текущий датированный pack остаётся `NO-GO`: staging/production ingress,
-restore target, test identities, scanner, production-like capacity data и alert destination не были
-предоставлены и честно отмечены `blocked`.
+public-key fingerprint. Актуальный датированный pack остаётся `NO-GO`: repository prerequisites
+задач 14 (event contract) и 20 (capacity baseline) подтверждены, но staging/production ingress,
+restore target, test identities, scanner scope, release environment и alert destination не были
+предоставлены; семь release gates честно отмечены `blocked`.
 
 Независимые review-проходы: **5/10**, затем **6/10**. Все actionable findings обоих проходов
 устранены; третий проход не выполнялся согласно лимиту в два review. Финальная проверка: 680 server,
 15 UI и 72 component tests, production build, lint без ошибок, `docs:check`, evidence checker и
 `git diff --check`. PostgreSQL suite локально пропущен без test database URLs; SQL не изменялся.
+
+Актуализация NO-GO pack от 2026-09-10 прошла два fresh review без контекста:
+**9.5/10** для pack/docs и **8.5/10** для тестов, затем **10/10** и **10/10**
+без actionable findings. После первого прохода тест закрепил точный append-only
+набор обоих известных NO-GO snapshots. Оба pack проходят checker; SHA-256 evidence
+и migration provenance сверены с pinned commit. Repository prerequisites теперь
+`pass`, но семь deployment-specific gates остаются `blocked`, а verdict — `NO-GO`.
 
 ## Корень долга
 
@@ -35,7 +43,7 @@ Owner: release/platform owner; product owners подписывают тольк�
    ключевые queries и cleanup; наличие backup без restore не считается.
 4. На staging проверить реальные OAuth redirect URIs/session/logout, PWA install/update,
    push subscribe/delivery/revoke и documented fallback.
-5. Выполнить authenticated DAST/runtime dependency/container scan в согласованном scope;
+5. Выполнить authenticated DAST и runtime application/dependency scan в согласованном scope;
    findings имеют severity, owner, due date или подписанное risk acceptance.
 6. Выполнить capacity smoke по baseline задачи 20 и rehearsal rollback приложения и
    обратимой части migration. Не обещать rollback для необратимого DDL — нужен restore plan.
