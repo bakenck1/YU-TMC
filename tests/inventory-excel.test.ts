@@ -88,6 +88,56 @@ test("exports empty workbooks for every PRD dataset without assuming shared colu
   assert.ok((await exportInspectionResults([])).byteLength > 0);
 });
 
+test("streams the inventory export without changing its workbook contract", async () => {
+  const bytes = await exportInventoryItems([
+    exportItem({ name: "Monitor", quantity: 2, unitPrice: 125000.5 }),
+    exportItem({ id: "00000000-0000-4000-8000-000000000099", name: "Desk" }),
+  ], "Inventory items");
+  const sheet = (await loadWorkbook(bytes)).getWorksheet("Inventory items")!;
+
+  assert.deepEqual((sheet.getRow(1).values as unknown[]).slice(1), [
+    "Name", "Inventory number", "Type", "Brand", "Model", "Quantity", "Unit price KZT",
+    "Total KZT", "Building", "Room", "Status", "Responsible", "Created", "Updated", "Exported at",
+  ]);
+  assert.equal(sheet.getCell("A2").value, "Monitor");
+  assert.equal(sheet.getCell("F2").value, 2);
+  assert.equal(sheet.getCell("G2").value, 125000.5);
+  assert.equal(sheet.getCell("H2").value, 250001);
+  assert.equal(sheet.getCell("I2").value, ROOM.buildingName);
+  assert.equal(sheet.getCell("J2").value, ROOM.designation);
+  assert.equal(sheet.getCell("L2").value, "Inventory Owner");
+  assert.equal(sheet.getCell("G2").numFmt, "#,##0.00");
+  assert.equal(sheet.getCell("M2").numFmt, "yyyy-mm-dd hh:mm");
+  assert.equal(sheet.getCell("A2").fill.type, "pattern");
+  assert.equal(sheet.rowCount, 3);
+  assert.equal(sheet.views[0]?.state, "frozen");
+  assert.ok(sheet.autoFilter);
+});
+
+test("preserves selected-column, nullable-value, and alternating-style behavior", async () => {
+  const bytes = await exportInventoryItems([
+    exportItem({ description: null, qrCode: null }),
+    exportItem({ id: "00000000-0000-4000-8000-000000000098", description: "Second", qrCode: "QR-2" }),
+  ], "Selected inventory", ["qrCode", "description", "createdAt"]);
+  const sheet = (await loadWorkbook(bytes)).getWorksheet("Selected inventory")!;
+
+  assert.deepEqual((sheet.getRow(1).values as unknown[]).slice(1), ["Name", "QR code", "Description", "Created"]);
+  assert.equal(sheet.getCell("B2").text, "");
+  assert.equal(sheet.getCell("C2").text, "");
+  assert.equal(sheet.getCell("B3").value, "QR-2");
+  assert.equal(sheet.getCell("C3").value, "Second");
+  assert.ok(sheet.getCell("D2").value instanceof Date);
+  assert.equal(sheet.getCell("D2").numFmt, "yyyy-mm-dd hh:mm");
+  assert.equal(sheet.getColumn(1).width, 34);
+  assert.equal(sheet.getColumn(2).width, 28);
+  assert.equal(sheet.autoFilter, "A1:D1");
+  assert.equal(sheet.getCell("A1").font.bold, true);
+  assert.equal(sheet.getCell("A1").fill.type, "pattern");
+  assert.equal(sheet.getCell("A2").fill.type, "pattern");
+  assert.equal(sheet.getCell("A2").fill.fgColor.argb, "FFF1F5F9");
+  assert.equal(sheet.getCell("A3").fill, undefined);
+});
+
 test("rejects non-ZIP uploads before invoking the workbook parser", async () => {
   await assert.rejects(
     parseInventoryWorkbook(new Uint8Array([1, 2, 3, 4]), [ROOM]),
@@ -135,4 +185,32 @@ async function loadWorkbook(bytes: Uint8Array) {
 
 async function writeWorkbook(workbook: Workbook) {
   return new Uint8Array(await workbook.xlsx.writeBuffer());
+}
+
+function exportItem(overrides: Partial<Parameters<typeof exportInventoryItems>[0][number]> = {}) {
+  return {
+    id: "00000000-0000-4000-8000-000000000010",
+    name: "Inventory item",
+    description: "Description",
+    category: "electronics",
+    itemType: "electronics",
+    brand: "Brand",
+    model: "Model",
+    quantity: 1,
+    unitPrice: 100,
+    inventoryNumberKind: "official",
+    inventoryNumber: "INV-100",
+    room: ROOM,
+    status: "active",
+    condition: "good",
+    connectionStatus: "not_applicable",
+    qrCode: null,
+    responsible: { id: "00000000-0000-4000-8000-000000000011", name: "Inventory Owner" },
+    photoUrl: null,
+    version: 1,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-02T00:00:00.000Z",
+    archivedAt: null,
+    ...overrides,
+  } satisfies Parameters<typeof exportInventoryItems>[0][number];
 }

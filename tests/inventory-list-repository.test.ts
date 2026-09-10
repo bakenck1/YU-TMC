@@ -22,6 +22,8 @@ test("general inventory queries include archived and decommissioned items", asyn
   assert.doesNotMatch(queries[0]!, /status\s+<>\s+'decommissioned'/i);
   assert.match(queries[1]!, /responsible_user_id\s*=\s*\$1/i);
   assert.doesNotMatch(queries[1]!, /archived_at\s+is\s+null/i);
+  assert.ok(queries[0]!.indexOf("limit 500") < queries[0]!.indexOf("service_move on true"));
+  assert.ok(queries[0]!.indexOf("limit 500") < queries[0]!.indexOf(") p on true"));
 });
 
 test("inventory collection uses stable bounded keyset pages beyond 10,000 rows", async () => {
@@ -47,8 +49,8 @@ test("inventory collection uses stable bounded keyset pages beyond 10,000 rows",
 
   assert.equal(records.length, 25_000);
   assert.equal(queries.length, 51);
-  assert.equal(queries.slice(0, -1).every(({ text }) => /limit 500\s*$/i.test(text)), true);
-  assert.match(queries.at(-1)!.text, /limit 1\s*$/i);
+  assert.equal(queries.slice(0, -1).every(({ text }) => /limit 500\s*\)/i.test(text)), true);
+  assert.match(queries.at(-1)!.text, /limit 1\s*\)/i);
   assert.equal(queries[0]!.values.length, 0);
   assert.match(queries[1]!.text, /i\.updated_at < \$1/);
   assert.match(queries[1]!.text, /i\.id > \$2/);

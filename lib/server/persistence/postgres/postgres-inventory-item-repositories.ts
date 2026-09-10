@@ -1034,6 +1034,21 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
 function itemSelect(where: string, limit = "") {
   return `
+    with selected as materialized (
+      select i.id
+        from ${ITEMS} i
+        join ${ROOMS} r on r.id = i.room_id
+        left join lateral (
+          select responsible_user_id
+            from "yu_inventory"."responsibility_periods"
+           where item_id = i.id and ended_at is null
+           order by started_at desc
+           limit 1
+        ) rp on true
+        ${where}
+       order by i.updated_at desc, i.id
+       ${limit}
+    )
     select i.id, i.name, i.description, i.item_type, i.brand, i.model,
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
@@ -1053,7 +1068,8 @@ function itemSelect(where: string, limit = "") {
            i.version, i.created_at, i.updated_at,
            i.updated_at::text as updated_at_cursor,
            service_move.occurred_at as maintenance_started_at, i.archived_at
-      from ${ITEMS} i
+      from selected
+      join ${ITEMS} i on i.id = selected.id
       join ${ROOMS} r on r.id = i.room_id
       join ${BUILDINGS} b on b.id = r.building_id
       left join lateral (
@@ -1101,9 +1117,8 @@ function itemSelect(where: string, limit = "") {
          order by attached_at desc nulls last
          limit 1
       ) usage_photo on true
-      ${where}
      order by i.updated_at desc, i.id
-     ${limit}`;
+    `;
 }
 
 function mapItem(row: ItemRow): InventoryItemRecord {

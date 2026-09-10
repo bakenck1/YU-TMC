@@ -1,7 +1,9 @@
 import "server-only";
 
+import { Buffer } from "node:buffer";
+import { PassThrough } from "node:stream";
 import { inflateRawSync } from "node:zlib";
-import { Workbook, type Cell, type Worksheet } from "exceljs";
+import { Workbook, stream, type Cell, type Worksheet } from "exceljs";
 
 import type { CreateInventoryItemInput, InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { InspectionDto } from "@/lib/contracts/inventory-inspections";
@@ -316,7 +318,18 @@ export async function exportInventoryItems(
   title: string,
   visibleColumns?: readonly string[],
 ): Promise<Uint8Array> {
-  const workbook = new Workbook();
+  const output = new PassThrough();
+  const chunks: Buffer[] = [];
+  const outputComplete = new Promise<void>((resolve, reject) => {
+    output.on("data", (chunk: Buffer) => chunks.push(chunk));
+    output.once("end", resolve);
+    output.once("error", reject);
+  });
+  const workbook = new stream.xlsx.WorkbookWriter({
+    stream: output,
+    useSharedStrings: false,
+    useStyles: true,
+  });
   const sheet = workbook.addWorksheet(title, { views: [{ state: "frozen", ySplit: 1 }] });
   const allColumns = [
     { header: "Name", key: "name", width: 34 },
@@ -342,29 +355,49 @@ export async function exportInventoryItems(
     "total", "building", "room", "status", "responsible", "createdAt", "updatedAt", "exportedAt",
   ]);
   requested.add("name");
-  sheet.columns = allColumns.filter((column) => requested.has(column.key));
+  const selectedColumns = allColumns.filter((column) => requested.has(column.key));
+  sheet.columns = selectedColumns;
+  styleHeader(sheet);
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: selectedColumns.length } };
+  setNumberFormat(sheet, "unitPrice", "#,##0.00");
+  setNumberFormat(sheet, "total", "#,##0.00");
+  setNumberFormat(sheet, "createdAt", "yyyy-mm-dd hh:mm");
+  setNumberFormat(sheet, "updatedAt", "yyyy-mm-dd hh:mm");
+  sheet.getRow(1).commit();
   const exportedAt = new Date();
-  items.forEach((item) => sheet.addRow({
-    name: item.name,
-    inventoryNumber: item.inventoryNumber,
-    qrCode: item.qrCode ?? "",
-    itemType: item.itemType,
-    brand: item.brand ?? "",
-    model: item.model ?? "",
-    description: item.description ?? "",
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    total: item.quantity * item.unitPrice,
-    building: item.room.buildingName,
-    room: item.room.designation,
-    status: item.status,
-    responsible: item.responsible?.name ?? "",
-    createdAt: new Date(item.createdAt),
-    updatedAt: new Date(item.updatedAt),
-    exportedAt,
-  }));
-  styleDataSheet(sheet);
-  return workbookBytes(workbook);
+  items.forEach((item, index) => {
+    const row = sheet.addRow({
+      name: item.name,
+      inventoryNumber: item.inventoryNumber,
+      qrCode: item.qrCode ?? "",
+      itemType: item.itemType,
+      brand: item.brand ?? "",
+      model: item.model ?? "",
+      description: item.description ?? "",
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.quantity * item.unitPrice,
+      building: item.room.buildingName,
+      room: item.room.designation,
+      status: item.status,
+      responsible: item.responsible?.name ?? "",
+      createdAt: new Date(item.createdAt),
+      updatedAt: new Date(item.updatedAt),
+      exportedAt,
+    });
+    if ((index + 2) % 2 === 0) {
+      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+    }
+    row.commit();
+  });
+  sheet.commit();
+  try {
+    await Promise.all([workbook.commit(), outputComplete]);
+  } catch (error) {
+    output.destroy();
+    throw error;
+  }
+  return Buffer.concat(chunks);
 }
 
 export async function exportInspectionResults(inspections: InspectionDto[]): Promise<Uint8Array> {

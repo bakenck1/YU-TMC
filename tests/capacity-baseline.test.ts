@@ -76,7 +76,23 @@ test("committed baseline contains complete, credential-free evidence and actiona
   assert.equal(report.collectionOutcomes.inventory_list.withinLimit, true);
   assert.ok(report.collectionOutcomes.inventory_list.elapsedMs > 0);
   assert.equal(report.collectionOutcomes.export_source.withinLimit, true);
-  assert.ok(report.queries.dockflow_projection.p95Ms <= report.queries.dockflow_projection.sloMs);
+  assert.equal(report.queries.inventory_list.sloMs, 750);
+  assert.ok(report.queries.inventory_list.p95Ms <= 750);
+  assert.equal(report.queries.export_source.sloMs, 750);
+  assert.ok(report.queries.export_source.p95Ms <= 750);
+  for (const scenario of ["inventory_list", "export_source"] as const) {
+    assert.equal(report.queries[scenario].planSummary.length, 2);
+    assert.ok(report.queries[scenario].planSummary.every(
+      (plan: { sharedHitBlocks: number }) => plan.sharedHitBlocks <= 1_600_000,
+    ));
+  }
+  assert.ok(report.applicationWorkloads.export_workbook.peakGrowthMiB <= 256);
+  assert.equal(report.applicationWorkloads.export_workbook.sloMs, 3_000);
+  assert.ok(report.applicationWorkloads.export_workbook.p95Ms <= 3_000);
+  assert.ok(report.applicationWorkloads.export_workbook.peakBaselineRssMiB > 0);
+  assert.equal(report.applicationWorkloads.export_workbook.measurementMode, "isolated_child_process_maxrss");
+  assert.equal(report.queries.dockflow_projection.sloMs, 250);
+  assert.ok(report.queries.dockflow_projection.p95Ms <= 250);
   assert.ok(report.poolSaturation.p95Ms <= 500);
   assert.equal(report.poolSaturation.errors, 0);
   assert.equal(report.poolSaturation.concurrentScanners, 16);
@@ -98,6 +114,7 @@ test("committed baseline contains complete, credential-free evidence and actiona
     export_memory: "tech_debt/25-p2-capacity-export-memory.md",
     dockflow_projection: "tech_debt/26-p3-capacity-dockflow-projection.md",
     inventory_list: "tech_debt/28-p2-inventory-list-projection.md",
+    export_source: "tech_debt/28-p2-inventory-list-projection.md",
   };
   assert.equal(report.bottlenecks.some((item: { id: string }) =>
     item.id === "inventory_list_capacity" || item.id === "export_source_capacity"), false);

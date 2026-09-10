@@ -41,13 +41,49 @@ describe("PostgreSQL Dockflow projection", () => {
 
     const inventory = await repository.listItems({ after: null, limit: 10 });
     expect(inventory).toHaveLength(3);
-    expect(inventory.filter((item) => item.status === "assigned")).toHaveLength(2);
     expect(inventory).toContainEqual(expect.objectContaining({
       id: ids.availableItemId,
+      name: "Available",
+      barcode: `AVL-${ids.availableItemId}`,
+      inventoryNumber: `AVL-${ids.availableItemId}`,
+      quantity: 3,
       status: "in_stock",
       availableQuantity: 3,
+      storageLocation: "Dockflow Building, 101",
+      cost: 300,
+      markingType: "individual",
+      photoUrl: null,
       responsible: null,
       assignments: [],
+    }));
+    expect(inventory).toContainEqual(expect.objectContaining({
+      id: ids.individualItemId,
+      name: "Individual",
+      barcode: `IND-${ids.individualItemId}`,
+      quantity: 1,
+      availableQuantity: 0,
+      status: "assigned",
+      storageLocation: "Dockflow Building, 101",
+      cost: 100,
+      markingType: "individual",
+      photoUrl: `/api/v1/items/${ids.individualItemId}/photo`,
+      responsible: { iin: ids.iin, fullName: "Dockflow Employee" },
+      assignments: [expect.objectContaining({ employeeIin: ids.iin, quantity: 1 })],
+    }));
+    expect(inventory).toContainEqual(expect.objectContaining({
+      id: ids.groupId,
+      name: "Batch",
+      barcode: `BAT-${ids.batchItemId}-0001`,
+      inventoryNumber: `BAT-${ids.batchItemId}`,
+      quantity: 5,
+      availableQuantity: 0,
+      status: "assigned",
+      storageLocation: "Dockflow Building, 101",
+      cost: 200,
+      markingType: "batch",
+      photoUrl: null,
+      responsible: { iin: ids.iin, fullName: "Dockflow Employee" },
+      assignments: [expect.objectContaining({ employeeIin: ids.iin, quantity: 5 })],
     }));
     const expectedInventoryIds = inventory.map((item) => item.id);
     const expectedAssignedIds = inventory.filter((item) => item.status === "assigned").map((item) => item.id);
@@ -110,6 +146,7 @@ async function seed() {
   const individualItemId = randomUUID();
   const batchItemId = randomUUID();
   const availableItemId = randomUUID();
+  const groupId = randomUUID();
   const iin = "900101400000";
   await migrationPool.query(
     `insert into "yu_inventory"."users" (id,code,email,full_name,role,iin,created_at,updated_at)
@@ -142,11 +179,18 @@ async function seed() {
     [randomUUID(), individualItemId, employeeId, adminId],
   );
   await migrationPool.query(
+    `insert into "yu_inventory"."photos"
+       (id,purpose,status,uploaded_by,original_object_key,preview_object_key,trusted_mime_type,byte_size,width,height,checksum_sha256,
+        binary_data,reserved_at,expires_at,attached_at,item_id)
+     values ($1,'item','attached',$2,$3,$4,'image/jpeg',1,1,1,$5,decode('ff','hex'),now(),now() + interval '1 hour',now(),$6)`,
+    [randomUUID(), adminId, `database://photos/${individualItemId}`, `database://photos/${individualItemId}/preview`, "a".repeat(64), individualItemId],
+  );
+  await migrationPool.query(
     `insert into "yu_inventory"."local_item_groups" (id,item_id,sequence_number,barcode_value,barcode_key,quantity,responsible_user_id,room_id,previous_room_id,created_by)
      values ($1,$2,1,$3,$4,5,$5,$6,$6,$7)`,
-    [randomUUID(), batchItemId, `BAT-${batchItemId}-0001`, `bat-${batchItemId}-0001`, employeeId, roomId, adminId],
+    [groupId, batchItemId, `BAT-${batchItemId}-0001`, `bat-${batchItemId}-0001`, employeeId, roomId, adminId],
   );
-  return { employeeId, individualItemId, batchItemId, availableItemId, iin };
+  return { employeeId, individualItemId, batchItemId, availableItemId, groupId, iin };
 }
 
 async function resetSchemas(config: DatabaseConfig) {
