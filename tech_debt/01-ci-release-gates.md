@@ -136,6 +136,21 @@ checklist не представлены как единый контракт.
 
 ## Status: Done
 
+### CI history regression repair (2026-09-10)
+
+GitHub Actions run `34439907045` exposed a real release-evidence regression: the
+blocking `tests` job used the default shallow checkout, while the evidence verifier
+must resolve immutable files from pinned historical commits. The primary checkout
+now uses `fetch-depth: 0`. Contract coverage scopes that requirement specifically to
+the `tests` job, and release-evidence coverage verifies both a pack generated from
+the current committed tree and the repository's pinned historical NO-GO pack.
+
+Focused validation: 11/11 release-evidence and CI-contract tests, `docs:check`,
+targeted ESLint, and `git diff --check` pass. Fresh independent reviews were limited
+to two passes: **4/10** implementation and **5/10** tests on the first pass, then
+**10/10** and **10/10** with no actionable findings after correcting the checkout
+placement and the job-scoped assertion.
+
 Основной CI/release-контур закрыт: обязательные source/UI/database checks, lint,
 мigrations, runtime smoke, полный test runner, Storybook, audit, production build
 и security invariants теперь выполняются в одном workflow; database integration не

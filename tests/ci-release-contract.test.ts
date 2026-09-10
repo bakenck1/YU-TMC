@@ -8,6 +8,9 @@ import { getDatabaseTestFiles } from "../scripts/database-test-files.mjs";
 
 test("CI validates the documented release gates in dependency order", async () => {
   const workflow = await readFile(".github/workflows/tests.yml", "utf8");
+  const testsJobStart = workflow.indexOf("  tests:");
+  const browserSmokeJobStart = workflow.indexOf("  browser-smoke:");
+  const testsJob = workflow.slice(testsJobStart, browserSmokeJobStart);
   const migrationIndex = workflow.indexOf("npm run db:migrate -- --target=test");
   const smokeIndex = workflow.indexOf("npm run db:smoke -- --target=test");
   const testsIndex = workflow.indexOf("npm run test:all");
@@ -27,6 +30,9 @@ test("CI validates the documented release gates in dependency order", async () =
   assert.match(workflow, /bash -n deploy\/enable-https\.sh/);
   assert.match(workflow, /node --check deploy\/backup-postgres-connection\.mjs/);
   assert.match(workflow, /sudo env .*bash scripts\/test-deployment-runtime\.sh/);
+  assert.ok(testsJobStart >= 0);
+  assert.ok(browserSmokeJobStart > testsJobStart);
+  assert.match(testsJob, /fetch-depth:\s*0/);
 });
 
 test("direct deployment performs migration, settings import, and smoke checks before services start", async () => {
