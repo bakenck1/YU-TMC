@@ -2,9 +2,9 @@
 
 ## Почему это долг
 
-`.github/workflows/tests.yml` запускает `npm ci`, `npm run test:all`,
-`npm audit`, `npm run build` и `npm run security:check`, но не запускает
-`db:check`, `db:smoke`, `ui:check`, Storybook build, Compose validation и
+На момент постановки задачи `.github/workflows/tests.yml` запускал `npm ci`,
+`npm run test:all`, `npm audit`, `npm run build` и `npm run security:check`, но не запускал
+`db:check`, `db:smoke`, `ui:check`, Storybook build, deployment guard smoke и
 отдельный migration/runtime-role smoke-test. При этом `scripts/test-all.mjs`
 может намеренно пропустить PostgreSQL integration вне CI, если
 `TEST_DATABASE_URL` не задан.
@@ -28,9 +28,11 @@ checklist не представлены как единый контракт.
    - `npm run db:check`;
    - `npm run ui:check`;
    - `npm run storybook:build`;
-   - production/mobile Compose config validation с non-secret placeholders;
+   - изолированный smoke backup/HTTPS guards текущего direct deployment без
+     production credentials (`scripts/test-deployment-runtime.sh`), syntax
+     checks для HTTPS/backup scripts и статические contract checks systemd units;
    - `npm run db:migrate -- --target=test` после readiness PostgreSQL и до
-     любого smoke/test шага;
+     любого database smoke/test шага;
    - `npm run db:smoke -- --target=test` через isolated test deployment id;
    - `npm run test:all` с обязательными `TEST_DATABASE_URL` и
      `TEST_DATABASE_MIGRATOR_URL`;
@@ -83,10 +85,8 @@ checklist не представлены как единый контракт.
    - deployment id проверяется через обе credentials и обязан отличаться от
      любого non-test deployment id.
 
-    Целевой CI workflow должен использовать следующие явные templates (сейчас
-    workflow содержит hard-coded deployment ID и потому ещё не соответствует
-    этому contract; passwords берутся из ephemeral CI service, а не из
-    repository secrets):
+    Реализованный CI workflow использует следующие явные templates; passwords
+    берутся из ephemeral CI service, а не из repository secrets:
 
    ```text
    TEST_DATABASE_URL=postgresql://yu_inventory_test_runtime:<runtime-password>@127.0.0.1:55433/yu_inventory_test
@@ -94,11 +94,10 @@ checklist не представлены как единый контракт.
    TEST_DATABASE_DEPLOYMENT_ID=yu-inventory-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
    ```
 
-    `GITHUB_RUN_ID` и `GITHUB_RUN_ATTEMPT` задаются самим workflow; текущий
-    hard-coded `yu-inventory-ci-test` нужно удалить. ID не берётся из
-    пользовательского ввода, не переиспользуется между runs и не совпадает с
-   development/production deployment IDs. Локальные запуски обязаны задавать
-   эквивалентные `TEST_DATABASE_*` variables явно.
+    `GITHUB_RUN_ID` и `GITHUB_RUN_ATTEMPT` задаются самим workflow. ID не берётся
+    из пользовательского ввода, не переиспользуется между runs и не совпадает с
+    development/production deployment IDs. Локальные запуски обязаны задавать
+    эквивалентные `TEST_DATABASE_*` variables явно.
 
 ## Подводные камни
 
@@ -107,31 +106,31 @@ checklist не представлены как единый контракт.
 - Не подменять production credentials CI placeholders в реальном deploy job.
 - `db:smoke` должен проверять именно ту БД, на которую направлен runtime URL,
   а не только успешное подключение migrator.
-- Storybook build и Compose validation могут требовать больше времени, поэтому
+- Storybook build и deployment smoke могут требовать больше времени, поэтому
   их лучше отделить от быстрых PR checks, но оставить обязательными для release.
 - Manual gates нельзя объявлять пройденными автоматически на основании
   локального audit report.
 
 ## TDD и проверки
 
-- Тест для `scripts/test-all.mjs` проверяет summary с database `SKIPPED`.
-- CI configuration test проверяет наличие обязательных commands, fail-fast
-  database environment, PostgreSQL health, создание
-  `yu_inventory_test_migrator`/`yu_inventory_test_runtime`, их privilege
-  separation и миграцию до smoke/test шагов.
-- Smoke test проверяет runtime role grants, migrator manifest и deployment id.
-- CI config test проверяет URL host/port/database, различие runtime и migrator
-  user, deterministic deployment-ID template и отсутствие production URL.
-- Negative test: отсутствие `TEST_DATABASE_URL` или
-  `TEST_DATABASE_MIGRATOR_URL` в CI-like environment приводит к ненулевому
-  exit code; наличие только одной переменной также считается ошибкой.
+- Contract test статически проверяет обязательные commands, deterministic
+  deployment-ID template, wiring deployment smoke и порядок
+  `db:migrate → db:smoke → test:all`.
+- Source contract `scripts/test-all.mjs` проверяет парность database URLs,
+  обязательность PostgreSQL в CI и отдельный `SKIPPED` summary локально.
+- Сам workflow поднимает health-checked PostgreSQL, создаёт две restricted роли
+  и исполняет migration, runtime smoke и PostgreSQL tests. Эти свойства
+  подтверждаются выполнением CI, а не выдаются за локально симулированные
+  negative behavioral tests.
 
 ## Acceptance criteria
 
 - CI падает при migration manifest mismatch.
 - CI падает, если database integration не была запущена.
 - CI проверяет `db:check`, `ui:check`, Storybook и security invariants.
-- Compose validation не требует настоящих production secrets.
+- Direct deployment checks не требуют настоящих production secrets: isolated
+  smoke проверяет schema/deployment-ID mismatch, backup и Nginx activation/
+  rollback, а contract tests — systemd units и порядок migration/start steps.
 - Release checklist явно показывает automated/manual status.
 - Текущие unit, UI, component и database suites остаются зелёными.
 
@@ -141,6 +140,13 @@ checklist не представлены как единый контракт.
 мigrations, runtime smoke, полный test runner, Storybook, audit, production build
 и security invariants теперь выполняются в одном workflow; database integration не
 может быть незаметно пропущена.
+
+После принятого отказа от container runtime прежний Compose-критерий удалён из
+актуального acceptance. Для текущего tracked deployment contract CI запускает
+`scripts/test-deployment-runtime.sh`: его изолированный fake-command harness
+проверяет backup, schema/deployment-ID mismatch и Nginx activation/rollback.
+Отдельные contract tests проверяют systemd unit definitions и документированный
+порядок migration/start, но не объявляются runtime-запуском этих services.
 
 Validation: `npm.cmd run docs:check`, CI contract tests, `npm.cmd run lint`,
 `npm.cmd run db:check`, `git diff --check` и `npm.cmd run test:all` проходят.
@@ -153,3 +159,10 @@ Independent review: первый проход — 5/10, test quality 4/10; по�
 superuser migrator, а контрактные тесты workflow остаются текстовыми. Их не
 маскируем статусом этой задачи; они будут закрыты вместе с воспроизводимостью
 toolchain/DB и усилением test-contract coverage.
+
+Reconciliation после удаления container runtime прошёл два fresh review без
+контекста: **7/10**, затем **7.8/10** (evidence/test **7/10** и **8.2/10**).
+После второго score исправлены все три actionable замечания: historical/current
+формулировки разделены, deployment smoke не приравнивается к запуску systemd
+services, а TDD-раздел описывает фактические static/runtime evidence boundaries.
+Третий review не запускался согласно лимиту в два прохода.
