@@ -15,6 +15,7 @@ import type { Pool } from "pg";
 
 let migrationConfig: DatabaseConfig;
 let database: Pool;
+let runtimeDatabase: Pool;
 
 describe("PostgreSQL item-form responsibility assignment", () => {
   beforeAll(async () => {
@@ -22,9 +23,16 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     await resetSchemas(migrationConfig);
     await migrateDatabase(migrationConfig);
     database = createPostgresPool(migrationConfig, { max: 2 });
+    runtimeDatabase = createPostgresPool({
+      ...migrationConfig,
+      applicationName: "yu-inventory-item-form-runtime-test",
+      connectionString: migrationConfig.runtimeConnectionString,
+      purpose: "runtime",
+    }, { max: 2 });
   });
 
   afterAll(async () => {
+    await runtimeDatabase?.end();
     await database?.end();
     await closeDatabase();
     await resetSchemas(migrationConfig);
@@ -189,6 +197,44 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     });
   });
 
+  it("allows the restricted runtime role to change an official number", async () => {
+    const adminId = randomUUID();
+    const firstEmployeeId = randomUUID();
+    const secondEmployeeId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, firstEmployeeId, secondEmployeeId);
+    await seedRoom(adminId, buildingId, roomId);
+    const service = createService(runtimeDatabase);
+    const actor = { userId: adminId, role: "admin" as const };
+    const created = await service.createItem({
+      name: "Runtime role number correction",
+      category: "electronics",
+      roomId,
+      barcode: `RUNTIME-${randomUUID()}`,
+    }, actor);
+    const correctedNumber = `RUNTIME-FIX-${randomUUID()}`;
+
+    const corrected = await service.updateProtected(created.id, {
+      version: created.version,
+      roomId,
+      inventoryNumber: correctedNumber,
+      status: "active",
+    }, actor);
+
+    expect(corrected.inventoryNumber).toBe(correctedNumber);
+    await expect(runtimeDatabase.query(
+      `delete from "yu_inventory"."barcode_registry" where item_id = $1`,
+      [created.id],
+    )).rejects.toMatchObject({ code: "42501" });
+    const registry = await database.query<{ original_value: string }>(
+      `select original_value from "yu_inventory"."barcode_registry"
+        where item_id = $1 and kind = 'official'`,
+      [created.id],
+    );
+    expect(registry.rows).toEqual([{ original_value: correctedNumber }]);
+  });
+
   it("records decommissioned use without optional evidence and restores the item only through audited actions", async () => {
     const adminId = randomUUID();
     const firstEmployeeId = randomUUID();
@@ -302,10 +348,10 @@ describe("PostgreSQL item-form responsibility assignment", () => {
   });
 });
 
-function createService() {
+function createService(source: Pool = database) {
   return new InventoryItemService(
     new PostgresUnitOfWork(
-      () => database,
+      () => source,
       (source) => ({
         ...createPostgresInventoryItemRepositories(source),
         ...createPostgresInventoryResponsibilityRepositories(source),
