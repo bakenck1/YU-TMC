@@ -12,9 +12,9 @@
 - независимые review-проходы: **9/10**, затем **10/10** после усиления regression-теста;
   итог — no actionable findings.
 
-Свежий `npm audit` отдельно сообщает об advisories для неизменённых `next@16.2.11` и
-`sharp@0.35.3`; reviewer подтвердил, что это отдельное обновление зависимостей, а не
-регрессия и не блокер этой cleanup-задачи.
+На момент первоначального review `npm audit` отдельно сообщал об advisories для
+`next@16.2.11` и `sharp@0.35.3`. Последующая security-gate правка задачи 01 обновила
+их до `next@16.3.4` и `sharp@0.35.4`; текущий production audit сообщает 0 vulnerabilities.
 
 ## Evidence
 

@@ -30,6 +30,11 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
+  typescript: {
+    // Test fixtures have dedicated typecheck projects; production builds check
+    // the complete application graph through this narrower root configuration.
+    tsconfigPath: "tsconfig.build.json",
+  },
   experimental: {
     // Production runtime bundles must not expose source maps, including when
     // the application is deployed directly with `next start`.
