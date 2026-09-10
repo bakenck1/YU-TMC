@@ -163,9 +163,7 @@ export default function ItemsTable({
     rooms: RoomDto[];
     variant?: "transfer" | "issue";
   };
-  invoiceActions?: {
-    recipientName: string;
-  };
+  invoiceActions?: boolean;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -364,7 +362,7 @@ export default function ItemsTable({
       {excelDataset || itemCreation || invoiceActions ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2.5 sm:flex-row sm:items-center">
           {invoiceActions ? (
-            <InventoryInvoiceActions items={selectedItems} recipientName={invoiceActions.recipientName} />
+            <InventoryInvoiceActions items={selectedItems} />
           ) : null}
           {excelDataset ? (
             <InventoryExportButton
@@ -505,7 +503,6 @@ export default function ItemsTable({
               </label>
               <InventoryFilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:brand` : undefined} />
               <InventoryFilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:model` : undefined} />
-              <InventoryFilterInput label={t("items.type")} value={draftFilters.itemType} onChange={(value) => updateDraftFilter("itemType", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:item-type` : undefined} />
               <InventoryFilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={(value) => updateDraftFilter("building", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:building` : undefined} />
               <InventoryFilterInput label={t("items.filterRoom")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={(value) => updateDraftFilter("location", value || "all")} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:location` : undefined} />
               <label className="text-sm text-zinc-600">

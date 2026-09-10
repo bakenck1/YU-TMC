@@ -6,7 +6,6 @@ import type { InventoryItem } from "@/lib/types";
 
 vi.mock("@/components/AppSettingsProvider", () => ({
   useAppSettings: () => ({
-    settings: { organizationName: "YU Inventory" },
     t: (key: string, values?: Record<string, unknown>) =>
       values ? `${key}:${JSON.stringify(values)}` : key,
   }),
@@ -27,7 +26,7 @@ const ITEM = {
 
 describe("InventoryInvoiceActions", () => {
   it("keeps the action available but prevents a blank invoice when no items are selected", () => {
-    render(<InventoryInvoiceActions items={[]} recipientName="Иванов Иван" />);
+    render(<InventoryInvoiceActions items={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "invoice.action" }));
 
@@ -49,12 +48,12 @@ describe("InventoryInvoiceActions", () => {
       opener: window,
     } as unknown as Window);
 
-    render(<InventoryInvoiceActions items={[ITEM]} recipientName="Иванов Иван" />);
+    render(<InventoryInvoiceActions items={[ITEM]} />);
     fireEvent.click(screen.getByRole("button", { name: "invoice.action" }));
 
     expect(screen.getByRole("dialog", { name: "invoice.title" })).not.toBeNull();
-    expect(screen.getByDisplayValue("YU Inventory")).not.toBeNull();
-    expect(screen.getByDisplayValue("Иванов Иван")).not.toBeNull();
+    expect(screen.queryByText("invoice.supplier")).toBeNull();
+    expect(screen.queryByText("invoice.recipient")).toBeNull();
     expect(screen.getByText('invoice.selectedSummary:{"count":1,"quantity":20}')).not.toBeNull();
 
     fireEvent.change(screen.getByRole("textbox", { name: "invoice.number" }), { target: { value: "42" } });

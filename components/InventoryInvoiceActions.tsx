@@ -12,20 +12,12 @@ import {
 } from "@/lib/inventory-invoice";
 import type { InventoryItem } from "@/lib/types";
 
-export default function InventoryInvoiceActions({
-  items,
-  recipientName,
-}: {
-  items: InventoryItem[];
-  recipientName: string;
-}) {
-  const { settings, t } = useAppSettings();
+export default function InventoryInvoiceActions({ items }: { items: InventoryItem[] }) {
+  const { t } = useAppSettings();
   const hasSelectedItems = items.length > 0;
   const [open, setOpen] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [date, setDate] = useState(todayInputValue);
-  const [supplier, setSupplier] = useState(settings.organizationName);
-  const [recipient, setRecipient] = useState(recipientName);
   const [error, setError] = useState(false);
 
   function openDialog() {
@@ -47,8 +39,6 @@ export default function InventoryInvoiceActions({
       items,
       invoiceNumber,
       date,
-      supplier,
-      recipient,
     });
     printWindow.document.open();
     printWindow.document.write(html);
@@ -101,15 +91,6 @@ export default function InventoryInvoiceActions({
                 <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
               </label>
             </div>
-            <label className="block text-sm font-medium text-zinc-700">
-              {t("invoice.supplier")}
-              <input value={supplier} onChange={(event) => setSupplier(event.target.value)} maxLength={160} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
-            </label>
-            <label className="block text-sm font-medium text-zinc-700">
-              {t("invoice.recipient")}
-              <input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={160} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
-            </label>
-
             {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{t("invoice.popupBlocked")}</p> : null}
 
             <div className="grid gap-3 border-t border-black/5 pt-5 sm:grid-cols-2">

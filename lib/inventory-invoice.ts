@@ -5,8 +5,6 @@ export type InventoryInvoiceVariant = "small" | "large";
 export interface InventoryInvoiceDetails {
   invoiceNumber: string;
   date: string;
-  supplier: string;
-  recipient: string;
 }
 
 export interface InventoryInvoiceDocumentInput extends InventoryInvoiceDetails {
@@ -41,10 +39,8 @@ export function buildInventoryInvoiceHtml({
   items,
   invoiceNumber,
   date,
-  supplier,
-  recipient,
 }: InventoryInvoiceDocumentInput) {
-  const details = { invoiceNumber, date, supplier, recipient };
+  const details = { invoiceNumber, date };
   const pages = variant === "small"
     ? chunk(items, SMALL_ROWS_PER_COPY).map(
         (pageItems, pageIndex) => `
@@ -89,19 +85,13 @@ function renderInvoice(
   return `<article class="invoice invoice-${variant}" data-invoice-copy="${copyId}">
     <header>
       <div class="invoice-title">НАКЛАДНАЯ №<span class="line invoice-number">${escapeHtml(details.invoiceNumber)}</span></div>
-      <div class="invoice-date">«<span class="line day">${escapeHtml(formattedDate(details.date).day)}</span>»<span class="line month">${escapeHtml(formattedDate(details.date).month)}</span><span class="line year">${escapeHtml(formattedDate(details.date).year)}</span> г.</div>
-      <div class="party"><span>Поставщик</span><span class="line">${escapeHtml(details.supplier)}</span></div>
-      <div class="party"><span>Получатель</span><span class="line">${escapeHtml(details.recipient)}</span></div>
+      <div class="invoice-date"><span class="date-label">Дата выписки:</span> «<span class="line day">${escapeHtml(formattedDate(details.date).day)}</span>»<span class="line month">${escapeHtml(formattedDate(details.date).month)}</span><span class="line year">${escapeHtml(formattedDate(details.date).year)}</span> г.</div>
     </header>
     <table>
       <colgroup><col class="name-col"><col class="code-col"><col class="unit-col"><col class="quantity-col"><col class="price-col"><col class="sum-col"></colgroup>
       <thead><tr><th>Наименование</th><th>Шифр</th><th>Ед.<br>изм.</th><th>Кол-<br>во</th><th>Цена</th><th>Сумма</th></tr></thead>
       <tbody>${rows.join("")}</tbody>
     </table>
-    <footer>
-      ${signatureRow("Принял(а)", details.recipient)}
-      ${signatureRow("Отпустил(а)", "")}
-    </footer>
   </article>`;
 }
 
@@ -119,10 +109,6 @@ function renderItemRow(item: InventoryItem) {
     <td class="number">${formatMoney(price)}</td>
     <td class="number">${formatMoney(total)}</td>
   </tr>`;
-}
-
-function signatureRow(label: string, fullName: string) {
-  return `<div class="signature-row"><span>${label}</span><span class="signature-line"><span class="signature-value"></span><small>(Подпись)</small></span><span>/</span><span class="name-line"><span class="signature-value">${escapeHtml(fullName)}</span><small>(Ф.И.О.)</small></span></div>`;
 }
 
 function formattedDate(value: string) {
@@ -185,11 +171,10 @@ const INVOICE_STYLES = `
   .line { display: inline-flex; min-height: 1.2em; align-items: flex-end; border-bottom: .3mm solid #000; padding: 0 1.5mm .2mm; }
   .invoice-number { min-width: 38mm; justify-content: center; }
   .invoice-date { margin-top: 1.5mm; text-align: center; white-space: nowrap; }
+  .date-label { margin-right: 2mm; }
   .invoice-date .day { min-width: 14mm; justify-content: center; }
   .invoice-date .month { min-width: 58mm; justify-content: center; }
   .invoice-date .year { min-width: 16mm; justify-content: center; }
-  .party { display: flex; align-items: flex-end; gap: 0; margin-top: 3mm; }
-  .party .line { flex: 1; min-width: 0; justify-content: flex-start; padding-left: 2mm; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; }
   .invoice-large table { margin-top: 5mm; font-size: 9.5pt; }
   .invoice-small table { margin-top: 4mm; font-size: 7.5pt; }
@@ -204,14 +189,6 @@ const INVOICE_STYLES = `
   .invoice-large .item-code { padding-left: .5mm; padding-right: .5mm; font-size: 7.25pt; white-space: nowrap; overflow-wrap: normal; }
   .center { text-align: center; }
   .number { text-align: right; white-space: nowrap; }
-  .invoice footer { margin-top: auto; }
-  .signature-row { display: grid; grid-template-columns: auto minmax(38mm, 1fr) auto minmax(56mm, 1.35fr); align-items: end; column-gap: 1mm; margin-top: 4mm; }
-  .signature-line, .name-line { position: relative; display: flex; min-width: 0; height: 6mm; align-items: flex-end; justify-content: center; border-bottom: .3mm solid #000; padding: 0 1mm .35mm; }
-  .signature-row small { position: absolute; top: 6.2mm; left: 0; right: 0; text-align: center; font-size: 7pt; }
-  .signature-value { max-width: 100%; overflow-wrap: anywhere; text-align: center; }
-  .invoice-small .signature-row { margin-top: 3mm; }
-  .invoice-small .signature-line, .invoice-small .name-line { height: 4.6mm; }
-  .invoice-small .signature-row small { top: 4.8mm; font-size: 6pt; }
   @media print {
     html, body { background: #fff; }
     .sheet { margin: 0; box-shadow: none; }

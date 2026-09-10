@@ -11,7 +11,7 @@ import { activeInventoryItems } from "@/lib/server/excel/inventory-excel";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { authorizationActor } from "@/lib/server/security/request-user";
 
-const INVENTORY_TARGET = 2_000;
+const INVENTORY_TARGET = 5_000;
 
 function toAnalyticsRecord(item: InventoryItemDto): AnalyticsRecord {
   return {
