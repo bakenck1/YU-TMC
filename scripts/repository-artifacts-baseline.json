@@ -124,6 +124,10 @@
       {
         "tag": "20260908160000_asset_loss_case_event_consistency",
         "reason": "The forward-only deferred constraint ensures every committed asset-loss case status matches the latest append-only event without rewriting the deployed event-contract migration."
+      },
+      {
+        "tag": "20260910120000_update_official_barcode_without_delete",
+        "reason": "The forward-only raw SQL migration replaces a trigger routine without changing the Drizzle-managed schema shape."
       }
     ]
   },
