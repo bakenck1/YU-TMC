@@ -144,6 +144,7 @@ export default function DecommissionedItemsView({
       <ItemsTable
         items={inUse}
         showFilters={false}
+        itemReturnHref="/items/decommissioned"
         dateLabel={t("decommissioned.decommissionedAt")}
         excelDataset={canExport ? "decommissioned_in_use" : undefined}
         completeDataset={completeDataset}
@@ -155,6 +156,7 @@ export default function DecommissionedItemsView({
       <ItemsTable
         items={archived}
         showFilters={false}
+        itemReturnHref="/items/decommissioned"
         dateLabel={t("decommissioned.decommissionedAt")}
         excelDataset={canExport ? "decommissioned" : undefined}
         completeDataset={completeDataset}

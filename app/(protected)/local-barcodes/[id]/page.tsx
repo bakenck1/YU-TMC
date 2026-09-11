@@ -9,17 +9,28 @@ import { getApplicationServices } from "@/lib/server/application";
 import { readHiddenPageResource } from "@/lib/server/security/hidden-page-resource";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { authorizationActor } from "@/lib/server/security/request-user";
+import { canonicalInventoryDetailsReturnHref } from "@/lib/inventory-list-state";
+import { canAccessPath } from "@/lib/security/authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function LocalBarcodePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { id } = await params;
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const user = await requireAuthorizedPage(`/local-barcodes/${id}`);
+  const requestedReturnHref = canonicalInventoryDetailsReturnHref(
+    resolvedSearchParams.returnTo,
+  );
+  const returnHref =
+    requestedReturnHref && canAccessPath(user.role, requestedReturnHref)
+      ? requestedReturnHref
+      : undefined;
   if (!isUuid(id)) notFound();
   const actor = authorizationActor(user);
   const [group, history] = await readHiddenPageResource(
@@ -54,6 +65,7 @@ export default async function LocalBarcodePage({
         }}
         localBarcodeItemId={group.itemId}
         hideComposition
+        returnHref={returnHref}
       />
     </Wrapper>
   );

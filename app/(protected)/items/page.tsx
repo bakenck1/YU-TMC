@@ -11,8 +11,23 @@ import { authorizationActor } from "@/lib/server/security/request-user";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { hasPermission } from "@/lib/security/permissions";
 import { isInventoryBuildingName } from "@/lib/campus-directory";
+import {
+  parseInventoryTableViewState,
+  type InventorySearchParams,
+} from "@/lib/inventory-list-state";
+import { employeeItemTabFromParam } from "@/lib/employee-items-tabs";
 
-export default async function ItemsPage() {
+export default async function ItemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<InventorySearchParams>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const initialViewState = parseInventoryTableViewState(resolvedSearchParams);
+  const requestedTab = resolvedSearchParams.tab;
+  const initialEmployeeTab = employeeItemTabFromParam(
+    Array.isArray(requestedTab) ? requestedTab[0] : requestedTab,
+  );
   const user = await requireAuthorizedPage("/items");
   const actor = authorizationActor(user);
   const services = getApplicationServices();
@@ -65,6 +80,8 @@ export default async function ItemsPage() {
           columnSettingsScope={user.userId}
           actorUserId={user.userId}
           actorRole={user.role}
+          initialStatus={initialEmployeeTab}
+          initialViewState={initialViewState}
         />
       ) : (
         <ItemsTable
@@ -83,6 +100,8 @@ export default async function ItemsPage() {
             buildings,
             mode: user.role === "warehouse" ? "restricted" : "full",
           } : undefined}
+          initialViewState={initialViewState}
+          stateUrlPath="/items"
           invoiceActions
         />
       )}

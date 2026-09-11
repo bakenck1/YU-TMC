@@ -579,6 +579,7 @@ export default function TmcItemQrFlow({
             <div className="mt-6 border-t border-zinc-100 pt-6">
               <ItemsTable
                 items={issueItems}
+                itemReturnHref={operation.href}
                 searchHistoryScope={`tmc-issue:${actorUserId}`}
                 columnSettingsScope={`tmc-issue:${actorUserId}`}
                 bulkActions={{
