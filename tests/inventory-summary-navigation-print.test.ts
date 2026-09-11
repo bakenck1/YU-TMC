@@ -15,7 +15,7 @@ test("every user role can open an item card from the summary", () => {
     "utf8",
   );
   assert.match(source, /onClick=\{\(\) => router\.push\(itemHref\(item\)\)\}/);
-  assert.match(source, /item\.localGroupId \? `\/local-barcodes\/\$\{item\.localGroupId\}` : `\/items\/\$\{item\.id\}`/);
+  assert.match(source, /inventoryDetailsHref\(itemPath, returnHref\)/);
   assert.match(source, /cursor-pointer[^"]*hover:bg-zinc-50\/80/);
 });
 

@@ -13,6 +13,10 @@ export type EmployeeItemTabKey =
   | "Home"
   | "End";
 
+export function employeeItemTabFromParam(value: unknown): ItemStatus {
+  return EMPLOYEE_ITEM_STATUSES.find((status) => status === value) ?? "active";
+}
+
 export function employeeItemTabAfterKey(
   current: ItemStatus,
   key: string,

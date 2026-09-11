@@ -37,6 +37,7 @@ import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog"
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
+import InventoryItemBackLink from "@/components/InventoryItemBackLink";
 import InventoryItemComments from "@/components/InventoryItemComments";
 import InventoryOverviewRow from "@/components/InventoryOverviewRow";
 import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
@@ -89,6 +90,7 @@ export default function InventoryItemDetails({
   localBarcodeItemId,
   hideComposition = false,
   commentItemId,
+  returnHref,
 }: {
   initialItem: InventoryItemDto;
   canEditContent: boolean;
@@ -111,9 +113,12 @@ export default function InventoryItemDetails({
   hideComposition?: boolean;
   /** Local groups share the source item's comment thread. */
   commentItemId?: string;
+  /** Restores the originating inventory list, including filters and pagination. */
+  returnHref?: string;
 }) {
   const { language, locale, t } = useAppSettings();
   const router = useRouter();
+  const returnDestination = returnHref ?? "/items";
   const [item, setItem] = useState(initialItem);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
@@ -549,7 +554,7 @@ export default function InventoryItemDetails({
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? responseErrorCode(response.status));
       }
-      router.push("/items");
+      router.replace(returnDestination);
       router.refresh();
     } catch (cause) {
       setError(localizeItemError(cause, t));
@@ -650,18 +655,23 @@ export default function InventoryItemDetails({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold text-zinc-700">{item.name}</h1>
-        <span className={`rounded px-2 py-1 text-xs font-medium ${item.status === "decommissioned_in_use" ? "bg-orange-100 text-orange-800 ring-1 ring-orange-300" : "bg-violet-100 text-violet-600"}`}>
-          {statusLabel}
-        </span>
+      <div className="flex items-start gap-3">
+        <InventoryItemBackLink href={returnDestination} />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pt-1 sm:gap-3">
+          <h1 className="min-w-0 break-words text-xl font-semibold text-zinc-700 sm:text-2xl">
+            {item.name}
+          </h1>
+          <span className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${item.status === "decommissioned_in_use" ? "bg-orange-100 text-orange-800 ring-1 ring-orange-300" : "bg-violet-100 text-violet-600"}`}>
+            {statusLabel}
+          </span>
+        </div>
       </div>
 
       <nav
         aria-label={t("itemDetails.actions")}
-        className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/5 bg-white/95 p-2 shadow-md backdrop-blur"
+        className="sticky top-0 z-30 flex items-center gap-2 overflow-x-auto overscroll-x-contain whitespace-nowrap rounded-xl border border-black/5 bg-white/95 p-2 shadow-md backdrop-blur md:flex-wrap md:justify-between md:overflow-visible"
       >
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-nowrap gap-2 md:flex-wrap">
           <span
             aria-current="page"
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -672,7 +682,7 @@ export default function InventoryItemDetails({
           {canManageCode ? <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button> : null}
         </div>
         {canSendToService || canManageProtected ? (
-          <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <div className="ml-auto flex shrink-0 flex-nowrap justify-end gap-2 md:flex-wrap">
             {canManageProtected ? (
               <button
                 ref={protectedTriggerRef}

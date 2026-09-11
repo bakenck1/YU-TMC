@@ -9,14 +9,25 @@ import { isInventoryBuildingName } from "@/lib/campus-directory";
 import { isUuid } from "@/lib/domain/identifiers";
 import { readHiddenPageResource } from "@/lib/server/security/hidden-page-resource";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
+import { canonicalInventoryDetailsReturnHref } from "@/lib/inventory-list-state";
+import { canAccessPath } from "@/lib/security/authorization";
 
 export default async function ItemPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { id } = await params;
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const user = await requireAuthorizedPage(`/items/${id}`);
+  const requestedReturnHref = canonicalInventoryDetailsReturnHref(
+    resolvedSearchParams.returnTo,
+  );
+  const returnHref =
+    requestedReturnHref && canAccessPath(user.role, requestedReturnHref)
+      ? requestedReturnHref
+      : undefined;
 
   if (isUuid(id)) {
     const actor = {
@@ -80,6 +91,7 @@ export default async function ItemPage({
         canManageComponents={canManageComponents}
         actorId={user.userId}
         actorRole={user.role}
+        returnHref={returnHref}
       />
       {user.role === "admin" || user.role === "employee" ? (
         <Wrapper width="full" responsive={{ at: "md", display: "inline-flex", width: "auto" }}>

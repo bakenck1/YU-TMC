@@ -14,6 +14,7 @@ import InventoryInvoiceActions from "@/components/InventoryInvoiceActions";
 import InventoryInformationPanel from "@/components/InventoryInformationPanel";
 import InventoryInspectionsManager from "@/components/InventoryInspectionsManager";
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
+import InventoryItemBackLink from "@/components/InventoryItemBackLink";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 import InventoryItemComments from "@/components/InventoryItemComments";
@@ -138,6 +139,7 @@ export const InventoryInvoiceActionsStory: Story = { name: "InventoryInvoiceActi
 export const InventoryInformationPanelStory: Story = { name: "InventoryInformationPanel", render: () => <InventoryInformationPanel /> };
 export const InventoryInspectionsManagerStory: Story = { name: "InventoryInspectionsManager", render: () => <InventoryInspectionsManager actorRole="admin" currentUserId="user-1" initialInspections={[STORY_INSPECTION]} initialInspectionId={STORY_INSPECTION.id} rooms={[STORY_ROOM]} technicians={[{ id: "user-1", fullName: "Demo User 1", role: "employee" }]} canExport /> };
 export const InventoryItemArchiveDialogStory: Story = { name: "InventoryItemArchiveDialog", render: () => <InventoryItemArchiveDialog itemName={STORY_ITEM_DTO.name} open saving={false} onClose={() => undefined} onConfirm={() => undefined} /> };
+export const InventoryItemBackLinkStory: Story = { name: "InventoryItemBackLink", render: () => <div className="p-6"><InventoryItemBackLink href="/items?page=3" /></div> };
 export const InventoryItemCameraCaptureStory: Story = { name: "InventoryItemCameraCapture", render: () => <InventoryItemCameraCapture open onClose={() => undefined} onCapture={() => undefined} /> };
 export const InventoryItemCodeScannerStory: Story = { name: "InventoryItemCodeScanner", render: () => <InventoryItemCodeScanner onClose={() => undefined} onCodeSelected={() => undefined} /> };
 export const InventoryItemCommentsStory: Story = { name: "InventoryItemComments", render: () => <InventoryItemComments itemId={STORY_ITEM_DTO.id} initialComments={[]} canComment /> };
