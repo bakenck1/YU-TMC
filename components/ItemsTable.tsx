@@ -34,6 +34,15 @@ import {
   inventoryItemCategoryTranslationKey,
   type InventoryItemCategoryTranslationKey,
 } from "@/lib/inventory-categories";
+import {
+  DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  EMPTY_TABLE_FILTERS,
+  INVENTORY_PAGE_SIZE_OPTIONS,
+  inventoryDetailsHref,
+  inventoryTableViewHref,
+  parseInventoryTableViewState,
+  type InventoryTableViewState,
+} from "@/lib/inventory-list-state";
 
 function loadSearchHistory(storageKey: string) {
   try {
@@ -77,20 +86,12 @@ function itemLinkLabel(item: InventoryItem) {
   return `${item.name} вЂ” ${identifier}`;
 }
 
-function itemHref(item: InventoryItem) {
-  return item.localGroupId ? `/local-barcodes/${item.localGroupId}` : `/items/${item.id}`;
+function itemHref(item: InventoryItem, returnHref?: string) {
+  const itemPath = item.localGroupId
+    ? `/local-barcodes/${item.localGroupId}`
+    : `/items/${item.id}`;
+  return inventoryDetailsHref(itemPath, returnHref);
 }
-
-const EMPTY_TABLE_FILTERS = {
-  category: "all",
-  location: "all",
-  statusKey: "all",
-  brand: "",
-  model: "",
-  itemType: "",
-  building: "",
-  responsible: "",
-};
 
 const COLUMN_LABEL_KEYS = {
   photo: "items.photo",
@@ -143,6 +144,10 @@ export default function ItemsTable({
   itemCreation,
   bulkActions,
   invoiceActions,
+  initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  stateUrlPath,
+  stateUrlParams,
+  itemReturnHref,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
@@ -164,20 +169,40 @@ export default function ItemsTable({
     variant?: "transfer" | "issue";
   };
   invoiceActions?: boolean;
+  initialViewState?: InventoryTableViewState;
+  stateUrlPath?: string;
+  stateUrlParams?: Readonly<Record<string, string | undefined>>;
+  /** Static fallback for tables whose own filters are not URL-managed. */
+  itemReturnHref?: string;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [startingViewState] = useState(() => {
+    if (
+      typeof window !== "undefined" &&
+      stateUrlPath &&
+      window.location.pathname === stateUrlPath
+    ) {
+      return parseInventoryTableViewState(
+        new URLSearchParams(window.location.search),
+      );
+    }
+    return {
+      ...initialViewState,
+      filters: { ...initialViewState.filters },
+    };
+  });
+  const [query, setQuery] = useState(startingViewState.query);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [filters, setFilters] = useState(EMPTY_TABLE_FILTERS);
-  const [draftFilters, setDraftFilters] = useState(EMPTY_TABLE_FILTERS);
+  const [filters, setFilters] = useState({ ...startingViewState.filters });
+  const [draftFilters, setDraftFilters] = useState({ ...startingViewState.filters });
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_INVENTORY_COLUMNS);
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(startingViewState.page);
+  const [pageSize, setPageSize] = useState(startingViewState.pageSize);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const columnSettingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -256,6 +281,15 @@ export default function ItemsTable({
     from: firstRecord,
     to: lastRecord,
   } = pagination;
+  const viewState: InventoryTableViewState = {
+    query,
+    filters,
+    page: currentPage,
+    pageSize,
+  };
+  const listHref = stateUrlPath
+    ? inventoryTableViewHref(stateUrlPath, viewState, stateUrlParams)
+    : itemReturnHref;
 
   const selectablePageItems = pageItems.filter((item) => invoiceActions || !item.localGroupId);
   const allVisibleSelected =
@@ -269,6 +303,38 @@ export default function ItemsTable({
       selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
     }
   }, [allVisibleSelected, someVisibleSelected]);
+
+  useEffect(() => {
+    if (
+      !stateUrlPath ||
+      !listHref ||
+      window.location.pathname !== stateUrlPath
+    ) {
+      return;
+    }
+    const nextUrl = `${listHref}${window.location.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(null, "", nextUrl);
+    }
+  }, [listHref, stateUrlPath]);
+
+  useEffect(() => {
+    if (!stateUrlPath) return;
+    const restoreFromHistory = () => {
+      if (window.location.pathname !== stateUrlPath) return;
+      const restored = parseInventoryTableViewState(
+        new URLSearchParams(window.location.search),
+      );
+      setQuery(restored.query);
+      setFilters({ ...restored.filters });
+      setDraftFilters({ ...restored.filters });
+      setPage(restored.page);
+      setPageSize(restored.pageSize);
+    };
+    window.addEventListener("popstate", restoreFromHistory);
+    return () => window.removeEventListener("popstate", restoreFromHistory);
+  }, [stateUrlPath]);
 
   function toggleItem(id: string) {
     setSelected((current) => {
@@ -351,8 +417,9 @@ export default function ItemsTable({
   }
 
   function updatePageSize(value: string) {
-    const max = Math.max(1, items.length);
-    const next = Math.min(max, Math.max(1, Number.parseInt(value, 10) || 1));
+    const requested = Number(value);
+    const next = INVENTORY_PAGE_SIZE_OPTIONS.find((size) => size === requested)
+      ?? INVENTORY_PAGE_SIZE_OPTIONS[0];
     setPageSize(next);
     setPage(1);
   }
@@ -567,13 +634,13 @@ export default function ItemsTable({
               return (
                 <tr
                   key={item.id}
-                  onClick={() => router.push(itemHref(item))}
+                  onClick={() => router.push(itemHref(item, listHref))}
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
                   <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
                   {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
-                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
+                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
                   {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
@@ -593,25 +660,38 @@ export default function ItemsTable({
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-sm text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex items-center gap-3"><span>{t("items.recordsPerPage")}</span><input type="number" min="1" max={Math.max(1, items.length)} value={pageSize} onChange={(event) => updatePageSize(event.target.value)} className="w-20 rounded-lg border border-black/10 px-3 py-1.5 font-medium" /></label>
-        <div className="flex items-center gap-3">
-          <span>{t("items.range", { from: firstRecord, to: lastRecord, total: filtered.length })}</span>
-          <button aria-label={t("common.previous")} title={t("common.previous")} type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">←</button>
-          <button aria-label={t("common.next")} title={t("common.next")} type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount} className="rounded-lg border border-black/10 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">→</button>
+        <label className="flex items-center justify-between gap-3 sm:justify-start">
+          <span>{t("items.recordsPerPage")}</span>
+          <select
+            value={pageSize}
+            onChange={(event) => updatePageSize(event.target.value)}
+            className="h-10 min-w-20 rounded-lg border border-black/10 bg-white px-3 font-medium text-zinc-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+          >
+            {INVENTORY_PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <span className="whitespace-nowrap">{t("items.range", { from: firstRecord, to: lastRecord, total: filtered.length })}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button aria-label={t("common.previous")} title={t("common.previous")} type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="flex h-10 w-10 items-center justify-center rounded-lg border border-black/10 disabled:cursor-not-allowed disabled:opacity-40">←</button>
+            <button aria-label={t("common.next")} title={t("common.next")} type="button" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage === pageCount} className="flex h-10 w-10 items-center justify-center rounded-lg border border-black/10 disabled:cursor-not-allowed disabled:opacity-40">→</button>
+          </div>
         </div>
       </div>
 
       <div className="space-y-3 md:hidden">
         {pageItems.map((item) => {
           return (
-            <article key={item.id} onClick={() => router.push(itemHref(item))} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
+            <article key={item.id} onClick={() => router.push(itemHref(item, listHref))} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
                 <label onClick={(event) => event.stopPropagation()} className="-ml-2 -mt-2 inline-flex min-h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl active:bg-zinc-100">
                   <input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
                 </label>
                 {visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">
-                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
+                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
                   {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{categoryLabel(item.category, t)}</p> : null}
                   {visibleColumns.brandModel ? <p className="mt-1 text-xs text-zinc-500">{item.brandModel ?? "—"}</p> : null}
                   {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item) ?? t("items.barcodeMissing")}</p> : null}

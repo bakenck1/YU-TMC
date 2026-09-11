@@ -17,6 +17,12 @@ import {
 } from "@/lib/employee-items-tabs";
 import type { InventoryItem } from "@/lib/types";
 import type { UserRole } from "@/lib/contracts/users";
+import {
+  DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  inventoryTableViewHref,
+  parseInventoryTableViewState,
+  type InventoryTableViewState,
+} from "@/lib/inventory-list-state";
 
 const EMPLOYEE_TAB_LABELS = {
   active: "status.active",
@@ -84,6 +90,7 @@ export function EmployeeItemsTabPanels({
   columnSettingsScope,
   actorUserId,
   actorRole,
+  initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
 }: {
   activeStatus: ItemStatus;
   items: InventoryItem[];
@@ -91,6 +98,7 @@ export function EmployeeItemsTabPanels({
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
+  initialViewState?: InventoryTableViewState;
 }) {
   const invoiceActions = items.length > 0;
 
@@ -113,6 +121,9 @@ export function EmployeeItemsTabPanels({
             columnSettingsScope={columnSettingsScope}
             bulkActions={{ actorUserId, actorRole, buildings: [], rooms: [] }}
             invoiceActions={invoiceActions}
+            initialViewState={initialViewState}
+            stateUrlPath="/items"
+            stateUrlParams={{ tab: status === "active" ? undefined : status }}
           />
         ) : null}
       </div>
@@ -131,6 +142,7 @@ export function EmployeeItemsTabsView({
   columnSettingsScope,
   actorUserId,
   actorRole,
+  initialViewState,
 }: {
   items: InventoryItem[];
   activeStatus: ItemStatus;
@@ -142,6 +154,7 @@ export function EmployeeItemsTabsView({
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
+  initialViewState?: InventoryTableViewState;
 }) {
   return (
     <>
@@ -159,6 +172,7 @@ export function EmployeeItemsTabsView({
         columnSettingsScope={columnSettingsScope}
         actorUserId={actorUserId}
         actorRole={actorRole}
+        initialViewState={initialViewState}
       />
     </>
   );
@@ -170,15 +184,34 @@ export default function EmployeeItemsTabs({
   columnSettingsScope,
   actorUserId,
   actorRole,
+  initialStatus = "active",
+  initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
 }: {
   items: InventoryItem[];
   searchHistoryScope: string;
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
+  initialStatus?: ItemStatus;
+  initialViewState?: InventoryTableViewState;
 }) {
   const { t } = useAppSettings();
-  const [activeStatus, setActiveStatus] = useState<ItemStatus>("active");
+  const [activeStatus, setActiveStatus] = useState<ItemStatus>(initialStatus);
+
+  function selectStatus(status: ItemStatus) {
+    if (typeof window !== "undefined" && window.location.pathname === "/items") {
+      const state = parseInventoryTableViewState(
+        new URLSearchParams(window.location.search),
+      );
+      const href = inventoryTableViewHref(
+        "/items",
+        { ...state, page: 1 },
+        { tab: status === "active" ? undefined : status },
+      );
+      window.history.replaceState(null, "", href);
+    }
+    setActiveStatus(status);
+  }
 
   return (
     <section aria-label={t("nav.items")} className="space-y-4">
@@ -192,11 +225,12 @@ export default function EmployeeItemsTabs({
         activeStatus={activeStatus}
         ariaLabel={t("nav.items")}
         label={(status) => t(EMPLOYEE_TAB_LABELS[status])}
-        onSelect={setActiveStatus}
+        onSelect={selectStatus}
         searchHistoryScope={searchHistoryScope}
         columnSettingsScope={columnSettingsScope}
         actorUserId={actorUserId}
         actorRole={actorRole}
+        initialViewState={initialViewState}
       />
     </section>
   );

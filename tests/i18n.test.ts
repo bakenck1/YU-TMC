@@ -26,6 +26,7 @@ test("critical interface and push messages have distinct RU, KK and EN translati
     "settings.interfaceLanguage",
     "inspections.title",
     "scanner.roomTitle",
+    "itemDetails.backToList",
     "itemDetails.protectedFields",
     "push.assignmentTitle",
     "transfers.scanHint",

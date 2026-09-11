@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
@@ -22,6 +22,10 @@ import {
   type InventorySummaryKind,
 } from "@/lib/inventory-summary";
 import type { InventoryItem } from "@/lib/types";
+import {
+  canonicalInventoryDetailsReturnHref,
+  inventoryDetailsHref,
+} from "@/lib/inventory-list-state";
 
 interface SummaryCard {
   kind: InventorySummaryKind;
@@ -74,6 +78,8 @@ export default function InventorySummaryAccordions({
 }) {
   const { locale, t } = useAppSettings();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [openKind, setOpenKind] = useState<InventorySummaryKind | null>(null);
   const summary = useMemo(() => summarizeInventory(items), [items]);
   const openItems = useMemo(
@@ -85,6 +91,11 @@ export default function InventorySummaryAccordions({
     () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
     [locale],
   );
+  const listSearch = searchParams.toString();
+  const returnHref =
+    canonicalInventoryDetailsReturnHref(
+      `${pathname}${listSearch ? `?${listSearch}` : ""}`,
+    ) ?? "/items";
 
   function cardValue(kind: InventorySummaryKind) {
     if (kind === "totalValue") {
@@ -94,7 +105,10 @@ export default function InventorySummaryAccordions({
   }
 
   function itemHref(item: InventoryItem) {
-    return item.localGroupId ? `/local-barcodes/${item.localGroupId}` : `/items/${item.id}`;
+    const itemPath = item.localGroupId
+      ? `/local-barcodes/${item.localGroupId}`
+      : `/items/${item.id}`;
+    return inventoryDetailsHref(itemPath, returnHref);
   }
 
   return (
