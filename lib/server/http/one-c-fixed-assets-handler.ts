@@ -7,10 +7,10 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { readLimitedBody } from "@/lib/server/http/request-body";
 import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
 import { currentRequestId } from "@/lib/server/observability";
-import { MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
+import { MAX_ONE_C_RECORDS, MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 
 const ACCEPTED_MEDIA_TYPES = ["application/xml", "text/xml"];
-const IMPORT_BODY_TIMEOUT_MS = 30_000;
+const IMPORT_BODY_TIMEOUT_MS = 120_000;
 
 type Dependencies = {
   service: Pick<OneCFixedAssetImportService, "importBatch" | "tryAcquireLease">;
@@ -20,7 +20,7 @@ type Dependencies = {
 };
 
 export function getOneCFixedAssetsCapability(apiKey = process.env.ONE_C_FIXED_ASSETS_API_KEY) {
-  return json({ service: "1c-fixed-assets", status: "capability", configured: Boolean(apiKey?.trim()), method: "POST", authentication: "Bearer token required", contentType: ACCEPTED_MEDIA_TYPES, maximumBytes: MAX_ONE_C_XML_BYTES });
+  return json({ service: "1c-fixed-assets", status: "capability", configured: Boolean(apiKey?.trim()), method: "POST", authentication: "Bearer token required", contentType: ACCEPTED_MEDIA_TYPES, maximumBytes: MAX_ONE_C_XML_BYTES, maximumRecords: MAX_ONE_C_RECORDS });
 }
 
 export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {

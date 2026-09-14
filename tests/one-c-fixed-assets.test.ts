@@ -6,7 +6,7 @@ import type { Pool } from "pg";
 import { createOneCFixedAssetsPostHandler, getOneCFixedAssetsCapability } from "@/lib/server/http/one-c-fixed-assets-handler";
 import type { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
-import { MAX_ONE_C_RECORDS, MAX_ONE_C_TEXT_LENGTH, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
+import { MAX_ONE_C_RECORDS, MAX_ONE_C_TEXT_LENGTH, MAX_ONE_C_XML_BYTES, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { observeHttpRequest } from "@/lib/server/observability";
 
@@ -22,7 +22,8 @@ describe("1C fixed assets HTTP boundary", () => {
     assert.deepEqual(await response.json(), {
       service: "1c-fixed-assets", status: "capability", configured: false,
       method: "POST", authentication: "Bearer token required",
-      contentType: ["application/xml", "text/xml"], maximumBytes: 10 * 1024 * 1024,
+      contentType: ["application/xml", "text/xml"], maximumBytes: MAX_ONE_C_XML_BYTES,
+      maximumRecords: MAX_ONE_C_RECORDS,
     });
   });
 
@@ -40,14 +41,14 @@ describe("1C fixed assets HTTP boundary", () => {
     assert.equal(calls, 0);
   });
 
-  it("rejects declared and actually streamed bodies beyond 10 MiB", async () => {
+  it("rejects declared and actually streamed bodies beyond the configured XML limit", async () => {
     const handler = createOneCFixedAssetsPostHandler({ service: serviceThat(async () => { throw new Error("must_not_store"); }), apiKey: () => API_KEY });
-    const declared = request("x", { "content-length": String(10 * 1024 * 1024 + 1) });
+    const declared = request("x", { "content-length": String(MAX_ONE_C_XML_BYTES + 1) });
     const declaredResponse = await handler(declared);
     assert.equal(declaredResponse.status, 413);
     assert.equal((await declaredResponse.json()).error, "xml_too_large");
 
-    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1)); controller.close(); } });
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(MAX_ONE_C_XML_BYTES + 1)); controller.close(); } });
     const streamed = new Request("https://inventory.example/api/integrations/1c/fixed-assets", {
       method: "POST", headers: headers(), body, duplex: "half",
     } as RequestInit & { duplex: "half" });
@@ -162,6 +163,11 @@ describe("1C fixed assets XML contract", () => {
     assert.equal(assets[0]?.responsibleExternalId, GUID);
   });
 
+  it("accepts exactly 50,000 records in one XML document", () => {
+    const xml = `<FixedAssets>${Array.from({ length: MAX_ONE_C_RECORDS }, (_, index) => `<FixedAsset><GUID>00000000-0000-4000-8000-${String(index).padStart(12, "0")}</GUID><Name>x</Name></FixedAsset>`).join("")}</FixedAssets>`;
+    assert.equal(parseOneCFixedAssets(xml).length, 50_000);
+  });
+
   it("enforces exact shape, duplicate, length, record-count, entity and namespace policy", () => {
     const cases = [
       ["<Envelope><FixedAssets><FixedAsset><GUID>" + GUID + "</GUID><Name>x</Name></FixedAsset></FixedAssets></Envelope>", "invalid_root"],
@@ -220,6 +226,31 @@ describe("1C fixed assets XML contract", () => {
     );
     await assert.rejects(rollbackRepository.saveBatch(parseOneCFixedAssets(XML)), OneCImportUnavailableError);
     assert.deepEqual(rollbackReleases, [true]);
+  });
+
+  it("upserts a complete batch in one PostgreSQL statement and preserves counters", async () => {
+    const statements: Array<{ sql: string; values?: unknown[] }> = [];
+    const client = {
+      query: async (sql: string, values?: unknown[]) => {
+        statements.push({ sql, values });
+        if (sql === "begin" || sql === "commit" || sql.includes("set_config")) return { rows: [], rowCount: 0 };
+        if (sql.includes("jsonb_to_recordset")) return { rows: [{ created: 1, updated: 0, unchanged: 0 }], rowCount: 1 };
+        throw new Error("unexpected_query");
+      },
+      release: () => undefined,
+    };
+    const repository = new PostgresOneCFixedAssetRepository(
+      { connect: async () => client } as unknown as Pick<Pool, "connect">,
+    );
+
+    assert.deepEqual(await repository.saveBatch(parseOneCFixedAssets(XML)), { created: 1, updated: 0, unchanged: 0 });
+    const upsert = statements.filter(({ sql }) => sql.includes("insert into"));
+    assert.equal(upsert.length, 1);
+    assert.match(upsert[0]?.sql ?? "", /jsonb_to_recordset/);
+    const serialized = JSON.parse(String(upsert[0]?.values?.[0])) as Array<{ external_id: string; payload_hash: string }>;
+    assert.equal(serialized.length, 1);
+    assert.equal(serialized[0]?.external_id, GUID);
+    assert.match(serialized[0]?.payload_hash ?? "", /^[0-9a-f]{64}$/);
   });
 });
 
