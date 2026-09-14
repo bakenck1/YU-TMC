@@ -253,6 +253,18 @@ export default function ItemsTable({
   }, [query, searchHistoryStorageKey]);
 
   const statusOptions = useMemo(() => inventoryStatusOptions(items), [items]);
+  const responsibleSuggestions = useMemo(() => {
+    const names = new Map<string, string>();
+    items.forEach((item) => {
+      const name = item.responsible.trim();
+      if (!name) return;
+      const key = name.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, " ");
+      if (!names.has(key)) names.set(key, name);
+    });
+    return [...names.values()].sort((first, second) =>
+      first.localeCompare(second, undefined, { sensitivity: "base" }),
+    );
+  }, [items]);
   const visibleSearchHistory = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return searchHistory;
@@ -579,7 +591,7 @@ export default function ItemsTable({
                   {statusOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "display" ? dataLabel(option.value) : t(`status.${option.value}`)}</option>)}
                 </select>
               </label>
-              <InventoryFilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:responsible` : undefined} />
+              <InventoryFilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:responsible` : undefined} suggestions={responsibleSuggestions} />
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={clearFilters} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50">{t("items.clearFilters")}</button>

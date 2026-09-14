@@ -25,7 +25,12 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
-import { groupInventoryRoomsByFloor } from "@/lib/inventory-room-floors";
+import {
+  groupInventoryRoomsByFloor,
+  groupInventoryRoomsByMainCampusWing,
+  isMainCampusWingFloor,
+  type InventoryRoomFloor,
+} from "@/lib/inventory-room-floors";
 import InventoryBuildingFormModal from "./InventoryBuildingFormModal";
 import InventoryRoomFormModal from "./InventoryRoomFormModal";
 
@@ -180,6 +185,95 @@ export default function InventoryBuildingsManager({
     }
   }
 
+  function renderRoom(building: BuildingDto, room: RoomDto) {
+    return (
+      <div
+        key={room.id}
+        className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
+          <DoorOpen className="h-4 w-4 shrink-0 text-zinc-400" />
+          <span className="truncate text-sm text-zinc-700">
+            {room.designation}
+          </span>
+          <span className="shrink-0 text-xs text-zinc-400">
+            · {room.floorNumber} {t("inventory.floorShort")}
+          </span>
+        </div>
+        {canEdit ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <a
+              href={`/api/inventory/rooms/${room.id}/qr?download=1`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t("room.qrDownload")}
+            </a>
+            <button
+              type="button"
+              onClick={() => setRoomEditor({ building, room })}
+              className="min-h-9 rounded-lg px-2 text-xs font-semibold text-accent-dark hover:bg-emerald-50"
+            >
+              {t("common.open")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void archiveRoom(room)}
+              disabled={archivingId === room.id}
+              aria-label={t("building.archiveRoom", { name: room.designation })}
+              className="rounded-md p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderFloorRooms(
+    building: BuildingDto,
+    floor: InventoryRoomFloor,
+  ) {
+    const splitByWing =
+      findCampusBuildingPreset(building.name)?.id === "main-campus" &&
+      isMainCampusWingFloor(floor.floorNumber);
+    if (!splitByWing) {
+      return floor.rooms.map((room) => renderRoom(building, room));
+    }
+
+    const { wings, unassignedRooms } =
+      groupInventoryRoomsByMainCampusWing(floor.rooms);
+    return (
+      <>
+        {wings.map((wing) => (
+          <details
+            key={wing.code}
+            className="group/wing overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50/50"
+          >
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
+              <span className="truncate">
+                {t("building.wingName", { name: wing.label })}
+              </span>
+              <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-zinc-500">
+                {t("inventory.roomsCount")}: {wing.rooms.length}
+                <ChevronDown
+                  className="h-4 w-4 transition-transform group-open/wing:rotate-180"
+                  aria-hidden="true"
+                />
+              </span>
+            </summary>
+            <div className="space-y-2 border-t border-emerald-100 bg-white p-2">
+              {wing.rooms.map((room) => renderRoom(building, room))}
+            </div>
+          </details>
+        ))}
+        {unassignedRooms.map((room) => renderRoom(building, room))}
+      </>
+    );
+  }
+
   return (
     <section className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-col gap-4 rounded-2xl border border-black/5 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -328,50 +422,7 @@ export default function InventoryBuildingsManager({
                         </span>
                       </summary>
                       <div className="space-y-2 border-t border-zinc-200 bg-white p-2">
-                      {floor.rooms.map((room) => (
-                    <div
-                      key={room.id}
-                      className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
-                        <DoorOpen className="h-4 w-4 shrink-0 text-zinc-400" />
-                        <span className="truncate text-sm text-zinc-700">
-                          {room.designation}
-                        </span>
-                        <span className="shrink-0 text-xs text-zinc-400">
-                          · {room.floorNumber} {t("inventory.floorShort")}
-                        </span>
-                      </div>
-                      {canEdit ? (
-                        <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <a
-                            href={`/api/inventory/rooms/${room.id}/qr?download=1`}
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            {t("room.qrDownload")}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setRoomEditor({ building, room })}
-                            className="min-h-9 rounded-lg px-2 text-xs font-semibold text-accent-dark hover:bg-emerald-50"
-                          >
-                            {t("common.open")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void archiveRoom(room)}
-                            disabled={archivingId === room.id}
-                            aria-label={t("building.archiveRoom", { name: room.designation })}
-                            className="rounded-md p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                      ))}
+                        {renderFloorRooms(building, floor)}
                       </div>
                     </details>
                   ))}
