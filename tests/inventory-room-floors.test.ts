@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RoomDto } from "../lib/contracts/inventory-locations";
-import { groupInventoryRoomsByFloor } from "../lib/inventory-room-floors";
+import {
+  groupInventoryRoomsByFloor,
+  groupInventoryRoomsByMainCampusWing,
+  isMainCampusWingFloor,
+  mainCampusWingFromDesignation,
+} from "../lib/inventory-room-floors";
 
 function room(id: string, designation: string, floorNumber: number): RoomDto {
   return {
@@ -31,4 +36,62 @@ test("groups rooms into sorted floors and naturally sorts room designations", ()
   assert.deepEqual(floors.map((floor) => floor.floorNumber), [1, 7]);
   assert.deepEqual(floors[0]?.rooms.map((value) => value.designation), ["2", "102"]);
   assert.deepEqual(floors[1]?.rooms.map((value) => value.designation), ["72", "710"]);
+});
+
+test("groups lower main-campus rooms into A, B, D and E wings", () => {
+  const groups = groupInventoryRoomsByMainCampusWing([
+    room("room-e", "E402", 4),
+    room("room-d", "D412", 4),
+    room("room-a", "A401", 4),
+    room("room-b", "B403", 4),
+    room("room-cyrillic-v", "В404", 4),
+    room("room-other", "405", 4),
+  ]);
+
+  assert.deepEqual(
+    groups.wings.map((wing) => [wing.code, wing.label]),
+    [
+      ["A", "A"],
+      ["B", "B"],
+      ["D", "D"],
+      ["E", "E"],
+    ],
+  );
+  assert.deepEqual(
+    new Set(groups.wings[1]?.rooms.map((value) => value.designation)),
+    new Set(["B403", "В404"]),
+  );
+  assert.deepEqual(groups.unassignedRooms.map((value) => value.designation), ["405"]);
+  assert.equal(isMainCampusWingFloor(0), true);
+  assert.equal(isMainCampusWingFloor(4), true);
+  assert.equal(isMainCampusWingFloor(5), false);
+});
+
+test("recognizes a campus wing before or after a room number", () => {
+  const cases = [
+    ["A401", "A"],
+    ["А 401", "A"],
+    ["401A", "A"],
+    ["401 А", "A"],
+    ["B-401", "B"],
+    ["Б 401", "B"],
+    ["401В", "B"],
+    ["401 V", "B"],
+    ["D/401", "D"],
+    ["401 Д", "D"],
+    ["E.401", "E"],
+    ["401-Е", "E"],
+  ] as const;
+
+  for (const [designation, expectedWing] of cases) {
+    assert.equal(
+      mainCampusWingFromDesignation(designation),
+      expectedWing,
+      designation,
+    );
+  }
+
+  assert.equal(mainCampusWingFromDesignation("401"), null);
+  assert.equal(mainCampusWingFromDesignation("Office A401"), null);
+  assert.equal(mainCampusWingFromDesignation("A office 401"), null);
 });
