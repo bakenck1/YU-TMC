@@ -21,7 +21,7 @@ test("adds both off-campus dormitories to the building catalog", () => {
   const dormitory1 = findCampusBuildingPreset("Общежитие 1");
   const dormitory2 = findCampusBuildingPreset("Общежитие 2");
 
-  assert.equal(dormitory1?.address, "Микрорайон 3Б, 10, Актау");
+  assert.equal(dormitory1?.address, "3Б микрорайон, 10, Актау");
   assert.equal(dormitory2?.address, "27 микрорайон, 7, Актау");
   assert.equal(dormitory1?.mapVisible, false);
   assert.equal(dormitory2?.mapVisible, false);
