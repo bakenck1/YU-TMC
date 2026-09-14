@@ -26,7 +26,7 @@ constraints, transaction rollback and privilege-sensitive behavior.
 | Service requests | collection BOLA, required photo, status transition | ✓ | ✓ | ✓ | ✓ | — |
 | Photos/attachments | parent scope, MIME/size, lifecycle and byte serving | ✓ | ✓ | ✓ | ✓ | object-store outage is operational |
 | Asset loss (P0) | actor/BOLA, body bounds, exact period, receipt rollback/race | ✓ | ✓ | ✓ | n/a | API-only by recorded decision |
-| 1C fixed-assets inbox (P0) | auth-before-body, 10 MiB/deadline, lease, atomic upsert | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
+| 1C fixed-assets inbox (P0) | auth-before-body, 64 MiB/deadline, lease, atomic bulk upsert | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
 | Dockflow external API | key rotation, bounded cursor, safe errors, public projection | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
 | Push/outbox | lease, retry/dead-letter, ownership and stale cleanup | ✓ | ✓ | ✓ | ✓ | provider delivery staging gate |
 | Settings | singleton, guarded import, locking/concurrency | ✓ | ✓ | ✓ | ✓ | — |

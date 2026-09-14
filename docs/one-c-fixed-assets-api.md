@@ -22,8 +22,8 @@ Authorization: Bearer <API_KEY>
 Content-Type: application/xml; charset=utf-8
 ```
 
-- Максимальный размер тела запроса: 10 MiB.
-- Максимальное количество записей в одном запросе: 5000.
+- Максимальный размер тела запроса: 64 MiB.
+- Максимальное количество записей в одном запросе: 50 000.
 - Кодировка XML: UTF-8.
 - `GET` по этому же URL описывает capability и наличие настройки ключа, но не
   проверяет доступность базы данных и не загружает данные.
@@ -129,10 +129,10 @@ HTTP `200 OK`:
 | `400` | Некорректный XML, отсутствуют элементы `FixedAsset`, неправильный GUID, дата, число либо обязательное поле. |
 | `401` | Заголовок `Authorization` отсутствует или Bearer-ключ неверный. |
 | `429` | Для этого ключа уже выполняется импорт; повторить запрос после `Retry-After`. |
-| `413` | XML превышает 10 MiB. |
+| `413` | XML превышает 64 MiB. |
 | `415` | `Content-Type` отличается от `application/xml` и `text/xml`. |
 | `500` | Транзакция сохранения не выполнена; ответ содержит только безопасный код `store_failed` и `requestId`. |
-| `503` | API-ключ не настроен (`integration_not_configured`), база недоступна (`store_unavailable`) либо превышен 30-секундный лимит чтения/транзакции (`import_timeout`); запрос следует повторить. |
+| `503` | API-ключ не настроен (`integration_not_configured`), база недоступна (`store_unavailable`) либо превышен лимит чтения XML (120 секунд) или транзакции (150 секунд) (`import_timeout`); запрос следует повторить. |
 
 Пример ошибки авторизации:
 
@@ -171,7 +171,8 @@ GET https://inventory.yu.edu.kz/api/integrations/1c/fixed-assets
   "method": "POST",
   "authentication": "Bearer token required",
   "contentType": ["application/xml", "text/xml"],
-  "maximumBytes": 10485760
+  "maximumBytes": 67108864,
+  "maximumRecords": 50000
 }
 ```
 

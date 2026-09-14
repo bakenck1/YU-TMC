@@ -6,8 +6,8 @@ import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 
 export type { OneCFixedAsset, OneCImportResult } from "@/lib/contracts/one-c-fixed-assets";
 
-export const MAX_ONE_C_XML_BYTES = 10 * 1024 * 1024;
-export const MAX_ONE_C_RECORDS = 5_000;
+export const MAX_ONE_C_XML_BYTES = 64 * 1024 * 1024;
+export const MAX_ONE_C_RECORDS = 50_000;
 export const MAX_ONE_C_TEXT_LENGTH = 255;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

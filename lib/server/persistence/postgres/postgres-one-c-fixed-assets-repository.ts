@@ -7,7 +7,13 @@ import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { oneCFixedAssetPayload } from "@/lib/server/integrations/one-c-fixed-assets";
 
 type ImportTimeouts = { statementTimeoutMs: number; transactionTimeoutMs: number };
-const DEFAULT_TIMEOUTS: ImportTimeouts = { statementTimeoutMs: 15_000, transactionTimeoutMs: 30_000 };
+const DEFAULT_TIMEOUTS: ImportTimeouts = { statementTimeoutMs: 120_000, transactionTimeoutMs: 150_000 };
+
+type BatchCountersRow = {
+  created: string | number;
+  updated: string | number;
+  unchanged: string | number;
+};
 
 export class PostgresOneCFixedAssetRepository implements OneCFixedAssetRepository {
   constructor(
@@ -55,30 +61,48 @@ export class PostgresOneCFixedAssetRepository implements OneCFixedAssetRepositor
     try {
       await client.query("begin");
       transactionStarted = true;
-      for (const asset of assets) {
-        const remainingMs = deadline - Date.now();
-        if (remainingMs <= 0) throw new Error("one_c_import_transaction_timeout");
-        await client.query("select set_config('statement_timeout', $1, true)", [
-          `${Math.min(this.timeouts.statementTimeoutMs, remainingMs)}ms`,
-        ]);
-        const { payload, hash } = oneCFixedAssetPayload(asset);
-        const stored = await client.query<{ created: boolean }>(
-          `insert into "yu_inventory"."one_c_fixed_asset_inbox" as inbox
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) throw new Error("one_c_import_transaction_timeout");
+      await client.query("select set_config('statement_timeout', $1, true)", [
+        `${Math.min(this.timeouts.statementTimeoutMs, remainingMs)}ms`,
+      ]);
+      const batch = assets.map((asset) => {
+        const { hash } = oneCFixedAssetPayload(asset);
+        return { external_id: asset.externalId, payload_hash: hash, payload: asset };
+      });
+      const stored = await client.query<BatchCountersRow>(
+        `with incoming as (
+           select row.external_id, row.payload_hash, row.payload
+             from jsonb_to_recordset($1::jsonb) as row(
+               external_id text,
+               payload_hash varchar(64),
+               payload jsonb
+             )
+         ), upserted as (
+           insert into "yu_inventory"."one_c_fixed_asset_inbox" as inbox
              (external_id, payload_hash, payload, received_at, updated_at)
-           values ($1, $2, $3::jsonb, transaction_timestamp(), transaction_timestamp())
+           select external_id, payload_hash, payload,
+                  transaction_timestamp(), transaction_timestamp()
+             from incoming
            on conflict (external_id) do update set
              payload_hash = excluded.payload_hash,
              payload = excluded.payload,
              received_at = transaction_timestamp(),
              updated_at = transaction_timestamp()
            where inbox.payload_hash is distinct from excluded.payload_hash
-           returning (xmax = 0) as created`,
-          [asset.externalId, hash, payload],
-        );
-        if (!stored.rowCount) result.unchanged += 1;
-        else if (stored.rows[0]?.created) result.created += 1;
-        else result.updated += 1;
-      }
+           returning (xmax = 0) as created
+         )
+         select count(*) filter (where created)::int as created,
+                count(*) filter (where not created)::int as updated,
+                ($2::int - count(*))::int as unchanged
+           from upserted`,
+        [JSON.stringify(batch), assets.length],
+      );
+      const counters = stored.rows[0];
+      if (!counters) throw new Error("one_c_import_counters_missing");
+      result.created = Number(counters.created);
+      result.updated = Number(counters.updated);
+      result.unchanged = Number(counters.unchanged);
       await client.query("commit");
       transactionStarted = false;
       return result;

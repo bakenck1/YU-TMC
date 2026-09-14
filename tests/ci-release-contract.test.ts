@@ -125,7 +125,9 @@ test("production deployment protects HTTPS activation and database backups", asy
   assert.match(httpsConfig, /listen 443 ssl default_server/);
   assert.match(httpsConfig, /return 444/);
   assert.doesNotMatch(httpsConfig, /ssl_reject_handshake/);
-  assert.match(httpsConfig, /client_max_body_size 11m/);
+  assert.match(httpsConfig, /client_max_body_size 65m/);
+  assert.match(httpsConfig, /client_body_timeout 120s/);
+  assert.match(httpsConfig, /proxy_read_timeout 180s/);
   assert.match(httpsConfig, /ssl_protocols TLSv1\.2 TLSv1\.3/);
   assert.match(httpsConfig, /return 308 https:\/\/inventory\.yu\.edu\.kz\$request_uri/);
   assert.match(backupService, /ProtectSystem=strict/);
