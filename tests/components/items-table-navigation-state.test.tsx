@@ -146,4 +146,36 @@ describe("ItemsTable navigation state", () => {
       screen.getByText('items.range:{"from":1,"to":35,"total":35}'),
     ).not.toBeNull();
   });
+
+  it("suggests a responsible person's full name from any matching name part", () => {
+    const items = [
+      { ...ITEMS[0]!, responsible: "Серикбаев Оралхан Нурланович" },
+      { ...ITEMS[1]!, responsible: "Ибраева Айгуль Болатовна" },
+      { ...ITEMS[2]!, responsible: "Серикбаев Оралхан Нурланович" },
+    ];
+    render(<ItemsTable items={items} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^items\.filters/ }));
+    const responsible = screen.getByRole("combobox", { name: "items.responsible" });
+
+    fireEvent.focus(responsible);
+    fireEvent.change(responsible, { target: { value: "Оралхан" } });
+    const option = screen.getByRole("option", {
+      name: "Серикбаев Оралхан Нурланович",
+    });
+    expect(screen.getAllByRole("option", {
+      name: "Серикбаев Оралхан Нурланович",
+    })).toHaveLength(1);
+
+    fireEvent.click(option);
+    expect((responsible as HTMLInputElement).value).toBe(
+      "Серикбаев Оралхан Нурланович",
+    );
+
+    fireEvent.focus(responsible);
+    fireEvent.change(responsible, { target: { value: "Нурланович" } });
+    expect(screen.getByRole("option", {
+      name: "Серикбаев Оралхан Нурланович",
+    })).not.toBeNull();
+  });
 });
