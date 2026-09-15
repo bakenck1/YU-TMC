@@ -33,6 +33,9 @@ export async function GET(
     );
     const url = new URL(request.url);
     const kind = url.searchParams.get("kind") === "qr" ? "qr" : "barcode";
+    if (item.itemSection === "it" && kind === "barcode") {
+      throw new ApplicationError("not_found", "item_barcode_not_found");
+    }
     if (kind === "qr" && !hasPermission(user.role, "inventory.qr.manage")) {
       throw new ApplicationError("forbidden", "forbidden");
     }

@@ -30,6 +30,7 @@ type ItemRow = QueryResultRow & {
   room_designation: string;
   building_id: string;
   building_name: string;
+  item_section: "general" | "it";
 };
 
 type GroupRow = QueryResultRow & {
@@ -69,6 +70,7 @@ type GroupRow = QueryResultRow & {
   cancelled_at: Date | null;
   cancellation_reason: string | null;
   version: number;
+  item_section: "general" | "it";
 };
 
 type EventRow = QueryResultRow & {
@@ -127,6 +129,7 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   private async queryItem(id: string, lock: boolean): Promise<LocalBarcodeItemRecord | null> {
     const result = await this.source.query<ItemRow>(
       `select i.id, i.name, i.inventory_number, i.quantity, i.version, i.status,
+              i.item_section,
               rp.responsible_user_id, responsible.full_name as responsible_name,
               r.id as room_id, r.designation as room_designation,
               b.id as building_id, b.name as building_name
@@ -137,7 +140,7 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
          left join ${S}."users" responsible on responsible.id = rp.responsible_user_id
         where i.id = $1 ${lock ? "for update of i" : ""}`, [id]);
     const row = result.rows[0];
-    return row ? { id: row.id, name: row.name, inventoryNumber: row.inventory_number, quantity: Number(row.quantity), version: Number(row.version), status: row.status, responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, buildingId: row.building_id, buildingName: row.building_name } : null;
+    return row ? { id: row.id, name: row.name, inventoryNumber: row.inventory_number, quantity: Number(row.quantity), version: Number(row.version), status: row.status, responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, buildingId: row.building_id, buildingName: row.building_name, itemSection: row.item_section } : null;
   }
 
   async findGroupForUpdate(id: string) { return this.queryGroup("g.id = $1", id, true); }
@@ -162,6 +165,7 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   private async queryGroup(predicate: string, value: string, lock: boolean): Promise<LocalBarcodeGroupRecord | null> {
     const result = await this.source.query<GroupRow>(
       `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_section,
               i.item_type, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.unit_price,
               i.condition as item_condition,
@@ -191,6 +195,7 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   async listGroups(itemId: string): Promise<LocalBarcodeGroupRecord[]> {
     const result = await this.source.query<GroupRow>(
       `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_section,
               i.item_type, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
@@ -217,6 +222,7 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
   async listActiveGroupsAssignedTo(userId: string): Promise<LocalBarcodeGroupRecord[]> {
     const result = await this.source.query<GroupRow>(
       `select g.*, i.name as item_name, i.inventory_number as original_barcode,
+              i.item_section,
               i.item_type, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.unit_price, photo.id as item_photo_id,
               responsible.full_name as responsible_name, cancelled.full_name as cancelled_by_name,
@@ -312,5 +318,5 @@ class PostgresLocalBarcodeRepository implements LocalBarcodeRepository {
 }
 
 function mapGroup(row: GroupRow): LocalBarcodeGroupRecord {
-  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, itemType: row.item_type, itemBrand: row.item_brand, itemModel: row.item_model, itemDescription: row.item_description, unitPrice: Number(row.unit_price), itemCondition: row.item_condition, itemConnectionStatus: row.item_connection_status, itemPhotoId: row.item_photo_id, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, floorNumber: Number(row.room_floor_number), buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousResponsibleName: row.previous_responsible_name, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version) };
+  return { id: row.id, itemId: row.item_id, itemName: row.item_name, originalBarcode: row.original_barcode, itemType: row.item_type, itemBrand: row.item_brand, itemModel: row.item_model, itemDescription: row.item_description, unitPrice: Number(row.unit_price), itemCondition: row.item_condition, itemConnectionStatus: row.item_connection_status, itemPhotoId: row.item_photo_id, parentGroupId: row.parent_group_id, sequenceNumber: BigInt(row.sequence_number), barcodeValue: row.barcode_value, barcodeKey: row.barcode_key, quantity: Number(row.quantity), responsibleUserId: row.responsible_user_id, responsibleName: row.responsible_name, roomId: row.room_id, roomDesignation: row.room_designation, floorNumber: Number(row.room_floor_number), buildingId: row.building_id, buildingName: row.building_name, previousResponsibleUserId: row.previous_responsible_user_id, previousResponsibleName: row.previous_responsible_name, previousRoomId: row.previous_room_id, createdBy: row.created_by, createdAt: row.created_at, transferredAt: row.transferred_at, status: row.status, cancelledBy: row.cancelled_by, cancelledByName: row.cancelled_by_name, cancelledAt: row.cancelled_at, cancellationReason: row.cancellation_reason, version: Number(row.version), itemSection: row.item_section };
 }

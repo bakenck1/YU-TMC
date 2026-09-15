@@ -24,6 +24,7 @@ export async function DELETE(request: Request) {
     const deletedItemIds = await getApplicationServices().items.deleteItems(
       (body as { itemIds: string[] }).itemIds,
       authorizationActor(user),
+      (body as { itemSection?: "general" | "it" }).itemSection === "it" ? "it" : "general",
     );
     return Response.json({ deletedItemIds });
   } catch (error) {

@@ -281,6 +281,13 @@
       "when": 1789027200000,
       "tag": "20260910120000_update_official_barcode_without_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789458173962,
+      "tag": "20260915074253_supreme_magus",
+      "breakpoints": true
     }
   ]
 }

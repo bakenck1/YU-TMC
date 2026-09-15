@@ -94,6 +94,7 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
          ) period on true
          left join ${USERS} responsible on responsible.id = period.responsible_user_id
         where i.room_id = $1 and i.archived_at is null
+          and i.item_section = 'general'
         order by i.name, i.inventory_number
         ${sqlCollectionLimit(COLLECTION_LIMITS.roomWorkspaceItems)}`,
       [roomId],

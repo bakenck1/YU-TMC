@@ -47,12 +47,16 @@ const HISTORY = '"yu_inventory"."item_inventory_number_history"';
 const AUDIT = '"yu_inventory"."audit_records"';
 const COMPONENTS = '"yu_inventory"."item_components"';
 const COMMENT_ATTACHMENTS = '"yu_inventory"."item_comment_attachments"';
+const IT_ADDRESSES = '"yu_inventory"."item_network_addresses"';
 
 interface ItemRow extends QueryResultRow {
   id: string;
   name: string;
   description: string | null;
   item_type: string;
+  item_section: NonNullable<InventoryItemRecord["itemSection"]>;
+  it_type: InventoryItemRecord["itType"];
+  network_addresses: NonNullable<InventoryItemRecord["networkAddresses"]> | null;
   brand: string | null;
   model: string | null;
   quantity: number;
@@ -107,19 +111,23 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 
   async listItems(): Promise<InventoryItemRecord[]> {
-    return this.listItemCollection("", []);
+    return this.listItemCollection("i.item_section = 'general'", []);
+  }
+
+  async listItItems(): Promise<InventoryItemRecord[]> {
+    return this.listItemCollection("i.item_section = 'it'", []);
   }
 
   async listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]> {
     return this.listItemCollection(
-      "rp.responsible_user_id = $1 or r.primary_responsible_id = $1",
+      "i.item_section = 'general' and (rp.responsible_user_id = $1 or r.primary_responsible_id = $1)",
       [userId],
     );
   }
 
   async listDecommissionedItems(): Promise<InventoryItemRecord[]> {
     return this.listItemCollection(
-      "i.status in ('decommissioned', 'decommissioned_in_use')",
+      "i.item_section = 'general' and i.status in ('decommissioned', 'decommissioned_in_use')",
       [],
     );
   }
@@ -128,7 +136,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     userId: string,
   ): Promise<InventoryItemRecord[]> {
     return this.listItemCollection(
-      "(rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
+      "i.item_section = 'general' and (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
       [userId],
     );
   }
@@ -179,6 +187,43 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       [id],
     );
     return result.rows[0] ? mapItem(result.rows[0]) : null;
+  }
+
+  async replaceItNetworkAddresses(
+    itemId: string,
+    addresses: readonly import("@/lib/it-inventory").ItNetworkAddressInput[],
+  ): Promise<import("@/lib/it-inventory").ItNetworkAddress[]> {
+    await this.source.query(`delete from ${IT_ADDRESSES} where item_id = $1`, [itemId]);
+    const saved: import("@/lib/it-inventory").ItNetworkAddress[] = [];
+    for (const [position, address] of addresses.entries()) {
+      const result = await this.source.query<{
+        id: string;
+        device_label: string | null;
+        ip_address: string | null;
+        mac_address: string | null;
+      }>(
+        `insert into ${IT_ADDRESSES}
+           (id, item_id, position, device_label, ip_address, mac_address)
+         values (gen_random_uuid(), $1, $2, $3, $4, $5)
+         returning id, device_label, ip_address, mac_address`,
+        [
+          itemId,
+          position,
+          address.deviceLabel ?? null,
+          address.ipAddress ?? null,
+          address.macAddress ?? null,
+        ],
+      );
+      const row = result.rows[0];
+      if (!row) throw new Error("it_network_address_insert_failed");
+      saved.push({
+        id: row.id,
+        deviceLabel: row.device_label,
+        ipAddress: row.ip_address,
+        macAddress: row.mac_address,
+      });
+    }
+    return saved;
   }
 
   async listComponents(itemId: string): Promise<InventoryItemRecord[]> {
@@ -478,16 +523,19 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     try {
       const result = await this.source.query<ItemRow>(
         `insert into ${ITEMS}
-           (id, name, description, item_type, brand, model, quantity, unit_price,
+           (id, name, description, item_type, item_section, it_type,
+            brand, model, quantity, unit_price,
             room_id, inventory_number_kind, inventory_number, inventory_number_key,
             created_by, updated_by, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13, $14, $14)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15, $16, $16)
          returning id`,
         [
           input.id,
           input.name,
           input.description,
           input.itemType,
+          input.itemSection,
+          input.itType,
           input.brand,
           input.model,
           input.quantity,
@@ -534,15 +582,17 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   ): Promise<InventoryItemRecord | null> {
     const result = await this.source.query<{ id: string }>(
       `update ${ITEMS}
-       set name = $2, description = $3, item_type = $4, brand = $5,
-           model = $6, quantity = $7, unit_price = $8, updated_by = $9,
-           updated_at = $10, version = version + 1
-       where id = $1 and version = $11 and status not in ('decommissioned', 'decommissioned_in_use')`,
+       set name = $2, description = $3, item_type = $4,
+           it_type = case when item_section = 'it' then $5::"yu_inventory"."it_equipment_type" else null end,
+           brand = $6, model = $7, quantity = $8, unit_price = $9, updated_by = $10,
+           updated_at = $11, version = version + 1
+       where id = $1 and version = $12 and status not in ('decommissioned', 'decommissioned_in_use')`,
       [
         input.id,
         input.name,
         input.description,
         input.itemType,
+        input.itType ?? null,
         input.brand,
         input.model,
         input.quantity,
@@ -1049,7 +1099,9 @@ function itemSelect(where: string, limit = "") {
        order by i.updated_at desc, i.id
        ${limit}
     )
-    select i.id, i.name, i.description, i.item_type, i.brand, i.model,
+    select i.id, i.name, i.description, i.item_type, i.item_section, i.it_type,
+           coalesce(addresses.entries, '[]'::jsonb) as network_addresses,
+           i.brand, i.model,
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
            b.id as building_id, b.name as building_name,
@@ -1072,6 +1124,18 @@ function itemSelect(where: string, limit = "") {
       join ${ITEMS} i on i.id = selected.id
       join ${ROOMS} r on r.id = i.room_id
       join ${BUILDINGS} b on b.id = r.building_id
+      left join lateral (
+        select jsonb_agg(
+                 jsonb_build_object(
+                   'id', a.id,
+                   'deviceLabel', a.device_label,
+                   'ipAddress', a.ip_address,
+                   'macAddress', a.mac_address
+                 ) order by a.position, a.id
+               ) as entries
+          from ${IT_ADDRESSES} a
+         where a.item_id = i.id
+      ) addresses on true
       left join lateral (
         select occurred_at
           from ${AUDIT}
@@ -1127,6 +1191,11 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     name: row.name,
     description: row.description,
     itemType: row.item_type,
+    itemSection: row.item_section ?? "general",
+    itType: row.it_type ?? null,
+    networkAddresses: Array.isArray(row.network_addresses)
+      ? row.network_addresses
+      : [],
     brand: row.brand,
     model: row.model,
     quantity: Number(row.quantity),

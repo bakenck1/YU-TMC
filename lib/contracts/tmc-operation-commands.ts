@@ -33,6 +33,7 @@ export interface BulkChangeTmcLocationInput {
   items: readonly TmcOperationItemReference[];
   roomId: string;
   comment?: string | null;
+  itemSection?: "general" | "it";
 }
 
 export interface DecideTmcTransferRequestInput {

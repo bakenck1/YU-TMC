@@ -36,6 +36,7 @@ import InventoryItemQrDialogs from "@/components/InventoryItemQrDialogs";
 import InventoryItemArchiveDialog from "@/components/InventoryItemArchiveDialog";
 import InventoryItemServiceDialog from "@/components/InventoryItemServiceDialog";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
+import ItNetworkAddressEditor from "@/components/ItNetworkAddressEditor";
 import InventoryItemComposition from "@/components/InventoryItemComposition";
 import InventoryItemBackLink from "@/components/InventoryItemBackLink";
 import InventoryItemComments from "@/components/InventoryItemComments";
@@ -58,6 +59,7 @@ import {
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import { addItemPhotoWithRefresh } from "@/lib/inventory-item-photo-client";
+import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
 
 type ResponsiblePickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
   Partial<Pick<TmcOperationUserDto, "email" | "role">>;
@@ -123,9 +125,12 @@ export default function InventoryItemDetails({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
-  const [category, setCategory] = useState<InventoryItemCategory>(
-    item.category ?? categoryFromLegacyType(item.itemType),
+  const [category, setCategory] = useState<InventoryItemCategory | ItEquipmentType>(
+    item.itemSection === "it" && item.itType
+      ? item.itType
+      : item.category ?? categoryFromLegacyType(item.itemType),
   );
+  const [networkAddresses, setNetworkAddresses] = useState<ItNetworkAddressInput[]>(item.networkAddresses ?? []);
   const [brand, setBrand] = useState(item.brand ?? "");
   const [model, setModel] = useState(item.model ?? "");
   const [quantity, setQuantity] = useState(String(item.quantity));
@@ -182,6 +187,7 @@ export default function InventoryItemDetails({
   const itemPhotoUrls = item.photoUrls?.length
     ? item.photoUrls
     : item.photoUrl ? [item.photoUrl] : [];
+  const mustKeepLastPhoto = item.itemSection === "it" && itemPhotoUrls.length <= 1;
   const selectedPhotoUrl = itemPhotoUrls[Math.min(selectedPhotoIndex, itemPhotoUrls.length - 1)];
 
   useEffect(() => {
@@ -257,7 +263,8 @@ export default function InventoryItemDetails({
   function openContentEditor() {
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.category ?? categoryFromLegacyType(item.itemType));
+    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? categoryFromLegacyType(item.itemType));
+    setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -272,7 +279,8 @@ export default function InventoryItemDetails({
     setEditing(false);
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.category ?? categoryFromLegacyType(item.itemType));
+    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? categoryFromLegacyType(item.itemType));
+    setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
     setQuantity(String(item.quantity));
@@ -316,7 +324,9 @@ export default function InventoryItemDetails({
           version: item.version,
           name,
           description: description || null,
-          category,
+          ...(item.itemSection === "it"
+            ? { itType: category, networkAddresses }
+            : { category }),
           brand: brand || null,
           model: model || null,
           quantity: Number(quantity),
@@ -331,7 +341,8 @@ export default function InventoryItemDetails({
         throw new Error(body.error ?? responseErrorCode(response.status));
       }
       setItem(body.item);
-      setCategory(body.item.category ?? categoryFromLegacyType(body.item.itemType));
+      setCategory(body.item.itemSection === "it" && body.item.itType ? body.item.itType : body.item.category ?? categoryFromLegacyType(body.item.itemType));
+      setNetworkAddresses(body.item.networkAddresses ?? []);
       setBrand(body.item.brand ?? "");
       setModel(body.item.model ?? "");
       setQuantity(String(body.item.quantity));
@@ -347,7 +358,8 @@ export default function InventoryItemDetails({
   }
 
   function printCodeLabel(kind: "barcode" | "qr") {
-    window.open(`/items/${item.id}/qr?kind=${kind}`, "_blank", "noopener,noreferrer");
+    const basePath = item.itemSection === "it" ? "/it-items" : "/items";
+    window.open(`${basePath}/${item.id}/qr?kind=${kind}`, "_blank", "noopener,noreferrer");
     setQrDialog(null);
   }
 
@@ -679,7 +691,11 @@ export default function InventoryItemDetails({
             <FileText className="h-4 w-4" /> {t("items.information")}
           </span>
           {canEditContent ? <button ref={editTriggerRef} type="button" onClick={openContentEditor} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
-          {canManageCode ? <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button> : null}
+          {canManageCode && item.itemSection === "it" ? (
+            <button type="button" onClick={() => printCodeLabel("qr")} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><QrCode className="h-4 w-4" />{t("inventory.qrCode")}</button>
+          ) : canManageCode ? (
+            <button type="button" onClick={() => { setCodeKind("barcode"); setQrDialog("generate"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Barcode className="h-4 w-4" />{t("itemDetails.barcode")}</button>
+          ) : null}
         </div>
         {canSendToService || canManageProtected ? (
           <div className="ml-auto flex shrink-0 flex-nowrap justify-end gap-2 md:flex-wrap">
@@ -787,15 +803,15 @@ export default function InventoryItemDetails({
                 ))}
               </select>
             </label>
-            <div className="sm:col-span-2">
+            {item.itemSection !== "it" ? <div className="sm:col-span-2">
               <TmcUserPicker
                 value={responsible}
                 onChange={setResponsible}
                 employeeOnly
                 label={`${t("createItem.responsible")} (${t("createItem.optional")})`}
               />
-            </div>
-            <label className="block text-sm">
+            </div> : null}
+            {item.itemSection !== "it" ? <label className="block text-sm">
               <span className="text-zinc-600">{t("itemDetails.officialNumber")}</span>
               <input
                 value={inventoryNumber}
@@ -807,7 +823,7 @@ export default function InventoryItemDetails({
               <span id="official-number-hint" className="mt-1 block text-xs text-zinc-500">
                 {t("itemDetails.officialNumberHint")}
               </span>
-            </label>
+            </label> : null}
             <label className="block text-sm">
               <span className="text-zinc-600">{t("items.status")}</span>
               <select
@@ -1003,7 +1019,7 @@ export default function InventoryItemDetails({
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.type")}</span>
-                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select>
+                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{item.itemSection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></>}</select>
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("itemDetails.brand")}</span>
@@ -1026,6 +1042,9 @@ export default function InventoryItemDetails({
                 <span className="text-zinc-500">{t("itemDetails.description")}</span>
                 <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
               </label>
+              {item.itemSection === "it" ? (
+                <ItNetworkAddressEditor value={networkAddresses} onChange={setNetworkAddresses} />
+              ) : null}
               {error ? (
                 <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
@@ -1079,7 +1098,7 @@ export default function InventoryItemDetails({
             {canEditContent ? (
               <div className="flex items-center gap-2">
                 {itemPhotoUrls.length < 4 ? <button type="button" onClick={() => { setCameraTarget("item"); setCameraOpen(true); }} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />{t("itemPhotos.add")}</button> : null}
-                <button type="button" onClick={() => void deletePhoto(selectedPhotoUrl)} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("item.deletePhoto")}</button>
+                {!mustKeepLastPhoto ? <button type="button" onClick={() => void deletePhoto(selectedPhotoUrl)} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("item.deletePhoto")}</button> : null}
               </div>
             ) : null}
             <p className="text-sm font-medium text-white">{selectedPhotoIndex + 1} / {itemPhotoUrls.length}</p>
@@ -1120,7 +1139,7 @@ export default function InventoryItemDetails({
                   {capturingPhoto ? t("itemDetails.saving") : itemPhotoUrls.length < 4 ? t("itemPhotos.add") : t("items.photo")}
                 </button>
               ) : null}
-              {canEditContent && item.photoUrl ? (
+              {canEditContent && item.photoUrl && !mustKeepLastPhoto ? (
                 <button type="button" onClick={() => void deletePhoto(itemPhotoUrls[0])} disabled={capturingPhoto} aria-label={t("item.deletePhoto")} className="absolute bottom-2 left-2 flex h-11 w-11 items-center justify-center rounded-full bg-white text-red-600 shadow-lg hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-5 w-5" /></button>
               ) : null}
             </div>
@@ -1138,9 +1157,9 @@ export default function InventoryItemDetails({
               ) : (
                 <QrCode className="h-[86.4px] w-[86.4px] text-zinc-600" strokeWidth={1.5} />
               )}
-              <p className="mt-1 max-w-[190px] break-all font-mono text-sm font-medium text-zinc-700">
+              {item.itemSection !== "it" ? <p className="mt-1 max-w-[190px] break-all font-mono text-sm font-medium text-zinc-700">
                 {item.inventoryNumber}
-              </p>
+              </p> : null}
               <button
                 type="button"
                 onClick={() => { setCodeKind("qr"); setQrDialog("generate"); }}
@@ -1158,17 +1177,19 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
-            <InventoryOverviewRow label={t("items.type")} value={t(inventoryItemCategoryTranslationKey(item.category ?? categoryFromLegacyType(item.itemType)))} />
+            <InventoryOverviewRow label={t("items.type")} value={item.itemSection === "it" ? t(item.itType === "camera" ? "it.typeCamera" : "it.typeWifi") : t(inventoryItemCategoryTranslationKey(item.category ?? categoryFromLegacyType(item.itemType)))} />
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
-            <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} />
-            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
-            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
-            {localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
+            {item.itemSection !== "it" ? <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} /> : null}
+            {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
+            {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
+            {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
             <InventoryOverviewRow label={t("item.condition")} value={t(`condition.${item.condition ?? "good"}`)} />
             <InventoryOverviewRow label={t("room.connected")} value={t(`connection.${item.connectionStatus ?? "not_applicable"}`)} />
             <InventoryOverviewRow label={t("items.createdAt")} value={new Date(item.createdAt).toLocaleDateString(locale)} />
             <InventoryOverviewRow label={t("itemDetails.description")} value={item.description || t("common.notSpecified")} />
+            {item.itemSection === "it" ? <InventoryOverviewRow label={t("it.ipAddress")} value={(item.networkAddresses ?? []).map((address) => address.ipAddress).filter(Boolean).join(", ") || t("common.notSpecified")} /> : null}
+            {item.itemSection === "it" ? <InventoryOverviewRow label={t("it.macAddress")} value={(item.networkAddresses ?? []).map((address) => address.macAddress).filter(Boolean).join(", ") || t("common.notSpecified")} /> : null}
           </dl>
           {item.decommissionedUsage ? (
             <section className="mt-6 rounded-2xl border border-orange-300 bg-orange-50 p-4">
@@ -1187,11 +1208,11 @@ export default function InventoryItemDetails({
           ) : null}
         </section>
 
-        <LocalBarcodeDistributionPanel
+        {item.itemSection !== "it" ? <LocalBarcodeDistributionPanel
           itemId={localBarcodeItemId ?? item.id}
           actorId={actorId}
           actorRole={actorRole}
-        />
+        /> : null}
 
         {!hideComposition ? <InventoryItemComposition
           key={item.id}

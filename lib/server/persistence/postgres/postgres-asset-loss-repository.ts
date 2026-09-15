@@ -55,6 +55,7 @@ class PostgresAssetLossRepository implements AssetLossRepository {
       `select (i.unit_price * i.quantity)::numeric(14,2)::text as amount, rp.id as responsibility_period_id
          from ${TABLES.items} i join ${TABLES.periods} rp on rp.item_id = i.id
         where i.id = $1 and rp.responsible_user_id = $2 and rp.ended_at is null
+          and i.item_section = 'general'
           and i.status not in ('decommissioned', 'decommissioned_in_use')
         for update of i, rp`, [itemId, employeeId],
     );
@@ -100,6 +101,7 @@ class PostgresAssetLossRepository implements AssetLossRepository {
   async getReceipt(caseId: string, employeeId: string | null) {
     const result = await this.source.query<{ binary_data: Buffer; trusted_mime_type: string } & QueryResultRow>(
       `select photo.binary_data, photo.trusted_mime_type from ${TABLES.losses} loss
+       join ${TABLES.items} item on item.id = loss.item_id and item.item_section = 'general'
        join ${TABLES.photos} photo on photo.id = loss.receipt_photo_id
        where loss.id = $1 and ($2::uuid is null or loss.employee_id = $2)
          and photo.purpose = 'asset_loss_receipt' and photo.status = 'attached' and photo.binary_data is not null`, [caseId, employeeId],
@@ -121,7 +123,8 @@ class PostgresAssetLossRepository implements AssetLossRepository {
           where item_id = loss.item_id and ended_at is null
           order by id limit 1 for update
        ) rp on true
-       where loss.id = $1 for update of loss, item, employee`, [caseId],
+       where loss.id = $1 and item.item_section = 'general'
+       for update of loss, item, employee`, [caseId],
     );
     const row = result.rows[0];
     return row ? { ...mapLoss(row), employeeActive: row.employee_active, activeResponsibilityPeriodId: row.active_responsibility_period_id, responsibleUserId: row.responsible_user_id } : null;
@@ -154,7 +157,7 @@ class PostgresAssetLossRepository implements AssetLossRepository {
 function lossSelect() {
   return `select loss.id, loss.employee_id, loss.item_id, loss.responsibility_period_id, item.name as item_name, item.inventory_number,
     loss.status, loss.amount::text, loss.currency, loss.receipt_photo_id, loss.created_at, loss.submitted_at,
-    loss.reviewed_at, loss.review_result, loss.review_comment, loss.closed_at from ${TABLES.losses} loss join ${TABLES.items} item on item.id = loss.item_id`;
+    loss.reviewed_at, loss.review_result, loss.review_comment, loss.closed_at from ${TABLES.losses} loss join ${TABLES.items} item on item.id = loss.item_id and item.item_section = 'general'`;
 }
 
 function mapLoss(row: LossRow): AssetLossRecord {

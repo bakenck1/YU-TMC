@@ -15,10 +15,16 @@ export default function InventoryQrPrintView({
   item,
   kind,
   canShowQr,
+  basePath = "/items",
+  allowBarcode = true,
+  showInventoryNumber = true,
 }: {
   item: InventoryQrPrintItem;
   kind: InventoryQrPrintKind;
   canShowQr: boolean;
+  basePath?: "/items" | "/it-items";
+  allowBarcode?: boolean;
+  showInventoryNumber?: boolean;
 }) {
   const { language, t } = useAppSettings();
   const codeUrl = `/api/inventory/items/${item.id}/qr?kind=${kind}&format=svg`;
@@ -39,16 +45,16 @@ export default function InventoryQrPrintView({
         >
           <Download className="h-4 w-4" /> {t("itemDetails.download")} {isBarcode ? "SVG" : "PNG"}
         </a>
-        {!isBarcode || canShowQr ? (
+        {allowBarcode && (!isBarcode || canShowQr) ? (
           <Link
-            href={`/items/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
+            href={`${basePath}/${item.id}/qr?kind=${isBarcode ? "qr" : "barcode"}`}
             className="rounded-lg border border-black/10 px-4 py-2 text-sm"
           >
             {isBarcode ? t("print.showQr") : t("print.showBarcode")}
           </Link>
         ) : null}
         <Link
-          href={`/items/${item.id}`}
+          href={`${basePath}/${item.id}`}
           className="rounded-lg border border-black/10 px-4 py-2 text-sm"
         >
           {t("print.backToItem")}
@@ -79,10 +85,10 @@ export default function InventoryQrPrintView({
               <dt className="text-zinc-500">{t("items.type")}</dt>
               <dd className="font-semibold">{item.itemType}</dd>
             </div>
-            <div>
+            {showInventoryNumber ? <div>
               <dt className="text-zinc-500">{t("items.inventoryNumber")}</dt>
               <dd className="font-semibold">{item.inventoryNumber}</dd>
-            </div>
+            </div> : null}
             <div>
               <dt className="text-zinc-500">{t("items.location")}</dt>
               <dd className="font-semibold">

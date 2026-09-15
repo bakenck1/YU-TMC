@@ -173,12 +173,16 @@ export function canonicalInventoryDetailsReturnHref(value: unknown) {
     const url = new URL(value, RETURN_HREF_BASE);
     if (url.origin !== RETURN_HREF_BASE) return null;
 
-    if (url.pathname === "/items") {
-      const tab = employeeItemTabFromParam(url.searchParams.get("tab"));
+    if (url.pathname === "/items" || url.pathname === "/it-items") {
+      const tab = url.pathname === "/items"
+        ? employeeItemTabFromParam(url.searchParams.get("tab"))
+        : "active";
       return inventoryTableViewHref(
-        "/items",
+        url.pathname,
         parseInventoryTableViewState(url.searchParams),
-        { tab: tab === "active" ? undefined : tab },
+        url.pathname === "/items"
+          ? { tab: tab === "active" ? undefined : tab }
+          : undefined,
       );
     }
 

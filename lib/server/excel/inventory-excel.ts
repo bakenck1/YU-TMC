@@ -344,6 +344,8 @@ export async function exportInventoryItems(
     { header: "Total KZT", key: "total", width: 18 },
     { header: "Building", key: "building", width: 36 },
     { header: "Room", key: "room", width: 14 },
+    { header: "IP addresses", key: "ipAddress", width: 30 },
+    { header: "MAC addresses", key: "macAddress", width: 30 },
     { header: "Status", key: "status", width: 18 },
     { header: "Responsible", key: "responsible", width: 28 },
     { header: "Created", key: "createdAt", width: 22 },
@@ -379,6 +381,14 @@ export async function exportInventoryItems(
       total: item.quantity * item.unitPrice,
       building: item.room.buildingName,
       room: item.room.designation,
+      ipAddress: (item.networkAddresses ?? [])
+        .map((address) => address.ipAddress)
+        .filter(Boolean)
+        .join("; "),
+      macAddress: (item.networkAddresses ?? [])
+        .map((address) => address.macAddress)
+        .filter(Boolean)
+        .join("; "),
       status: item.status,
       responsible: item.responsible?.name ?? "",
       createdAt: new Date(item.createdAt),

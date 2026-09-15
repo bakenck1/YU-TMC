@@ -46,6 +46,7 @@ export function createPostgresDockflowInventoryRepository(pool = getDatabasePool
             and p.binary_data is not null
             and p.trusted_mime_type in ('image/jpeg', 'image/png', 'image/webp')
             and i.archived_at is null and i.status <> 'decommissioned'
+            and i.item_section = 'general'
           order by p.attached_at desc nulls last limit 1`,
         [id],
       );
@@ -65,10 +66,12 @@ const employeeItemCounts = `
       on rp.responsible_user_id = u.id and rp.ended_at is null
     left join "yu_inventory"."items" ri
       on ri.id = rp.item_id and ri.archived_at is null and ri.status <> 'decommissioned'
+      and ri.item_section = 'general'
     left join "yu_inventory"."local_item_groups" g
       on g.responsible_user_id = u.id and g.status = 'active'
     left join "yu_inventory"."items" gi
       on gi.id = g.item_id and gi.archived_at is null and gi.status <> 'decommissioned'
+      and gi.item_section = 'general'
    where u.is_active = true and u.deleted_at is null and u.iin is not null
    group by u.iin`;
 
@@ -105,6 +108,7 @@ const assignedItemsSelect = (employeePredicate: string) => `
         ) photo on true
        where ${employeePredicate} and u.is_active = true and u.deleted_at is null and rp.ended_at is null
          and i.archived_at is null and i.status <> 'decommissioned'
+         and i.item_section = 'general'
          and not exists (
            select 1 from "yu_inventory"."local_item_groups" active_group
             where active_group.item_id = i.id and active_group.status = 'active'
@@ -132,6 +136,7 @@ const assignedItemsSelect = (employeePredicate: string) => `
         ) photo on true
        where ${employeePredicate} and u.is_active = true and u.deleted_at is null and g.status = 'active'
          and i.archived_at is null and i.status <> 'decommissioned'
+         and i.item_section = 'general'
     ) assigned_items`;
 
 const inventoryItemsSelect = `
@@ -142,6 +147,7 @@ const inventoryItemsSelect = `
            date_trunc('milliseconds', i.updated_at) as updated_at
       from "yu_inventory"."items" i
      where i.archived_at is null and i.status <> 'decommissioned'
+       and i.item_section = 'general'
        and not exists (select 1 from "yu_inventory"."responsibility_periods" rp where rp.item_id = i.id and rp.ended_at is null)
        and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
     union all
@@ -152,6 +158,7 @@ const inventoryItemsSelect = `
       join "yu_inventory"."items" i on i.id = rp.item_id
      where rp.ended_at is null and u.is_active = true and u.deleted_at is null and u.iin is not null
        and i.archived_at is null and i.status <> 'decommissioned'
+       and i.item_section = 'general'
        and not exists (select 1 from "yu_inventory"."local_item_groups" g where g.item_id = i.id and g.status = 'active')
     union all
     select g.id, i.id, g.id, u.id, g.transferred_at, 'group'::text,
@@ -161,6 +168,7 @@ const inventoryItemsSelect = `
       join "yu_inventory"."items" i on i.id = g.item_id
      where g.status = 'active' and u.is_active = true and u.deleted_at is null and u.iin is not null
        and i.archived_at is null and i.status <> 'decommissioned'
+       and i.item_section = 'general'
   ), selected as materialized (
     select * from candidates
      where ($1::timestamptz is null or updated_at < $1 or (updated_at = $1 and id > $2::uuid))

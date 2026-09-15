@@ -94,9 +94,21 @@ function statusName(item: InventoryItemDto) {
 
 export default async function AnalyticsPage() {
   const user = await requireAuthorizedPage("/analytics");
-  const items = activeInventoryItems(await getApplicationServices().items.listItems(
-    authorizationActor(user),
-  ));
+  const actor = authorizationActor(user);
+  const services = getApplicationServices();
+  const [generalItems, itItems] = await Promise.all([
+    services.items.listItems(actor),
+    user.role === "admin" ? services.items.listItItems(actor) : Promise.resolve([]),
+  ]);
+  const data = buildAnalyticsDashboard(activeInventoryItems(generalItems));
+  const itData = user.role === "admin"
+    ? buildAnalyticsDashboard(activeInventoryItems(itItems))
+    : undefined;
+
+  return <AnalyticsCharts data={data} itData={itData} />;
+}
+
+export function buildAnalyticsDashboard(items: InventoryItemDto[]): AnalyticsDashboardData {
   const totalValue = items.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
     0,
@@ -104,7 +116,7 @@ export default async function AnalyticsPage() {
   const assigned = items.filter((item) => item.responsible !== null).length;
   const withPhoto = items.filter((item) => item.photoUrl !== null).length;
 
-  const data: AnalyticsDashboardData = {
+  return {
     records: items.map(toAnalyticsRecord),
     summary: {
       totalItems: items.length,
@@ -128,6 +140,4 @@ export default async function AnalyticsPage() {
       6,
     ),
   };
-
-  return <AnalyticsCharts data={data} />;
 }

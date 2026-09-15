@@ -37,6 +37,7 @@ export default function TmcBulkActions({
   buildings,
   rooms,
   variant = "transfer",
+  itemSection = "general",
   onComplete,
   onClear,
 }: {
@@ -46,6 +47,7 @@ export default function TmcBulkActions({
   buildings: BuildingDto[];
   rooms: RoomDto[];
   variant?: "transfer" | "issue";
+  itemSection?: "general" | "it";
   onComplete: () => void;
   onClear?: () => void;
 }) {
@@ -284,6 +286,7 @@ export default function TmcBulkActions({
           roomId,
           items: operationItems.map((item) => ({ itemId: item.id, itemVersion: item.version ?? 0 })),
           comment: comment.trim() || null,
+          ...(itemSection === "it" ? { itemSection } : {}),
         }),
       });
       const payload = await response.json() as {
@@ -331,7 +334,10 @@ export default function TmcBulkActions({
       const response = await fetch("/api/inventory/items/bulk-delete", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ itemIds: operationItems.map((item) => item.id) }),
+        body: JSON.stringify({
+          itemIds: operationItems.map((item) => item.id),
+          ...(itemSection === "it" ? { itemSection } : {}),
+        }),
       });
       if (!response.ok) throw new Error("request_failed");
       setMode(null);
@@ -381,12 +387,12 @@ export default function TmcBulkActions({
                   <MapPin className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t("tmc.bulk.changeLocation")}
                 </button>
               ) : null}
-              {actorRole === "admin" ? (
+              {actorRole === "admin" && itemSection === "general" ? (
                 <button type="button" role="menuitem" disabled={!categorySelectionValid} onClick={() => open("category")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
                   <Tags className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t("items.type")}
                 </button>
               ) : null}
-              {canTransfer ? (
+              {canTransfer && itemSection === "general" ? (
                 <button type="button" role="menuitem" disabled={!standardSelectionValid} onClick={() => open("transfer")} className="flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50">
                   <ArrowRightLeft className="h-4 w-4 text-zinc-400" aria-hidden="true" /> {t(variant === "issue" ? "tmc.operation.issue" : "tmc.bulk.transfer")}
                 </button>

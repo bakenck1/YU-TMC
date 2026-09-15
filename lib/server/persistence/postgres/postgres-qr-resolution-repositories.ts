@@ -30,6 +30,7 @@ interface QrRow extends QueryResultRow {
   responsible_name: string | null;
   responsible_user_id: string | null;
   item_type: string | null;
+  item_section: QrResolutionRecord["itemSection"];
   item_brand: string | null;
   item_model: string | null;
   item_description: string | null;
@@ -64,7 +65,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               i.inventory_number,
               u.full_name as responsible_name,
               coalesce(rp.responsible_user_id, r.primary_responsible_id) as responsible_user_id,
-              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.item_type, i.item_section, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.quantity as item_quantity,
               i.unit_price as item_unit_price, i.condition as item_condition,
               i.connection_status as item_connection_status,
@@ -107,6 +108,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       responsibleName: row.responsible_name,
       responsibleUserId: row.responsible_user_id,
       itemType: row.item_type,
+      itemSection: row.item_section,
       itemBrand: row.item_brand,
       itemModel: row.item_model,
       itemDescription: row.item_description,
@@ -133,7 +135,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
               i.name as title, b.name as building_name,
               r.designation as room_designation, i.inventory_number,
               u.full_name as responsible_name, rp.responsible_user_id,
-              i.item_type, i.brand as item_brand, i.model as item_model,
+              i.item_type, i.item_section, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.quantity as item_quantity,
               i.unit_price as item_unit_price, i.condition as item_condition,
               i.connection_status as item_connection_status,
@@ -177,6 +179,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       responsibleName: row.responsible_name,
       responsibleUserId: row.responsible_user_id,
       itemType: row.item_type,
+      itemSection: row.item_section,
       itemBrand: row.item_brand,
       itemModel: row.item_model,
       itemDescription: row.item_description,

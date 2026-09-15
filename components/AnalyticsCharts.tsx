@@ -13,19 +13,56 @@ import { filteredDashboard, type AnalyticsDashboardData } from "@/lib/analytics-
 import type { AnalyticsChartSelection } from "@/lib/analytics-chart-selection";
 import { formatAnalyticsMoney } from "@/lib/analytics-formatters";
 
+function localizedItType(
+  value: string,
+  t: (key: "it.typeWifi" | "it.typeCamera") => string,
+) {
+  return value === "wifi_access_point"
+    ? t("it.typeWifi")
+    : value === "camera"
+      ? t("it.typeCamera")
+      : value;
+}
+
 export default function AnalyticsCharts({
   data: initialData,
+  itData,
 }: {
   data: AnalyticsDashboardData;
+  itData?: AnalyticsDashboardData;
 }) {
   const { locale, t } = useAppSettings();
   const [building, setBuilding] = useState("all");
   const [itemType, setItemType] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const data = useMemo(() => filteredDashboard(initialData, { building, itemType, dateFrom, dateTo }), [building, dateFrom, dateTo, initialData, itemType]);
-  const buildings = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.building))).sort(), [initialData.records]);
-  const itemTypes = useMemo(() => Array.from(new Set(initialData.records.map((record) => record.itemType))).sort(), [initialData.records]);
+  const [dataset, setDataset] = useState<"general" | "it">("general");
+  const sourceData = dataset === "it" && itData ? itData : initialData;
+  const filteredData = useMemo(() => filteredDashboard(sourceData, { building, itemType, dateFrom, dateTo }), [building, dateFrom, dateTo, sourceData, itemType]);
+  const data = useMemo(() => {
+    if (dataset !== "it") return filteredData;
+    const localizeRecords = <T extends { records: typeof filteredData.records }>(entry: T) => ({
+      ...entry,
+      records: entry.records.map((record) => ({ ...record, itemType: localizedItType(record.itemType, t) })),
+    });
+    const localizeTypeEntries = (entries: typeof filteredData.types) => entries.map((entry) => ({
+      ...localizeRecords(entry),
+      name: localizedItType(entry.name, t),
+    }));
+    return {
+      ...filteredData,
+      records: filteredData.records.map((record) => ({ ...record, itemType: localizedItType(record.itemType, t) })),
+      types: localizeTypeEntries(filteredData.types),
+      valueByType: localizeTypeEntries(filteredData.valueByType),
+      brands: filteredData.brands.map(localizeRecords),
+      objects: filteredData.objects.map(localizeRecords),
+      locations: filteredData.locations.map(localizeRecords),
+      statuses: filteredData.statuses.map(localizeRecords),
+      responsibles: filteredData.responsibles.map(localizeRecords),
+    };
+  }, [dataset, filteredData, t]);
+  const buildings = useMemo(() => Array.from(new Set(sourceData.records.map((record) => record.building))).sort(), [sourceData.records]);
+  const itemTypes = useMemo(() => Array.from(new Set(sourceData.records.map((record) => record.itemType))).sort(), [sourceData.records]);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
   const [selection, setSelection] = useState<AnalyticsChartSelection | null>(null);
   const assignedPercent = data.summary.totalItems
@@ -46,6 +83,7 @@ export default function AnalyticsCharts({
               <Banknote className="h-6 w-6 text-emerald-300" />
             </span>
             <div>
+              {itData ? <label className="mb-4 block text-sm text-slate-200"><span className="sr-only">{t("nav.analytics")}</span><select value={dataset} onChange={(event) => { setDataset(event.target.value as "general" | "it"); setBuilding("all"); setItemType("all"); setSelection(null); }} className="rounded-xl border border-white/20 bg-slate-800 px-3 py-2 text-sm text-white"><option value="general">{t("it.analyticsGeneral")}</option><option value="it">{t("it.analyticsIt")}</option></select></label> : null}
               <p className="text-sm text-slate-300">{t("analytics.totalValueTitle")}</p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">
                 {formatAnalyticsMoney(data.summary.totalValue, locale)}
@@ -63,7 +101,7 @@ export default function AnalyticsCharts({
                 {t("analytics.recordsProgress", { current: data.summary.totalItems, target: data.summary.targetItems })}
               </p>
               <Link
-                href="/items"
+                href={dataset === "it" ? "/it-items" : "/items"}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-400/10"
               >
                 {t("analytics.viewItems")} <ArrowUpRight className="h-4 w-4" />
@@ -75,7 +113,7 @@ export default function AnalyticsCharts({
 
       <section aria-label={t("analytics.filters")} className="grid gap-3 rounded-2xl border border-black/5 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
         <select value={building} onChange={(event) => setBuilding(event.target.value)} aria-label={t("analytics.buildingFilter")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm"><option value="all">{t("analytics.allBuildings")}</option>{buildings.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-        <select value={itemType} onChange={(event) => setItemType(event.target.value)} aria-label={t("analytics.itemTypeFilter")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm"><option value="all">{t("analytics.allItemTypes")}</option>{itemTypes.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+        <select value={itemType} onChange={(event) => setItemType(event.target.value)} aria-label={t("analytics.itemTypeFilter")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm"><option value="all">{t("analytics.allItemTypes")}</option>{itemTypes.map((value) => <option key={value} value={value}>{dataset === "it" ? localizedItType(value, t) : value}</option>)}</select>
         <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} aria-label={t("analytics.dateFrom")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
         <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} aria-label={t("analytics.dateTo")} className="rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 text-sm" />
       </section>

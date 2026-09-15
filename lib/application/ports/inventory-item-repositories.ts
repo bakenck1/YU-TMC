@@ -7,12 +7,21 @@ import type {
 import type { UserRole } from "@/lib/contracts/users";
 import type { InventoryItemCategory } from "@/lib/inventory-categories";
 import type { InventoryResponsibilityRepository } from "@/lib/application/ports/inventory-responsibility-repositories";
+import type {
+  InventorySection,
+  ItEquipmentType,
+  ItNetworkAddress,
+  ItNetworkAddressInput,
+} from "@/lib/it-inventory";
 
 export interface InventoryItemRecord {
   id: string;
   name: string;
   description: string | null;
   itemType: string;
+  itemSection?: InventorySection;
+  itType?: ItEquipmentType | null;
+  networkAddresses?: ItNetworkAddress[];
   brand: string | null;
   model: string | null;
   quantity: number;
@@ -50,6 +59,8 @@ export interface InsertInventoryItemRecord {
   name: string;
   description: string | null;
   itemType: string;
+  itemSection: InventorySection;
+  itType: ItEquipmentType | null;
   brand: string | null;
   model: string | null;
   quantity: number;
@@ -67,6 +78,7 @@ export interface UpdateInventoryItemContentRecord {
   name: string;
   description: string | null;
   itemType: string;
+  itType?: ItEquipmentType | null;
   brand: string | null;
   model: string | null;
   quantity: number;
@@ -276,12 +288,17 @@ export interface StoredInventoryItemCommentAttachment
 export interface InventoryItemRepository {
   roomExists(id: string): Promise<boolean>;
   listItems(): Promise<InventoryItemRecord[]>;
+  listItItems(): Promise<InventoryItemRecord[]>;
   listItemsAssignedTo(userId: string): Promise<InventoryItemRecord[]>;
   listDecommissionedItems(): Promise<InventoryItemRecord[]>;
   listDecommissionedItemsAssignedTo(
     userId: string,
   ): Promise<InventoryItemRecord[]>;
   findItemById(id: string): Promise<InventoryItemRecord | null>;
+  replaceItNetworkAddresses(
+    itemId: string,
+    addresses: readonly ItNetworkAddressInput[],
+  ): Promise<ItNetworkAddress[]>;
   listComponents(itemId: string): Promise<InventoryItemRecord[]>;
   listOperations(itemId: string): Promise<InventoryItemOperationRecord[]>;
   listComments(itemId: string): Promise<InventoryItemCommentRecord[]>;

@@ -9,6 +9,7 @@ import {
   isInventoryItemCategory,
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
+import { isItEquipmentType, type ItNetworkAddressInput } from "@/lib/it-inventory";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
@@ -247,6 +248,8 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
     (body.model !== undefined && body.model !== null && typeof body.model !== "string") ||
     (body.quantity !== undefined && body.quantity !== null && typeof body.quantity !== "number") ||
     (body.unitPrice !== undefined && body.unitPrice !== null && typeof body.unitPrice !== "number")
+    || (body.itType !== undefined && !isItEquipmentType(body.itType))
+    || (body.networkAddresses !== undefined && !Array.isArray(body.networkAddresses))
   ) {
     throw invalidRequest();
   }
@@ -260,6 +263,8 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
     model: body.model as string | null | undefined,
     quantity: body.quantity as number | null | undefined,
     unitPrice: body.unitPrice as number | null | undefined,
+    itType: body.itType as UpdateInventoryItemContentInput["itType"],
+    networkAddresses: body.networkAddresses as ItNetworkAddressInput[] | undefined,
   };
 }
 
