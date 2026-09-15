@@ -46,6 +46,15 @@ export class QrResolutionService {
         ),
       );
       assertItItemAccess(record, actor);
+      if (record?.targetKind === "item" && record.itemSection === "it") {
+        return {
+          status: "unknown",
+          canonicalKey: barcode.value,
+          format: "legacy_raw",
+          qrStatus: null,
+          target: null,
+        };
+      }
       if (
         !record ||
         !isRecordAccessible(record, {
@@ -77,18 +86,37 @@ export class QrResolutionService {
       );
     }
 
-    const record = await this.unitOfWork.read(async ({ qr }) => {
+    const resolved = await this.unitOfWork.read(async ({ qr }) => {
       const qrRecord = await qr.findByCanonicalKey(parsed.canonicalKey);
-      if (qrRecord || kind === "qr") return qrRecord;
+      if (qrRecord || kind === "qr") {
+        return { record: qrRecord, fromBarcode: false };
+      }
       const barcode = parseCode39ScanInput(parsed.originalValue);
-      if (!barcode.ok) return null;
-      return qr.findItemByBarcode(
-        barcode.value,
-        inventoryNumberComparisonKey(barcode.inventoryNumber),
-        barcode.fallbackKey,
-      );
+      if (!barcode.ok) return { record: null, fromBarcode: false };
+      return {
+        record: await qr.findItemByBarcode(
+          barcode.value,
+          inventoryNumberComparisonKey(barcode.inventoryNumber),
+          barcode.fallbackKey,
+        ),
+        fromBarcode: true,
+      };
     });
+    const { record } = resolved;
     assertItItemAccess(record, actor);
+    if (
+      resolved.fromBarcode &&
+      record?.targetKind === "item" &&
+      record.itemSection === "it"
+    ) {
+      return {
+        status: "unknown",
+        canonicalKey: parsed.canonicalKey,
+        format: parsed.format,
+        qrStatus: null,
+        target: null,
+      };
+    }
     if (
       !record ||
       !isRecordAccessible(record, {

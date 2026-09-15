@@ -37,6 +37,9 @@ export async function GET(
       id,
       authorizationActor(user),
     );
+    if (item.itemSection !== "general") {
+      throw new ApplicationError("not_found", "item_not_found");
+    }
     return Response.json({ item });
   } catch (error) {
     return itemErrorResponse(error);

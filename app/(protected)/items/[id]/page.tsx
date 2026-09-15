@@ -39,6 +39,7 @@ export default async function ItemPage({
       () => services.items.findItem(id, actor),
       notFound,
     );
+    if (item.itemSection !== "general") notFound();
     const canManageProtected = hasPermission(
       user.role,
       "inventory.item.manage_protected_fields",

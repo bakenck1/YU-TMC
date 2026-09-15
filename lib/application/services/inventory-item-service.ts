@@ -402,6 +402,14 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.it.manage");
+    const rawInput = input as unknown as Record<string, unknown>;
+    if (
+      "barcode" in rawInput ||
+      "inventoryNumber" in rawInput ||
+      "responsibleUserId" in rawInput
+    ) {
+      throw new ApplicationError("validation", "it_barcode_not_allowed");
+    }
     if (!isItEquipmentType(input.itType)) {
       throw new ApplicationError("validation", "invalid_it_equipment_type");
     }
