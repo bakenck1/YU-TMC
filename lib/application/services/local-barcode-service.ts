@@ -46,7 +46,7 @@ export async function applyApprovedLocalBarcodeTransfer(
   }
   const item = await localBarcodes.findItemForUpdate(input.itemId);
   if (!item) throw notFound("item_not_found");
-  assertItItemAccess(item, input.initiator.role);
+  assertLocalBarcodeMutationAllowed(item, input.initiator.role);
   if (item.status !== "active") throw conflict("item_not_available");
   if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
     throw validation("source_barcode_required");
@@ -197,7 +197,7 @@ export class LocalBarcodeService {
       }
       const item = await localBarcodes.findItemForUpdate(normalized.itemId);
       if (!item) throw notFound("item_not_found");
-      assertItItemAccess(item, currentActor.role);
+      assertLocalBarcodeMutationAllowed(item, currentActor.role);
       if (item.status !== "active") throw conflict("item_not_available");
       if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
         throw validation("source_barcode_required");
@@ -283,7 +283,7 @@ export class LocalBarcodeService {
       if (!item) {
         throw notFound("item_not_found");
       }
-      assertItItemAccess(item, currentActor.role);
+      assertLocalBarcodeMutationAllowed(item, currentActor.role);
       const group = await localBarcodes.findGroupForUpdate(normalized.groupId);
       if (!group) throw notFound("local_group_not_found");
       if (group.status !== "active") throw conflict("local_group_already_cancelled");
@@ -308,7 +308,10 @@ export class LocalBarcodeService {
     if (!isUuid(id)) throw notFound("local_group_not_found");
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroup(id.toLowerCase());
-      if (group) assertItItemAccess(group, actor.role);
+      if (group) {
+        assertItItemAccess(group, actor.role);
+        if (group.itemSection === "it") throw notFound("local_group_not_found");
+      }
       if (!group || !canRead(actor, group.responsibleUserId)) throw notFound("local_group_not_found");
       return toDto(group);
     });
@@ -318,7 +321,10 @@ export class LocalBarcodeService {
     if (!isUuid(id)) throw notFound("local_group_not_found");
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroup(id.toLowerCase());
-      if (group) assertItItemAccess(group, actor.role);
+      if (group) {
+        assertItItemAccess(group, actor.role);
+        if (group.itemSection === "it") throw notFound("local_group_not_found");
+      }
       if (!group || !canRead(actor, group.responsibleUserId)) {
         throw notFound("local_group_not_found");
       }
@@ -333,7 +339,10 @@ export class LocalBarcodeService {
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
-      if (group) assertItItemAccess(group, actor.role);
+      if (group) {
+        assertItItemAccess(group, actor.role);
+        if (group.itemSection === "it") return null;
+      }
       if (!group || group.status !== "active" || !canResolveScannedBarcode(actor)) {
         return null;
       }
@@ -348,7 +357,10 @@ export class LocalBarcodeService {
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
-      if (group) assertItItemAccess(group, actor.role);
+      if (group) {
+        assertItItemAccess(group, actor.role);
+        if (group.itemSection === "it") return null;
+      }
       return group &&
         (canRead(actor, group.responsibleUserId) ||
           (group.status === "active" && canResolveScannedBarcode(actor)))
@@ -374,6 +386,7 @@ export class LocalBarcodeService {
       const item = await localBarcodes.findItem(itemId.toLowerCase());
       if (!item) throw notFound("item_not_found");
       assertItItemAccess(item, actor.role);
+      if (item.itemSection === "it") throw notFound("item_not_found");
       const groups = await localBarcodes.listGroups(item.id);
       if (!hasPermission(actor.role, "inventory.local_barcode.read_all") && actor.userId !== item.responsibleUserId && !groups.some((group) => group.status === "active" && group.responsibleUserId === actor.userId)) throw notFound("item_not_found");
       const active = groups.filter((group) => group.status === "active");
@@ -399,6 +412,15 @@ function assertItItemAccess(
 ) {
   if (record.itemSection === "it" && !hasPermission(role, "inventory.it.read")) {
     throw forbidden();
+  }
+}
+function assertLocalBarcodeMutationAllowed(
+  record: { itemSection?: "general" | "it" },
+  role: AuthorizationActor["role"],
+) {
+  assertItItemAccess(record, role);
+  if (record.itemSection === "it") {
+    throw validation("it_barcode_not_allowed");
   }
 }
 async function requireLiveActor(repo: LocalBarcodeRepositories["localBarcodes"], actor: AuthenticatedActor) { const current = await repo.findActorForUpdate(actor.userId); if (!current || !current.active || current.deletedAt || current.role !== actor.role || current.version !== actor.sessionVersion) throw forbidden(); return current; }

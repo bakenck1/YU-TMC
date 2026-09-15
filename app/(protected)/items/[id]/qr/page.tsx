@@ -31,6 +31,7 @@ export default async function ItemQrPrintPage({
     () => getApplicationServices().items.findItem(id, actor),
     notFound,
   );
+  if (item.itemSection !== "general") notFound();
   if (kind === "qr" && !item.qrCode) notFound();
   return (
     <InventoryQrPrintView

@@ -13,7 +13,7 @@ test("shows the item QR code 20 percent larger", () => {
   assert.match(source, /className="h-\[86\.4px\] w-\[86\.4px\]"/);
 });
 
-test("shows the inventory number directly below the item QR code", () => {
+test("shows the inventory number below the QR code only for general inventory", () => {
   const source = readFileSync(
     new URL("../components/InventoryItemDetails.tsx", import.meta.url),
     "utf8",
@@ -21,6 +21,6 @@ test("shows the inventory number directly below the item QR code", () => {
 
   assert.match(
     source,
-    /<p className="mt-1 max-w-\[190px\] break-all font-mono text-sm font-medium text-zinc-700">\s*\{item\.inventoryNumber\}\s*<\/p>\s*<button/,
+    /\{item\.itemSection !== "it" \? <p className="mt-1 max-w-\[190px\] break-all font-mono text-sm font-medium text-zinc-700">\s*\{item\.inventoryNumber\}\s*<\/p> : null\}\s*<button/,
   );
 });

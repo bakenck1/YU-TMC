@@ -31,6 +31,8 @@ export function toInventoryQrPrintItem(
     printableValue:
       kind === "qr"
         ? item.qrCode
-        : code39PayloadForItem(item.inventoryNumber, item.id),
+        : item.itemSection === "it"
+          ? null
+          : code39PayloadForItem(item.inventoryNumber, item.id),
   };
 }
