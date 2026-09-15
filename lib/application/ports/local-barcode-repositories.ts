@@ -26,6 +26,7 @@ export interface LocalBarcodeItemRecord {
   roomDesignation: string;
   buildingId: string;
   buildingName: string;
+  itemSection?: "general" | "it";
 }
 
 export interface LocalBarcodeGroupRecord {
@@ -65,6 +66,7 @@ export interface LocalBarcodeGroupRecord {
   cancelledAt: Date | null;
   cancellationReason: string | null;
   version: number;
+  itemSection?: "general" | "it";
 }
 
 export interface LocalBarcodeRecipientRecord {

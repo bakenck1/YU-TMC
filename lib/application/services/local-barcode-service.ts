@@ -46,6 +46,7 @@ export async function applyApprovedLocalBarcodeTransfer(
   }
   const item = await localBarcodes.findItemForUpdate(input.itemId);
   if (!item) throw notFound("item_not_found");
+  assertItItemAccess(item, input.initiator.role);
   if (item.status !== "active") throw conflict("item_not_available");
   if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
     throw validation("source_barcode_required");
@@ -196,6 +197,7 @@ export class LocalBarcodeService {
       }
       const item = await localBarcodes.findItemForUpdate(normalized.itemId);
       if (!item) throw notFound("item_not_found");
+      assertItItemAccess(item, currentActor.role);
       if (item.status !== "active") throw conflict("item_not_available");
       if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
         throw validation("source_barcode_required");
@@ -281,6 +283,7 @@ export class LocalBarcodeService {
       if (!item) {
         throw notFound("item_not_found");
       }
+      assertItItemAccess(item, currentActor.role);
       const group = await localBarcodes.findGroupForUpdate(normalized.groupId);
       if (!group) throw notFound("local_group_not_found");
       if (group.status !== "active") throw conflict("local_group_already_cancelled");
@@ -305,6 +308,7 @@ export class LocalBarcodeService {
     if (!isUuid(id)) throw notFound("local_group_not_found");
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroup(id.toLowerCase());
+      if (group) assertItItemAccess(group, actor.role);
       if (!group || !canRead(actor, group.responsibleUserId)) throw notFound("local_group_not_found");
       return toDto(group);
     });
@@ -314,6 +318,7 @@ export class LocalBarcodeService {
     if (!isUuid(id)) throw notFound("local_group_not_found");
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroup(id.toLowerCase());
+      if (group) assertItItemAccess(group, actor.role);
       if (!group || !canRead(actor, group.responsibleUserId)) {
         throw notFound("local_group_not_found");
       }
@@ -328,6 +333,7 @@ export class LocalBarcodeService {
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
+      if (group) assertItItemAccess(group, actor.role);
       if (!group || group.status !== "active" || !canResolveScannedBarcode(actor)) {
         return null;
       }
@@ -342,6 +348,7 @@ export class LocalBarcodeService {
     try { key = localBarcodeComparisonKey(value); } catch { return null; }
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const group = await localBarcodes.findGroupByBarcodeKey(key);
+      if (group) assertItItemAccess(group, actor.role);
       return group &&
         (canRead(actor, group.responsibleUserId) ||
           (group.status === "active" && canResolveScannedBarcode(actor)))
@@ -355,7 +362,9 @@ export class LocalBarcodeService {
       throw forbidden();
     }
     return this.unitOfWork.read(async ({ localBarcodes }) =>
-      (await localBarcodes.listActiveGroupsAssignedTo(actor.userId)).map(toDto),
+      (await localBarcodes.listActiveGroupsAssignedTo(actor.userId))
+        .filter((group) => group.itemSection !== "it")
+        .map(toDto),
     );
   }
 
@@ -364,6 +373,7 @@ export class LocalBarcodeService {
     return this.unitOfWork.read(async ({ localBarcodes }) => {
       const item = await localBarcodes.findItem(itemId.toLowerCase());
       if (!item) throw notFound("item_not_found");
+      assertItItemAccess(item, actor.role);
       const groups = await localBarcodes.listGroups(item.id);
       if (!hasPermission(actor.role, "inventory.local_barcode.read_all") && actor.userId !== item.responsibleUserId && !groups.some((group) => group.status === "active" && group.responsibleUserId === actor.userId)) throw notFound("item_not_found");
       const active = groups.filter((group) => group.status === "active");
@@ -383,6 +393,14 @@ function toDto(group: LocalBarcodeGroupRecord): LocalBarcodeGroupDto {
 
 function canRead(actor: AuthorizationActor, responsibleId: string) { return hasPermission(actor.role, "inventory.local_barcode.read_all") || (actor.userId === responsibleId && hasPermission(actor.role, "inventory.local_barcode.read_assigned")); }
 function canResolveScannedBarcode(actor: AuthorizationActor) { return hasPermission(actor.role, "inventory.qr.resolve_full") || hasPermission(actor.role, "inventory.qr.resolve_item"); }
+function assertItItemAccess(
+  record: { itemSection?: "general" | "it" },
+  role: AuthorizationActor["role"],
+) {
+  if (record.itemSection === "it" && !hasPermission(role, "inventory.it.read")) {
+    throw forbidden();
+  }
+}
 async function requireLiveActor(repo: LocalBarcodeRepositories["localBarcodes"], actor: AuthenticatedActor) { const current = await repo.findActorForUpdate(actor.userId); if (!current || !current.active || current.deletedAt || current.role !== actor.role || current.version !== actor.sessionVersion) throw forbidden(); return current; }
 function normalizeTransfer(input: CreateLocalBarcodeTransferInput): CreateLocalBarcodeTransferInput { const comment = typeof input?.comment === "string" ? input.comment.normalize("NFKC").trim() : ""; if (!input || typeof input !== "object" || !isUuid(input.itemId) || (input.sourceGroupId !== null && !isUuid(input.sourceGroupId)) || !isUuid(input.recipientUserId) || !Number.isSafeInteger(input.quantity) || input.quantity < 1 || !Number.isSafeInteger(input.sourceVersion) || input.sourceVersion < 1 || [...comment].length > 1000) throw validation("invalid_local_transfer"); return { itemId: input.itemId.toLowerCase(), sourceGroupId: input.sourceGroupId?.toLowerCase() ?? null, recipientUserId: input.recipientUserId.toLowerCase(), quantity: input.quantity, sourceVersion: input.sourceVersion, comment: comment || null }; }
 function normalizeCancel(groupId: string, input: CancelLocalBarcodeInput) { const reason = typeof input?.reason === "string" ? input.reason.normalize("NFKC").trim() : ""; if (!isUuid(groupId) || !Number.isSafeInteger(input?.version) || input.version < 1 || !reason || [...reason].length > 1000) throw validation("invalid_local_cancellation"); return { groupId: groupId.toLowerCase(), version: input.version, reason }; }

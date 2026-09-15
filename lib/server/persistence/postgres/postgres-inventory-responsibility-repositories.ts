@@ -37,6 +37,7 @@ interface StateRow extends QueryResultRow {
   item_status: ItemResponsibilityState["itemStatus"];
   responsible_user_id: string | null;
   responsible_name: string | null;
+  item_section: "general" | "it";
 }
 
 interface TransferRow extends QueryResultRow {
@@ -54,6 +55,7 @@ interface TransferRow extends QueryResultRow {
   closed_at: Date | null;
   decision_comment: string | null;
   version: number;
+  item_section: "general" | "it";
 }
 
 interface TimelineRow extends QueryResultRow {
@@ -91,7 +93,7 @@ class PostgresInventoryResponsibilityRepository
   async findItemState(itemId: string): Promise<ItemResponsibilityState | null> {
     const result = await this.source.query<StateRow>(
       `select i.id as item_id, i.status as item_status,
-              rp.id as responsibility_period_id,
+              i.item_section, rp.id as responsibility_period_id,
               rp.responsible_user_id,
               u.full_name as responsible_name
          from ${ITEMS} i
@@ -113,6 +115,7 @@ class PostgresInventoryResponsibilityRepository
           responsibleUserId: row.responsible_user_id,
           responsibleName: row.responsible_name,
           itemStatus: row.item_status,
+          itemSection: row.item_section,
         }
       : null;
   }
@@ -122,7 +125,7 @@ class PostgresInventoryResponsibilityRepository
   ): Promise<ItemResponsibilityState | null> {
     const result = await this.source.query<StateRow>(
       `select i.id as item_id, i.status as item_status,
-              current_period.id as responsibility_period_id,
+              i.item_section, current_period.id as responsibility_period_id,
               current_period.responsible_user_id,
               current_period.responsible_name
          from ${ITEMS} i
@@ -495,7 +498,7 @@ class PostgresInventoryResponsibilityRepository
 function transferSelect(where: string, lock = "", limit = "") {
   return `
     select t.id, t.item_id, i.name as item_name,
-           i.inventory_number as item_inventory_number, t.requested_by,
+           i.item_section, i.inventory_number as item_inventory_number, t.requested_by,
            requester.full_name as requested_by_name,
            t.proposed_responsible_id,
            t.current_responsible_id_at_request,
@@ -521,6 +524,7 @@ function mapItemState(row: StateRow | undefined): ItemResponsibilityState | null
         responsibleUserId: row.responsible_user_id,
         responsibleName: row.responsible_name,
         itemStatus: row.item_status,
+        itemSection: row.item_section,
       }
     : null;
 }
@@ -541,6 +545,7 @@ function mapTransfer(row: TransferRow): TransferRecord {
     closedAt: row.closed_at ? new Date(row.closed_at) : null,
     decisionComment: row.decision_comment,
     version: Number(row.version),
+    itemSection: row.item_section,
   };
 }
 

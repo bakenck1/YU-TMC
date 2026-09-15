@@ -10,7 +10,7 @@ import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 
 const MAXIMUM_BODY_BYTES = 16 * 1024;
-const INPUT_FIELDS = new Set(["items", "roomId", "comment"]);
+const INPUT_FIELDS = new Set(["items", "roomId", "comment", "itemSection"]);
 const ITEM_FIELDS = new Set(["itemId", "itemVersion"]);
 
 export interface TmcBulkLocationPostDependencies {
@@ -52,7 +52,8 @@ function parseInput(value: unknown): BulkChangeTmcLocationInput {
     body.items.length > 50 ||
     (body.comment !== undefined &&
       body.comment !== null &&
-      typeof body.comment !== "string")
+      typeof body.comment !== "string") ||
+    (body.itemSection !== undefined && body.itemSection !== "general" && body.itemSection !== "it")
   ) {
     throw invalidRequest();
   }
@@ -75,6 +76,7 @@ function parseInput(value: unknown): BulkChangeTmcLocationInput {
     roomId: body.roomId,
     items,
     ...(body.comment !== undefined ? { comment: body.comment as string | null } : {}),
+    ...(body.itemSection !== undefined ? { itemSection: body.itemSection as "general" | "it" } : {}),
   };
 }
 

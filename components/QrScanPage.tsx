@@ -50,6 +50,10 @@ export default function QrScanPage({
       const body = (await response.json().catch(() => ({}))) as {
         resolution?: QrResolutionDto;
       };
+      if (response.status === 403) {
+        router.replace("/access-denied");
+        return;
+      }
       const resolution = body.resolution;
       if (
         !response.ok ||

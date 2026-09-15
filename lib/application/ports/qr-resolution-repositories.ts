@@ -7,6 +7,7 @@ import type {
   QrTargetKind,
   RecordStatus,
 } from "@/lib/contracts/inventory-domain";
+import type { InventorySection } from "@/lib/it-inventory";
 
 export interface QrResolutionRecord {
   canonicalKey: string;
@@ -22,6 +23,7 @@ export interface QrResolutionRecord {
   responsibleName: string | null;
   responsibleUserId?: string | null;
   itemType?: string | null;
+  itemSection?: InventorySection | null;
   itemBrand?: string | null;
   itemModel?: string | null;
   itemDescription?: string | null;

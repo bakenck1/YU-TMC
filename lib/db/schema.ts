@@ -54,6 +54,7 @@ import {
   TRANSFER_STATUSES,
 } from "@/lib/contracts/inventory-domain";
 import { USER_ROLES } from "@/lib/contracts/users";
+import { INVENTORY_SECTIONS, IT_EQUIPMENT_TYPES } from "@/lib/it-inventory";
 
 /**
  * All application tables are schema-qualified so PostgreSQL's public schema is
@@ -215,6 +216,14 @@ export const userCodeSequence = inventorySchema.sequence(
 export const passwordResetGenerationSequence = inventorySchema.sequence(
   "password_reset_generation_sequence",
   { startWith: 1, increment: 1, minValue: 1, cache: 1 },
+);
+export const inventorySectionEnum = inventorySchema.enum(
+  "inventory_section",
+  INVENTORY_SECTIONS,
+);
+export const itEquipmentTypeEnum = inventorySchema.enum(
+  "it_equipment_type",
+  IT_EQUIPMENT_TYPES,
 );
 
 export const localBarcodeSequence = inventorySchema.sequence(
@@ -754,6 +763,8 @@ export const itemsTable = inventorySchema.table(
     name: varchar({ length: 160 }).notNull(),
     description: text(),
     itemType: varchar({ length: 120 }).notNull().default("electronics"),
+    itemSection: inventorySectionEnum().notNull().default("general"),
+    itType: itEquipmentTypeEnum(),
     brand: varchar({ length: 120 }),
     model: varchar({ length: 160 }),
     quantity: integer().notNull().default(1),
@@ -811,7 +822,11 @@ export const itemsTable = inventorySchema.table(
       "items_display_values_check",
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
-          AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture')
+          AND (
+            (${table.itemSection} = 'general' AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture') AND ${table.itType} IS NULL)
+            OR
+            (${table.itemSection} = 'it' AND ${table.itType} in ('wifi_access_point', 'camera') AND ${table.itemType} = ${table.itType}::text)
+          )
           AND btrim(${table.inventoryNumber}) <> ''
           AND btrim(${table.inventoryNumberKey}) <> ''
           AND ${table.quantity} > 0
@@ -844,6 +859,7 @@ export const itemsTable = inventorySchema.table(
     ),
     index("items_room_status_idx").on(table.roomId, table.status),
     index("items_status_idx").on(table.status),
+    index("items_section_status_idx").on(table.itemSection, table.status),
     index("items_inventory_number_key_idx").on(table.inventoryNumberKey),
     index("items_created_in_inspection_idx").on(
       table.createdInInspectionId,
@@ -1144,6 +1160,37 @@ export const qrIdentifiersTable = inventorySchema.table(
       table.status,
     ),
     index("qr_identifiers_created_by_idx").on(table.createdBy),
+  ],
+);
+
+export const itemNetworkAddressesTable = inventorySchema.table(
+  "item_network_addresses",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    itemId: uuid()
+      .notNull()
+      .references(() => itemsTable.id, {
+        onDelete: "cascade",
+        onUpdate: "restrict",
+      }),
+    position: integer().notNull(),
+    deviceLabel: text(),
+    ipAddress: text(),
+    macAddress: text(),
+  },
+  (table) => [
+    check("item_network_addresses_position_check", sql`${table.position} >= 0`),
+    check(
+      "item_network_addresses_nonempty_check",
+      sql`coalesce(btrim(${table.deviceLabel}), '') <> ''
+          OR coalesce(btrim(${table.ipAddress}), '') <> ''
+          OR coalesce(btrim(${table.macAddress}), '') <> ''`,
+    ),
+    uniqueIndex("item_network_addresses_item_position_unique").on(
+      table.itemId,
+      table.position,
+    ),
+    index("item_network_addresses_item_idx").on(table.itemId),
   ],
 );
 

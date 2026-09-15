@@ -34,6 +34,9 @@ export interface InventoryItem {
   displayStatus?: string;
   photo?: string;
   version?: number;
+  itemSection?: import("@/lib/it-inventory").InventorySection;
+  itType?: import("@/lib/it-inventory").ItEquipmentType | null;
+  networkAddresses?: import("@/lib/it-inventory").ItNetworkAddress[];
 }
 
 export interface Room {

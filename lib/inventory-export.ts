@@ -9,7 +9,7 @@ export function isCompleteInventoryExport(
 }
 
 export function createInventoryExportPayload(
-  dataset: "items" | "decommissioned" | "decommissioned_in_use",
+  dataset: "items" | "it-items" | "decommissioned" | "decommissioned_in_use",
   itemIds: readonly string[],
   columns: InventoryColumnVisibility,
   completeDataset = false,
@@ -20,18 +20,23 @@ export function createInventoryExportPayload(
   return {
     dataset,
     ...(completeDataset ? {} : { itemIds: [...itemIds] }),
-    columns: exportColumnKeys(columns),
+    columns: exportColumnKeys(columns, dataset),
   };
 }
 
-function exportColumnKeys(columns: InventoryColumnVisibility) {
+function exportColumnKeys(
+  columns: InventoryColumnVisibility,
+  dataset: "items" | "it-items" | "decommissioned" | "decommissioned_in_use",
+) {
   const keys = ["name", "inventoryNumber"];
-  if (columns.qrCode) keys.push("qrCode");
+  if (dataset !== "it-items" && columns.qrCode) keys.push("qrCode");
   if (columns.itemType) keys.push("itemType");
   if (columns.brandModel) keys.push("brand", "model");
   if (columns.location) keys.push("building", "room");
+  if (columns.ipAddress) keys.push("ipAddress");
+  if (columns.macAddress) keys.push("macAddress");
   if (columns.status) keys.push("status");
-  if (columns.responsible) keys.push("responsible");
+  if (dataset !== "it-items" && columns.responsible) keys.push("responsible");
   if (columns.additionalInfo) keys.push("description");
   if (columns.quantity) keys.push("quantity");
   if (columns.price) keys.push("unitPrice", "total");

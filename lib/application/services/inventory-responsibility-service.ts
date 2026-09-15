@@ -53,6 +53,7 @@ export class InventoryResponsibilityService {
     return this.unitOfWork.transaction(async ({ responsibility }) => {
       const item = await responsibility.findItemState(itemId);
       if (!item) throw notFound("item_not_found");
+      assertItItemAccess(item, actor);
       if (item.itemStatus !== "active") throw conflict("item_not_available");
       if (item.responsibleUserId) throw conflict("item_already_assigned");
       const startedAt = this.clock.now();
@@ -98,6 +99,7 @@ export class InventoryResponsibilityService {
     return this.unitOfWork.transaction(async ({ responsibility }) => {
       const item = await responsibility.findItemState(input.itemId);
       if (!item) throw notFound("item_not_found");
+      assertItItemAccess(item, actor);
       if (!item.responsibleUserId) throw conflict("item_is_free");
       if (item.responsibleUserId === actor.userId) {
         throw conflict("already_responsible");
@@ -181,6 +183,7 @@ export class InventoryResponsibilityService {
         throw conflict("transfer_not_pending");
       }
       const item = await responsibility.findItemStateForUpdate(current.itemId);
+      if (item) assertItItemAccess(item, actor);
       if (
         !item ||
         item.itemStatus !== "active" ||
@@ -280,7 +283,13 @@ export class InventoryResponsibilityService {
           role: actor.role,
           sessionVersion: actor.sessionVersion,
         })
-      ).map((transfer) => toTransferDto(transfer, normalizedActorId)),
+      )
+        .filter(
+          (transfer) =>
+            transfer.itemSection !== "it" ||
+            hasPermission(actor.role, "inventory.it.read"),
+        )
+        .map((transfer) => toTransferDto(transfer, normalizedActorId)),
     );
   }
 
@@ -294,6 +303,7 @@ export class InventoryResponsibilityService {
     return this.unitOfWork.read(async ({ responsibility }) => {
       const item = await responsibility.findItemState(itemId);
       if (!item) throw notFound("item_not_found");
+      assertItItemAccess(item, actor);
       return (await responsibility.listTimeline(itemId)).map(toTimelineDto);
     });
   }
@@ -343,6 +353,9 @@ export class InventoryResponsibilityService {
         normalizedActorId,
       );
       if (!current) throw notFound("transfer_not_found");
+      if (current.itemSection === "it") {
+        throw new ApplicationError("forbidden", "forbidden");
+      }
       if (current.status !== "pending_current_owner") {
         throw conflict("transfer_not_pending");
       }
@@ -601,6 +614,18 @@ function notFound(code: string) {
 
 function conflict(code: string) {
   return new ApplicationError("conflict", code);
+}
+
+function assertItItemAccess(
+  item: { itemSection?: "general" | "it" },
+  actor: AuthorizationActor,
+) {
+  if (
+    item.itemSection === "it" &&
+    !hasPermission(actor.role, "inventory.it.read")
+  ) {
+    throw new ApplicationError("forbidden", "forbidden");
+  }
 }
 
 function postgresConflict(error: unknown) {

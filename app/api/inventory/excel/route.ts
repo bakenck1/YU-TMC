@@ -53,6 +53,16 @@ export async function GET(request: Request) {
         "decommissioned-items.xlsx",
       );
     }
+    if (dataset === "it-items") {
+      if (!hasPermission(user.role, "inventory.it.read")) throw forbidden();
+      return workbookResponse(
+        await exportInventoryItems(
+          activeInventoryItems(await services.items.listItItems(actor)),
+          "IT inventory items",
+        ),
+        "it-inventory-items.xlsx",
+      );
+    }
     if (dataset === "decommissioned_in_use") {
       return workbookResponse(
         await exportInventoryItems(
@@ -88,6 +98,7 @@ export async function POST(request: Request) {
       };
       if (
         body.dataset !== "items" &&
+        body.dataset !== "it-items" &&
         body.dataset !== "decommissioned" &&
         body.dataset !== "decommissioned_in_use"
       ) throw invalidRequest();
@@ -102,8 +113,13 @@ export async function POST(request: Request) {
         ? rawColumns.filter((value): value is string => typeof value === "string" && value.length <= 40).slice(0, 30)
         : undefined;
       const services = getApplicationServices();
+      if (body.dataset === "it-items" && !hasPermission(user.role, "inventory.it.read")) {
+        throw forbidden();
+      }
       const source = body.dataset === "items"
         ? activeInventoryItems(await services.items.listItems(actor))
+        : body.dataset === "it-items"
+          ? activeInventoryItems(await services.items.listItItems(actor))
         : (await services.items.listDecommissionedItems(actor)).filter(
             (item) => item.status === body.dataset,
           );
@@ -111,10 +127,10 @@ export async function POST(request: Request) {
       return workbookResponse(
         await exportInventoryItems(
           selected,
-          body.dataset === "items" ? "Inventory items" : body.dataset === "decommissioned_in_use" ? "Decommissioned but in use" : "Decommissioned",
+          body.dataset === "items" ? "Inventory items" : body.dataset === "it-items" ? "IT inventory items" : body.dataset === "decommissioned_in_use" ? "Decommissioned but in use" : "Decommissioned",
           columns,
         ),
-        body.dataset === "items" ? "inventory-items.xlsx" : body.dataset === "decommissioned_in_use" ? "decommissioned-in-use.xlsx" : "decommissioned-items.xlsx",
+        body.dataset === "items" ? "inventory-items.xlsx" : body.dataset === "it-items" ? "it-inventory-items.xlsx" : body.dataset === "decommissioned_in_use" ? "decommissioned-in-use.xlsx" : "decommissioned-items.xlsx",
       );
     }
     if (action !== "preview" && action !== "import") throw invalidRequest();

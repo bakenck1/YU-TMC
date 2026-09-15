@@ -291,7 +291,8 @@ class PostgresTmcTransferRequestRepository
       status: string;
       archived_at: Date | null;
     } & QueryResultRow>(
-      `select status, archived_at from ${ITEMS} where id = $1 for update`,
+      `select status, archived_at from ${ITEMS}
+        where id = $1 and item_section = 'general' for update`,
       [input.itemId],
     );
     const periodResult = await this.source.query<{
@@ -512,6 +513,7 @@ class PostgresTmcTransferRequestRepository
            select item.id, item.version, item.status, item.archived_at
              from ${ITEMS} item
             where item.id = $3
+              and item.item_section = 'general'
             for update
          ), locked_period as materialized (
            select period.id, period.item_id, period.responsible_user_id,
@@ -735,6 +737,7 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
     const predicates = [
       `audit.subject_kind = 'item'`,
       `audit.action = 'item.location_changed'`,
+      `item.item_section = 'general'`,
       input.includeAll
         ? "true"
         : `exists (
@@ -1063,6 +1066,7 @@ function candidateSelect() {
          limit 1
       ) photo on true
      where i.id = any($1::uuid[])
+       and i.item_section = 'general'
      order by i.id`;
 }
 

@@ -1,5 +1,6 @@
 import type {
   CreateInventoryItemInput,
+  CreateItInventoryItemInput,
   InventoryItemAuditDto,
   InventoryItemDto,
   InventoryItemOperationDto,
@@ -47,6 +48,13 @@ import {
   InventoryItemCommentService,
   type InventoryItemCommentAttachmentInput,
 } from "@/lib/application/services/inventory-item-comment-service";
+import {
+  hasItNetworkAddressValue,
+  isItEquipmentType,
+  type InventorySection,
+  type ItEquipmentType,
+  type ItNetworkAddressInput,
+} from "@/lib/it-inventory";
 
 export type { InventoryItemCommentAttachmentInput } from "@/lib/application/services/inventory-item-comment-service";
 
@@ -110,7 +118,20 @@ export class InventoryItemService {
     // responsibility. Keep every lifecycle state in that scoped result so
     // the employee tabs and summary cards can show their own decommissioned
     // items as well.
-    return repositories.map(toItemDto);
+    return repositories
+      .filter((item) => (item.itemSection ?? "general") === "general")
+      .map(toItemDto);
+  }
+
+  async listItItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
+    requirePermission(actor, "inventory.it.read");
+    const records = await this.unitOfWork.transaction(
+      ({ items }) => items.listItItems(),
+      { isolation: "repeatable-read", readOnly: true },
+    );
+    return records
+      .filter((item) => item.itemSection === "it")
+      .map(toItemDto);
   }
 
   async listDecommissionedItems(
@@ -135,6 +156,9 @@ export class InventoryItemService {
     const item = await this.unitOfWork.read(async ({ items }) => {
       const value = await items.findItemById(id);
       if (!value) throw new ApplicationError("not_found", "item_not_found");
+      if (value.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
+        throw forbidden();
+      }
       if (
         !hasPermission(actor.role, "inventory.item.read_all") &&
         !(
@@ -165,7 +189,11 @@ export class InventoryItemService {
       // A linked component is part of the assigned item's composition. Hiding
       // it when another employee is responsible for that component makes the
       // composition look incomplete and prevents the card from being useful.
-      return items.listComponents(normalizedId);
+      const components = await items.listComponents(normalizedId);
+      const section = item.itemSection ?? "general";
+      return components.filter(
+        (component) => (component.itemSection ?? "general") === section,
+      );
     });
     return records.map(toItemDto);
   }
@@ -185,6 +213,12 @@ export class InventoryItemService {
       ]);
       if (!leftItem || !rightItem) {
         throw new ApplicationError("not_found", "item_not_found");
+      }
+      if (
+        (leftItem.itemSection ?? "general") !==
+        (rightItem.itemSection ?? "general")
+      ) {
+        throw new ApplicationError("validation", "item_component_section_mismatch");
       }
       if (
         leftItem.status === "decommissioned" ||
@@ -230,10 +264,20 @@ export class InventoryItemService {
       throw new ApplicationError("validation", "item_component_query_too_long");
     }
     const records = await this.unitOfWork.read(async ({ items }) => {
-      if (!(await items.findItemById(itemId))) {
+      const parent = await items.findItemById(itemId);
+      if (!parent) {
         throw new ApplicationError("not_found", "item_not_found");
       }
-      return items.searchComponentCandidates(itemId, normalizedQuery, 50);
+      assertItemReadable(parent, actor);
+      const candidates = await items.searchComponentCandidates(
+        itemId,
+        normalizedQuery,
+        50,
+      );
+      const section = parent.itemSection ?? "general";
+      return candidates.filter(
+        (candidate) => (candidate.itemSection ?? "general") === section,
+      );
     });
     return records.map(toItemDto);
   }
@@ -350,6 +394,41 @@ export class InventoryItemService {
     const authorizedInput = actor.role === "warehouse"
       ? normalizeWarehouseCreateInput(input)
       : input;
+    return this.createItemInSection(authorizedInput, actor, "general", null, []);
+  }
+
+  async createItItem(
+    input: CreateItInventoryItemInput,
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.it.manage");
+    if (!isItEquipmentType(input.itType)) {
+      throw new ApplicationError("validation", "invalid_it_equipment_type");
+    }
+    if (input.quantity === undefined || input.quantity === null) {
+      throw new ApplicationError("validation", "invalid_item_quantity");
+    }
+    const requestedPhotos = input.photos ?? (input.photo ? [input.photo] : []);
+    if (requestedPhotos.length < 1) {
+      throw new ApplicationError("validation", "item_photo_required");
+    }
+    const addresses = normalizeItNetworkAddresses(input.networkAddresses);
+    return this.createItemInSection(
+      { ...input, itemType: input.itType },
+      actor,
+      "it",
+      input.itType,
+      addresses,
+    );
+  }
+
+  private async createItemInSection(
+    authorizedInput: CreateInventoryItemInput,
+    actor: AuthorizationActor,
+    itemSection: InventorySection,
+    itType: ItEquipmentType | null,
+    networkAddresses: ItNetworkAddressInput[],
+  ): Promise<InventoryItemDto> {
     const values = normalizeCreateInput(authorizedInput);
     if (values.responsibleUserId) {
       requirePermission(actor, "inventory.item.manage_protected_fields");
@@ -379,7 +458,9 @@ export class InventoryItemService {
         id: itemId,
         name: values.name,
         description: values.description,
-        itemType: values.itemType,
+        itemType: itType ?? values.itemType,
+        itemSection,
+        itType,
         brand: values.brand,
         model: values.model,
         quantity: values.quantity,
@@ -408,6 +489,8 @@ export class InventoryItemService {
             name: created.name,
             description: created.description,
             itemType: created.itemType,
+            itemSection,
+            itType,
             brand: created.brand,
             model: created.model,
             quantity: created.quantity,
@@ -432,6 +515,22 @@ export class InventoryItemService {
         ? await items.findItemById(itemId)
         : created;
       if (!assigned) throw new Error("item_refresh_failed");
+      let savedNetworkAddresses = assigned.networkAddresses ?? [];
+      if (itemSection === "it") {
+        savedNetworkAddresses = await items.replaceItNetworkAddresses(itemId, networkAddresses);
+        await items.appendAudit(
+          createAudit({
+            id: this.ids.create(),
+            actor,
+            subjectId: itemId,
+            subjectRevision: assigned.version,
+            action: "item.network_addresses_updated",
+            beforeValues: { addresses: [] },
+            afterValues: { addresses: networkAddresses },
+            occurredAt,
+          }),
+        );
+      }
       let photographed = assigned;
       for (const [index, photo] of photos.entries()) {
         const updated = await items.updateItemPhoto({
@@ -457,7 +556,11 @@ export class InventoryItemService {
           }),
         );
       }
-      return toItemDto({ ...photographed, qrCode });
+      return toItemDto({
+        ...photographed,
+        qrCode,
+        ...(itemSection === "it" ? { networkAddresses: savedNetworkAddresses } : {}),
+      });
     });
   }
 
@@ -575,6 +678,8 @@ export class InventoryItemService {
           name: values.name,
           description: values.description,
           itemType: values.itemType,
+          itemSection: "general",
+          itType: null,
           brand: values.brand,
           model: values.model,
           quantity: values.quantity,
@@ -627,6 +732,7 @@ export class InventoryItemService {
   ): Promise<TmcBulkOperationResultDto> {
     requirePermission(actor, "inventory.item.bulk_manage");
     const normalized = normalizeBulkLocationInput(input);
+    if (normalized.itemSection === "it") requirePermission(actor, "inventory.it.manage");
     const occurredAt = this.clock.now();
 
     return this.unitOfWork.transaction(async ({ items }) => {
@@ -638,6 +744,10 @@ export class InventoryItemService {
       for (const reference of normalized.items) {
         const current = await items.findItemById(reference.itemId);
         if (!current) {
+          outcomes.push(problemOutcome(reference.itemId, "item_not_found"));
+          continue;
+        }
+        if ((current.itemSection ?? "general") !== normalized.itemSection) {
           outcomes.push(problemOutcome(reference.itemId, "item_not_found"));
           continue;
         }
@@ -707,7 +817,7 @@ export class InventoryItemService {
       const updatedIds: string[] = [];
       for (const id of ids) {
         const current = await items.findItemById(id);
-        if (!current) continue;
+        if (!current || (current.itemSection ?? "general") !== "general") continue;
         const updated = await items.updateItemCategory({
           id,
           category: normalizedCategory,
@@ -736,11 +846,20 @@ export class InventoryItemService {
   async deleteItems(
     itemIds: readonly string[],
     actor: AuthorizationActor,
+    itemSection: InventorySection = "general",
   ): Promise<string[]> {
     requirePermission(actor, "inventory.item.delete");
     const ids = normalizeBulkItemIds(itemIds);
+    if (itemSection === "it") requirePermission(actor, "inventory.it.manage");
     return this.unitOfWork.transaction(
-      ({ items }) => items.deleteItems(ids),
+      async ({ items }) => {
+        const visibleIds: string[] = [];
+        for (const id of ids) {
+          const item = await items.findItemById(id);
+          if (item && (item.itemSection ?? "general") === itemSection) visibleIds.push(id);
+        }
+        return visibleIds.length ? items.deleteItems(visibleIds) : [];
+      },
       { isolation: "serializable", maxAttempts: 3 },
     );
   }
@@ -755,11 +874,25 @@ export class InventoryItemService {
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      const isItItem = current.itemSection === "it";
+      if (isItItem) requirePermission(actor, "inventory.it.manage");
+      if (isItItem && !isItEquipmentType(input.itType)) {
+        throw new ApplicationError("validation", "invalid_it_equipment_type");
+      }
+      if (!isItItem && (input.itType !== undefined || input.networkAddresses !== undefined)) {
+        throw new ApplicationError("validation", "invalid_it_item_fields");
+      }
       if (current.version !== input.version) throw versionConflict();
+      const nextNetworkAddresses = isItItem
+        ? input.networkAddresses === undefined
+          ? current.networkAddresses ?? []
+          : normalizeItNetworkAddresses(input.networkAddresses)
+        : [];
       const values = {
         name: patch.name,
         description: patch.description,
-        itemType: patch.category ?? current.itemType,
+        itemType: isItItem ? input.itType! : patch.category ?? current.itemType,
+        itType: isItItem ? input.itType! : null,
         brand: patch.brand === undefined ? current.brand : patch.brand,
         model: patch.model === undefined ? current.model : patch.model,
         quantity: patch.quantity ?? current.quantity,
@@ -773,6 +906,9 @@ export class InventoryItemService {
         occurredAt: this.clock.now(),
       });
       if (!updated) throw versionConflict();
+      const savedNetworkAddresses = isItItem
+        ? await items.replaceItNetworkAddresses(id, nextNetworkAddresses)
+        : [];
       await items.appendAudit(
         createAudit({
           id: this.ids.create(),
@@ -780,12 +916,22 @@ export class InventoryItemService {
           subjectId: id,
           subjectRevision: updated.version,
           action: "item.content_updated",
-          beforeValues: itemContentAuditValues(current),
-          afterValues: itemContentAuditValues(updated),
+          beforeValues: {
+            ...itemContentAuditValues(current),
+            ...(isItItem ? { itType: current.itType, networkAddresses: current.networkAddresses ?? [] } : {}),
+          },
+          afterValues: {
+            ...itemContentAuditValues(updated),
+            ...(isItItem ? { itType: input.itType, networkAddresses: savedNetworkAddresses } : {}),
+          },
           occurredAt: this.clock.now(),
         }),
       );
-      return toItemDto({ ...updated, qrCode: current.qrCode });
+      return toItemDto({
+        ...updated,
+        qrCode: current.qrCode,
+        ...(isItItem ? { itType: input.itType!, networkAddresses: savedNetworkAddresses } : {}),
+      });
     });
   }
 
@@ -850,6 +996,13 @@ export class InventoryItemService {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== version) throw versionConflict();
+      const currentPhotoCount = current.photoIds?.length ?? (current.photoUrl ? 1 : 0);
+      if (
+        current.itemSection === "it" &&
+        (currentPhotoCount <= 1 || !photoId)
+      ) {
+        throw new ApplicationError("validation", "item_photo_required");
+      }
       if (!current.photoUrl) {
         throw new ApplicationError("not_found", "item_photo_not_found");
       }
@@ -907,6 +1060,9 @@ export class InventoryItemService {
   ): Promise<StoredItemPhoto> {
     return this.unitOfWork.read(async ({ items }) => {
       const item = await items.findItemById(id);
+      if (item?.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
+        throw forbidden();
+      }
       const hasParentAccess = Boolean(
         item &&
           (hasPermission(actor.role, "inventory.item.read_all") ||
@@ -1232,6 +1388,9 @@ export class InventoryItemService {
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (current.itemSection === "it") {
+        requirePermission(actor, "inventory.it.manage");
+      }
       if (actor.role === "employee" && current.responsibleId !== actor.userId) {
         throw forbidden();
       }
@@ -1355,6 +1514,37 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
   };
 }
 
+function normalizeItNetworkAddresses(
+  value: CreateItInventoryItemInput["networkAddresses"],
+): ItNetworkAddressInput[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 1_000) {
+    throw new ApplicationError("validation", "invalid_it_network_addresses");
+  }
+  return value
+    .map((address) => {
+      if (!address || typeof address !== "object" || Array.isArray(address)) {
+        throw new ApplicationError("validation", "invalid_it_network_addresses");
+      }
+      const values = [address.deviceLabel, address.ipAddress, address.macAddress];
+      if (values.some((entry) => entry !== undefined && entry !== null && typeof entry !== "string")) {
+        throw new ApplicationError("validation", "invalid_it_network_addresses");
+      }
+      if (values.some((entry) => typeof entry === "string" && [...entry].length > 500)) {
+        throw new ApplicationError("validation", "invalid_it_network_addresses");
+      }
+      return address;
+    })
+    .filter(hasItNetworkAddressValue)
+    .map((address) => {
+      return {
+        deviceLabel: address.deviceLabel ?? null,
+        ipAddress: address.ipAddress ?? null,
+        macAddress: address.macAddress ?? null,
+      };
+    });
+}
+
 function normalizeWarehouseCreateInput(
   input: CreateInventoryItemInput,
 ): CreateInventoryItemInput {
@@ -1466,7 +1656,8 @@ function normalizeBulkLocationInput(input: BulkChangeTmcLocationInput) {
   if (input.comment !== undefined && input.comment !== null && input.comment !== "") {
     comment = normalizeText(input.comment, 1_000, "invalid_comment");
   }
-  return { roomId, items: itemReferences, comment };
+  const itemSection = input.itemSection === "it" ? "it" : "general";
+  return { roomId, items: itemReferences, comment, itemSection };
 }
 
 function problemOutcome(
@@ -1670,7 +1861,9 @@ function requirePermission(
     | "inventory.item.manage_protected_fields"
     | "inventory.item.manage_components"
     | "inventory.item.bulk_manage"
-    | "inventory.item.delete",
+    | "inventory.item.delete"
+    | "inventory.it.read"
+    | "inventory.it.manage",
 ) {
   if (!hasPermission(actor.role, permission)) throw forbidden();
 }
@@ -1702,6 +1895,9 @@ function assertItemReadable(
   item: InventoryItemRecord,
   actor: AuthorizationActor,
 ): void {
+  if (item.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
+    throw forbidden();
+  }
   if (
     !hasPermission(actor.role, "inventory.item.read_all") &&
     !(
@@ -1801,6 +1997,9 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       ? record.itemType
       : categoryFromLegacyType(record.itemType),
     itemType: record.itemType,
+    itemSection: record.itemSection ?? "general",
+    itType: record.itType ?? null,
+    networkAddresses: record.networkAddresses ?? [],
     brand: record.brand,
     model: record.model,
     quantity: record.quantity,

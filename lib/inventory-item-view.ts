@@ -7,7 +7,9 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     id: item.id,
     name: item.name,
     inventoryNumber: item.inventoryNumber,
-    category: item.category ?? categoryFromLegacyType(item.itemType),
+    category: item.itemSection === "it" && item.itType
+      ? item.itType
+      : item.category ?? categoryFromLegacyType(item.itemType),
     brand: item.brand ?? undefined,
     model: item.model ?? undefined,
     buildingId: item.room.buildingId,
@@ -27,11 +29,16 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     updatedAtIso: item.updatedAt,
     createdAt: new Date(item.createdAt).toLocaleDateString(),
     additionalInfo: item.description ?? undefined,
-    itemType: item.category ?? categoryFromLegacyType(item.itemType),
+    itemType: item.itemSection === "it" && item.itType
+      ? item.itType
+      : item.category ?? categoryFromLegacyType(item.itemType),
     brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || undefined,
     quantity: item.quantity,
     price: item.unitPrice,
     version: item.version,
+    itemSection: item.itemSection,
+    itType: item.itType,
+    networkAddresses: item.networkAddresses,
   };
 }
 

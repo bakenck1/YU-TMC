@@ -163,7 +163,8 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
             where item_id = i.id and ended_at is null
             order by started_at desc limit 1
          ) period on true
-        where i.id = $1 and i.archived_at is null`,
+        where i.id = $1 and i.archived_at is null
+          and i.item_section = 'general'`,
       [itemId],
     );
     const row = result.rows[0];
@@ -196,6 +197,7 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
             for update
          ) period on true
         where i.id = $1 and i.archived_at is null
+          and i.item_section = 'general'
           for update of i, r`,
       [itemId],
     );
@@ -352,6 +354,7 @@ function requestSelect() {
                  request.created_at, request.updated_at, request.version
             from ${REQUESTS} request
             join ${ITEMS} i on i.id = request.item_id
+              and i.item_section = 'general'
             join ${ROOMS} r on r.id = request.room_id
             join ${BUILDINGS} b on b.id = r.building_id
             join ${USERS} author on author.id = request.author_id

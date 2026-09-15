@@ -16,6 +16,7 @@ import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history"
 import {
   DEFAULT_INVENTORY_COLUMNS,
   INVENTORY_COLUMN_KEYS,
+  IT_NETWORK_COLUMN_KEYS,
   parseInventoryColumnVisibility,
   type InventoryColumnKey,
 } from "@/lib/inventory-columns";
@@ -26,13 +27,13 @@ import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import TmcBulkActions from "@/components/TmcBulkActions";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import type { UserRole } from "@/lib/contracts/users";
+import type { TranslationKey } from "@/lib/i18n";
 import InventoryFilterInput from "./InventoryFilterInput";
 import InventoryThumbnail from "./InventoryThumbnail";
 import InventoryVisibleStatus from "./InventoryVisibleStatus";
 import { code39PayloadForItem } from "@/lib/domain/code39";
 import {
   inventoryItemCategoryTranslationKey,
-  type InventoryItemCategoryTranslationKey,
 } from "@/lib/inventory-categories";
 import {
   DEFAULT_INVENTORY_TABLE_VIEW_STATE,
@@ -60,11 +61,12 @@ function saveSearchHistory(storageKey: string, history: string[]) {
   }
 }
 
-function loadColumnVisibility(storageKey: string) {
+function loadColumnVisibility(storageKey: string, fallback: typeof DEFAULT_INVENTORY_COLUMNS) {
   try {
-    return parseInventoryColumnVisibility(window.localStorage.getItem(storageKey));
+    const stored = window.localStorage.getItem(storageKey);
+    return stored ? parseInventoryColumnVisibility(stored) : { ...fallback };
   } catch {
-    return { ...DEFAULT_INVENTORY_COLUMNS };
+    return { ...fallback };
   }
 }
 
@@ -89,7 +91,9 @@ function itemLinkLabel(item: InventoryItem) {
 function itemHref(item: InventoryItem, returnHref?: string) {
   const itemPath = item.localGroupId
     ? `/local-barcodes/${item.localGroupId}`
-    : `/items/${item.id}`;
+    : item.itemSection === "it"
+      ? `/it-items/${item.id}`
+      : `/items/${item.id}`;
   return inventoryDetailsHref(itemPath, returnHref);
 }
 
@@ -100,6 +104,8 @@ const COLUMN_LABEL_KEYS = {
   itemType: "items.type",
   brandModel: "items.brandModel",
   location: "items.location",
+  ipAddress: "it.ipAddress",
+  macAddress: "it.macAddress",
   status: "items.status",
   responsible: "items.responsible",
   additionalInfo: "items.additionalInfo",
@@ -111,7 +117,7 @@ const COLUMN_LABEL_KEYS = {
 
 function categoryLabel(
   category: InventoryItem["category"],
-  t: (key: InventoryItemCategoryTranslationKey) => string,
+  t: (key: TranslationKey) => string,
 ) {
   if (
     category === "electronics" ||
@@ -120,6 +126,8 @@ function categoryLabel(
   ) {
     return t(inventoryItemCategoryTranslationKey(category));
   }
+  if (category === "wifi_access_point") return t("it.typeWifi");
+  if (category === "camera") return t("it.typeCamera");
   return category;
 }
 
@@ -131,6 +139,30 @@ function barcodeValue(item: InventoryItem) {
 
 function isTemporaryBarcode(value: string) {
   return /^TMP-\d{4}-\d{6}$/i.test(value);
+}
+
+function NetworkAddressCell({
+  item,
+  field,
+  moreLabel,
+}: {
+  item: InventoryItem;
+  field: "ipAddress" | "macAddress";
+  moreLabel: (count: number) => string;
+}) {
+  const values = (item.networkAddresses ?? [])
+    .map((address) => address[field])
+    .filter((value): value is string => Boolean(value));
+  if (values.length === 0) return <span aria-label="—">—</span>;
+  if (values.length === 1) return <span>{values[0]}</span>;
+  return (
+    <details onClick={(event) => event.stopPropagation()} className="relative">
+      <summary className="cursor-pointer whitespace-nowrap text-emerald-700">{values[0]} · {moreLabel(values.length - 1)}</summary>
+      <ul className="absolute z-20 mt-2 min-w-48 space-y-1 rounded-xl border border-black/10 bg-white p-3 shadow-xl">
+        {values.map((value, index) => <li key={`${value}-${index}`} className="whitespace-nowrap">{value}</li>)}
+      </ul>
+    </details>
+  );
 }
 
 export default function ItemsTable({
@@ -148,18 +180,20 @@ export default function ItemsTable({
   stateUrlPath,
   stateUrlParams,
   itemReturnHref,
+  variant = "general",
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
   dateLabel?: string;
   searchHistoryScope?: string;
   columnSettingsScope?: string;
-  excelDataset?: "items" | "decommissioned" | "decommissioned_in_use";
+  excelDataset?: "items" | "it-items" | "decommissioned" | "decommissioned_in_use";
   completeDataset?: boolean;
   itemCreation?: {
     rooms: RoomDto[];
     buildings: BuildingDto[];
     mode: "full" | "restricted";
+    section?: "general" | "it";
   };
   bulkActions?: {
     actorUserId: string;
@@ -167,6 +201,7 @@ export default function ItemsTable({
     buildings: BuildingDto[];
     rooms: RoomDto[];
     variant?: "transfer" | "issue";
+    itemSection?: "general" | "it";
   };
   invoiceActions?: boolean;
   initialViewState?: InventoryTableViewState;
@@ -174,6 +209,7 @@ export default function ItemsTable({
   stateUrlParams?: Readonly<Record<string, string | undefined>>;
   /** Static fallback for tables whose own filters are not URL-managed. */
   itemReturnHref?: string;
+  variant?: "general" | "it";
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -198,7 +234,10 @@ export default function ItemsTable({
   const [filters, setFilters] = useState({ ...startingViewState.filters });
   const [draftFilters, setDraftFilters] = useState({ ...startingViewState.filters });
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_INVENTORY_COLUMNS);
+  const defaultColumns = useMemo(() => variant === "it"
+    ? { ...DEFAULT_INVENTORY_COLUMNS, qrCode: false, ipAddress: true, macAddress: true, responsible: false }
+    : DEFAULT_INVENTORY_COLUMNS, [variant]);
+  const [visibleColumns, setVisibleColumns] = useState(() => ({ ...defaultColumns }));
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(startingViewState.page);
@@ -229,11 +268,14 @@ export default function ItemsTable({
   useEffect(() => {
     if (!columnSettingsStorageKey) return;
     const timeout = window.setTimeout(
-      () => setVisibleColumns(loadColumnVisibility(columnSettingsStorageKey)),
+      () => {
+        const loaded = loadColumnVisibility(columnSettingsStorageKey, defaultColumns);
+        setVisibleColumns(variant === "it" ? { ...loaded, qrCode: false, responsible: false } : loaded);
+      },
       0,
     );
     return () => window.clearTimeout(timeout);
-  }, [columnSettingsStorageKey]);
+  }, [columnSettingsStorageKey, defaultColumns, variant]);
 
   useEffect(() => () => {
     if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
@@ -414,7 +456,7 @@ export default function ItemsTable({
   }
 
   function resetColumns() {
-    const next = { ...DEFAULT_INVENTORY_COLUMNS };
+    const next = { ...defaultColumns };
     setVisibleColumns(next);
     if (columnSettingsStorageKey) saveColumnVisibility(columnSettingsStorageKey, next);
   }
@@ -438,6 +480,9 @@ export default function ItemsTable({
 
   return (
     <div className="space-y-4">
+      {variant === "it" ? (
+        <h1 className="text-2xl font-semibold text-zinc-900">{t("it.title")}</h1>
+      ) : null}
       {excelDataset || itemCreation || invoiceActions ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2.5 sm:flex-row sm:items-center">
           {invoiceActions ? (
@@ -456,6 +501,7 @@ export default function ItemsTable({
               rooms={itemCreation.rooms}
               buildings={itemCreation.buildings}
               restricted={itemCreation.mode === "restricted"}
+              inventorySection={itemCreation.section ?? "general"}
             />
           ) : null}
         </div>
@@ -556,7 +602,11 @@ export default function ItemsTable({
                 className="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-black/10 bg-white p-3 shadow-xl"
               >
                 <div className="space-y-1">
-                  {INVENTORY_COLUMN_KEYS.map((key) => (
+                  {[...INVENTORY_COLUMN_KEYS, ...IT_NETWORK_COLUMN_KEYS].filter(
+                    (key) => variant === "it" || !IT_NETWORK_COLUMN_KEYS.includes(key as never),
+                  ).filter(
+                    (key) => variant !== "it" || (key !== "responsible" && key !== "qrCode"),
+                  ).map((key) => (
                     <label key={key} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
                       <input type="checkbox" checked={visibleColumns[key]} onChange={() => toggleColumn(key)} className="h-4 w-4 accent-emerald-500" />
                       {t(COLUMN_LABEL_KEYS[key])}
@@ -574,10 +624,19 @@ export default function ItemsTable({
               <label className="text-sm text-zinc-600">
                 <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.type")}</span>
                 <select value={draftFilters.category} onChange={(event) => updateDraftFilter("category", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">
-                  <option value="all">{t("items.allCategories")}</option>
-                  <option value="electronics">{t("common.electronics")}</option>
-                  <option value="electrical_equipment">{t("data.electricalEquipment")}</option>
-                  <option value="furniture">{t("data.furniture")}</option>
+                  <option value="all">{variant === "it" ? t("it.allTypes") : t("items.allCategories")}</option>
+                  {variant === "it" ? (
+                    <>
+                      <option value="wifi_access_point">{t("it.typeWifi")}</option>
+                      <option value="camera">{t("it.typeCamera")}</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="electronics">{t("common.electronics")}</option>
+                      <option value="electrical_equipment">{t("data.electricalEquipment")}</option>
+                      <option value="furniture">{t("data.furniture")}</option>
+                    </>
+                  )}
                 </select>
               </label>
               <InventoryFilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:brand` : undefined} />
@@ -591,7 +650,7 @@ export default function ItemsTable({
                   {statusOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "display" ? dataLabel(option.value) : t(`status.${option.value}`)}</option>)}
                 </select>
               </label>
-              <InventoryFilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:responsible` : undefined} suggestions={responsibleSuggestions} />
+              {variant !== "it" ? <InventoryFilterInput label={t("items.responsible")} value={draftFilters.responsible} onChange={(value) => updateDraftFilter("responsible", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:responsible` : undefined} suggestions={responsibleSuggestions} /> : null}
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={clearFilters} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50">{t("items.clearFilters")}</button>
@@ -613,6 +672,7 @@ export default function ItemsTable({
               buildings={bulkActions.buildings}
               rooms={bulkActions.rooms}
               variant={bulkActions.variant}
+              itemSection={bulkActions.itemSection}
               onComplete={() => router.refresh()}
               onClear={() => setSelected(new Set())}
             />
@@ -622,7 +682,7 @@ export default function ItemsTable({
       </div>
 
       <div className="hidden overflow-x-auto rounded-2xl border border-black/5 bg-white md:block">
-        <table className="min-w-[1380px] w-full text-left text-sm">
+        <table className={`${variant === "it" ? "min-w-[1180px]" : "min-w-[1380px]"} w-full text-left text-sm`}>
           <thead>
             <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-zinc-400">
               <th className="w-16 px-2 py-2 text-center"><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></th>
@@ -632,6 +692,8 @@ export default function ItemsTable({
               {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
               {visibleColumns.brandModel ? <th className="px-3 py-4 font-medium">{t("items.brandModel")}</th> : null}
               {visibleColumns.location ? <th className="px-3 py-4 font-medium">{t("items.location")}</th> : null}
+              {visibleColumns.ipAddress ? <th className="px-3 py-4 font-medium">{t("it.ipAddress")}</th> : null}
+              {visibleColumns.macAddress ? <th className="px-3 py-4 font-medium">{t("it.macAddress")}</th> : null}
               {visibleColumns.status ? <th className="px-3 py-4 font-medium">{t("items.status")}</th> : null}
               {visibleColumns.responsible ? <th className="px-3 py-4 font-medium">{t("items.responsible")}</th> : null}
               {visibleColumns.additionalInfo ? <th className="px-3 py-4 font-medium">{t("items.additionalInfo")}</th> : null}
@@ -656,6 +718,8 @@ export default function ItemsTable({
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
                   {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
+                  {visibleColumns.ipAddress ? <td className="px-3 py-4 text-zinc-600"><NetworkAddressCell item={item} field="ipAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></td> : null}
+                  {visibleColumns.macAddress ? <td className="px-3 py-4 text-zinc-600"><NetworkAddressCell item={item} field="macAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></td> : null}
                   {visibleColumns.status ? <td className="px-3 py-4"><InventoryVisibleStatus status={visibleItemStatus(item)} /></td> : null}
                   {visibleColumns.responsible ? <td className="px-3 py-4 text-zinc-600">{item.responsible}</td> : null}
                   {visibleColumns.additionalInfo ? <td className="max-w-[240px] px-3 py-4 text-zinc-600">{item.additionalInfo ?? "вЂ”"}</td> : null}
@@ -713,6 +777,8 @@ export default function ItemsTable({
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
                 {visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}
+                {visibleColumns.ipAddress ? <><dt className="text-zinc-400">{t("it.ipAddress")}</dt><dd className="text-right"><NetworkAddressCell item={item} field="ipAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></dd></> : null}
+                {visibleColumns.macAddress ? <><dt className="text-zinc-400">{t("it.macAddress")}</dt><dd className="text-right"><NetworkAddressCell item={item} field="macAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></dd></> : null}
                 {visibleColumns.responsible ? <><dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd></> : null}
                 {visibleColumns.updatedAt ? <><dt className="text-zinc-400">{dateLabel ?? t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "вЂ”"}</dd></> : null}
                 {visibleColumns.createdAt ? <><dt className="text-zinc-400">{t("items.createdAt")}</dt><dd className="text-right">{item.createdAt ?? "вЂ”"}</dd></> : null}

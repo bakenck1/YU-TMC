@@ -45,6 +45,7 @@ export class QrResolutionService {
           barcode.fallbackKey,
         ),
       );
+      assertItItemAccess(record, actor);
       if (
         !record ||
         !isRecordAccessible(record, {
@@ -87,6 +88,7 @@ export class QrResolutionService {
         barcode.fallbackKey,
       );
     });
+    assertItItemAccess(record, actor);
     if (
       !record ||
       !isRecordAccessible(record, {
@@ -136,6 +138,19 @@ export class QrResolutionService {
       throw new ApplicationError("not_found", "item_photo_not_found");
     }
     return photo;
+  }
+}
+
+function assertItItemAccess(
+  record: QrResolutionRecord | null,
+  actor: AuthorizationActor,
+) {
+  if (
+    record?.targetKind === "item" &&
+    record.itemSection === "it" &&
+    !hasPermission(actor.role, "inventory.it.read")
+  ) {
+    throw new ApplicationError("forbidden", "forbidden");
   }
 }
 

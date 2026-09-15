@@ -5,6 +5,12 @@ import type {
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
 import type { InventoryItemCategory } from "@/lib/inventory-categories";
+import type {
+  InventorySection,
+  ItEquipmentType,
+  ItNetworkAddress,
+  ItNetworkAddressInput,
+} from "@/lib/it-inventory";
 
 export interface InventoryItemDto {
   id: string;
@@ -14,6 +20,9 @@ export interface InventoryItemDto {
   category?: InventoryItemCategory;
   /** @deprecated Kept during the data-model transition; it equals category. */
   itemType: string;
+  itemSection?: InventorySection;
+  itType?: ItEquipmentType | null;
+  networkAddresses?: ItNetworkAddress[];
   brand: string | null;
   model: string | null;
   quantity: number;
@@ -136,6 +145,16 @@ export interface CreateInventoryItemInput {
   }>;
 }
 
+export interface CreateItInventoryItemInput
+  extends Omit<
+    CreateInventoryItemInput,
+    "category" | "itemType" | "quantity" | "barcode" | "inventoryNumber" | "responsibleUserId"
+  > {
+  itType: ItEquipmentType;
+  quantity: number;
+  networkAddresses?: ItNetworkAddressInput[];
+}
+
 export interface UpdateInventoryItemContentInput {
   version: number;
   name: string;
@@ -146,6 +165,8 @@ export interface UpdateInventoryItemContentInput {
   model?: string | null;
   quantity?: number | null;
   unitPrice?: number | null;
+  itType?: ItEquipmentType;
+  networkAddresses?: ItNetworkAddressInput[];
 }
 
 export interface UpdateInventoryItemPhotoInput {

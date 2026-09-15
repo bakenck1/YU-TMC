@@ -136,6 +136,9 @@ export class InventoryItemCommentService {
 }
 
 function assertItemReadable(item: InventoryItemRecord, actor: AuthorizationActor) {
+  if (item.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
+    throw new ApplicationError("forbidden", "forbidden");
+  }
   if (
     !hasPermission(actor.role, "inventory.item.read_all") &&
     !(

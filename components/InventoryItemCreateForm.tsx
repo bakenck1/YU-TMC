@@ -8,9 +8,11 @@ import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCodeScanner from "@/components/InventoryItemCodeScanner";
 import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture";
+import ItNetworkAddressEditor from "@/components/ItNetworkAddressEditor";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import type { InventoryItemCategory } from "@/lib/inventory-categories";
+import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
 
 export default function InventoryItemCreateForm({
   rooms,
@@ -19,6 +21,7 @@ export default function InventoryItemCreateForm({
   openInitially = false,
   hideTrigger = false,
   restricted = false,
+  inventorySection = "general",
   onCreated,
   onDismiss,
 }: {
@@ -29,6 +32,7 @@ export default function InventoryItemCreateForm({
   hideTrigger?: boolean;
   /** When true (warehouse role) — only name, description, room and photo are shown. */
   restricted?: boolean;
+  inventorySection?: "general" | "it";
   onCreated?: () => void;
   onDismiss?: () => void;
 }) {
@@ -37,7 +41,7 @@ export default function InventoryItemCreateForm({
   const [open, setOpen] = useState(openInitially);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<"" | InventoryItemCategory>("");
+  const [category, setCategory] = useState<"" | InventoryItemCategory | ItEquipmentType>("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -50,6 +54,7 @@ export default function InventoryItemCreateForm({
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [photos, setPhotos] = useState<Array<{ imageDataUrl: string; width: number; height: number }>>([]);
+  const [networkAddresses, setNetworkAddresses] = useState<ItNetworkAddressInput[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const buildingRooms = useMemo(
@@ -82,21 +87,26 @@ export default function InventoryItemCreateForm({
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/inventory/items", {
+      const response = await fetch(
+        inventorySection === "it" ? "/api/inventory/it-items" : "/api/inventory/items",
+        {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name,
           description: description || null,
-          category,
+          ...(inventorySection === "it" ? { itType: category } : { category }),
           brand: restricted ? null : (brand || null),
           model: restricted ? null : (model || null),
           quantity: restricted ? 1 : Number(quantity),
           unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
-          responsibleUserId: restricted ? null : responsible?.id ?? null,
-          barcode: restricted ? null : (barcode.trim() || null),
+          ...(inventorySection !== "it" ? {
+            responsibleUserId: restricted ? null : responsible?.id ?? null,
+            barcode: restricted ? null : (barcode.trim() || null),
+          } : {}),
           photos,
+          ...(inventorySection === "it" ? { networkAddresses } : {}),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -112,6 +122,7 @@ export default function InventoryItemCreateForm({
       setBarcode("");
       setResponsible(null);
       setPhotos([]);
+      setNetworkAddresses([]);
       onCreated?.();
       router.refresh();
     } catch (cause) {
@@ -159,12 +170,12 @@ export default function InventoryItemCreateForm({
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              {!restricted && (
+              {!restricted && inventorySection !== "it" && (
                 <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></>}</select></label>
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
@@ -190,7 +201,7 @@ export default function InventoryItemCreateForm({
                 </label>
               ) : null}
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.room")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{visibleRooms.map((room) => <option key={room.id} value={room.id}>{room.designation} · {t("inventory.floorShort")} {room.floorNumber}</option>)}</select></label>
-              {!restricted ? (
+              {!restricted && inventorySection !== "it" ? (
                 <TmcUserPicker
                   value={responsible}
                   onChange={setResponsible}
@@ -203,9 +214,12 @@ export default function InventoryItemCreateForm({
                   )}
                 />
               ) : null}
-              {!restricted && (
+              {!restricted && inventorySection !== "it" && (
                 <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span>({t("createItem.optional")})</span></span><input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")} {t("createItem.barcodeOptionalHint")}</span></label>
               )}
+              {inventorySection === "it" ? (
+                <ItNetworkAddressEditor value={networkAddresses} onChange={setNetworkAddresses} />
+              ) : null}
               <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4">
                 <p className="text-base font-medium text-zinc-800">{t("items.photo")} <span className="text-red-600">({t("createItem.required")})</span></p>
                 <p className="mt-1 text-xs text-zinc-500">{t("itemPhotos.hint")}</p>

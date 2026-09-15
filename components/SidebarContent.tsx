@@ -17,6 +17,7 @@ import {
   Settings,
   UserCircle,
   Users,
+  Wifi,
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -39,6 +40,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/items", labelKey: "nav.items", icon: Boxes },
+  { href: "/it-items", labelKey: "nav.itItems", icon: Wifi },
   { href: "/scan", labelKey: "nav.scanQr", icon: ScanLine },
   { href: "/requests", labelKey: "nav.requests", icon: ClipboardList },
   { href: "/tmc", labelKey: "tmc.entryPoint", icon: ArrowLeftRight },

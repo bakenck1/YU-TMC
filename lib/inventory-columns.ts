@@ -14,7 +14,11 @@ export const INVENTORY_COLUMN_KEYS = [
   "price",
 ] as const;
 
-export type InventoryColumnKey = (typeof INVENTORY_COLUMN_KEYS)[number];
+export const IT_NETWORK_COLUMN_KEYS = ["ipAddress", "macAddress"] as const;
+
+export type InventoryColumnKey =
+  | (typeof INVENTORY_COLUMN_KEYS)[number]
+  | (typeof IT_NETWORK_COLUMN_KEYS)[number];
 export type InventoryColumnVisibility = Record<InventoryColumnKey, boolean>;
 
 export const DEFAULT_INVENTORY_COLUMNS: InventoryColumnVisibility = {
@@ -24,6 +28,8 @@ export const DEFAULT_INVENTORY_COLUMNS: InventoryColumnVisibility = {
   itemType: true,
   brandModel: true,
   location: true,
+  ipAddress: false,
+  macAddress: false,
   status: true,
   responsible: true,
   additionalInfo: false,
@@ -44,7 +50,7 @@ export function parseInventoryColumnVisibility(
     }
     const record = parsed as Record<string, unknown>;
     return Object.fromEntries(
-      INVENTORY_COLUMN_KEYS.map((key) => [
+      [...INVENTORY_COLUMN_KEYS, ...IT_NETWORK_COLUMN_KEYS].map((key) => [
         key,
         typeof record[key] === "boolean"
           ? record[key]

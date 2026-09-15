@@ -7,6 +7,7 @@ export interface ItemResponsibilityState {
   responsibleUserId: string | null;
   responsibleName: string | null;
   itemStatus: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
+  itemSection?: "general" | "it";
 }
 
 export interface InventoryResponsibilityAuthorizationUser {
@@ -38,6 +39,7 @@ export interface TransferRecord {
   closedAt: Date | null;
   decisionComment: string | null;
   version: number;
+  itemSection?: "general" | "it";
 }
 
 export interface ResponsibilityTimelineRecord {
