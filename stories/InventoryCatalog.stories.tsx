@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
+import AccessDeniedMessage from "@/components/AccessDeniedMessage";
 import DecommissionedItemsView from "@/components/DecommissionedItemsView";
 import EmployeeItemsTabs, { EmployeeItemsTabList, EmployeeItemsTabPanels, EmployeeItemsTabsView } from "@/components/EmployeeItemsTabs";
 import InspectionProgress from "@/components/InspectionProgress";
@@ -32,6 +33,7 @@ import InventorySummaryAccordions from "@/components/InventorySummaryAccordions"
 import InventoryThumbnail from "@/components/InventoryThumbnail";
 import InventoryTransferList from "@/components/InventoryTransferList";
 import InventoryTransfersManager from "@/components/InventoryTransfersManager";
+import ItNetworkAddressEditor from "@/components/ItNetworkAddressEditor";
 import ItemDetails from "@/components/ItemDetails";
 import ItemsTable from "@/components/ItemsTable";
 import LocationBuildingCard from "@/components/LocationBuildingCard";
@@ -122,6 +124,7 @@ const meta = { title: "Catalog/Inventory", parameters: { layout: "fullscreen" } 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const AccessDeniedMessageStory: Story = { name: "AccessDeniedMessage", render: () => <AccessDeniedMessage /> };
 export const DecommissionedItemsViewStory: Story = { name: "DecommissionedItemsView", render: () => <DecommissionedItemsView items={[{ ...item, status: "decommissioned", decommissionedOn: "2026-08-01" }]} canExport /> };
 export const EmployeeItemsTabsStory: Story = { name: "EmployeeItemsTabs", render: () => <EmployeeItemsTabs items={items.slice(0, 5)} searchHistoryScope="storybook" columnSettingsScope="storybook" actorUserId="user-1" actorRole="employee" /> };
 export const EmployeeItemsTabListStory: Story = { name: "EmployeeItemsTabList", render: () => <EmployeeItemsTabList activeStatus="active" ariaLabel="ТМЦ сотрудника" label={(status) => status} onSelect={() => undefined} /> };
@@ -157,6 +160,7 @@ export const InventorySummaryAccordionsStory: Story = { name: "InventorySummaryA
 export const InventoryThumbnailStory: Story = { name: "InventoryThumbnail", render: () => <InventoryThumbnail /> };
 export const InventoryTransferListStory: Story = { name: "InventoryTransferList", render: () => <InventoryTransferList kind="incoming" transfers={[STORY_TRANSFER]} loading={false} busy={false} onConfirm={() => undefined} onReject={() => undefined} onRejectCommentChange={() => undefined} /> };
 export const InventoryTransfersManagerStory: Story = { name: "InventoryTransfersManager", render: () => <InventoryTransfersManager /> };
+export const ItNetworkAddressEditorStory: Story = { name: "ItNetworkAddressEditor", render: () => <ItNetworkAddressEditor value={[{ deviceLabel: "Камера в холле", ipAddress: "192.168.10.25", macAddress: "AA:BB:CC:DD:EE:FF" }]} onChange={() => undefined} /> };
 export const ItemDetailsStory: Story = { name: "ItemDetails", render: () => <ItemDetails item={item} canManage /> };
 export const ItemsTableStory: Story = { name: "ItemsTable", render: () => <ItemsTable items={items.slice(0, 8)} searchHistoryScope="storybook" columnSettingsScope="storybook" excelDataset="items" /> };
 export const LocationBuildingCardStory: Story = { name: "LocationBuildingCard", render: () => <LocationBuildingCard building={buildings[0]} /> };

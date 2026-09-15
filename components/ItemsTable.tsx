@@ -141,7 +141,7 @@ function isTemporaryBarcode(value: string) {
   return /^TMP-\d{4}-\d{6}$/i.test(value);
 }
 
-function NetworkAddressCell({
+export function NetworkAddressCell({
   item,
   field,
   moreLabel,

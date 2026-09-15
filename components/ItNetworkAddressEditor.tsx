@@ -86,7 +86,7 @@ export default function ItNetworkAddressEditor({
   );
 }
 
-function AddressField({
+export function AddressField({
   label,
   value,
   onChange,
