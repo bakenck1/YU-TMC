@@ -3,6 +3,7 @@ import { employeeItemTabFromParam } from "@/lib/employee-items-tabs";
 export interface InventoryTableFilters {
   category: string;
   location: string;
+  room?: string;
   statusKey: string;
   brand: string;
   model: string;
@@ -43,6 +44,7 @@ const STATIC_INVENTORY_RETURN_PATHS = new Set([
 export const EMPTY_TABLE_FILTERS: InventoryTableFilters = {
   category: "all",
   location: "all",
+  room: "",
   statusKey: "all",
   brand: "",
   model: "",
@@ -62,6 +64,7 @@ const PARAMETER_NAMES = {
   query: "q",
   category: "category",
   location: "location",
+  room: "room",
   statusKey: "status",
   brand: "brand",
   model: "model",
@@ -75,11 +78,13 @@ const PARAMETER_NAMES = {
 export function parseInventoryTableViewState(
   searchParams: InventorySearchParams | ReadableSearchParams,
 ): InventoryTableViewState {
+  const room = readText(searchParams, PARAMETER_NAMES.room);
   return {
     query: readText(searchParams, PARAMETER_NAMES.query),
     filters: {
       category: readChoice(searchParams, PARAMETER_NAMES.category),
       location: readChoice(searchParams, PARAMETER_NAMES.location),
+      ...(room ? { room } : {}),
       statusKey: readChoice(searchParams, PARAMETER_NAMES.statusKey),
       brand: readText(searchParams, PARAMETER_NAMES.brand),
       model: readText(searchParams, PARAMETER_NAMES.model),
@@ -115,6 +120,7 @@ export function inventoryTableViewHref(
     state.filters.category,
     "all",
   );
+  setNonEmpty(params, PARAMETER_NAMES.room, state.filters.room ?? "");
   setNonDefault(
     params,
     PARAMETER_NAMES.location,
@@ -294,6 +300,7 @@ function boundedInventoryTableViewHref(
     state.filters.category,
     "all",
   );
+  setParamWithinHrefBudget(pathname, params, PARAMETER_NAMES.room, state.filters.room ?? "");
   setNonDefaultWithinHrefBudget(
     pathname,
     params,

@@ -9,6 +9,7 @@ export interface InventoryListFilters {
   query: string;
   category: string;
   location: string;
+  room?: string;
   statusKey: string;
   brand?: string;
   model?: string;
@@ -43,11 +44,18 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
   const query = normalizeFilterText(filters.query);
   const location = filters.location === "all" ? "" : normalizeFilterText(filters.location);
   const floorRange = parseFloorRange(location);
+  const room = normalizeFilterText(filters.room);
   const brand = normalizeFilterText(filters.brand);
   const model = normalizeFilterText(filters.model);
   const itemType = normalizeFilterText(filters.itemType);
   const building = normalizeFilterText(filters.building);
   const responsible = normalizeFilterText(filters.responsible);
+  const hasExactBuilding = Boolean(building) && items.some((item) =>
+    normalizeFilterText(item.building ?? item.location.split("/")[0]) === building,
+  );
+  const hasExactRoom = Boolean(room) && items.some((item) =>
+    normalizeFilterText(item.room ?? item.location.split("/").at(-1)) === room,
+  );
   return items.filter((item) => {
     const matchesQuery =
       !query ||
@@ -61,18 +69,22 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
       .map(normalizeFilterText)
       .filter(Boolean)
       .join(" ");
+    const itemRoom = normalizeFilterText(
+      item.room ?? item.location.split("/").at(-1),
+    );
     return Boolean(
       matchesQuery &&
         (filters.category === "all" || item.category === filters.category) &&
-        (!location ||
-          itemLocation.includes(location) ||
-          (floorRange !== null && itemMatchesFloorRange(item, floorRange))) &&
+        (!location || (floorRange !== null
+          ? itemMatchesFloorRange(item, floorRange)
+          : itemLocation.includes(location))) &&
+        (!room || (hasExactRoom ? itemRoom === room : itemRoom.includes(room))) &&
         (!brand || itemBrand.includes(brand)) &&
         (!model || itemModel.includes(model)) &&
         (!itemType ||
           normalizeFilterText(item.name).includes(itemType) ||
           normalizeFilterText(item.itemType ?? item.category).includes(itemType)) &&
-        (!building || itemBuilding.includes(building)) &&
+        (!building || (hasExactBuilding ? itemBuilding === building : itemBuilding.includes(building))) &&
         (!responsible || normalizeFilterText(item.responsible).includes(responsible)) &&
         matchesStatusFilter(item, filters.statusKey),
     );
@@ -88,6 +100,13 @@ function normalizeFilterText(value: string | undefined): string {
 }
 
 function parseFloorRange(value: string): { from: number; to: number } | null {
+  const singleFloor = value.match(
+    /^(\d{1,2})\s*(?:этаж|қабат|floor)$/u,
+  );
+  if (singleFloor) {
+    const floor = Number(singleFloor[1]);
+    return { from: floor, to: floor };
+  }
   const match = value.match(
     /^(\d{1,2})\s*[-–—]\s*(\d{1,2})(?:\s*(?:этаж(?:а|ей|и)?|қабат(?:тар)?|floors?))?$/u,
   );

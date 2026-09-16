@@ -56,19 +56,16 @@ export default async function ItemsPage({
   ];
   const canCreate = hasPermission(user.role, "inventory.item.create");
   const canExport = hasPermission(user.role, "inventory.report.export");
-  let buildings: BuildingDto[] = [];
-  let rooms: RoomDto[] = [];
-  if (canCreate) {
-    buildings = (await getApplicationServices().locations.listBuildings(actor)).filter(
-      (building) => isInventoryBuildingName(building.name),
-    );
-    const roomLists = await Promise.all(
-      buildings.map((building) =>
-        getApplicationServices().locations.listRooms(building.id, actor),
-      ),
-    );
-    rooms = roomLists.flat();
-  }
+  const buildings: BuildingDto[] = (
+    await services.locations.listBuildings(actor)
+  ).filter(
+    (building) => building.status === "active" && isInventoryBuildingName(building.name),
+  );
+  const rooms: RoomDto[] = (
+    await Promise.all(
+      buildings.map((building) => services.locations.listRooms(building.id, actor)),
+    )
+  ).flat().filter((room) => room.status === "active");
 
   return (
     <Wrapper direction="column" gap="md">
@@ -82,6 +79,7 @@ export default async function ItemsPage({
           actorRole={user.role}
           initialStatus={initialEmployeeTab}
           initialViewState={initialViewState}
+          locations={{ buildings, rooms }}
         />
       ) : (
         <ItemsTable
@@ -95,6 +93,7 @@ export default async function ItemsPage({
             buildings,
             rooms,
           }}
+          locations={{ buildings, rooms }}
           itemCreation={canCreate ? {
             rooms,
             buildings,

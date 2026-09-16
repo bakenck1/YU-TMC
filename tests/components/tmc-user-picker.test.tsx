@@ -44,6 +44,29 @@ describe("TmcUserPicker", () => {
     expect(input.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("selects from touch pointerup without relying on Safari's synthetic click", async () => {
+    const onChange = vi.fn();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ users: [FIRST] }),
+    } as Response);
+    render(<TmcUserPicker value={null} onChange={onChange} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "ad" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    const option = screen.getByRole("option", { name: /Ada Lovelace/ });
+    fireEvent.pointerDown(option, { pointerType: "touch" });
+    fireEvent.pointerUp(option, { pointerType: "touch" });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(FIRST);
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("drops a stale response and clears the controlled value", async () => {
     const onChange = vi.fn();
     let resolveFirst!: (value: Response) => void;

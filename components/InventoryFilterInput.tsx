@@ -11,6 +11,7 @@ export interface InventoryFilterInputProps {
   onChange: (value: string) => void;
   historyStorageKey?: string;
   suggestions?: readonly string[];
+  showSuggestionsOnFocus?: boolean;
 }
 
 function normalizeSearchValue(value: string) {
@@ -20,7 +21,14 @@ function normalizeSearchValue(value: string) {
 function loadHistory(storageKey: string) { try { return parseSearchHistory(window.localStorage.getItem(storageKey)); } catch { return []; } }
 function saveHistory(storageKey: string, history: string[]) { try { window.localStorage.setItem(storageKey, JSON.stringify(history)); } catch { /* Embedded webviews may deny storage. */ } }
 
-export default function InventoryFilterInput({ label, value, onChange, historyStorageKey, suggestions = [] }: InventoryFilterInputProps) {
+export default function InventoryFilterInput({
+  label,
+  value,
+  onChange,
+  historyStorageKey,
+  suggestions = [],
+  showSuggestionsOnFocus = false,
+}: InventoryFilterInputProps) {
   const { t } = useAppSettings();
   const [history, setHistory] = useState<string[]>([]);
   const [focused, setFocused] = useState(false);
@@ -29,11 +37,10 @@ export default function InventoryFilterInput({ label, value, onChange, historySt
   const blurTimeoutRef = useRef<number | null>(null);
   const query = normalizeSearchValue(value);
   const visibleSuggestions = useMemo(() => {
-    if (!query) return [];
+    if (!query && !showSuggestionsOnFocus) return [];
     return suggestions
-      .filter((entry) => normalizeSearchValue(entry).includes(query))
-      .slice(0, 8);
-  }, [query, suggestions]);
+      .filter((entry) => !query || normalizeSearchValue(entry).includes(query));
+  }, [query, showSuggestionsOnFocus, suggestions]);
   const visibleSuggestionKeys = useMemo(
     () => new Set(visibleSuggestions.map(normalizeSearchValue)),
     [visibleSuggestions],

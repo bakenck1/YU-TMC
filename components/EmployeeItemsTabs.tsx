@@ -17,6 +17,7 @@ import {
 } from "@/lib/employee-items-tabs";
 import type { InventoryItem } from "@/lib/types";
 import type { UserRole } from "@/lib/contracts/users";
+import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import {
   DEFAULT_INVENTORY_TABLE_VIEW_STATE,
   inventoryTableViewHref,
@@ -91,6 +92,7 @@ export function EmployeeItemsTabPanels({
   actorUserId,
   actorRole,
   initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  locations,
 }: {
   activeStatus: ItemStatus;
   items: InventoryItem[];
@@ -99,6 +101,7 @@ export function EmployeeItemsTabPanels({
   actorUserId: string;
   actorRole: UserRole;
   initialViewState?: InventoryTableViewState;
+  locations?: { buildings: BuildingDto[]; rooms: RoomDto[] };
 }) {
   const invoiceActions = items.length > 0;
 
@@ -124,6 +127,7 @@ export function EmployeeItemsTabPanels({
             initialViewState={initialViewState}
             stateUrlPath="/items"
             stateUrlParams={{ tab: status === "active" ? undefined : status }}
+            locations={locations}
           />
         ) : null}
       </div>
@@ -143,6 +147,7 @@ export function EmployeeItemsTabsView({
   actorUserId,
   actorRole,
   initialViewState,
+  locations,
 }: {
   items: InventoryItem[];
   activeStatus: ItemStatus;
@@ -155,6 +160,7 @@ export function EmployeeItemsTabsView({
   actorUserId: string;
   actorRole: UserRole;
   initialViewState?: InventoryTableViewState;
+  locations?: { buildings: BuildingDto[]; rooms: RoomDto[] };
 }) {
   return (
     <>
@@ -173,6 +179,7 @@ export function EmployeeItemsTabsView({
         actorUserId={actorUserId}
         actorRole={actorRole}
         initialViewState={initialViewState}
+        locations={locations}
       />
     </>
   );
@@ -186,6 +193,7 @@ export default function EmployeeItemsTabs({
   actorRole,
   initialStatus = "active",
   initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  locations,
 }: {
   items: InventoryItem[];
   searchHistoryScope: string;
@@ -194,6 +202,7 @@ export default function EmployeeItemsTabs({
   actorRole: UserRole;
   initialStatus?: ItemStatus;
   initialViewState?: InventoryTableViewState;
+  locations?: { buildings: BuildingDto[]; rooms: RoomDto[] };
 }) {
   const { t } = useAppSettings();
   const [activeStatus, setActiveStatus] = useState<ItemStatus>(initialStatus);
@@ -231,6 +240,7 @@ export default function EmployeeItemsTabs({
         actorUserId={actorUserId}
         actorRole={actorRole}
         initialViewState={initialViewState}
+        locations={locations}
       />
     </section>
   );

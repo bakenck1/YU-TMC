@@ -141,6 +141,36 @@ function isTemporaryBarcode(value: string) {
   return /^TMP-\d{4}-\d{6}$/i.test(value);
 }
 
+interface InventoryFilterLocations {
+  buildings: BuildingDto[];
+  rooms: RoomDto[];
+}
+
+interface InventoryFilterRoomOption {
+  buildingName: string;
+  designation: string;
+  floorNumber: number;
+}
+
+function normalizedLocationValue(value: string) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function compareLocationValues(first: string, second: string) {
+  return first.localeCompare(second, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function floorNumberFromItem(item: InventoryItem) {
+  if (Number.isInteger(item.floorNumber)) return item.floorNumber!;
+  const match = item.location.match(
+    /(?:^|\/)\s*(\d{1,2})\s*(?:этаж|қабат|floor)(?:\s|\/|$)/iu,
+  );
+  return match ? Number(match[1]) : null;
+}
+
 export function NetworkAddressCell({
   item,
   field,
@@ -175,6 +205,7 @@ export default function ItemsTable({
   completeDataset = true,
   itemCreation,
   bulkActions,
+  locations,
   invoiceActions,
   initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
   stateUrlPath,
@@ -203,6 +234,7 @@ export default function ItemsTable({
     variant?: "transfer" | "issue";
     itemSection?: "general" | "it";
   };
+  locations?: InventoryFilterLocations;
   invoiceActions?: boolean;
   initialViewState?: InventoryTableViewState;
   stateUrlPath?: string;
@@ -307,6 +339,88 @@ export default function ItemsTable({
       first.localeCompare(second, undefined, { sensitivity: "base" }),
     );
   }, [items]);
+  const locationDirectory = useMemo(() => {
+    const buildingDtos = [
+      ...(locations?.buildings ?? []),
+      ...(itemCreation?.buildings ?? []),
+      ...(bulkActions?.buildings ?? []),
+    ].filter((building) => building.status === "active");
+    const buildingNamesById = new Map(
+      buildingDtos.map((building) => [building.id, building.name] as const),
+    );
+    const buildingNames = new Map<string, string>();
+    buildingDtos.forEach((building) => {
+      const key = normalizedLocationValue(building.name);
+      if (key && !buildingNames.has(key)) buildingNames.set(key, building.name);
+    });
+    items.forEach((item) => {
+      const name = item.building?.trim() || item.location.split("/")[0]?.trim() || "";
+      const key = normalizedLocationValue(name);
+      if (key && !buildingNames.has(key)) buildingNames.set(key, name);
+    });
+
+    const rooms = new Map<string, InventoryFilterRoomOption>();
+    const roomDtos = [
+      ...(locations?.rooms ?? []),
+      ...(itemCreation?.rooms ?? []),
+      ...(bulkActions?.rooms ?? []),
+    ].filter((room) => room.status === "active");
+    roomDtos.forEach((room) => {
+      const buildingName = buildingNamesById.get(room.buildingId);
+      if (!buildingName) return;
+      const key = [
+        normalizedLocationValue(buildingName),
+        room.floorNumber,
+        normalizedLocationValue(room.designation),
+      ].join("\u0000");
+      rooms.set(key, {
+        buildingName,
+        designation: room.designation,
+        floorNumber: room.floorNumber,
+      });
+    });
+    items.forEach((item) => {
+      const buildingName = item.building?.trim() || item.location.split("/")[0]?.trim() || "";
+      const designation = item.room?.trim() || item.location.split("/").at(-1)?.trim() || "";
+      const floorNumber = floorNumberFromItem(item);
+      if (!buildingName || !designation || floorNumber === null) return;
+      const key = [
+        normalizedLocationValue(buildingName),
+        floorNumber,
+        normalizedLocationValue(designation),
+      ].join("\u0000");
+      if (!rooms.has(key)) rooms.set(key, { buildingName, designation, floorNumber });
+    });
+
+    return {
+      buildingNames: [...buildingNames.values()].sort(compareLocationValues),
+      rooms: [...rooms.values()],
+    };
+  }, [bulkActions, itemCreation, items, locations]);
+  const selectedBuildingName = locationDirectory.buildingNames.find(
+    (name) => normalizedLocationValue(name) === normalizedLocationValue(draftFilters.building),
+  );
+  const buildingRoomOptions = selectedBuildingName
+    ? locationDirectory.rooms.filter(
+        (room) => normalizedLocationValue(room.buildingName) === normalizedLocationValue(selectedBuildingName),
+      )
+    : locationDirectory.rooms;
+  const floorOptions = [...new Set(buildingRoomOptions.map((room) => room.floorNumber))]
+    .sort((first, second) => first - second)
+    .map((floorNumber) => ({
+      floorNumber,
+      label: `${floorNumber} ${t("inventory.floorShort")}`,
+    }));
+  const selectedFloorNumber = floorOptions.find(
+    (floor) => normalizedLocationValue(floor.label) === normalizedLocationValue(
+      draftFilters.location === "all" ? "" : draftFilters.location,
+    ),
+  )?.floorNumber;
+  const roomSuggestions = [...new Set(
+    buildingRoomOptions
+      .filter((room) => selectedFloorNumber === undefined || room.floorNumber === selectedFloorNumber)
+      .map((room) => room.designation),
+  )].sort(compareLocationValues);
   const visibleSearchHistory = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return searchHistory;
@@ -432,6 +546,64 @@ export default function ItemsTable({
 
   function updateDraftFilter(name: keyof typeof EMPTY_TABLE_FILTERS, value: string) {
     setDraftFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  function updateBuildingFilter(value: string) {
+    setDraftFilters((current) => {
+      const selectedBuilding = locationDirectory.buildingNames.find(
+        (name) => normalizedLocationValue(name) === normalizedLocationValue(value),
+      );
+      if (!selectedBuilding) return { ...current, building: value };
+
+      const compatibleRooms = locationDirectory.rooms.filter(
+        (room) => normalizedLocationValue(room.buildingName) === normalizedLocationValue(selectedBuilding),
+      );
+      const selectedFloor = floorOptions.find(
+        (floor) => normalizedLocationValue(floor.label) === normalizedLocationValue(
+          current.location === "all" ? "" : current.location,
+        ),
+      )?.floorNumber;
+      const location = selectedFloor !== undefined && !compatibleRooms.some(
+        (room) => room.floorNumber === selectedFloor,
+      )
+        ? "all"
+        : current.location;
+      const compatibleFloor = location === "all"
+        ? undefined
+        : compatibleRooms.find(
+            (room) => `${room.floorNumber} ${t("inventory.floorShort")}` === location,
+          )?.floorNumber;
+      const currentRoom = current.room ?? "";
+      const room = currentRoom && !compatibleRooms.some(
+        (option) =>
+          normalizedLocationValue(option.designation) === normalizedLocationValue(currentRoom) &&
+          (compatibleFloor === undefined || option.floorNumber === compatibleFloor),
+      )
+        ? ""
+        : currentRoom;
+      return { ...current, building: value, location, room };
+    });
+  }
+
+  function updateFloorFilter(value: string) {
+    setDraftFilters((current) => {
+      const nextLocation = value || "all";
+      const selectedFloor = floorOptions.find(
+        (floor) => normalizedLocationValue(floor.label) === normalizedLocationValue(value),
+      )?.floorNumber;
+      const currentRoom = current.room ?? "";
+      if (selectedFloor === undefined || !currentRoom) {
+        return { ...current, location: nextLocation };
+      }
+      const room = buildingRoomOptions.some(
+        (option) =>
+          option.floorNumber === selectedFloor &&
+          normalizedLocationValue(option.designation) === normalizedLocationValue(currentRoom),
+      )
+        ? currentRoom
+        : "";
+      return { ...current, location: nextLocation, room };
+    });
   }
 
   function applyFilters() {
@@ -641,8 +813,9 @@ export default function ItemsTable({
               </label>
               <InventoryFilterInput label={t("itemDetails.brand")} value={draftFilters.brand} onChange={(value) => updateDraftFilter("brand", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:brand` : undefined} />
               <InventoryFilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:model` : undefined} />
-              <InventoryFilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={(value) => updateDraftFilter("building", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:building` : undefined} />
-              <InventoryFilterInput label={t("items.filterRoom")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={(value) => updateDraftFilter("location", value || "all")} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:location` : undefined} />
+              <InventoryFilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={updateBuildingFilter} suggestions={locationDirectory.buildingNames} showSuggestionsOnFocus />
+              <InventoryFilterInput label={t("items.filterFloor")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={updateFloorFilter} suggestions={floorOptions.map((floor) => floor.label)} showSuggestionsOnFocus />
+              <InventoryFilterInput label={t("items.filterRoom")} value={draftFilters.room ?? ""} onChange={(value) => updateDraftFilter("room", value)} suggestions={roomSuggestions} showSuggestionsOnFocus />
               <label className="text-sm text-zinc-600">
                 <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.status")}</span>
                 <select value={draftFilters.statusKey} onChange={(event) => updateDraftFilter("statusKey", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">

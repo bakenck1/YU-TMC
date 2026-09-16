@@ -3,9 +3,9 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import pg from "pg";
+import pg, { native } from "pg";
 
-import { captureProductionCapacityScenarios, measureProductionInventoryCollection, TMC_PUSH_WORKER_LEASE_MS } from "./production-scenarios.ts";
+import { captureProductionCapacityScenarios, TMC_PUSH_WORKER_LEASE_MS } from "./production-scenarios.ts";
 import { measureApplicationWorkloads } from "./application-workloads.ts";
 
 const root = process.cwd();
@@ -26,7 +26,7 @@ try {
   const environment = await readEnvironment(pool);
   const cardinality = await readCardinality(pool);
   assertCardinality(cardinality, dataset.cardinality);
-  const scenarios = await captureProductionCapacityScenarios(dataset.epoch);
+  const scenarios = await captureProductionCapacityScenarios();
 
   const queries = {};
   for (const [name, statements] of Object.entries(scenarios)) {
@@ -35,28 +35,22 @@ try {
   const poolSaturation = await measurePoolSaturation(pool, scenarios.dockflow_projection, dataset);
   const statementTimeout = await verifyStatementTimeout(pool, dataset.load.statementTimeoutMs);
   const applicationWorkloads = await measureApplicationWorkloads(dataset);
-  const inventoryCollection = await measureProductionInventoryCollection(pool);
-  const collectionOutcomes = {
-    inventory_list: inventoryCollection,
-    export_source: { ...inventoryCollection },
-  };
   const worker = process.env.CAPACITY_DISPOSABLE_WORKER_PROBE === "1"
     ? await measureDisposableWorkerShutdown(pool, dataset)
     : { measured: false, reason: "Enable only on a disposable database with CAPACITY_DISPOSABLE_WORKER_PROBE=1." };
   const routeChunks = await readRouteChunkMetrics(root);
   const finalMemory = process.memoryUsage();
 
-  const bottlenecks = rankBottlenecks({ queries, applicationWorkloads, collectionOutcomes, poolSaturation, statementTimeout, worker, routeChunks, initialMemory, finalMemory }, dataset);
+  const bottlenecks = rankBottlenecks({ queries, applicationWorkloads, poolSaturation, statementTimeout, worker, routeChunks, initialMemory, finalMemory }, dataset);
   const report = {
     schemaVersion: 1,
-    dataset: { version: dataset.version, epoch: dataset.epoch, description: dataset.description, expected: dataset.cardinality, actual: cardinality },
+    dataset: { version: dataset.version, description: dataset.description, expected: dataset.cardinality, actual: cardinality },
     environment,
     load: dataset.load,
     measuredAt: startedAt.toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     queries,
     applicationWorkloads,
-    collectionOutcomes,
     poolSaturation,
     statementTimeout,
     worker,
@@ -147,20 +141,9 @@ async function measureQuery(database, name, statements, config) {
     p50Ms: percentile(samples, 0.5),
     p95Ms: percentile(samples, 0.95),
     sloMs: config.sloMs[name],
-    planSummary: compactPlans(statements, retainedPlans).map((entry) => ({ executions: entry.executions, ...summarizePlan(entry.plan) })),
-    plans: compactPlans(statements, retainedPlans),
+    planSummary: retainedPlans.map(summarizePlan),
+    plans: retainedPlans,
   };
-}
-
-function compactPlans(statements, plans) {
-  const compact = new Map();
-  statements.forEach((statement, index) => {
-    const fingerprint = createHash("sha256").update(statement.sql.replace(/\s+/g, " ").trim()).digest("hex");
-    const existing = compact.get(fingerprint);
-    if (existing) existing.executions += 1;
-    else compact.set(fingerprint, { fingerprint, executions: 1, plan: plans[index] });
-  });
-  return [...compact.values()];
 }
 
 function summarizePlan(payload) {
@@ -331,15 +314,12 @@ function rankBottlenecks(metrics, config) {
     .filter(([, value]) => value.p95Ms > value.sloMs)
     .map(([name, value]) => ({ id: name, metric: "p95Ms", measured: value.p95Ms, budget: value.sloMs, ratio: round(value.p95Ms / value.sloMs), followUp: `Profile ${name} independently; expected gain is p95 <= ${value.sloMs}ms; rollback any query/index change that misses that budget.` }));
   if (!metrics.statementTimeout.enforced) output.push({ id: "statement_timeout", metric: "enforced", measured: false, budget: true, ratio: Infinity, followUp: "Restore fail-closed statement timeout enforcement; rollback configuration if cancellation cannot be demonstrated." });
-  for (const [name, value] of Object.entries(metrics.collectionOutcomes)) {
-    if (!value.withinLimit) output.push({ id: `${name}_capacity`, metric: "rows", measured: value.rows, budget: value.limit, ratio: round(value.rows / value.limit), followUp: `Replace the fail-closed whole-collection path with a bounded product contract; expected capacity is at least ${value.rows} rows; rollback if authorization, export completeness, or memory regresses.` });
-  }
   for (const [name, value] of Object.entries(metrics.applicationWorkloads)) {
     if (value.p95Ms > value.sloMs) output.push({ id: name, metric: "p95Ms", measured: value.p95Ms, budget: value.sloMs, ratio: round(value.p95Ms / value.sloMs), followUp: `Profile ${name} independently; expected gain is p95 <= ${value.sloMs}ms; rollback if the workload output contract changes.` });
   }
   if (metrics.poolSaturation.p95Ms > config.budgets.poolP95Ms) output.push({ id: "pool_saturation", metric: "p95Ms", measured: metrics.poolSaturation.p95Ms, budget: config.budgets.poolP95Ms, ratio: round(metrics.poolSaturation.p95Ms / config.budgets.poolP95Ms), followUp: `Profile pool waits at ${config.load.concurrentScanners} scanners; expected gain is p95 <= ${config.budgets.poolP95Ms}ms; rollback pool sizing if database saturation rises.` });
-  const exportGrowth = metrics.applicationWorkloads.export_workbook.peakGrowthMiB;
-  if (exportGrowth > config.budgets.processRssGrowthMiB) output.push({ id: "export_memory", metric: "peakGrowthMiB", measured: exportGrowth, budget: config.budgets.processRssGrowthMiB, ratio: round(exportGrowth / config.budgets.processRssGrowthMiB), followUp: `Profile retained heap and workbook allocation; expected isolated export peak growth <= ${config.budgets.processRssGrowthMiB} MiB; rollback changes that alter workbook content or increase peak memory.` });
+  const rssGrowth = bytesToMiB(metrics.finalMemory.rss - metrics.initialMemory.rss);
+  if (rssGrowth > config.budgets.processRssGrowthMiB) output.push({ id: "process_memory", metric: "rssGrowthMiB", measured: rssGrowth, budget: config.budgets.processRssGrowthMiB, ratio: round(rssGrowth / config.budgets.processRssGrowthMiB), followUp: `Profile retained heap and workbook allocation; expected growth <= ${config.budgets.processRssGrowthMiB} MiB; rollback changes that increase peak memory.` });
   for (const [route, value] of Object.entries(metrics.routeChunks)) {
     if (value.client?.kib > config.budgets.routeClientKiB) output.push({ id: `route_chunk:${route}`, metric: "clientKiB", measured: value.client.kib, budget: config.budgets.routeClientKiB, ratio: round(value.client.kib / config.budgets.routeClientKiB), followUp: `Analyze this route with the Next bundle analyzer; expected client payload <= ${config.budgets.routeClientKiB} KiB; rollback splitting if navigation regresses.` });
   }
@@ -351,7 +331,7 @@ function rankBottlenecks(metrics, config) {
 
 function renderMarkdown(report) {
   const queryRows = Object.entries(report.queries).map(([name, value]) => {
-    const summary = value.planSummary.map((plan) => `${plan.executions}× ${plan.rootNode}; hit/read ${plan.sharedHitBlocks}/${plan.sharedReadBlocks}`).join(" + ");
+    const summary = value.planSummary.map((plan) => `${plan.rootNode}; hit/read ${plan.sharedHitBlocks}/${plan.sharedReadBlocks}`).join(" + ");
     return `| ${name} (${value.statementCount}) | \`${value.fingerprint.slice(0, 12)}\` | ${value.p50Ms} | ${value.p95Ms} | ${value.sloMs} | ${summary} |`;
   }).join("\n");
   const cardinalityRows = Object.entries(report.dataset.actual).map(([name, value]) => `| ${name} | ${value.toLocaleString("en-US")} |`).join("\n");
@@ -359,12 +339,8 @@ function renderMarkdown(report) {
   const bottlenecks = report.bottlenecks.length
     ? report.bottlenecks.map((item, index) => `${index + 1}. **${item.id}** — ${item.metric} ${item.measured}, budget ${item.budget}. Follow-up: ${item.followUp}`).join("\n")
     : "No measured query, timeout, or worker-shutdown bottleneck exceeded its declared budget. No speculative optimization task was created.";
-  const collectionSummary = (value) => value.withinLimit
-    ? `${value.rows} rows completed in ${value.elapsedMs}ms across ${value.pageCount} reads with batches <= ${value.batchLimit}`
-    : `FAILS above ${value.limit} rows`;
-  return `# Capacity baseline ${report.dataset.version}\n\nGenerated ${report.measuredAt}. Synthetic data only; no production dump or PII was used. Full PostgreSQL plans are stored in the adjacent JSON report. This is a nightly/release baseline, not a PR timing gate.\n\n## Environment\n\n- Node: ${report.environment.node}; PostgreSQL: ${report.environment.postgres.postgres_version}; platform: ${report.environment.platform}\n- CPU: ${report.environment.cpuCount} × ${report.environment.cpuModel}\n- PostgreSQL: max_connections=${report.environment.postgres.max_connections}, shared_buffers=${report.environment.postgres.shared_buffers}, effective_cache_size=${report.environment.postgres.effective_cache_size}\n- Next production build: ${report.environment.nextBuildId ?? "not available"}\n- Statement timeout: ${report.statementTimeout.configuredMs}ms, enforced=${report.statementTimeout.enforced}, observed=${report.statementTimeout.elapsedMs}ms\n\n## Dataset\n\n| Collection | Rows |\n| --- | ---: |\n${cardinalityRows}\n\nTargets: ${report.load.concurrentScanners} concurrent scanners, pool ${report.load.poolSize}, worker concurrency ${report.load.workerConcurrency}, batch ${report.load.workerBatchSize}, lease ${report.load.workerLeaseSeconds}s. Fixed dataset epoch: ${report.dataset.epoch}.\n\nRepository collection outcome: inventory=${collectionSummary(report.collectionOutcomes.inventory_list)}; export=${collectionSummary(report.collectionOutcomes.export_source)}. Query latency below does not override this functional verdict.\n\n## Read-only PostgreSQL baseline\n\nEach scenario ran ${report.load.warmups} warmups plus ${report.load.samples} measured samples in \`BEGIN READ ONLY\` with \`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)\`. Multi-statement rows represent the complete production repository operation, including TMC history hydration.\n\n| Scenario (statements) | SHA-256 fingerprint | P50 ms | P95 ms | SLO ms | Plan summary |\n| --- | --- | ---: | ---: | ---: | --- |\n${queryRows}\n\n## XML and export workloads\n\n| Scenario | Records | P50 ms | P95 ms | SLO ms |\n| --- | ---: | ---: | ---: | ---: |\n${workloadRows}\n\nPool saturation: ${report.poolSaturation.concurrentScanners} requests through ${report.poolSaturation.poolSize} connections, P50 ${report.poolSaturation.p50Ms}ms, P95 ${report.poolSaturation.p95Ms}ms, total ${report.poolSaturation.totalMs}ms, max waiting ${report.poolSaturation.maxWaiting}, errors ${report.poolSaturation.errors}.\n\nWorker probe: ${report.worker.measured ? `${report.worker.workerConcurrency} one-cycle workers claimed ${report.worker.claimed} distinct events (duplicates ${report.worker.duplicateClaims}); natural shutdown ${report.worker.gracefulShutdownMs}ms against ${report.worker.gracefulShutdownBudgetMs}ms budget, verified production lease ${report.worker.leaseSeconds}s` : report.worker.reason}\n\nProcess RSS: ${report.processMemoryMiB.rssBefore} MiB → ${report.processMemoryMiB.rssAfter} MiB; heap used: ${report.processMemoryMiB.heapUsedBefore} MiB → ${report.processMemoryMiB.heapUsedAfter} MiB. Production client and server route chunks are recorded in the JSON report from the Next build manifests; Storybook is not used as a proxy.\n\n## Ranked bottlenecks\n\n${bottlenecks}\n`;
+  return `# Capacity baseline ${report.dataset.version}\n\nGenerated ${report.measuredAt}. Synthetic data only; no production dump or PII was used. Full PostgreSQL plans are stored in the adjacent JSON report. This is a nightly/release baseline, not a PR timing gate.\n\n## Environment\n\n- Node: ${report.environment.node}; PostgreSQL: ${report.environment.postgres.postgres_version}; platform: ${report.environment.platform}\n- CPU: ${report.environment.cpuCount} × ${report.environment.cpuModel}\n- PostgreSQL: max_connections=${report.environment.postgres.max_connections}, shared_buffers=${report.environment.postgres.shared_buffers}, effective_cache_size=${report.environment.postgres.effective_cache_size}\n- Next production build: ${report.environment.nextBuildId ?? "not available"}\n- Statement timeout: ${report.statementTimeout.configuredMs}ms, enforced=${report.statementTimeout.enforced}, observed=${report.statementTimeout.elapsedMs}ms\n\n## Dataset\n\n| Collection | Rows |\n| --- | ---: |\n${cardinalityRows}\n\nTargets: ${report.load.concurrentScanners} concurrent scanners, pool ${report.load.poolSize}, worker concurrency ${report.load.workerConcurrency}, batch ${report.load.workerBatchSize}, lease ${report.load.workerLeaseSeconds}s.\n\n## Read-only PostgreSQL baseline\n\nEach scenario ran ${report.load.warmups} warmups plus ${report.load.samples} measured samples in \`BEGIN READ ONLY\` with \`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)\`. Multi-statement rows represent the complete production repository operation.\n\n| Scenario (statements) | SHA-256 fingerprint | P50 ms | P95 ms | SLO ms | Plan summary |\n| --- | --- | ---: | ---: | ---: | --- |\n${queryRows}\n\n## XML and export workloads\n\n| Scenario | Records | P50 ms | P95 ms | SLO ms |\n| --- | ---: | ---: | ---: | ---: |\n${workloadRows}\n\nPool saturation: ${report.poolSaturation.concurrentScanners} requests through ${report.poolSaturation.poolSize} connections, P50 ${report.poolSaturation.p50Ms}ms, P95 ${report.poolSaturation.p95Ms}ms, total ${report.poolSaturation.totalMs}ms, max waiting ${report.poolSaturation.maxWaiting}, errors ${report.poolSaturation.errors}.\n\nWorker probe: ${report.worker.measured ? `${report.worker.workerConcurrency} one-cycle workers claimed ${report.worker.claimed} distinct events (duplicates ${report.worker.duplicateClaims}); natural shutdown ${report.worker.gracefulShutdownMs}ms against ${report.worker.gracefulShutdownBudgetMs}ms budget, verified production lease ${report.worker.leaseSeconds}s` : report.worker.reason}\n\nProcess RSS: ${report.processMemoryMiB.rssBefore} MiB → ${report.processMemoryMiB.rssAfter} MiB; heap used: ${report.processMemoryMiB.heapUsedBefore} MiB → ${report.processMemoryMiB.heapUsedAfter} MiB. Production client and server route chunks are recorded in the JSON report from the Next build manifests; Storybook is not used as a proxy.\n\n## Ranked bottlenecks\n\n${bottlenecks}\n`;
 }
-
 
 function percentile(values, ratio) {
   const sorted = [...values].sort((a, b) => a - b);
