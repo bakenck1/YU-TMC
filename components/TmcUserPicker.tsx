@@ -206,6 +206,9 @@ export default function TmcUserPicker({
                   role="option"
                   aria-selected={value?.id === user.id}
                   onPointerDown={(event) => event.preventDefault()}
+                  onPointerUp={(event) => {
+                    if (event.pointerType !== "mouse") select(user);
+                  }}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => select(user)}
                   className={`min-h-11 cursor-pointer rounded-lg px-3 py-2.5 text-sm ${index === activeIndex ? "bg-emerald-50 text-emerald-950" : "text-zinc-800 hover:bg-zinc-50"}`}

@@ -7,7 +7,6 @@ import type {
 } from "@/lib/analytics-dashboard";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import { getApplicationServices } from "@/lib/server/application";
-import { activeInventoryItems } from "@/lib/server/excel/inventory-excel";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { authorizationActor } from "@/lib/server/security/request-user";
 
@@ -85,13 +84,6 @@ function valueByType(items: InventoryItemDto[]): ChartDatum[] {
     .sort((left, right) => right.value - left.value);
 }
 
-function statusName(item: InventoryItemDto) {
-  if (item.status === "maintenance") return "На обслуживании";
-  if (item.status === "decommissioned") return "Списано";
-  if (item.status === "decommissioned_in_use") return "Списан, но используется";
-  return "Активен";
-}
-
 export default async function AnalyticsPage() {
   const user = await requireAuthorizedPage("/analytics");
   const actor = authorizationActor(user);
@@ -100,9 +92,9 @@ export default async function AnalyticsPage() {
     services.items.listItems(actor),
     user.role === "admin" ? services.items.listItItems(actor) : Promise.resolve([]),
   ]);
-  const data = buildAnalyticsDashboard(activeInventoryItems(generalItems));
+  const data = buildAnalyticsDashboard(generalItems);
   const itData = user.role === "admin"
-    ? buildAnalyticsDashboard(activeInventoryItems(itItems))
+    ? buildAnalyticsDashboard(itItems)
     : undefined;
 
   return <AnalyticsCharts data={data} itData={itData} />;
@@ -130,7 +122,7 @@ export function buildAnalyticsDashboard(items: InventoryItemDto[]): AnalyticsDas
     brands: topWithOther(countBy(items, (item) => item.brand ?? "Без бренда")),
     objects: countBy(items, (item) => item.room.buildingName),
     locations: topWithOther(countBy(items, (item) => item.room.designation), 8),
-    statuses: countBy(items, statusName),
+    statuses: countBy(items, (item) => item.status),
     valueByType: valueByType(items),
     responsibles: topWithOther(
       countBy(

@@ -38,6 +38,7 @@ export default async function ItItemsPage({
         excelDataset="it-items"
         itemCreation={{ rooms, buildings: inventoryBuildings, mode: "full", section: "it" }}
         bulkActions={{ actorUserId: user.userId, actorRole: user.role, buildings: inventoryBuildings, rooms, itemSection: "it" }}
+        locations={{ buildings: inventoryBuildings, rooms }}
         initialViewState={parseInventoryTableViewState(await searchParams)}
         stateUrlPath="/it-items"
         variant="it"

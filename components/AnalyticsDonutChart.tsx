@@ -22,12 +22,17 @@ const TONE_COLORS: Record<AnalyticsChartTone, string> = {
 };
 
 const STATUS_TONES: Record<string, AnalyticsChartTone> = {
+  active: "sky",
+  maintenance: "amber",
+  decommissioned: "rose",
+  decommissioned_in_use: "ochre",
   Работник: "violet",
   Маркировано: "green",
   "Не распределено": "neutral",
   Активен: "sky",
   "На обслуживании": "amber",
   Списано: "rose",
+  "Списан, но используется": "ochre",
 };
 
 function shadeHex(hex: string, amount: number) {
