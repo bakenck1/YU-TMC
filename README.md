@@ -129,6 +129,12 @@ The compatibility inventory and legacy sunset policy are maintained in
 The audit, generated-history and repository-artifact policy is maintained in
 [docs/repository-artifacts.md](docs/repository-artifacts.md).
 
+## Workstation transfer
+
+Keep source code in GitHub and transfer secrets and the local development
+database separately. The safe Windows migration procedure is documented in
+[docs/workstation-transfer.md](docs/workstation-transfer.md).
+
 Run the documentation contract itself with:
 
 ```powershell
