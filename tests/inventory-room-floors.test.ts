@@ -7,6 +7,7 @@ import {
   groupInventoryRoomsByMainCampusWing,
   isMainCampusWingFloor,
   mainCampusWingFromDesignation,
+  sortInventoryRoomsForSelection,
 } from "../lib/inventory-room-floors";
 
 function room(id: string, designation: string, floorNumber: number): RoomDto {
@@ -94,4 +95,22 @@ test("recognizes a campus wing before or after a room number", () => {
   assert.equal(mainCampusWingFromDesignation("401"), null);
   assert.equal(mainCampusWingFromDesignation("Office A401"), null);
   assert.equal(mainCampusWingFromDesignation("A office 401"), null);
+});
+
+test("sorts room selections by floor, then A, B, D and E wings", () => {
+  const sorted = sortInventoryRoomsForSelection([
+    room("room-e-2", "E201", 2),
+    room("room-d-1", "D110", 1),
+    room("room-b-1", "B105", 1),
+    room("room-a-10", "A110", 1),
+    room("room-other", "Library", 1),
+    room("room-a-2", "A102", 1),
+    room("room-e-1", "E101", 1),
+    room("room-b-2", "B201", 2),
+  ]);
+
+  assert.deepEqual(
+    sorted.map((value) => value.designation),
+    ["A102", "A110", "B105", "D110", "E101", "Library", "B201", "E201"],
+  );
 });

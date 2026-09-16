@@ -108,11 +108,39 @@ export function groupInventoryRoomsByFloor(
     }));
 }
 
+/**
+ * Keeps room pickers predictable: floors first, then the Main Campus wing
+ * order shown in the inventory UI (A, B, D, E), then the room number.
+ * Rooms without a recognized wing stay after the known wings on their floor.
+ */
+export function sortInventoryRoomsForSelection<
+  T extends Pick<RoomDto, "designation" | "floorNumber">,
+>(rooms: readonly T[]): T[] {
+  return rooms.toSorted((left, right) => {
+    const floorOrder = left.floorNumber - right.floorNumber;
+    if (floorOrder !== 0) return floorOrder;
+
+    const leftWing = mainCampusWingFromDesignation(left.designation);
+    const rightWing = mainCampusWingFromDesignation(right.designation);
+    const leftWingOrder = leftWing ? MAIN_CAMPUS_WINGS.findIndex((wing) => wing.code === leftWing) : MAIN_CAMPUS_WINGS.length;
+    const rightWingOrder = rightWing ? MAIN_CAMPUS_WINGS.findIndex((wing) => wing.code === rightWing) : MAIN_CAMPUS_WINGS.length;
+    const wingOrder = leftWingOrder - rightWingOrder;
+    if (wingOrder !== 0) return wingOrder;
+
+    return naturalRoomDesignationCompare(left, right);
+  });
+}
+
 function naturallySortRooms(rooms: readonly RoomDto[]): RoomDto[] {
-  return rooms.toSorted((left, right) =>
-    left.designation.localeCompare(right.designation, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    }),
-  );
+  return rooms.toSorted(naturalRoomDesignationCompare);
+}
+
+function naturalRoomDesignationCompare(
+  left: Pick<RoomDto, "designation">,
+  right: Pick<RoomDto, "designation">,
+): number {
+  return left.designation.localeCompare(right.designation, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
