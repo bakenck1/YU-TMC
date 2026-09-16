@@ -1,6 +1,6 @@
 "use client";
 
-import { Barcode, MapPinned, RotateCcw, ScanLine } from "lucide-react";
+import { Barcode, MapPinned, Pencil, RotateCcw, ScanLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -11,6 +11,7 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
 import { parseCreateTmcTransferRequestResult } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
+import { hasPermission } from "@/lib/security/permissions";
 
 type ScannedItem = NonNullable<QrResolutionDto["target"]> & { kind: "item" };
 
@@ -168,6 +169,7 @@ export default function QrScanPage({
   }
 
   const canClaim = actorRole === "employee";
+  const canEditItem = hasPermission(actorRole, "inventory.item.edit_content");
   const itemActive = item?.status === "active";
   const assignedToOther =
     item?.isAssigned === true && item.isCurrentUserResponsible !== true;
@@ -265,14 +267,30 @@ export default function QrScanPage({
                   </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  onClick={scanAgain}
-                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700"
-                >
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                  {t("tmc.qr.scanAgain")}
-                </button>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={scanAgain}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700"
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    {t("tmc.qr.scanAgain")}
+                  </button>
+                  {canEditItem ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          `/items/${encodeURIComponent(item.id)}?edit=content&returnTo=%2Fscan`,
+                        )
+                      }
+                      className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                      {t("items.edit")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             }
           />

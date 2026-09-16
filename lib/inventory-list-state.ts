@@ -38,6 +38,7 @@ const MAX_RETURN_HREF_LENGTH = 4_000;
 const RETURN_HREF_BASE = "https://inventory.local";
 const STATIC_INVENTORY_RETURN_PATHS = new Set([
   "/items/decommissioned",
+  "/scan",
   "/tmc/issue",
 ]);
 

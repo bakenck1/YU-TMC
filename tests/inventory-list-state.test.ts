@@ -135,6 +135,10 @@ test("inventory return URLs drop unknown data and normalize known values", () =>
     canonicalInventoryDetailsReturnHref("/tmc/issue?junk=value"),
     "/tmc/issue",
   );
+  assert.equal(
+    canonicalInventoryDetailsReturnHref("/scan?junk=value"),
+    "/scan",
+  );
   assert.equal(canonicalInventoryDetailsReturnHref(`/items?q=${"x".repeat(40_000)}`), null);
 });
 

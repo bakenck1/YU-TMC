@@ -89,7 +89,7 @@ test("warehouse creation is server-limited to basic item fields", async () => {
   );
 });
 
-test("warehouse can create restricted items but cannot access other mutations or inspections", () => {
+test("warehouse can create and edit basic item content without privileged mutations or inspections", () => {
   const warehouse = "warehouse" as const;
 
   assert.equal(hasPermission(warehouse, "inventory.item.read_all"), true);
@@ -99,7 +99,7 @@ test("warehouse can create restricted items but cannot access other mutations or
   assert.equal(canAccessPath(warehouse, "/items/decommissioned"), true);
   assert.equal(canAccessPath(warehouse, "/analytics"), true);
   assert.equal(hasPermission(warehouse, "inventory.item.create"), true);
-  assert.equal(hasPermission(warehouse, "inventory.item.edit_content"), false);
+  assert.equal(hasPermission(warehouse, "inventory.item.edit_content"), true);
   assert.equal(
     hasPermission(warehouse, "inventory.item.manage_protected_fields"),
     false,
@@ -118,13 +118,11 @@ test("warehouse can create restricted items but cannot access other mutations or
   assert.equal(canAccessPath(warehouse, "/settings"), false);
 });
 
-test("warehouse item mutations other than creation are rejected before repository access", async () => {
+test("warehouse privileged item mutations are rejected before repository access", async () => {
   const service = createItemService();
   const actor = { userId: "warehouse-1", role: "warehouse" as const };
   const forbiddenMutations = [
     service.importItems([] as never, actor),
-    service.updateContent("item-1", {} as never, actor),
-    service.updatePhoto("item-1", {} as never, actor),
     service.updateProtected("item-1", {} as never, actor),
     service.archiveItem("item-1", 1, actor),
     service.sendToService("item-1", 1, {} as never, actor),
