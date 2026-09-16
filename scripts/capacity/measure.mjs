@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import pg, { native } from "pg";
+import pg from "pg";
 
 import { captureProductionCapacityScenarios, TMC_PUSH_WORKER_LEASE_MS } from "./production-scenarios.ts";
 import { measureApplicationWorkloads } from "./application-workloads.ts";

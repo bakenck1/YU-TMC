@@ -60,6 +60,7 @@ yarn-error.log*
 # local agent/editor state and deployment bundles
 /.claude/
 /.tmp-dockflow-deploy/
+/.private-transfer/
 *.bundle
 
 # vercel

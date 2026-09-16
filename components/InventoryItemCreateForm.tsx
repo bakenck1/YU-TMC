@@ -13,6 +13,7 @@ import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import type { InventoryItemCategory } from "@/lib/inventory-categories";
 import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 
 export default function InventoryItemCreateForm({
   rooms,
@@ -46,7 +47,11 @@ export default function InventoryItemCreateForm({
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
-  const initialRoom = rooms.find((room) => room.id === initialRoomId) ?? rooms[0];
+  const orderedRooms = useMemo(
+    () => sortInventoryRoomsForSelection(rooms),
+    [rooms],
+  );
+  const initialRoom = orderedRooms.find((room) => room.id === initialRoomId) ?? orderedRooms[0];
   const [buildingId, setBuildingId] = useState(initialRoom?.buildingId ?? "");
   const [roomId, setRoomId] = useState(initialRoom?.id ?? "");
   const [responsible, setResponsible] = useState<TmcOperationUserDto | null>(null);
@@ -58,11 +63,11 @@ export default function InventoryItemCreateForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const buildingRooms = useMemo(
-    () => rooms.filter((room) => room.buildingId === buildingId),
-    [buildingId, rooms],
+    () => orderedRooms.filter((room) => room.buildingId === buildingId),
+    [buildingId, orderedRooms],
   );
   const showBuildingSelector = buildings.length > 0 && !initialRoomId;
-  const visibleRooms = showBuildingSelector ? buildingRooms : rooms;
+  const visibleRooms = showBuildingSelector ? buildingRooms : orderedRooms;
 
   if (rooms.length === 0) {
     if (hideTrigger) return null;
@@ -192,7 +197,7 @@ export default function InventoryItemCreateForm({
                     onChange={(event) => {
                       const nextBuildingId = event.target.value;
                       setBuildingId(nextBuildingId);
-                      setRoomId(rooms.find((room) => room.buildingId === nextBuildingId)?.id ?? "");
+                      setRoomId(orderedRooms.find((room) => room.buildingId === nextBuildingId)?.id ?? "");
                     }}
                     className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"
                   >
