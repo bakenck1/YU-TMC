@@ -59,6 +59,7 @@ import {
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import { addItemPhotoWithRefresh } from "@/lib/inventory-item-photo-client";
+import { updateItemContentWithRefresh } from "@/lib/inventory-item-content-client";
 import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
 
 type ResponsiblePickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
@@ -93,6 +94,7 @@ export default function InventoryItemDetails({
   hideComposition = false,
   commentItemId,
   returnHref,
+  initialEditing = false,
 }: {
   initialItem: InventoryItemDto;
   canEditContent: boolean;
@@ -117,12 +119,14 @@ export default function InventoryItemDetails({
   commentItemId?: string;
   /** Restores the originating inventory list, including filters and pagination. */
   returnHref?: string;
+  /** Opens the content editor immediately after an authorized scan action. */
+  initialEditing?: boolean;
 }) {
   const { language, locale, t } = useAppSettings();
   const router = useRouter();
   const returnDestination = returnHref ?? "/items";
   const [item, setItem] = useState(initialItem);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(canEditContent && initialEditing);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
   const [category, setCategory] = useState<InventoryItemCategory | ItEquipmentType>(
@@ -317,36 +321,26 @@ export default function InventoryItemDetails({
     setError("");
     setSaved(false);
     try {
-      const response = await fetch(`/api/inventory/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          version: item.version,
-          name,
-          description: description || null,
-          ...(item.itemSection === "it"
-            ? { itType: category, networkAddresses }
-            : { category }),
-          brand: brand || null,
-          model: model || null,
-          quantity: Number(quantity),
-          unitPrice: Number(unitPrice),
-        }),
+      const updatedItem = await updateItemContentWithRefresh(fetch, item, {
+        name,
+        description: description || null,
+        ...(item.itemSection === "it"
+          ? { itType: category as ItEquipmentType, networkAddresses }
+          : { category: category as InventoryItemCategory }),
+        brand: brand || null,
+        model: model || null,
+        quantity: Number(quantity),
+        unitPrice: Number(unitPrice),
       });
-      const body = (await response.json().catch(() => ({}))) as {
-        item?: InventoryItemDto;
-        error?: string;
-      };
-      if (!response.ok || !body.item) {
-        throw new Error(body.error ?? responseErrorCode(response.status));
-      }
-      setItem(body.item);
-      setCategory(body.item.itemSection === "it" && body.item.itType ? body.item.itType : body.item.category ?? categoryFromLegacyType(body.item.itemType));
-      setNetworkAddresses(body.item.networkAddresses ?? []);
-      setBrand(body.item.brand ?? "");
-      setModel(body.item.model ?? "");
-      setQuantity(String(body.item.quantity));
-      setUnitPrice(String(body.item.unitPrice));
+      setItem(updatedItem);
+      setName(updatedItem.name);
+      setDescription(updatedItem.description ?? "");
+      setCategory(updatedItem.itemSection === "it" && updatedItem.itType ? updatedItem.itType : updatedItem.category ?? categoryFromLegacyType(updatedItem.itemType));
+      setNetworkAddresses(updatedItem.networkAddresses ?? []);
+      setBrand(updatedItem.brand ?? "");
+      setModel(updatedItem.model ?? "");
+      setQuantity(String(updatedItem.quantity));
+      setUnitPrice(String(updatedItem.unitPrice));
       setEditing(false);
       setSaved(true);
       router.refresh();

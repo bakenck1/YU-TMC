@@ -17,7 +17,10 @@ export default async function ItemPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ returnTo?: string | string[] }>;
+  searchParams: Promise<{
+    edit?: string | string[];
+    returnTo?: string | string[];
+  }>;
 }) {
   const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const user = await requireAuthorizedPage(`/items/${id}`);
@@ -44,6 +47,13 @@ export default async function ItemPage({
       user.role,
       "inventory.item.manage_protected_fields",
     );
+    const canEditContent = hasPermission(
+      user.role,
+      "inventory.item.edit_content",
+    );
+    const requestedEditor = Array.isArray(resolvedSearchParams.edit)
+      ? resolvedSearchParams.edit[0]
+      : resolvedSearchParams.edit;
     const canManageComponents = hasPermission(
       user.role,
       "inventory.item.manage_components",
@@ -78,7 +88,8 @@ export default async function ItemPage({
       <Wrapper direction="column" gap="md">
       <InventoryItemDetails
         initialItem={item}
-        canEditContent={hasPermission(user.role, "inventory.item.edit_content")}
+        canEditContent={canEditContent}
+        initialEditing={canEditContent && requestedEditor === "content"}
         canSendToService={hasPermission(user.role, "inventory.item.send_to_service")}
         requiresServicePhoto
         canManageCode={hasPermission(user.role, "inventory.qr.manage")}

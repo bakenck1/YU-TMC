@@ -154,4 +154,28 @@ describe("QrScanPage", () => {
     expect(screen.queryByRole("button", { name: "tmc.operation.requestTransfer" })).toBeNull();
     expect(screen.queryByRole("button", { name: "tmc.operation.acceptItem" })).toBeNull();
   });
+
+  it.each(["admin", "warehouse"] as const)(
+    "opens the scanned item editor for the %s role",
+    async (actorRole) => {
+      render(<QrScanPage actorRole={actorRole} />);
+      fireEvent.click(screen.getByRole("button", { name: "scanner.itemTitle" }));
+      fireEvent.click(screen.getByRole("button", { name: "resolve barcode" }));
+
+      fireEvent.click(await screen.findByRole("button", { name: "items.edit" }));
+
+      expect(push).toHaveBeenCalledWith(
+        "/items/33333333-3333-4333-8333-333333333333?edit=content&returnTo=%2Fscan",
+      );
+    },
+  );
+
+  it("does not offer scanned item editing to an employee", async () => {
+    render(<QrScanPage actorRole="employee" />);
+    fireEvent.click(screen.getByRole("button", { name: "scanner.itemTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "resolve barcode" }));
+
+    await screen.findByText("Current owner");
+    expect(screen.queryByRole("button", { name: "items.edit" })).toBeNull();
+  });
 });

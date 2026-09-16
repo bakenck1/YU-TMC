@@ -63,8 +63,8 @@ export function canAccessPath(role: unknown, pathname: string) {
     return hasPermission(role, "inventory.inspection.read_all");
   }
   if (matchesRoute(pathOnly, "/inventory") && role === "warehouse") {
-    // The warehouse role is read-only over inventory items and must not enter
-    // the building/room management workspace.
+    // Warehouse staff can edit basic item content, but must not enter the
+    // building/room management workspace.
     return false;
   }
   if (matchesRoute(pathOnly, "/items/decommissioned")) {
