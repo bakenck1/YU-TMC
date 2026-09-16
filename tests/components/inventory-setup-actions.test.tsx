@@ -155,6 +155,32 @@ describe("inventory setup actions", () => {
     );
   });
 
+  it("orders item room choices by floor and then A, B, D and E blocks", () => {
+    const rooms = [
+      { ...ROOM, id: "room-e-2", designation: "E201", floorNumber: 2 },
+      { ...ROOM, id: "room-d-1", designation: "D110", floorNumber: 1 },
+      { ...ROOM, id: "room-b-1", designation: "B105", floorNumber: 1 },
+      { ...ROOM, id: "room-a-10", designation: "A110", floorNumber: 1 },
+      { ...ROOM, id: "room-a-2", designation: "A102", floorNumber: 1 },
+      { ...ROOM, id: "room-e-1", designation: "E101", floorNumber: 1 },
+      { ...ROOM, id: "room-b-2", designation: "B201", floorNumber: 2 },
+    ];
+
+    render(<InventoryItemCreateForm rooms={rooms} openInitially />);
+
+    const roomSelect = screen.getByLabelText(/itemDetails\.room/) as HTMLSelectElement;
+    expect(Array.from(roomSelect.options, (option) => option.value)).toEqual([
+      "room-a-2",
+      "room-a-10",
+      "room-b-1",
+      "room-d-1",
+      "room-e-1",
+      "room-b-2",
+      "room-e-2",
+    ]);
+    expect(roomSelect.value).toBe("room-a-2");
+  });
+
   it("allows creating a room on floor zero in the Main Campus", async () => {
     const onSave = vi.fn();
     const mainCampus = { ...BUILDING, name: "The Main Campus" };
