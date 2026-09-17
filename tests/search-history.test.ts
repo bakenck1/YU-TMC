@@ -49,5 +49,7 @@ test("search history menu retains keyboard focus and supports Escape", async () 
   assert.match(source, /item-filter-history:v1/);
   assert.match(source, /historyStorageKey=\{filterHistoryStorageKey/);
   assert.match(source, /onClick=\{\(\) => setSearchFocused\(true\)\}/);
-  assert.doesNotMatch(source, /role="combobox"/);
+  assert.match(source, /role="combobox"/);
+  assert.match(source, /aria-autocomplete="list"/);
+  assert.match(source, /role="listbox"/);
 });

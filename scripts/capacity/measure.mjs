@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import pg from "pg";
 
-import { captureProductionCapacityScenarios, TMC_PUSH_WORKER_LEASE_MS } from "./production-scenarios.ts";
+import { captureProductionCapacityScenarios, measureProductionInventoryCollection, TMC_PUSH_WORKER_LEASE_MS } from "./production-scenarios.ts";
 import { measureApplicationWorkloads } from "./application-workloads.ts";
 
 const root = process.cwd();
@@ -26,7 +26,7 @@ try {
   const environment = await readEnvironment(pool);
   const cardinality = await readCardinality(pool);
   assertCardinality(cardinality, dataset.cardinality);
-  const scenarios = await captureProductionCapacityScenarios();
+  const scenarios = await captureProductionCapacityScenarios(dataset.epoch);
 
   const queries = {};
   for (const [name, statements] of Object.entries(scenarios)) {
@@ -35,22 +35,28 @@ try {
   const poolSaturation = await measurePoolSaturation(pool, scenarios.dockflow_projection, dataset);
   const statementTimeout = await verifyStatementTimeout(pool, dataset.load.statementTimeoutMs);
   const applicationWorkloads = await measureApplicationWorkloads(dataset);
+  const inventoryCollection = await measureProductionInventoryCollection(pool);
+  const collectionOutcomes = {
+    inventory_list: inventoryCollection,
+    export_source: { ...inventoryCollection },
+  };
   const worker = process.env.CAPACITY_DISPOSABLE_WORKER_PROBE === "1"
     ? await measureDisposableWorkerShutdown(pool, dataset)
     : { measured: false, reason: "Enable only on a disposable database with CAPACITY_DISPOSABLE_WORKER_PROBE=1." };
   const routeChunks = await readRouteChunkMetrics(root);
   const finalMemory = process.memoryUsage();
 
-  const bottlenecks = rankBottlenecks({ queries, applicationWorkloads, poolSaturation, statementTimeout, worker, routeChunks, initialMemory, finalMemory }, dataset);
+  const bottlenecks = rankBottlenecks({ queries, applicationWorkloads, collectionOutcomes, poolSaturation, statementTimeout, worker, routeChunks, initialMemory, finalMemory }, dataset);
   const report = {
     schemaVersion: 1,
-    dataset: { version: dataset.version, description: dataset.description, expected: dataset.cardinality, actual: cardinality },
+    dataset: { version: dataset.version, epoch: dataset.epoch, description: dataset.description, expected: dataset.cardinality, actual: cardinality },
     environment,
     load: dataset.load,
     measuredAt: startedAt.toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     queries,
     applicationWorkloads,
+    collectionOutcomes,
     poolSaturation,
     statementTimeout,
     worker,
@@ -141,9 +147,20 @@ async function measureQuery(database, name, statements, config) {
     p50Ms: percentile(samples, 0.5),
     p95Ms: percentile(samples, 0.95),
     sloMs: config.sloMs[name],
-    planSummary: retainedPlans.map(summarizePlan),
-    plans: retainedPlans,
+    planSummary: compactPlans(statements, retainedPlans).map((entry) => ({ executions: entry.executions, ...summarizePlan(entry.plan) })),
+    plans: compactPlans(statements, retainedPlans),
   };
+}
+
+function compactPlans(statements, plans) {
+  const compact = new Map();
+  statements.forEach((statement, index) => {
+    const fingerprint = createHash("sha256").update(statement.sql.replace(/\s+/g, " ").trim()).digest("hex");
+    const existing = compact.get(fingerprint);
+    if (existing) existing.executions += 1;
+    else compact.set(fingerprint, { fingerprint, executions: 1, plan: plans[index] });
+  });
+  return [...compact.values()];
 }
 
 function summarizePlan(payload) {
@@ -314,12 +331,15 @@ function rankBottlenecks(metrics, config) {
     .filter(([, value]) => value.p95Ms > value.sloMs)
     .map(([name, value]) => ({ id: name, metric: "p95Ms", measured: value.p95Ms, budget: value.sloMs, ratio: round(value.p95Ms / value.sloMs), followUp: `Profile ${name} independently; expected gain is p95 <= ${value.sloMs}ms; rollback any query/index change that misses that budget.` }));
   if (!metrics.statementTimeout.enforced) output.push({ id: "statement_timeout", metric: "enforced", measured: false, budget: true, ratio: Infinity, followUp: "Restore fail-closed statement timeout enforcement; rollback configuration if cancellation cannot be demonstrated." });
+  for (const [name, value] of Object.entries(metrics.collectionOutcomes)) {
+    if (!value.withinLimit) output.push({ id: `${name}_capacity`, metric: "rows", measured: value.rows, budget: value.limit, ratio: round(value.rows / value.limit), followUp: `Replace the fail-closed whole-collection path with a bounded product contract; expected capacity is at least ${value.rows} rows; rollback if authorization, export completeness, or memory regresses.` });
+  }
   for (const [name, value] of Object.entries(metrics.applicationWorkloads)) {
     if (value.p95Ms > value.sloMs) output.push({ id: name, metric: "p95Ms", measured: value.p95Ms, budget: value.sloMs, ratio: round(value.p95Ms / value.sloMs), followUp: `Profile ${name} independently; expected gain is p95 <= ${value.sloMs}ms; rollback if the workload output contract changes.` });
   }
   if (metrics.poolSaturation.p95Ms > config.budgets.poolP95Ms) output.push({ id: "pool_saturation", metric: "p95Ms", measured: metrics.poolSaturation.p95Ms, budget: config.budgets.poolP95Ms, ratio: round(metrics.poolSaturation.p95Ms / config.budgets.poolP95Ms), followUp: `Profile pool waits at ${config.load.concurrentScanners} scanners; expected gain is p95 <= ${config.budgets.poolP95Ms}ms; rollback pool sizing if database saturation rises.` });
-  const rssGrowth = bytesToMiB(metrics.finalMemory.rss - metrics.initialMemory.rss);
-  if (rssGrowth > config.budgets.processRssGrowthMiB) output.push({ id: "process_memory", metric: "rssGrowthMiB", measured: rssGrowth, budget: config.budgets.processRssGrowthMiB, ratio: round(rssGrowth / config.budgets.processRssGrowthMiB), followUp: `Profile retained heap and workbook allocation; expected growth <= ${config.budgets.processRssGrowthMiB} MiB; rollback changes that increase peak memory.` });
+  const exportGrowth = metrics.applicationWorkloads.export_workbook.peakGrowthMiB;
+  if (exportGrowth > config.budgets.processRssGrowthMiB) output.push({ id: "export_memory", metric: "peakGrowthMiB", measured: exportGrowth, budget: config.budgets.processRssGrowthMiB, ratio: round(exportGrowth / config.budgets.processRssGrowthMiB), followUp: `Profile retained heap and workbook allocation; expected isolated export peak growth <= ${config.budgets.processRssGrowthMiB} MiB; rollback changes that alter workbook content or increase peak memory.` });
   for (const [route, value] of Object.entries(metrics.routeChunks)) {
     if (value.client?.kib > config.budgets.routeClientKiB) output.push({ id: `route_chunk:${route}`, metric: "clientKiB", measured: value.client.kib, budget: config.budgets.routeClientKiB, ratio: round(value.client.kib / config.budgets.routeClientKiB), followUp: `Analyze this route with the Next bundle analyzer; expected client payload <= ${config.budgets.routeClientKiB} KiB; rollback splitting if navigation regresses.` });
   }
@@ -331,7 +351,7 @@ function rankBottlenecks(metrics, config) {
 
 function renderMarkdown(report) {
   const queryRows = Object.entries(report.queries).map(([name, value]) => {
-    const summary = value.planSummary.map((plan) => `${plan.rootNode}; hit/read ${plan.sharedHitBlocks}/${plan.sharedReadBlocks}`).join(" + ");
+    const summary = value.planSummary.map((plan) => `${plan.executions}× ${plan.rootNode}; hit/read ${plan.sharedHitBlocks}/${plan.sharedReadBlocks}`).join(" + ");
     return `| ${name} (${value.statementCount}) | \`${value.fingerprint.slice(0, 12)}\` | ${value.p50Ms} | ${value.p95Ms} | ${value.sloMs} | ${summary} |`;
   }).join("\n");
   const cardinalityRows = Object.entries(report.dataset.actual).map(([name, value]) => `| ${name} | ${value.toLocaleString("en-US")} |`).join("\n");
