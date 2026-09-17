@@ -24,6 +24,7 @@ export interface InventoryItemRecord {
   networkAddresses?: ItNetworkAddress[];
   brand: string | null;
   model: string | null;
+  oneCCode?: string | null;
   quantity: number;
   unitPrice: number;
   roomId: string;
@@ -63,6 +64,7 @@ export interface InsertInventoryItemRecord {
   itType: ItEquipmentType | null;
   brand: string | null;
   model: string | null;
+  oneCCode?: string | null;
   quantity: number;
   unitPrice: number;
   roomId: string;
@@ -81,6 +83,7 @@ export interface UpdateInventoryItemContentRecord {
   itType?: ItEquipmentType | null;
   brand: string | null;
   model: string | null;
+  oneCCode?: string | null;
   quantity: number;
   unitPrice: number;
   actorId: string;

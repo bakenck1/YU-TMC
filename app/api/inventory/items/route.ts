@@ -65,6 +65,7 @@ function parseCreate(
       typeof body.description !== "string") ||
     (body.brand !== undefined && body.brand !== null && typeof body.brand !== "string") ||
     (body.model !== undefined && body.model !== null && typeof body.model !== "string") ||
+    (body.oneCCode !== undefined && body.oneCCode !== null && typeof body.oneCCode !== "string") ||
     (body.quantity !== undefined && body.quantity !== null && typeof body.quantity !== "number") ||
     (body.unitPrice !== undefined && body.unitPrice !== null && typeof body.unitPrice !== "number") ||
     (body.barcode !== undefined &&
@@ -122,6 +123,7 @@ function parseCreate(
     description: body.description as string | null | undefined,
     brand: body.brand as string | null | undefined,
     model: body.model as string | null | undefined,
+    oneCCode: body.oneCCode as string | null | undefined,
     quantity: body.quantity as number | null | undefined,
     unitPrice: body.unitPrice as number | null | undefined,
     barcode: body.barcode as string | null | undefined,

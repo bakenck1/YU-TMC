@@ -122,7 +122,8 @@ function categoryLabel(
   if (
     category === "electronics" ||
     category === "electrical_equipment" ||
-    category === "furniture"
+    category === "furniture" ||
+    category === "components"
   ) {
     return t(inventoryItemCategoryTranslationKey(category));
   }
@@ -807,6 +808,7 @@ export default function ItemsTable({
                       <option value="electronics">{t("common.electronics")}</option>
                       <option value="electrical_equipment">{t("data.electricalEquipment")}</option>
                       <option value="furniture">{t("data.furniture")}</option>
+                      <option value="components">{t("data.components")}</option>
                     </>
                   )}
                 </select>

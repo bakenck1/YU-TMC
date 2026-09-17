@@ -25,6 +25,8 @@ export interface InventoryItemDto {
   networkAddresses?: ItNetworkAddress[];
   brand: string | null;
   model: string | null;
+  /** Separate 1C nomenclature code used in the material statement. */
+  oneCCode?: string | null;
   quantity: number;
   unitPrice: number;
   inventoryNumberKind: InventoryNumberKind;
@@ -124,6 +126,8 @@ export interface CreateInventoryItemInput {
   description?: string | null;
   brand?: string | null;
   model?: string | null;
+  /** Separate 1C nomenclature code; leading zeroes are preserved. */
+  oneCCode?: string | null;
   quantity?: number | null;
   unitPrice?: number | null;
   roomId: string;
@@ -148,7 +152,7 @@ export interface CreateInventoryItemInput {
 export interface CreateItInventoryItemInput
   extends Omit<
     CreateInventoryItemInput,
-    "category" | "itemType" | "quantity" | "barcode" | "inventoryNumber" | "responsibleUserId"
+    "category" | "itemType" | "oneCCode" | "quantity" | "barcode" | "inventoryNumber" | "responsibleUserId"
   > {
   itType: ItEquipmentType;
   quantity: number;
@@ -163,6 +167,7 @@ export interface UpdateInventoryItemContentInput {
   itemType?: string | null;
   brand?: string | null;
   model?: string | null;
+  oneCCode?: string | null;
   quantity?: number | null;
   unitPrice?: number | null;
   itType?: ItEquipmentType;

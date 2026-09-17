@@ -446,7 +446,7 @@ export default function TmcBulkActions({
               <div className="mt-5 space-y-4">
                 {mode === "transfer" ? <TmcUserPicker value={recipient} onChange={(value) => { setRecipient(value); localTransferKeys.current = {}; }} /> : mode === "category" ? (
                   <label className="block text-sm text-zinc-600">{t("items.type")}
-                    <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5"><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></select>
+                    <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5"><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></select>
                   </label>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">

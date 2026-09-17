@@ -62,6 +62,7 @@ test("POST payload contains only filtered item ids and visible columns", () => {
       columns: [
         "name",
         "inventoryNumber",
+        "oneCCode",
         "qrCode",
         "itemType",
         "brand",

@@ -7,6 +7,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     id: item.id,
     name: item.name,
     inventoryNumber: item.inventoryNumber,
+    oneCCode: item.oneCCode ?? undefined,
     category: item.itemSection === "it" && item.itType
       ? item.itType
       : item.category ?? categoryFromLegacyType(item.itemType),

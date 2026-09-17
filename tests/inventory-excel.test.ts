@@ -49,6 +49,7 @@ test("validates Excel rows and rejects duplicate inventory numbers before import
     125000.5,
     ROOM.buildingName,
     ROOM.designation,
+    "00000001491",
     "INV-100",
   ]);
   sheet.addRow([
@@ -61,6 +62,7 @@ test("validates Excel rows and rejects duplicate inventory numbers before import
     50000,
     ROOM.buildingName,
     ROOM.designation,
+    "00000009999",
     "inv-100",
   ]);
   const parsed = await parseInventoryWorkbook(await writeWorkbook(workbook), [ROOM]);
@@ -73,6 +75,7 @@ test("validates Excel rows and rejects duplicate inventory numbers before import
     category: "electronics",
     brand: "HP",
     model: "E24",
+    oneCCode: "00000001491",
     quantity: 2,
     unitPrice: 125000.5,
     roomId: ROOM.id,
@@ -96,18 +99,19 @@ test("streams the inventory export without changing its workbook contract", asyn
   const sheet = (await loadWorkbook(bytes)).getWorksheet("Inventory items")!;
 
   assert.deepEqual((sheet.getRow(1).values as unknown[]).slice(1), [
-    "Name", "Inventory number", "Type", "Brand", "Model", "Quantity", "Unit price KZT",
+    "Name", "Inventory number", "1C code (material statement)", "Type", "Brand", "Model", "Quantity", "Unit price KZT",
     "Total KZT", "Building", "Room", "Status", "Responsible", "Created", "Updated", "Exported at",
   ]);
   assert.equal(sheet.getCell("A2").value, "Monitor");
-  assert.equal(sheet.getCell("F2").value, 2);
-  assert.equal(sheet.getCell("G2").value, 125000.5);
-  assert.equal(sheet.getCell("H2").value, 250001);
-  assert.equal(sheet.getCell("I2").value, ROOM.buildingName);
-  assert.equal(sheet.getCell("J2").value, ROOM.designation);
-  assert.equal(sheet.getCell("L2").value, "Inventory Owner");
-  assert.equal(sheet.getCell("G2").numFmt, "#,##0.00");
-  assert.equal(sheet.getCell("M2").numFmt, "yyyy-mm-dd hh:mm");
+  assert.equal(sheet.getCell("C2").value, "00000001491");
+  assert.equal(sheet.getCell("G2").value, 2);
+  assert.equal(sheet.getCell("H2").value, 125000.5);
+  assert.equal(sheet.getCell("I2").value, 250001);
+  assert.equal(sheet.getCell("J2").value, ROOM.buildingName);
+  assert.equal(sheet.getCell("K2").value, ROOM.designation);
+  assert.equal(sheet.getCell("M2").value, "Inventory Owner");
+  assert.equal(sheet.getCell("H2").numFmt, "#,##0.00");
+  assert.equal(sheet.getCell("N2").numFmt, "yyyy-mm-dd hh:mm");
   assert.equal(sheet.getCell("A2").fill.type, "pattern");
   assert.equal(sheet.rowCount, 3);
   assert.equal(sheet.views[0]?.state, "frozen");
@@ -148,8 +152,8 @@ test("rejects non-ZIP uploads before invoking the workbook parser", async () => 
 test("rejects ZIP entries whose actual expansion exceeds their declared size", async () => {
   const workbook = new Workbook();
   const sheet = workbook.addWorksheet("Items");
-  sheet.addRow(["Name*", "Description", "Type*", "Brand", "Model", "Quantity*", "Unit price KZT*", "Building*", "Room*", "Inventory number"]);
-  sheet.addRow(["A".repeat(10_000), "", "Equipment", "", "", 1, 1, ROOM.buildingName, ROOM.designation, "INV-ZIP"]);
+  sheet.addRow(["Name*", "Description", "Type*", "Brand", "Model", "Quantity*", "Unit price KZT*", "Building*", "Room*", "1C code (material statement)", "Inventory number"]);
+  sheet.addRow(["A".repeat(10_000), "", "Equipment", "", "", 1, 1, ROOM.buildingName, ROOM.designation, "00000001491", "INV-ZIP"]);
   const bytes = await writeWorkbook(workbook);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let patched = false;
@@ -196,6 +200,7 @@ function exportItem(overrides: Partial<Parameters<typeof exportInventoryItems>[0
     itemType: "electronics",
     brand: "Brand",
     model: "Model",
+    oneCCode: "00000001491",
     quantity: 1,
     unitPrice: 100,
     inventoryNumberKind: "official",

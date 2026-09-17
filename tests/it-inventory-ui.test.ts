@@ -12,6 +12,7 @@ test("IT inventory export never requests a barcode column", () => {
     { ...DEFAULT_INVENTORY_COLUMNS, qrCode: true },
   );
   assert.equal(payload.columns.includes("qrCode"), false);
+  assert.equal(payload.columns.includes("oneCCode"), false);
 });
 
 test("IT address editor stays inside narrow dialogs", async () => {

@@ -9,11 +9,12 @@ import {
   isInventoryItemCategory,
 } from "../lib/inventory-categories";
 
-test("supports electrical equipment as a first-class inventory category", () => {
+test("supports all first-class inventory categories", () => {
   assert.deepEqual(INVENTORY_ITEM_CATEGORIES, [
     "electronics",
     "electrical_equipment",
     "furniture",
+    "components",
   ]);
   assert.equal(isInventoryItemCategory("electrical_equipment"), true);
   assert.equal(
@@ -25,13 +26,19 @@ test("supports electrical equipment as a first-class inventory category", () => 
     categoryFromLegacyType("\u042d\u043b\u0435\u043a\u0442\u0440\u043e\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435"),
     "electrical_equipment",
   );
+  assert.equal(isInventoryItemCategory("components"), true);
+  assert.equal(
+    inventoryItemCategoryTranslationKey("components"),
+    "data.components",
+  );
+  assert.equal(categoryFromLegacyType("Комплектующие"), "components");
 });
 
-test("database migration allows the electrical equipment category", async () => {
+test("database migration allows the components category", async () => {
   const [migration, schema, journal] = await Promise.all([
     readFile(
       new URL(
-        "../drizzle/20260907113517_electrical_equipment_category.sql",
+        "../drizzle/20260917075020_open_firebird.sql",
         import.meta.url,
       ),
       "utf8",
@@ -40,12 +47,12 @@ test("database migration allows the electrical equipment category", async () => 
     readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   ]);
 
-  const allowedValues = /'electronics', 'electrical_equipment', 'furniture'/;
+  const allowedValues = /'electronics', 'electrical_equipment', 'furniture', 'components'/;
   assert.match(migration, allowedValues);
   assert.match(schema, allowedValues);
   assert.ok(
     JSON.parse(journal).entries.some(
-      (entry: { tag?: string }) => entry.tag === "20260907113517_electrical_equipment_category",
+      (entry: { tag?: string }) => entry.tag === "20260917075020_open_firebird",
     ),
   );
 });

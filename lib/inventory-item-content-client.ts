@@ -51,6 +51,7 @@ function contentFromItem(item: InventoryItemDto): InventoryItemContentDraft {
       }
     : {
         ...common,
+        oneCCode: item.oneCCode ?? null,
         category: item.category ?? categoryFromLegacyType(item.itemType),
       };
 }
@@ -116,6 +117,11 @@ function mergeWithLatest(
 
   return {
     ...common,
+    oneCCode: preferUserChange(
+      draft.oneCCode,
+      original.oneCCode,
+      latest.oneCCode,
+    ),
     category: preferUserChange(
       draft.category,
       original.category,

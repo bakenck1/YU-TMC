@@ -249,6 +249,7 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
     (body.itemType !== undefined && body.itemType !== null && typeof body.itemType !== "string") ||
     (body.brand !== undefined && body.brand !== null && typeof body.brand !== "string") ||
     (body.model !== undefined && body.model !== null && typeof body.model !== "string") ||
+    (body.oneCCode !== undefined && body.oneCCode !== null && typeof body.oneCCode !== "string") ||
     (body.quantity !== undefined && body.quantity !== null && typeof body.quantity !== "number") ||
     (body.unitPrice !== undefined && body.unitPrice !== null && typeof body.unitPrice !== "number")
     || (body.itType !== undefined && !isItEquipmentType(body.itType))
@@ -264,6 +265,7 @@ function parseContent(value: unknown): UpdateInventoryItemContentInput {
     itemType: body.itemType as string | null | undefined,
     brand: body.brand as string | null | undefined,
     model: body.model as string | null | undefined,
+    oneCCode: body.oneCCode as string | null | undefined,
     quantity: body.quantity as number | null | undefined,
     unitPrice: body.unitPrice as number | null | undefined,
     itType: body.itType as UpdateInventoryItemContentInput["itType"],

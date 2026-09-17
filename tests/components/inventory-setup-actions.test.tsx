@@ -138,6 +138,11 @@ describe("inventory setup actions", () => {
         name: "data.electricalEquipment",
       }) as HTMLOptionElement).value,
     ).toBe("electrical_equipment");
+    expect(
+      (screen.getByRole("option", {
+        name: "data.components",
+      }) as HTMLOptionElement).value,
+    ).toBe("components");
     expect(nameInput.closest("label")?.textContent).toContain(
       "createItem.required",
     );
@@ -286,6 +291,9 @@ describe("inventory setup actions", () => {
     fireEvent.change(screen.getByLabelText(/items\.type/), {
       target: { value: "electrical_equipment" },
     });
+    fireEvent.change(screen.getByLabelText(/itemDetails\.oneCCode/), {
+      target: { value: "00000001491" },
+    });
     fireEvent.change(screen.getByLabelText(/createItem\.barcode/), {
       target: { value: "RESP-1001" },
     });
@@ -306,6 +314,7 @@ describe("inventory setup actions", () => {
       expect(createCall).toBeDefined();
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
         category: "electrical_equipment",
+        oneCCode: "00000001491",
         responsibleUserId: employee.id,
         photos: [
           {
@@ -314,6 +323,45 @@ describe("inventory setup actions", () => {
             height: 1,
           },
         ],
+      });
+    });
+  });
+
+  it("creates components without a barcode", async () => {
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => {
+      void _input;
+      void _init;
+      return { ok: true, json: async () => ({ item: {} }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+
+    fireEvent.change(screen.getByLabelText(/items\.name/), {
+      target: { value: "Кабель питания" },
+    });
+    fireEvent.change(screen.getByLabelText(/createItem\.barcode/), {
+      target: { value: "MUST-NOT-BE-SENT" },
+    });
+    fireEvent.change(screen.getByLabelText(/items\.type/), {
+      target: { value: "components" },
+    });
+    expect(screen.queryByLabelText(/createItem\.barcode/)).toBeNull();
+    expect(screen.getByText("createItem.componentsNoBarcode")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "createItem.create" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input]) =>
+        String(input) === "/api/inventory/items",
+      );
+      expect(createCall).toBeDefined();
+      expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
+        category: "components",
+        barcode: null,
       });
     });
   });

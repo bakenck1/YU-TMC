@@ -29,6 +29,7 @@ function exportColumnKeys(
   dataset: "items" | "it-items" | "decommissioned" | "decommissioned_in_use",
 ) {
   const keys = ["name", "inventoryNumber"];
+  if (dataset !== "it-items") keys.push("oneCCode");
   if (dataset !== "it-items" && columns.qrCode) keys.push("qrCode");
   if (columns.itemType) keys.push("itemType");
   if (columns.brandModel) keys.push("brand", "model");

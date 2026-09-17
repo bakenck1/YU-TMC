@@ -59,6 +59,7 @@ interface ItemRow extends QueryResultRow {
   network_addresses: NonNullable<InventoryItemRecord["networkAddresses"]> | null;
   brand: string | null;
   model: string | null;
+  one_c_code: string | null;
   quantity: number;
   unit_price: string | number;
   room_id: string;
@@ -524,10 +525,10 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       const result = await this.source.query<ItemRow>(
         `insert into ${ITEMS}
            (id, name, description, item_type, item_section, it_type,
-            brand, model, quantity, unit_price,
+            brand, model, one_c_code, quantity, unit_price,
             room_id, inventory_number_kind, inventory_number, inventory_number_key,
             created_by, updated_by, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15, $16, $16)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $17)
          returning id`,
         [
           input.id,
@@ -538,6 +539,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           input.itType,
           input.brand,
           input.model,
+          input.oneCCode ?? null,
           input.quantity,
           input.unitPrice,
           input.roomId,
@@ -584,9 +586,9 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       `update ${ITEMS}
        set name = $2, description = $3, item_type = $4,
            it_type = case when item_section = 'it' then $5::"yu_inventory"."it_equipment_type" else null end,
-           brand = $6, model = $7, quantity = $8, unit_price = $9, updated_by = $10,
-           updated_at = $11, version = version + 1
-       where id = $1 and version = $12 and status not in ('decommissioned', 'decommissioned_in_use')`,
+           brand = $6, model = $7, one_c_code = $8, quantity = $9, unit_price = $10, updated_by = $11,
+           updated_at = $12, version = version + 1
+       where id = $1 and version = $13 and status not in ('decommissioned', 'decommissioned_in_use')`,
       [
         input.id,
         input.name,
@@ -595,6 +597,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         input.itType ?? null,
         input.brand,
         input.model,
+        input.oneCCode ?? null,
         input.quantity,
         input.unitPrice,
         input.actorId,
@@ -1101,7 +1104,7 @@ function itemSelect(where: string, limit = "") {
     )
     select i.id, i.name, i.description, i.item_type, i.item_section, i.it_type,
            coalesce(addresses.entries, '[]'::jsonb) as network_addresses,
-           i.brand, i.model,
+           i.brand, i.model, i.one_c_code,
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
            b.id as building_id, b.name as building_name,
@@ -1198,6 +1201,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
       : [],
     brand: row.brand,
     model: row.model,
+    oneCCode: row.one_c_code,
     quantity: Number(row.quantity),
     unitPrice: Number(row.unit_price),
     roomId: row.room_id,

@@ -2,6 +2,7 @@ export interface InventoryExcelPreviewRow {
   rowNumber: number;
   name: string;
   inventoryNumber: string;
+  oneCCode: string;
   itemType: string;
   building: string;
   room: string;

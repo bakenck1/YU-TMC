@@ -14,7 +14,7 @@ import { parseCode39ScanInput } from "../lib/domain/code39";
 
 const ROOT = new URL("../", import.meta.url);
 
-test("barcode input is optional and sent to the item creation API when provided", async () => {
+test("barcode input is optional, except components are always stored without one", async () => {
   const form = await readFile(
     new URL("components/InventoryItemCreateForm.tsx", ROOT),
     "utf8",
@@ -23,11 +23,12 @@ test("barcode input is optional and sent to the item creation API when provided"
     new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
 
   assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: restricted \? null : \(barcode\.trim\(\) \|\| null\)/);
+  assert.match(form, /barcode: restricted \|\| category === "components" \? null : \(barcode\.trim\(\) \|\| null\)/);
   assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);
   assert.match(form, /t\("createItem\.barcodeOptionalHint"\)/);
+  assert.match(form, /t\("createItem\.componentsNoBarcode"\)/);
   assert.doesNotMatch(form, /!barcode\.trim\(\)/);
   assert.doesNotMatch(route, /body\.barcode\.trim\(\)\.length === 0/);
   assert.match(form, /setBarcode\(value\)/);
@@ -77,6 +78,7 @@ test("item creation service accepts a missing barcode", async () => {
   const input = {
     name: "Monitor",
     itemType: "Equipment",
+    oneCCode: "00000001491",
     roomId: "11111111-1111-4111-8111-111111111111",
   };
   const actor = { userId: "user-1", role: "admin" as const };
@@ -85,6 +87,7 @@ test("item creation service accepts a missing barcode", async () => {
 
   assert.equal(inserted?.inventoryNumberKind, "temporary");
   assert.equal(inserted?.inventoryNumber, "unused");
+  assert.equal(inserted?.oneCCode, "00000001491");
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {

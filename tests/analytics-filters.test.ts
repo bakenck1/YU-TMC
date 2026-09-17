@@ -68,6 +68,7 @@ test("analytics category and status codes have Russian labels", () => {
     translateDataLabel("ru", "electrical_equipment"),
     "Электрооборудование",
   );
+  assert.equal(translateDataLabel("ru", "components"), "Комплектующие");
   assert.equal(translateDataLabel("ru", "active"), "Активен");
   assert.equal(translateDataLabel("ru", "decommissioned"), "Списано");
   assert.equal(

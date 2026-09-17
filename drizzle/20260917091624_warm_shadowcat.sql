@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."items" ADD COLUMN "one_c_code" varchar(64);

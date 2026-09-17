@@ -471,6 +471,7 @@ export class InventoryItemService {
         itType,
         brand: values.brand,
         model: values.model,
+        oneCCode: itemSection === "general" ? values.oneCCode : null,
         quantity: values.quantity,
         unitPrice: values.unitPrice,
         roomId: values.roomId,
@@ -501,6 +502,7 @@ export class InventoryItemService {
             itType,
             brand: created.brand,
             model: created.model,
+            oneCCode: created.oneCCode ?? null,
             quantity: created.quantity,
             unitPrice: created.unitPrice,
             roomId: created.roomId,
@@ -690,6 +692,7 @@ export class InventoryItemService {
           itType: null,
           brand: values.brand,
           model: values.model,
+          oneCCode: values.oneCCode,
           quantity: values.quantity,
           unitPrice: values.unitPrice,
           roomId: values.roomId,
@@ -718,6 +721,7 @@ export class InventoryItemService {
               itemType: created.itemType,
               brand: created.brand,
               model: created.model,
+              oneCCode: created.oneCCode ?? null,
               quantity: created.quantity,
               unitPrice: created.unitPrice,
               roomId: created.roomId,
@@ -903,6 +907,11 @@ export class InventoryItemService {
         itType: isItItem ? input.itType! : null,
         brand: patch.brand === undefined ? current.brand : patch.brand,
         model: patch.model === undefined ? current.model : patch.model,
+        oneCCode: isItItem
+          ? null
+          : patch.oneCCode === undefined
+            ? current.oneCCode ?? null
+            : patch.oneCCode,
         quantity: patch.quantity ?? current.quantity,
         unitPrice: patch.unitPrice ?? current.unitPrice,
       };
@@ -1512,6 +1521,7 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     itemType: content.category ?? categoryFromLegacyType(input.itemType ?? ""),
     brand: content.brand ?? null,
     model: content.model ?? null,
+    oneCCode: content.oneCCode ?? null,
     quantity: content.quantity ?? 1,
     unitPrice: content.unitPrice ?? 0,
     roomId,
@@ -1559,6 +1569,7 @@ function normalizeWarehouseCreateInput(
   const hasProtectedValues =
     (input.brand !== undefined && input.brand !== null) ||
     (input.model !== undefined && input.model !== null) ||
+    (input.oneCCode !== undefined && input.oneCCode !== null) ||
     (input.quantity !== undefined && input.quantity !== null && input.quantity !== 1) ||
     (input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== 0) ||
     (input.barcode !== undefined && input.barcode !== null) ||
@@ -1574,6 +1585,7 @@ function normalizeWarehouseCreateInput(
     photos: input.photos,
     brand: null,
     model: null,
+    oneCCode: null,
     quantity: 1,
     unitPrice: 0,
     barcode: null,
@@ -1589,6 +1601,7 @@ function normalizeContentInput(input: {
   itemType?: unknown;
   brand?: unknown;
   model?: unknown;
+  oneCCode?: unknown;
   quantity?: unknown;
   unitPrice?: unknown;
 }) {
@@ -1606,6 +1619,7 @@ function normalizeContentInput(input: {
     category: normalizeOptionalCategory(input.category),
     brand: normalizeOptionalText(input.brand, 120, "invalid_item_brand"),
     model: normalizeOptionalText(input.model, 160, "invalid_item_model"),
+    oneCCode: normalizeOptionalText(input.oneCCode, 64, "invalid_one_c_code"),
     quantity: normalizeOptionalPositiveInteger(input.quantity),
     unitPrice: normalizeOptionalPrice(input.unitPrice),
   };
@@ -2010,6 +2024,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     networkAddresses: record.networkAddresses ?? [],
     brand: record.brand,
     model: record.model,
+    oneCCode: record.oneCCode ?? null,
     quantity: record.quantity,
     unitPrice: record.unitPrice,
     inventoryNumberKind: record.inventoryNumberKind,
@@ -2058,6 +2073,7 @@ function itemContentAuditValues(record: InventoryItemRecord) {
     itemType: record.itemType,
     brand: record.brand,
     model: record.model,
+    oneCCode: record.oneCCode ?? null,
     quantity: record.quantity,
     unitPrice: record.unitPrice,
   };

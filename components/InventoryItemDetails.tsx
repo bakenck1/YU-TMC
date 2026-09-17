@@ -137,6 +137,7 @@ export default function InventoryItemDetails({
   const [networkAddresses, setNetworkAddresses] = useState<ItNetworkAddressInput[]>(item.networkAddresses ?? []);
   const [brand, setBrand] = useState(item.brand ?? "");
   const [model, setModel] = useState(item.model ?? "");
+  const [oneCCode, setOneCCode] = useState(item.oneCCode ?? "");
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [unitPrice, setUnitPrice] = useState(String(item.unitPrice));
   const [saving, setSaving] = useState(false);
@@ -271,6 +272,7 @@ export default function InventoryItemDetails({
     setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
+    setOneCCode(item.oneCCode ?? "");
     setQuantity(String(item.quantity));
     setUnitPrice(String(item.unitPrice));
     setError("");
@@ -287,6 +289,7 @@ export default function InventoryItemDetails({
     setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
+    setOneCCode(item.oneCCode ?? "");
     setQuantity(String(item.quantity));
     setUnitPrice(String(item.unitPrice));
     setError("");
@@ -329,6 +332,7 @@ export default function InventoryItemDetails({
           : { category: category as InventoryItemCategory }),
         brand: brand || null,
         model: model || null,
+        ...(item.itemSection !== "it" ? { oneCCode: oneCCode.trim() || null } : {}),
         quantity: Number(quantity),
         unitPrice: Number(unitPrice),
       });
@@ -339,6 +343,7 @@ export default function InventoryItemDetails({
       setNetworkAddresses(updatedItem.networkAddresses ?? []);
       setBrand(updatedItem.brand ?? "");
       setModel(updatedItem.model ?? "");
+      setOneCCode(updatedItem.oneCCode ?? "");
       setQuantity(String(updatedItem.quantity));
       setUnitPrice(String(updatedItem.unitPrice));
       setEditing(false);
@@ -1013,7 +1018,7 @@ export default function InventoryItemDetails({
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.type")}</span>
-                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{item.itemSection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></>}</select>
+                  <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{item.itemSection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select>
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("itemDetails.brand")}</span>
@@ -1023,6 +1028,11 @@ export default function InventoryItemDetails({
                   <span className="text-zinc-500">{t("itemDetails.model")}</span>
                   <input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
                 </label>
+                {item.itemSection !== "it" ? <label className="block text-sm sm:col-span-2">
+                  <span className="text-zinc-500">{t("itemDetails.oneCCode")}</span>
+                  <input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" />
+                  <span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span>
+                </label> : null}
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.quantity")}</span>
                   <input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
@@ -1175,6 +1185,7 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             {item.itemSection !== "it" ? <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} /> : null}
+            {item.itemSection !== "it" ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}

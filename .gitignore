@@ -48,6 +48,7 @@ yarn-error.log*
 /.data/session-secret
 /.data/postgres-development/
 /.data/postgres-development.log
+/.data/postgres-codex/
 /.data/backups/
 /.data/caddy-public/
 /.settings-import/

@@ -45,6 +45,7 @@ export default function InventoryItemCreateForm({
   const [category, setCategory] = useState<"" | InventoryItemCategory | ItEquipmentType>("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
+  const [oneCCode, setOneCCode] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
   const orderedRooms = useMemo(
@@ -103,12 +104,13 @@ export default function InventoryItemCreateForm({
           ...(inventorySection === "it" ? { itType: category } : { category }),
           brand: restricted ? null : (brand || null),
           model: restricted ? null : (model || null),
+          oneCCode: restricted || inventorySection === "it" ? null : (oneCCode.trim() || null),
           quantity: restricted ? 1 : Number(quantity),
           unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
           ...(inventorySection !== "it" ? {
             responsibleUserId: restricted ? null : responsible?.id ?? null,
-            barcode: restricted ? null : (barcode.trim() || null),
+            barcode: restricted || category === "components" ? null : (barcode.trim() || null),
           } : {}),
           photos,
           ...(inventorySection === "it" ? { networkAddresses } : {}),
@@ -122,6 +124,7 @@ export default function InventoryItemCreateForm({
       setCategory("");
       setBrand("");
       setModel("");
+      setOneCCode("");
       setQuantity("1");
       setUnitPrice("");
       setBarcode("");
@@ -175,16 +178,18 @@ export default function InventoryItemCreateForm({
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              {!restricted && inventorySection !== "it" && (
+              {!restricted && inventorySection !== "it" && category !== "components" && (
                 <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option></>}</select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select></label>
+              {inventorySection !== "it" && category === "components" ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{t("createItem.componentsNoBarcode")}</p> : null}
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
+                  {inventorySection !== "it" ? <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.oneCCode")} <span>({t("createItem.optional")})</span></span><input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" placeholder={t("createItem.oneCCodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span></label> : null}
                   <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                 </div>
@@ -219,7 +224,7 @@ export default function InventoryItemCreateForm({
                   )}
                 />
               ) : null}
-              {!restricted && inventorySection !== "it" && (
+              {!restricted && inventorySection !== "it" && category !== "components" && (
                 <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span>({t("createItem.optional")})</span></span><input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")} {t("createItem.barcodeOptionalHint")}</span></label>
               )}
               {inventorySection === "it" ? (

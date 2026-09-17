@@ -8,6 +8,7 @@ export interface InventoryItem {
   localGroupId?: string;
   name: string;
   inventoryNumber: string;
+  oneCCode?: string;
   category: ItemCategory;
   brand?: string;
   model?: string;

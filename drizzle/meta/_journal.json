@@ -288,6 +288,20 @@
       "when": 1789458173962,
       "tag": "20260915074253_supreme_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789631420663,
+      "tag": "20260917075020_open_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789636584355,
+      "tag": "20260917091624_warm_shadowcat",
+      "breakpoints": true
     }
   ]
 }

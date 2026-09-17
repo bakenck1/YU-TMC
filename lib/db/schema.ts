@@ -767,6 +767,7 @@ export const itemsTable = inventorySchema.table(
     itType: itEquipmentTypeEnum(),
     brand: varchar({ length: 120 }),
     model: varchar({ length: 160 }),
+    oneCCode: varchar({ length: 64 }),
     quantity: integer().notNull().default(1),
     unitPrice: numeric({ precision: 14, scale: 2 }).notNull().default("0"),
     roomId: uuid()
@@ -823,7 +824,7 @@ export const itemsTable = inventorySchema.table(
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
           AND (
-            (${table.itemSection} = 'general' AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture') AND ${table.itType} IS NULL)
+            (${table.itemSection} = 'general' AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture', 'components') AND ${table.itType} IS NULL)
             OR
             (${table.itemSection} = 'it' AND ${table.itType} in ('wifi_access_point', 'camera') AND ${table.itemType} = ${table.itType}::text)
           )

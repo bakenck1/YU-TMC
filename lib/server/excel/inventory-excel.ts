@@ -26,6 +26,7 @@ const HEADERS = {
   unitPrice: "Unit price KZT*",
   building: "Building*",
   room: "Room*",
+  oneCCode: "1C code (material statement)",
   inventoryNumber: "Inventory number",
 } as const;
 type HeaderKey = keyof typeof HEADERS;
@@ -133,6 +134,7 @@ export async function parseInventoryWorkbook(
     const model = read("model");
     const building = read("building");
     const roomName = read("room");
+    const oneCCode = read("oneCCode");
     const inventoryNumber = read("inventoryNumber");
     const quantityText = read("quantity");
     const unitPriceText = read("unitPrice");
@@ -145,6 +147,7 @@ export async function parseInventoryWorkbook(
     validateLength(rowErrors, rowNumber, "Type*", itemType, 120);
     validateLength(rowErrors, rowNumber, "Brand", brand, 120);
     validateLength(rowErrors, rowNumber, "Model", model, 160);
+    validateLength(rowErrors, rowNumber, "1C code (material statement)", oneCCode, 64);
     validateLength(rowErrors, rowNumber, "Inventory number", inventoryNumber, 64);
     const quantity = parseInteger(quantityText);
     const unitPrice = parseMoney(unitPriceText);
@@ -171,6 +174,7 @@ export async function parseInventoryWorkbook(
       rowNumber,
       name,
       inventoryNumber,
+      oneCCode,
       itemType,
       building,
       room: roomName,
@@ -185,6 +189,7 @@ export async function parseInventoryWorkbook(
         category: categoryFromLegacyType(itemType),
         brand: brand || null,
         model: model || null,
+        oneCCode: oneCCode || null,
         quantity,
         unitPrice,
         roomId: room.id,
@@ -334,6 +339,7 @@ export async function exportInventoryItems(
   const allColumns = [
     { header: "Name", key: "name", width: 34 },
     { header: "Inventory number", key: "inventoryNumber", width: 24 },
+    { header: "1C code (material statement)", key: "oneCCode", width: 28 },
     { header: "QR code", key: "qrCode", width: 28 },
     { header: "Type", key: "itemType", width: 22 },
     { header: "Brand", key: "brand", width: 18 },
@@ -353,7 +359,7 @@ export async function exportInventoryItems(
     { header: "Exported at", key: "exportedAt", width: 22 },
   ] as const;
   const requested = new Set(visibleColumns ?? [
-    "name", "inventoryNumber", "itemType", "brand", "model", "quantity", "unitPrice",
+    "name", "inventoryNumber", "oneCCode", "itemType", "brand", "model", "quantity", "unitPrice",
     "total", "building", "room", "status", "responsible", "createdAt", "updatedAt", "exportedAt",
   ]);
   requested.add("name");
@@ -371,6 +377,7 @@ export async function exportInventoryItems(
     const row = sheet.addRow({
       name: item.name,
       inventoryNumber: item.inventoryNumber,
+      oneCCode: item.oneCCode ?? "",
       qrCode: item.qrCode ?? "",
       itemType: item.itemType,
       brand: item.brand ?? "",
@@ -454,6 +461,7 @@ function configureImportColumns(sheet: Worksheet) {
     { header: HEADERS.unitPrice, key: "unitPrice", width: 20 },
     { header: HEADERS.building, key: "building", width: 38 },
     { header: HEADERS.room, key: "room", width: 16 },
+    { header: HEADERS.oneCCode, key: "oneCCode", width: 28 },
     { header: HEADERS.inventoryNumber, key: "inventoryNumber", width: 24 },
   ];
 }

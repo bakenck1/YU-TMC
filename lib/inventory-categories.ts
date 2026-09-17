@@ -2,6 +2,7 @@ export const INVENTORY_ITEM_CATEGORIES = [
   "electronics",
   "electrical_equipment",
   "furniture",
+  "components",
 ] as const;
 
 export type InventoryItemCategory = (typeof INVENTORY_ITEM_CATEGORIES)[number];
@@ -9,7 +10,8 @@ export type InventoryItemCategory = (typeof INVENTORY_ITEM_CATEGORIES)[number];
 export type InventoryItemCategoryTranslationKey =
   | "common.electronics"
   | "data.electricalEquipment"
-  | "data.furniture";
+  | "data.furniture"
+  | "data.components";
 
 export function isInventoryItemCategory(
   value: unknown,
@@ -24,7 +26,8 @@ export function inventoryItemCategoryTranslationKey(
   category: InventoryItemCategory,
 ): InventoryItemCategoryTranslationKey {
   if (category === "electrical_equipment") return "data.electricalEquipment";
-  return category === "furniture" ? "data.furniture" : "common.electronics";
+  if (category === "furniture") return "data.furniture";
+  return category === "components" ? "data.components" : "common.electronics";
 }
 
 /**
@@ -36,6 +39,13 @@ export function categoryFromLegacyType(value: string): InventoryItemCategory {
   const normalized = value.trim().toLocaleLowerCase("ru-RU");
   if (normalized === "furniture" || normalized === "\u043c\u0435\u0431\u0435\u043b\u044c") {
     return "furniture";
+  }
+  if (
+    normalized === "components" ||
+    normalized === "component parts" ||
+    normalized === "\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442\u0443\u044e\u0449\u0438\u0435"
+  ) {
+    return "components";
   }
   if (
     normalized === "electrical_equipment" ||
