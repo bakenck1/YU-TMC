@@ -162,7 +162,7 @@ export default function QrScanPage({
     return (
       <InventoryRoomQrScanner
         onClose={() => setMode(null)}
-        onRoomResolved={(room) => router.push(`/rooms/${room.id}`)}
+        onRoomResolved={(room) => router.push(`/rooms/${room.id}?returnTo=%2Fscan`)}
         hintKey="scanner.openRoomHint"
       />
     );

@@ -42,9 +42,20 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     const adminId = randomUUID();
     const firstEmployeeId = randomUUID();
     const secondEmployeeId = randomUUID();
+    const warehouseId = randomUUID();
     const buildingId = randomUUID();
     const roomId = randomUUID();
     await seedUsers(adminId, firstEmployeeId, secondEmployeeId);
+    await database.query(
+      `insert into "yu_inventory"."users"
+         (id, code, email, full_name, role, created_at, updated_at)
+       values ($1, $2, $3, 'Form Warehouse', 'warehouse', now(), now())`,
+      [
+        warehouseId,
+        `FW-${warehouseId.slice(0, 8)}`,
+        `${warehouseId}@example.test`,
+      ],
+    );
     await seedRoom(adminId, buildingId, roomId);
     const service = createService();
 
@@ -74,6 +85,32 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     );
     expect(updated.responsible?.id).toBe(secondEmployeeId);
 
+    const assignedToAdministrator = await service.updateProtected(
+      created.id,
+      {
+        version: updated.version,
+        roomId,
+        inventoryNumber: updated.inventoryNumber,
+        status: "active",
+        responsibleUserId: adminId,
+      },
+      { userId: adminId, role: "admin" },
+    );
+    expect(assignedToAdministrator.responsible?.id).toBe(adminId);
+
+    const assignedToWarehouse = await service.updateProtected(
+      created.id,
+      {
+        version: assignedToAdministrator.version,
+        roomId,
+        inventoryNumber: assignedToAdministrator.inventoryNumber,
+        status: "active",
+        responsibleUserId: warehouseId,
+      },
+      { userId: adminId, role: "admin" },
+    );
+    expect(assignedToWarehouse.responsible?.id).toBe(warehouseId);
+
     const periods = await database.query<{
       responsible_user_id: string;
       ended_at: Date | null;
@@ -85,14 +122,24 @@ describe("PostgreSQL item-form responsibility assignment", () => {
         order by started_at, id`,
       [created.id],
     );
-    expect(periods.rows).toHaveLength(2);
+    expect(periods.rows).toHaveLength(4);
     expect(periods.rows[0]).toMatchObject({
       responsible_user_id: firstEmployeeId,
       source: "admin_override",
     });
     expect(periods.rows[0]!.ended_at).not.toBeNull();
-    expect(periods.rows[1]).toEqual({
+    expect(periods.rows[1]).toMatchObject({
       responsible_user_id: secondEmployeeId,
+      source: "admin_override",
+    });
+    expect(periods.rows[1]!.ended_at).not.toBeNull();
+    expect(periods.rows[2]).toMatchObject({
+      responsible_user_id: adminId,
+      source: "admin_override",
+    });
+    expect(periods.rows[2]!.ended_at).not.toBeNull();
+    expect(periods.rows[3]).toEqual({
+      responsible_user_id: warehouseId,
       ended_at: null,
       source: "admin_override",
     });
@@ -107,7 +154,7 @@ describe("PostgreSQL item-form responsibility assignment", () => {
         order by occurred_at, id`,
       [created.id],
     );
-    expect(audits.rows).toHaveLength(2);
+    expect(audits.rows).toHaveLength(4);
     expect(audits.rows.every((audit) =>
       audit.reason === "inventory_item_form_assignment" &&
       audit.is_administrative_exception

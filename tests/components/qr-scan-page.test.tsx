@@ -16,7 +16,14 @@ vi.mock("@/components/InventoryItemCodeScanner", () => ({
   ),
 }));
 vi.mock("@/components/InventoryRoomQrScanner", () => ({
-  default: () => <div>room scanner</div>,
+  default: ({ onRoomResolved }: { onRoomResolved(room: { id: string }): void }) => (
+    <button
+      type="button"
+      onClick={() => onRoomResolved({ id: "11111111-1111-4111-8111-111111111111" })}
+    >
+      resolve room
+    </button>
+  ),
 }));
 vi.mock("@/components/ScannedItemDetailsCard", () => ({
   default: ({ item, actions }: { item: { status: string; responsibleName?: string | null; itemDetails?: { condition: string; photoUrl: string | null } }; actions?: ReactNode }) => (
@@ -177,5 +184,15 @@ describe("QrScanPage", () => {
 
     await screen.findByText("Current owner");
     expect(screen.queryByRole("button", { name: "items.edit" })).toBeNull();
+  });
+
+  it("marks a scanned room page so the user can return to scanning", () => {
+    render(<QrScanPage actorRole="employee" />);
+    fireEvent.click(screen.getByRole("button", { name: "scanner.roomTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "resolve room" }));
+
+    expect(push).toHaveBeenCalledWith(
+      "/rooms/11111111-1111-4111-8111-111111111111?returnTo=%2Fscan",
+    );
   });
 });

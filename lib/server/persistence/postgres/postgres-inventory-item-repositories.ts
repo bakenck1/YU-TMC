@@ -76,6 +76,7 @@ interface ItemRow extends QueryResultRow {
   responsible_id: string | null;
   responsible_name: string | null;
   room_responsible_id: string | null;
+  room_access_mode?: "open" | "closed";
   photo_url: string | null;
   photo_id: string | null;
   photo_ids: string[] | null;
@@ -184,7 +185,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async findItemById(id: string): Promise<InventoryItemRecord | null> {
     const result = await this.source.query<ItemRow>(
-      itemSelect("where i.id = $1"),
+      itemSelect("where i.id = $1", "", true),
       [id],
     );
     return result.rows[0] ? mapItem(result.rows[0]) : null;
@@ -239,6 +240,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
             where left_item_id = $1 or right_item_id = $1
          )`,
         sqlCollectionLimit(COLLECTION_LIMITS.itemComponents),
+        true,
       ),
       [itemId],
     );
@@ -1085,7 +1087,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 }
 
-function itemSelect(where: string, limit = "") {
+function itemSelect(where: string, limit = "", includeRoomAccess = false) {
   return `
     with selected as materialized (
       select i.id
@@ -1113,7 +1115,7 @@ function itemSelect(where: string, limit = "") {
            q.original_value as qr_code,
            rp.responsible_user_id as responsible_id,
            u.full_name as responsible_name,
-           r.primary_responsible_id as room_responsible_id,
+           r.primary_responsible_id as room_responsible_id${includeRoomAccess ? ", r.access_mode as room_access_mode" : ""},
            p.preview_object_key as photo_url, p.photo_id, p.photo_ids,
            service_photo.id as service_photo_id,
            usage_photo.id as decommissioned_usage_photo_id,
@@ -1218,6 +1220,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
     roomResponsibleId: row.room_responsible_id,
+    roomAccessMode: row.room_access_mode,
     photoUrl: row.photo_id
       ? `/api/inventory/items/${row.id}/photo?v=${row.version}`
       : row.photo_url,

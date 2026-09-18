@@ -33,10 +33,12 @@ export interface QrResolutionRecord {
   itemConnectionStatus?: ConnectionStatus | null;
   itemHasPhoto?: boolean;
   itemCreatedAt?: Date | null;
+  roomAccessMode?: "open" | "closed" | null;
+  currentUserHasRoomItem?: boolean;
 }
 
 export interface QrResolutionRepository {
-  findByCanonicalKey(canonicalKey: string): Promise<QrResolutionRecord | null>;
+  findByCanonicalKey(canonicalKey: string, actorUserId?: string): Promise<QrResolutionRecord | null>;
   findItemByBarcode(
     barcodeValue: string,
     inventoryNumberKey: string,

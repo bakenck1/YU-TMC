@@ -14,6 +14,7 @@ import type {
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
+import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 import {
   hasPermission,
   type AuthorizationActor,
@@ -474,8 +475,7 @@ export class InventoryResponsibilityService {
           target.id !== normalizedResponsibleUserId ||
           !target.active ||
           target.deletedAt ||
-          target.role !== "employee" ||
-          target.id === currentActor.id
+          !isInventoryResponsibleRole(target.role)
         ) {
           throw new ApplicationError(
             "validation",

@@ -40,6 +40,8 @@ interface QrRow extends QueryResultRow {
   item_connection_status: QrResolutionRecord["itemConnectionStatus"] | null;
   item_has_photo: boolean;
   item_created_at: Date | null;
+  room_access_mode: "open" | "closed" | null;
+  current_user_has_room_item: boolean;
 }
 
 export function createPostgresQrResolutionRepositories(
@@ -53,6 +55,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
 
   async findByCanonicalKey(
     canonicalKey: string,
+    actorUserId?: string,
   ): Promise<QrResolutionRecord | null> {
     const result = await this.source.query<QrRow>(
       `select q.canonical_key, q.format, q.status as qr_status,
@@ -75,7 +78,25 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
                    and photo.purpose = 'item'
                    and photo.status = 'attached'
               ) as item_has_photo,
-              i.created_at as item_created_at
+              i.created_at as item_created_at,
+              r.access_mode as room_access_mode,
+              case when r.id is null or $2::uuid is null then false else (
+                exists (
+                  select 1 from ${ITEMS} room_item
+                  join ${RESPONSIBILITY} room_period
+                    on room_period.item_id = room_item.id
+                   and room_period.ended_at is null
+                 where room_item.room_id = r.id
+                   and room_item.archived_at is null
+                   and room_period.responsible_user_id = $2::uuid
+                )
+                or exists (
+                  select 1 from "yu_inventory"."local_item_groups" room_group
+                 where room_group.room_id = r.id
+                   and room_group.status = 'active'
+                   and room_group.responsible_user_id = $2::uuid
+                )
+              ) end as current_user_has_room_item
          from ${QR} q
          left join ${ROOMS} r on r.id = q.room_id
          left join ${BUILDINGS} b on b.id = coalesce(q.building_id, r.building_id)
@@ -90,7 +111,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
          left join ${USERS} u on u.id = coalesce(rp.responsible_user_id, r.primary_responsible_id)
         where q.canonical_key = $1
         limit 1`,
-      [canonicalKey],
+      [canonicalKey, actorUserId ?? null],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -120,6 +141,8 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       itemConnectionStatus: row.item_connection_status,
       itemHasPhoto: row.item_has_photo,
       itemCreatedAt: row.item_created_at,
+      roomAccessMode: row.room_access_mode,
+      currentUserHasRoomItem: row.current_user_has_room_item,
     };
   }
 
@@ -145,8 +168,17 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
                    and photo.purpose = 'item'
                    and photo.status = 'attached'
               ) as item_has_photo,
-              i.created_at as item_created_at
-         from ${ITEMS} i
+              i.created_at as item_created_at,
+              null::text as room_access_mode,
+              false as current_user_has_room_item
+         from (
+           select candidate.*,
+                  count(*) over () as candidate_count
+             from ${ITEMS} candidate
+            where ($3::text is not null and
+                   upper(left(replace(candidate.id::text, '-', ''), 16)) = upper($3))
+               or ($3::text is null and candidate.inventory_number_key = $2)
+         ) i
          join ${ROOMS} r on r.id = i.room_id
          join ${BUILDINGS} b on b.id = r.building_id
          left join lateral (
@@ -157,9 +189,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
             limit 1
          ) rp on true
          left join ${USERS} u on u.id = rp.responsible_user_id
-        where ($3::text is not null and
-               upper(left(replace(i.id::text, '-', ''), 16)) = upper($3))
-           or ($3::text is null and i.inventory_number_key = $2)
+        where i.candidate_count = 1
         limit 1`,
       [barcodeValue, inventoryNumberKey, fallbackKey ?? null],
     );
@@ -191,6 +221,8 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       itemConnectionStatus: row.item_connection_status,
       itemHasPhoto: row.item_has_photo,
       itemCreatedAt: row.item_created_at,
+      roomAccessMode: row.room_access_mode,
+      currentUserHasRoomItem: row.current_user_has_room_item,
     };
   }
 

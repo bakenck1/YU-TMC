@@ -282,7 +282,7 @@ test("override CAS repeats transfer, responsibility, live-admin and target bindi
   );
   assert.match(
     sql,
-    /\$5(?:::[^\s]+)? = 'assigned'[\s\S]*\$6(?:::uuid)? <> \$10[\s\S]*target\.id = \$6(?:::uuid)?[\s\S]*target\.role = 'employee'[\s\S]*target\.is_active = true[\s\S]*target\.deleted_at is null/i,
+    /\$5(?:::[^\s]+)? = 'assigned'[\s\S]*\$6(?:::uuid)? <> \$10[\s\S]*target\.id = \$6(?:::uuid)?[\s\S]*target\.role in \('employee', 'warehouse', 'admin'\)[\s\S]*target\.is_active = true[\s\S]*target\.deleted_at is null/i,
   );
 });
 

@@ -15,7 +15,6 @@ import {
   LogOut,
   ScanLine,
   Settings,
-  UserCircle,
   Users,
   Wifi,
   type LucideIcon,
@@ -50,10 +49,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
-  { href: "/profile", labelKey: "nav.profile", icon: UserCircle },
 ];
 
-const EMPLOYEE_NAV_PATHS = new Set(["/", "/items", "/scan", "/requests", "/tmc", "/profile"]);
+const EMPLOYEE_NAV_PATHS = new Set(["/", "/items", "/scan", "/requests", "/tmc"]);
 
 export function sidebarItemsForRole(role: UserRole) {
   return NAV_ITEMS.filter(

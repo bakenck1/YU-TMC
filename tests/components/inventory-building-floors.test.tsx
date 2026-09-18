@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import InventoryBuildingsManager from "@/components/InventoryBuildingsManager";
@@ -140,5 +140,45 @@ describe("building room navigation", () => {
       .closest("details");
     expect(fifthFloor?.textContent).toContain("A501");
     expect(fifthFloor?.textContent).not.toContain("A корпус");
+  });
+
+  it("lets an administrator change one room and then bulk-change an explicit selection", async () => {
+    const initial = { ...room("22222222-2222-4222-8222-222222222222", "101", 1), accessMode: "open" as const };
+    const closed = { ...initial, accessMode: "closed" as const, version: 2 };
+    const opened = { ...initial, accessMode: "open" as const, version: 3 };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ rooms: [initial] }))
+      .mockResolvedValueOnce(Response.json({ room: closed }))
+      .mockResolvedValueOnce(Response.json({
+        results: [{ id: opened.id, status: "updated", room: opened }],
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    render(
+      <InventoryBuildingsManager
+        actorRole="admin"
+        initialBuildings={[{ ...BUILDING, roomCount: 1 }]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /inventory\.roomsCount: 1/ }));
+    const roomLabel = await screen.findByText("101");
+    const roomCard = roomLabel.closest<HTMLDivElement>("div.rounded-xl");
+    if (!roomCard) throw new Error("room card missing");
+
+    fireEvent.click(within(roomCard).getByRole("button", { name: "room.closeAccessAction" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      accessMode: "closed",
+      version: 1,
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "room.selectForPrint: 101" }));
+    fireEvent.click(screen.getByRole("button", { name: "room.openAccessAction (1)" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit).body))).toEqual({
+      accessMode: "open",
+      rooms: [{ id: initial.id, version: 2 }],
+    });
   });
 });

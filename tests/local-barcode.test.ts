@@ -29,6 +29,7 @@ const USER_C_ID = "10000000-0000-4000-8000-000000000005";
 const ROOM_A_ID = "10000000-0000-4000-8000-000000000006";
 const ROOM_B_ID = "10000000-0000-4000-8000-000000000007";
 const ROOM_C_ID = "10000000-0000-4000-8000-000000000008";
+const GROUP_ID = "10000000-0000-4000-8000-000000000009";
 
 test("local Code 39 values use a global non-truncating suffix", () => {
   assert.equal(formatLocalBarcodeSuffix(1), "0001");
@@ -207,23 +208,24 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
   assert.equal(first.createdNewCode, true);
   assert.equal(events[0]?.reason, "Передача стульев");
 
-  await assert.rejects(
-    service.transfer(
-      {
-        itemId: ITEM_ID,
-        sourceGroupId: first.group.id,
-        recipientUserId: USER_C_ID,
-        quantity: 2,
-        sourceVersion: first.group.version,
-      },
-      { userId: USER_B_ID, role: "employee", sessionVersion: 1 },
-    ),
-    (error: unknown) =>
-      typeof error === "object" &&
-      error !== null &&
-      "publicCode" in error &&
-      error.publicCode === "local_group_return_only",
+  const forwarded = await service.transfer(
+    {
+      itemId: ITEM_ID,
+      sourceGroupId: first.group.id,
+      recipientUserId: USER_C_ID,
+      quantity: 2,
+      sourceVersion: first.group.version,
+    },
+    { userId: USER_B_ID, role: "employee", sessionVersion: 1 },
   );
+  assert.equal(forwarded.group.responsible.id, USER_C_ID);
+  assert.equal(groups.get(first.group.id)?.quantity, 3);
+  await service.cancel(
+    forwarded.group.id,
+    { version: forwarded.group.version, reason: "Cancel forwarded group" },
+    { userId: ADMIN_ID, role: "admin", sessionVersion: 1 },
+  );
+  assert.equal(groups.get(first.group.id)?.quantity, 5);
 
   const second = await service.transfer(
     {
@@ -231,11 +233,11 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
       sourceGroupId: first.group.id,
       recipientUserId: OWNER_ID,
       quantity: 2,
-      sourceVersion: first.group.version,
+      sourceVersion: groups.get(first.group.id)!.version,
     },
     { userId: USER_B_ID, role: "employee", sessionVersion: 1 },
   );
-  assert.equal(second.group.localBarcode, "1234/5678-0002");
+  assert.equal(second.group.localBarcode, "1234/5678-0003");
   assert.equal(groups.get(first.group.id)?.quantity, 3);
 
   const movedWhole = await service.transfer(
@@ -250,7 +252,7 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
   );
   assert.equal(movedWhole.createdNewCode, false);
   assert.equal(movedWhole.group.localBarcode, second.group.localBarcode);
-  assert.equal(sequence, BigInt(2));
+  assert.equal(sequence, BigInt(3));
 
   await service.cancel(
     second.group.id,
@@ -301,7 +303,7 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
     create: () =>
       `10000000-0000-4000-8000-${String(++idCounter).padStart(12, "0")}`,
   });
-  assert.equal(approved.group.localBarcode, "1234/5678-0003");
+  assert.equal(approved.group.localBarcode, "1234/5678-0004");
   assert.equal(approved.group.quantity, 2);
   assert.equal(approved.group.responsible.id, USER_B_ID);
   assert.equal(item.version, 4);
@@ -312,8 +314,19 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
   });
   assert.deepEqual(
     assignedToRecipient.map((group) => [group.localBarcode, group.quantity]),
-    [["1234/5678-0003", 2]],
+    [["1234/5678-0004", 2]],
   );
+  for (const role of ["admin", "warehouse"] as const) {
+    const assignedToPrivilegedOwner = await service.listActiveGroupsAssignedTo({
+      userId: USER_B_ID,
+      role,
+    });
+    assert.deepEqual(
+      assignedToPrivilegedOwner.map((group) => [group.localBarcode, group.quantity]),
+      [["1234/5678-0004", 2]],
+      role,
+    );
+  }
 });
 
 test("migration reserves a global namespace, preserves cancelled codes and defers quantity checks", async () => {
@@ -327,6 +340,50 @@ test("migration reserves a global namespace, preserves cancelled codes and defer
   assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
   assert.match(migration, /status = 'cancelled'/);
   assert.doesNotMatch(migration, /DELETE FROM .*local_item_groups/i);
+});
+
+test("a foreign local group follows its cabinet access mode on direct links", async () => {
+  const recipients = new Map([
+    [USER_B_ID, recipient(USER_B_ID, "Employee B", ROOM_B_ID)],
+  ]);
+  const record = groupFromInsert({
+    id: GROUP_ID,
+    itemId: ITEM_ID,
+    parentGroupId: null,
+    sequenceNumber: 1n,
+    barcodeValue: "1234/5678-0001",
+    barcodeKey: "1234/5678-0001",
+    quantity: 1,
+    responsibleUserId: USER_B_ID,
+    roomId: ROOM_B_ID,
+    previousResponsibleUserId: OWNER_ID,
+    previousRoomId: ROOM_A_ID,
+    createdBy: ADMIN_ID,
+    occurredAt: new Date("2026-09-18T00:00:00.000Z"),
+  }, recipients);
+  const repository = {
+    findGroup: async () => record,
+  } as unknown as LocalBarcodeRepository;
+  const repositories = {
+    localBarcodes: repository,
+    idempotency: {} as LocalBarcodeRepositories["idempotency"],
+  };
+  const service = new LocalBarcodeService({
+    read: async (work) => work(repositories),
+    transaction: async (work) => work(repositories),
+  }, { now: () => new Date() }, { create: () => "id" });
+
+  record.roomAccessMode = "open";
+  assert.equal((await service.getGroup(GROUP_ID, {
+    userId: OWNER_ID,
+    role: "employee",
+  })).id, GROUP_ID);
+
+  record.roomAccessMode = "closed";
+  await assert.rejects(
+    service.getGroup(GROUP_ID, { userId: OWNER_ID, role: "employee" }),
+    /local_group_not_found/,
+  );
 });
 
 function actor(

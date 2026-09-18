@@ -2,6 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { supportsMaterialStatementOneCCode } from "../lib/inventory-categories";
+
+test("material statement 1C code is limited to electrical equipment and components", () => {
+  assert.equal(supportsMaterialStatementOneCCode("electrical_equipment"), true);
+  assert.equal(supportsMaterialStatementOneCCode("components"), true);
+  assert.equal(supportsMaterialStatementOneCCode("electronics"), false);
+  assert.equal(supportsMaterialStatementOneCCode("furniture"), false);
+  assert.equal(supportsMaterialStatementOneCCode("wifi_access_point"), false);
+  assert.equal(supportsMaterialStatementOneCCode(null), false);
+});
+
 test("material statement 1C code has its own nullable database column", async () => {
   const [migration, schema, journal] = await Promise.all([
     readFile(

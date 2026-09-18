@@ -15,12 +15,19 @@ import type {
 } from "../lib/application/ports/inventory-responsibility-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
+import { isInventoryResponsibleRole } from "../lib/inventory-responsible-user";
 
 const ITEM_ID = "11111111-1111-4111-8111-111111111111";
 const ROOM_ID = "22222222-2222-4222-8222-222222222222";
 const ADMIN_ID = "33333333-3333-4333-8333-333333333333";
 const EMPLOYEE_ID = "44444444-4444-4444-8444-444444444444";
 const SECOND_EMPLOYEE_ID = "55555555-5555-4555-8555-555555555555";
+
+test("employees, warehouse users and administrators can be inventory responsible users", () => {
+  assert.equal(isInventoryResponsibleRole("employee"), true);
+  assert.equal(isInventoryResponsibleRole("admin"), true);
+  assert.equal(isInventoryResponsibleRole("warehouse"), true);
+});
 
 function itemRecord(
   input: InsertInventoryItemRecord,
@@ -46,7 +53,7 @@ function itemRecord(
   };
 }
 
-test("creating an item assigns the selected active employee and audits it atomically", async () => {
+test("creating an item can assign the active administrator who is performing the operation", async () => {
   let record: InventoryItemRecord | null = null;
   let state: ItemResponsibilityState | null = null;
   const assignments: InsertResponsibilityRecord[] = [];
@@ -73,7 +80,7 @@ test("creating an item assigns the selected active employee and audits it atomic
     findPendingTransfer: async () => null,
     findAuthorizationUserForUpdate: async (id: string) => ({
       id,
-      role: "employee" as const,
+      role: "admin" as const,
       active: true,
       deletedAt: null,
       version: 1,
@@ -119,16 +126,16 @@ test("creating an item assigns the selected active employee and audits it atomic
       category: "electronics",
       roomId: ROOM_ID,
       barcode: "RESP-1001",
-      responsibleUserId: EMPLOYEE_ID,
+      responsibleUserId: ADMIN_ID,
     },
     { userId: ADMIN_ID, role: "admin" },
   );
 
-  assert.equal(created.responsible?.id, EMPLOYEE_ID);
+  assert.equal(created.responsible?.id, ADMIN_ID);
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0]?.source, "admin_override");
   assert.deepEqual(responsibilityAudits[0]?.afterValues, {
-    responsibleUserId: EMPLOYEE_ID,
+    responsibleUserId: ADMIN_ID,
     source: "admin_override",
   });
 });

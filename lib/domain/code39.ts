@@ -51,6 +51,7 @@ const UUID_PATTERN =
 const LEGACY_BARCODE_INVENTORY_PREFIX = "YUB-";
 const BARCODE_FALLBACK_PREFIX = "YUI-";
 const MAX_DIRECT_INVENTORY_NUMBER_LENGTH = 16;
+const MAX_INVENTORY_NUMBER_LENGTH = 64;
 
 export function inventoryNumberComparisonKey(value: string): string {
   return value.normalize("NFKC").trim().toLocaleLowerCase("ru-RU");
@@ -59,19 +60,31 @@ export function inventoryNumberComparisonKey(value: string): string {
 export function code39PayloadForItem(
   inventoryNumber: string,
   itemId: string,
+  forceUnique = false,
 ): string {
-  const candidate = inventoryNumber.normalize("NFKC").trim().toUpperCase();
-  if (
-    candidate.length > 0 &&
-    candidate.length <= MAX_DIRECT_INVENTORY_NUMBER_LENGTH &&
-    CODE_39_DATA_PATTERN.test(candidate)
-  ) {
-    return candidate;
-  }
+  const candidate = code39PayloadForInventoryNumber(inventoryNumber);
+  if (!forceUnique && candidate && candidate.length <= MAX_DIRECT_INVENTORY_NUMBER_LENGTH) return candidate;
   if (!UUID_PATTERN.test(itemId)) {
     throw new RangeError("A UUID item id is required for the barcode fallback.");
   }
   return `${BARCODE_FALLBACK_PREFIX}${itemId.replaceAll("-", "").slice(0, 16).toUpperCase()}`;
+}
+
+/** Returns only a real, directly encodable inventory number; never an ID fallback. */
+export function code39PayloadForInventoryNumber(
+  inventoryNumber: string | null | undefined,
+): string | null {
+  const candidate = (inventoryNumber ?? "").normalize("NFKC").trim().toUpperCase();
+  if (
+    !candidate ||
+    candidate === "-" ||
+    /^TMP-\d{4}-\d{6}$/i.test(candidate) ||
+    candidate.length > MAX_INVENTORY_NUMBER_LENGTH ||
+    !CODE_39_DATA_PATTERN.test(candidate)
+  ) {
+    return null;
+  }
+  return candidate;
 }
 
 export type ParsedCode39Scan =

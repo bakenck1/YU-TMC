@@ -9,7 +9,13 @@ import type { RoomWorkspaceDto } from "@/lib/contracts/room-workspace";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function RoomPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RoomPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
+}) {
   const { id } = await params;
   const user = await requireAuthenticatedPage();
   let room: RoomWorkspaceDto;
@@ -19,5 +25,7 @@ export default async function RoomPage({ params }: { params: Promise<{ id: strin
     if (error instanceof ApplicationError && error.kind === "not_found") notFound();
     throw error;
   }
-  return <RoomWorkspaceView room={room} authenticated returnTo={`/rooms/${id}`} />;
+  const requestedReturnTo = (await searchParams).returnTo;
+  const backTo = requestedReturnTo === "/scan" ? "/scan" : undefined;
+  return <RoomWorkspaceView room={room} authenticated returnTo={`/rooms/${id}`} backTo={backTo} />;
 }

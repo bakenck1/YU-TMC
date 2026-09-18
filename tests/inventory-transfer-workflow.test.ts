@@ -11,6 +11,49 @@ import { canAccessPath } from "../lib/security/authorization";
 const owner = { userId: "11111111-1111-4111-8111-111111111111", role: "employee" as const, sessionVersion: 1 };
 const requester = { userId: "22222222-2222-4222-8222-222222222222", role: "employee" as const };
 
+test("administrators and warehouse users can accept free inventory into their own responsibility", async () => {
+  for (const role of ["admin", "warehouse"] as const) {
+    const userId = role === "admin"
+      ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      : "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    let responsibleUserId: string | null = null;
+    const repository: Partial<InventoryResponsibilityRepository> = {
+      findItemState: async () => ({
+        itemId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        responsibilityPeriodId: responsibleUserId ? "period-1" : null,
+        responsibleUserId,
+        responsibleName: responsibleUserId ? `${role} owner` : null,
+        itemStatus: "active" as const,
+      }),
+      insertResponsibility: async (input) => {
+        responsibleUserId = input.responsibleUserId;
+      },
+      appendAudit: async () => undefined,
+    };
+    const unitOfWork = {
+      transaction: (work) => work({
+        responsibility: repository as InventoryResponsibilityRepository,
+      }),
+      read: (work) => work({
+        responsibility: repository as InventoryResponsibilityRepository,
+      }),
+    } as UnitOfWork<{ responsibility: InventoryResponsibilityRepository }>;
+    const service = new InventoryResponsibilityService(
+      unitOfWork,
+      { now: () => new Date("2026-09-18T12:00:00.000Z") },
+      { create: () => "dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
+    );
+
+    const accepted = await service.acceptFree(
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      { userId, role },
+    );
+
+    assert.equal(accepted.responsibleUserId, userId, role);
+    assert.equal(responsibleUserId, userId, role);
+  }
+});
+
 test("employee QR transfer request is only completed by the captured owner", async () => {
   let currentOwner = owner.userId;
   let transfer: TransferRecord | null = null;

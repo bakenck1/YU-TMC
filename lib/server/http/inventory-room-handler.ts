@@ -58,16 +58,22 @@ function parseCreateRoom(value: unknown): CreateRoomInput {
     (input.primaryResponsibleId !== undefined &&
       input.primaryResponsibleId !== null &&
       (typeof input.primaryResponsibleId !== "string" ||
-        !input.primaryResponsibleId))
+        !input.primaryResponsibleId)) ||
+    (input.accessMode !== undefined &&
+      input.accessMode !== "open" && input.accessMode !== "closed")
   ) {
     throw invalidRequest();
   }
-  return {
+  const result: CreateRoomInput = {
     designation: input.designation,
     floorNumber: input.floorNumber,
     floorLabel: input.floorLabel as string | null | undefined,
     primaryResponsibleId: input.primaryResponsibleId as string | null | undefined,
   };
+  if (input.accessMode !== undefined) {
+    result.accessMode = input.accessMode as "open" | "closed";
+  }
+  return result;
 }
 
 function invalidRequest() {

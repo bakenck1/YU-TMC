@@ -39,11 +39,11 @@ const ITEMS: InventoryItem[] = [
   },
 ];
 
-test("summaries count records while total value respects quantity", () => {
+test("summaries count units except for written-off cards while total value respects quantity", () => {
   assert.deepEqual(summarizeInventory(ITEMS), {
     totalValue: 400,
-    totalItems: 3,
-    maintenance: 1,
+    totalItems: 15,
+    maintenance: 2,
     decommissioned: 1,
   });
   assert.equal(inventoryLineValue(BASE_ITEM), 300);

@@ -30,6 +30,12 @@ export function inventoryItemCategoryTranslationKey(
   return category === "components" ? "data.components" : "common.electronics";
 }
 
+export function supportsMaterialStatementOneCCode(
+  category: unknown,
+): category is "electrical_equipment" | "components" {
+  return category === "electrical_equipment" || category === "components";
+}
+
 /**
  * Imports and test fixtures created before categories were introduced may still
  * carry their old free-form type. The public API never accepts those values;

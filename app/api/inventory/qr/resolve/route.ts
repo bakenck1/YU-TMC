@@ -60,7 +60,7 @@ async function resolveQr(request: Request) {
             target: {
               kind: "item",
               id: localGroup.itemId,
-              status: "active",
+              status: localGroup.itemStatus ?? "active",
               title: localGroup.itemName,
               buildingName: localGroup.location.buildingName,
               roomDesignation: localGroup.location.roomDesignation,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { useAppSettings } from "./AppSettingsProvider";
 import CampusItemCard from "./CampusItemCard";
 import CampusItemStatusBadge from "./CampusItemStatusBadge";
@@ -349,20 +349,22 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
     if (timer.current) clearTimeout(timer.current);
     setView("loading");
     setItemId(null);
+    setFloorN(n);
     timer.current = setTimeout(() => {
-      setFloorN(n);
       setView("floor");
     }, 450);
   }, []);
 
   const openItem = useCallback((id: string) => {
     if (timer.current) clearTimeout(timer.current);
+    setItemId(id);
+    const target = data.itemsById[id];
+    if (target) setFloorN(target.floorN);
     setView("loading");
     timer.current = setTimeout(() => {
-      setItemId(id);
       setView("item");
     }, 400);
-  }, []);
+  }, [data.itemsById]);
 
   const close = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -383,6 +385,31 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
 
   const building = buildingId ? data.buildings[buildingId] : null;
   const item = itemId ? data.itemsById[itemId] : null;
+
+  const goBack = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    if (view === "loading" && itemId) {
+      setItemId(null);
+      setView("floor");
+      return;
+    }
+    if (view === "loading" && floorN != null) {
+      setFloorN(null);
+      setView("building");
+      return;
+    }
+    if (view === "item") {
+      setItemId(null);
+      setView("floor");
+      return;
+    }
+    if (view === "floor") {
+      setFloorN(null);
+      setView("building");
+      return;
+    }
+    close();
+  }, [close, floorN, itemId, view]);
 
   const crumbs = useMemo(() => {
     if (!building) return [];
@@ -622,6 +649,17 @@ export default function CampusMap({ data }: { data: CampusMapData }) {
                 style={css("flex:none;width:32px;height:32px;border-radius:9px;background:#eef1ee;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6b7671;border:none;")}
               >
                 <X size={18} />
+              </button>
+            </div>
+
+            <div style={css("flex:none;padding:10px 22px 0;")}>
+              <button
+                type="button"
+                onClick={goBack}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#dce5df] bg-white px-4 text-sm font-bold text-[#002060] shadow-sm hover:bg-[#f4f7f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#002060]"
+              >
+                <ArrowLeft size={17} aria-hidden="true" />
+                {t("map.back")}
               </button>
             </div>
 

@@ -110,19 +110,28 @@ test("component mutations are administrator-only and reject self-links", async (
   );
 });
 
-test("employee sees every linked item because all staff can view the full registry", async () => {
+test("employee sees only assigned or open-room linked items", async () => {
   const current = item(IDS[0], "employee-1");
   const assigned = item(IDS[1], "employee-1");
-  const other = { ...item("33333333-3333-4333-8333-333333333333"), responsibleId: "employee-2" };
+  const closedForeign = {
+    ...item("33333333-3333-4333-8333-333333333333"),
+    responsibleId: "employee-2",
+    roomAccessMode: "closed" as const,
+  };
+  const openForeign = {
+    ...item("44444444-4444-4444-8444-444444444444"),
+    responsibleId: "employee-2",
+    roomAccessMode: "open" as const,
+  };
   const service = createService({
     findItemById: async () => current,
-    listComponents: async () => [assigned, other],
+    listComponents: async () => [assigned, closedForeign, openForeign],
   });
   const result = await service.listComponents(IDS[0], {
     userId: "employee-1",
     role: "employee",
   });
-  assert.deepEqual(result.map((value) => value.id), [IDS[1], other.id]);
+  assert.deepEqual(result.map((value) => value.id), [IDS[1], openForeign.id]);
 });
 
 test("item reads hide an inaccessible existing item as not found", async () => {

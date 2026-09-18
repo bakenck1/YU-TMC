@@ -38,9 +38,11 @@ import {
   type AuthorizationActor,
 } from "@/lib/security/permissions";
 import type { ItemStatus } from "@/lib/contracts/inventory-domain";
+import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 import {
   categoryFromLegacyType,
   isInventoryItemCategory,
+  supportsMaterialStatementOneCCode,
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import sharp from "sharp";
@@ -114,12 +116,14 @@ export class InventoryItemService {
       }
       throw forbidden();
     }, { isolation: "repeatable-read", readOnly: true });
-    // The repository query is already scoped to the employee's current
-    // responsibility. Keep every lifecycle state in that scoped result so
-    // the employee tabs and summary cards can show their own decommissioned
-    // items as well.
+    // Legacy repository SQL also recognizes a room's primary responsible
+    // person. The cabinet-access model deliberately does not: employee-facing
+    // projections contain only a current item responsibility.
     return repositories
-      .filter((item) => (item.itemSection ?? "general") === "general")
+      .filter((item) =>
+        (item.itemSection ?? "general") === "general" &&
+        (actor.role !== "employee" || item.responsibleId === actor.userId),
+      )
       .map(toItemDto);
   }
 
@@ -146,7 +150,9 @@ export class InventoryItemService {
       }
       throw forbidden();
     }, { isolation: "repeatable-read", readOnly: true });
-    return records.map(toItemDto);
+    return records
+      .filter((item) => actor.role !== "employee" || item.responsibleId === actor.userId)
+      .map(toItemDto);
   }
 
   async findItem(
@@ -164,7 +170,7 @@ export class InventoryItemService {
         !(
           hasPermission(actor.role, "inventory.item.read_assigned") &&
           (value.responsibleId === actor.userId ||
-            value.roomResponsibleId === actor.userId)
+            value.roomAccessMode === "open")
         )
       ) {
         // Do not reveal whether an item ID exists to a caller outside its
@@ -186,13 +192,12 @@ export class InventoryItemService {
       const item = await items.findItemById(normalizedId);
       if (!item) throw new ApplicationError("not_found", "item_not_found");
       assertItemReadable(item, actor);
-      // A linked component is part of the assigned item's composition. Hiding
-      // it when another employee is responsible for that component makes the
-      // composition look incomplete and prevents the card from being useful.
       const components = await items.listComponents(normalizedId);
       const section = item.itemSection ?? "general";
       return components.filter(
-        (component) => (component.itemSection ?? "general") === section,
+        (component) =>
+          (component.itemSection ?? "general") === section &&
+          isItemReadable(component, actor),
       );
     });
     return records.map(toItemDto);
@@ -603,7 +608,7 @@ export class InventoryItemService {
         target.id !== input.responsibleUserId ||
         !target.active ||
         target.deletedAt ||
-        target.role !== "employee"
+        !isInventoryResponsibleRole(target.role)
       ) {
         throw new ApplicationError(
           "validation",
@@ -900,6 +905,7 @@ export class InventoryItemService {
           ? current.networkAddresses ?? []
           : normalizeItNetworkAddresses(input.networkAddresses)
         : [];
+      const nextGeneralCategory = patch.category ?? categoryFromLegacyType(current.itemType);
       const values = {
         name: patch.name,
         description: patch.description,
@@ -909,9 +915,11 @@ export class InventoryItemService {
         model: patch.model === undefined ? current.model : patch.model,
         oneCCode: isItItem
           ? null
-          : patch.oneCCode === undefined
-            ? current.oneCCode ?? null
-            : patch.oneCCode,
+          : !supportsMaterialStatementOneCCode(nextGeneralCategory)
+            ? null
+            : patch.oneCCode === undefined
+              ? current.oneCCode ?? null
+              : patch.oneCCode,
         quantity: patch.quantity ?? current.quantity,
         unitPrice: patch.unitPrice ?? current.unitPrice,
       };
@@ -1085,18 +1093,15 @@ export class InventoryItemService {
           (hasPermission(actor.role, "inventory.item.read_all") ||
             (hasPermission(actor.role, "inventory.item.read_assigned") &&
               (item.responsibleId === actor.userId ||
-                item.roomResponsibleId === actor.userId))),
+                item.roomAccessMode === "open"))),
       );
       if (
         !item ||
         !canPerformInventoryOperation(actor, {
           operation: "photo.item.preview",
-          currentResponsibleId:
-            item.roomResponsibleId === actor.userId
-              ? item.roomResponsibleId
-              : item.responsibleId,
+          currentResponsibleId: item.responsibleId,
           technicianHasParentAccess: hasParentAccess,
-          viaAuthorizedActiveItemScan: false,
+          viaAuthorizedActiveItemScan: item.roomAccessMode === "open",
           hasParentAccess,
         })
       ) {
@@ -1494,6 +1499,7 @@ export class InventoryItemService {
 
 function normalizeCreateInput(input: CreateInventoryItemInput) {
   const content = normalizeContentInput({ version: 1, ...input });
+  const itemType = content.category ?? categoryFromLegacyType(input.itemType ?? "");
   const roomId = normalizeId(input.roomId, "invalid_room_id");
   const suppliedInventoryNumber =
     input.inventoryNumber === undefined || input.inventoryNumber === null
@@ -1518,10 +1524,12 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     : suppliedInventoryNumber;
   return {
     ...content,
-    itemType: content.category ?? categoryFromLegacyType(input.itemType ?? ""),
+    itemType,
     brand: content.brand ?? null,
     model: content.model ?? null,
-    oneCCode: content.oneCCode ?? null,
+    oneCCode: supportsMaterialStatementOneCCode(itemType)
+      ? content.oneCCode ?? null
+      : null,
     quantity: content.quantity ?? 1,
     unitPrice: content.unitPrice ?? 0,
     roomId,
@@ -1917,21 +1925,24 @@ function assertItemReadable(
   item: InventoryItemRecord,
   actor: AuthorizationActor,
 ): void {
-  if (item.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
-    throw forbidden();
-  }
-  if (
-    !hasPermission(actor.role, "inventory.item.read_all") &&
-    !(
-      hasPermission(actor.role, "inventory.item.read_assigned") &&
-      (item.responsibleId === actor.userId ||
-        item.roomResponsibleId === actor.userId)
-    )
-  ) {
+  if (!isItemReadable(item, actor)) {
     // Read-only item subresources (comments, components, operations and
     // attachments) must not turn an existing foreign item into an oracle.
     throw itemNotFound();
   }
+}
+
+function isItemReadable(
+  item: InventoryItemRecord,
+  actor: AuthorizationActor,
+): boolean {
+  if (item.itemSection === "it" && !hasPermission(actor.role, "inventory.it.read")) {
+    return false;
+  }
+  return hasPermission(actor.role, "inventory.item.read_all") || (
+    hasPermission(actor.role, "inventory.item.read_assigned") &&
+    (item.responsibleId === actor.userId || item.roomAccessMode === "open")
+  );
 }
 
 function itemNotFound() {

@@ -32,6 +32,7 @@ export interface RoomDto {
   floorNumber: number;
   floorLabel: string | null;
   primaryResponsible?: { id: string; name: string } | null;
+  accessMode?: "open" | "closed";
   qrCode: string;
   status: "active" | "archived";
   version: number;
@@ -44,8 +45,26 @@ export interface CreateRoomInput {
   floorNumber: number;
   floorLabel?: string | null;
   primaryResponsibleId?: string | null;
+  accessMode?: "open" | "closed";
 }
 
 export interface UpdateRoomInput extends CreateRoomInput {
   version: number;
+}
+
+export interface UpdateRoomAccessInput {
+  accessMode: "open" | "closed";
+  version: number;
+}
+
+export interface BulkUpdateRoomAccessInput {
+  rooms: Array<{ id: string; version: number }>;
+  accessMode: "open" | "closed";
+}
+
+export interface BulkUpdateRoomAccessResult {
+  results: Array<
+    | { id: string; status: "updated" | "unchanged"; room: RoomDto }
+    | { id: string; status: "failed"; error: string }
+  >;
 }

@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import type { TranslationKey } from "@/lib/i18n";
+import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 import {
   installTmcRecipientSearchController,
   normalizeTmcRecipientQuery,
@@ -27,12 +28,14 @@ type TmcUserPickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &
 export default function TmcUserPicker({
   value,
   onChange,
-  employeeOnly = false,
+  responsibleOnly = false,
+  includeCurrentUser = false,
   label,
 }: {
   value: TmcOperationUserDto | null | TmcUserPickerValue;
   onChange: (user: TmcOperationUserDto | null) => void;
-  employeeOnly?: boolean;
+  responsibleOnly?: boolean;
+  includeCurrentUser?: boolean;
   label?: ReactNode;
 }) {
   const { t } = useAppSettings();
@@ -59,24 +62,25 @@ export default function TmcUserPicker({
     () =>
       installTmcRecipientSearchController(controllerRef, {
         fetcher: (url, init) => fetch(url, init),
+        includeCurrentUser,
         onState: (state) => {
           setSearchState(state);
           setActiveIndex(
             state.status === "ready" &&
-              state.users.some((user) => !employeeOnly || user.role === "employee")
+              state.users.some((user) => !responsibleOnly || isInventoryResponsibleRole(user.role))
               ? 0
               : -1,
           );
         },
       }),
-    [employeeOnly],
+    [includeCurrentUser, responsibleOnly],
   );
   useEffect(() => {
     if (open) controllerRef.current?.search(query);
     else controllerRef.current?.reset();
   }, [open, query]);
   const users = searchState.status === "ready"
-    ? searchState.users.filter((user) => !employeeOnly || user.role === "employee")
+    ? searchState.users.filter((user) => !responsibleOnly || isInventoryResponsibleRole(user.role))
     : [];
   const activeUser = activeIndex >= 0 ? users[activeIndex] : undefined;
   const activeOptionId = open && activeUser

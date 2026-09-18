@@ -36,7 +36,7 @@ test("creates an empty import template with an authoritative room directory", as
   assert.equal(workbook.getWorksheet("Rooms")?.getCell("B2").text, ROOM.designation);
 });
 
-test("validates Excel rows and rejects duplicate inventory numbers before import", async () => {
+test("validates Excel rows and rejects an unrelated duplicate inventory number before import", async () => {
   const workbook = await loadWorkbook(await createInventoryTemplate([ROOM]));
   const sheet = workbook.getWorksheet("Items")!;
   sheet.addRow([
@@ -83,6 +83,33 @@ test("validates Excel rows and rejects duplicate inventory numbers before import
   });
   assert.equal(parsed.preview.errors[0]?.code, "duplicate_inventory_number");
   assert.equal(parsed.preview.errors[0]?.rowNumber, 3);
+});
+
+test("accepts exactly one monitor and one system unit with the same inventory number", async () => {
+  const workbook = await loadWorkbook(await createInventoryTemplate([ROOM]));
+  const sheet = workbook.getWorksheet("Items")!;
+  sheet.addRow([
+    "Монитор Dell", "", "Equipment", "Dell", "P2422H", 1, 100,
+    ROOM.buildingName, ROOM.designation, "", "PAIR-100",
+  ]);
+  sheet.addRow([
+    "Системный блок Dell", "", "Equipment", "Dell", "OptiPlex", 1, 200,
+    ROOM.buildingName, ROOM.designation, "", "pair-100",
+  ]);
+  sheet.addRow([
+    "Моноблок", "", "Equipment", "", "", 1, 300,
+    ROOM.buildingName, ROOM.designation, "", "PAIR-100",
+  ]);
+
+  const parsed = await parseInventoryWorkbook(await writeWorkbook(workbook), [ROOM]);
+  assert.equal(parsed.preview.validRowCount, 2);
+  assert.deepEqual(parsed.inputs.map((input) => input.name), [
+    "Монитор Dell",
+    "Системный блок Dell",
+  ]);
+  assert.equal(parsed.preview.errors.length, 1);
+  assert.equal(parsed.preview.errors[0]?.code, "duplicate_inventory_number");
+  assert.equal(parsed.preview.errors[0]?.rowNumber, 4);
 });
 
 test("exports empty workbooks for every PRD dataset without assuming shared columns", async () => {

@@ -11,6 +11,10 @@ import type { InventoryExcelPreviewDto, InventoryExcelValidationError } from "@/
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { categoryFromLegacyType } from "@/lib/inventory-categories";
+import {
+  sharedInventoryNumberDevice,
+  type SharedInventoryNumberDevice,
+} from "@/lib/inventory-number-pair-policy";
 
 const MAX_IMPORT_ROWS = 2_000;
 const MAX_ARCHIVE_ENTRIES = 2_000;
@@ -107,7 +111,10 @@ export async function parseInventoryWorkbook(
   const roomLookup = new Map(
     rooms.map((room) => [roomKey(room.buildingName, room.designation), room]),
   );
-  const inventoryNumbers = new Map<string, number>();
+  const inventoryNumbers = new Map<
+    string,
+    Array<{ rowNumber: number; device: SharedInventoryNumberDevice | null }>
+  >();
   let nonEmptyRows = 0;
 
   for (let rowNumber = 2; rowNumber <= sheet.actualRowCount; rowNumber += 1) {
@@ -163,11 +170,16 @@ export async function parseInventoryWorkbook(
     }
     if (inventoryNumber) {
       const numberKey = inventoryNumber.normalize("NFKC").toLocaleUpperCase("en-US");
-      const firstRow = inventoryNumbers.get(numberKey);
-      if (firstRow !== undefined) {
+      const existing = inventoryNumbers.get(numberKey) ?? [];
+      const device = sharedInventoryNumberDevice(name);
+      const validPair = existing.length === 1 &&
+        device !== null &&
+        existing[0]?.device !== null &&
+        existing[0]?.device !== device;
+      if (existing.length > 0 && !validPair) {
         rowErrors.push({ rowNumber, field: "Inventory number", code: "duplicate_inventory_number" });
       } else {
-        inventoryNumbers.set(numberKey, rowNumber);
+        inventoryNumbers.set(numberKey, [...existing, { rowNumber, device }]);
       }
     }
     rows.push({

@@ -13,6 +13,7 @@ export type QrResolutionStatus =
   | "revoked"
   | "unissued_system_code"
   | "cancelled"
+  | "denied"
   | "unknown";
 
 export interface QrResolutionDto {

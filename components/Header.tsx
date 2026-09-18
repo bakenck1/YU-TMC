@@ -98,7 +98,7 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
             {user ? t(ROLE_LABELS[user.role]) : "—"}
           </p>
         </div>
-        <Link href="/profile" aria-label="Открыть профиль" className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+        <Link href="/profile" aria-label={t("nav.profile")} className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
           {user ? initials(user.name, user.email) : "YU"}
         </Link>
       </div>

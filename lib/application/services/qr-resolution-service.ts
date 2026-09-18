@@ -87,7 +87,7 @@ export class QrResolutionService {
     }
 
     const resolved = await this.unitOfWork.read(async ({ qr }) => {
-      const qrRecord = await qr.findByCanonicalKey(parsed.canonicalKey);
+      const qrRecord = await qr.findByCanonicalKey(parsed.canonicalKey, actor.userId);
       if (qrRecord || kind === "qr") {
         return { record: qrRecord, fromBarcode: false };
       }
@@ -104,6 +104,20 @@ export class QrResolutionService {
     });
     const { record } = resolved;
     assertItItemAccess(record, actor);
+    if (
+      record?.targetKind === "room" &&
+      record.roomAccessMode === "closed" &&
+      actor.role === "employee" &&
+      !record.currentUserHasRoomItem
+    ) {
+      return {
+        status: "denied",
+        canonicalKey: parsed.canonicalKey,
+        format: parsed.format,
+        qrStatus: null,
+        target: null,
+      };
+    }
     if (
       resolved.fromBarcode &&
       record?.targetKind === "item" &&

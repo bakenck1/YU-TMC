@@ -10,6 +10,7 @@ vi.mock("@/components/AppSettingsProvider", () => ({
 
 const FIRST = { id: "11111111-1111-4111-8111-111111111111", fullName: "Ada Lovelace", email: "ada@example.test", role: "employee" as const };
 const SECOND = { id: "22222222-2222-4222-8222-222222222222", fullName: "Bauyrzhan User", email: "bau@example.test", role: "warehouse" as const };
+const ADMIN = { id: "33333333-3333-4333-8333-333333333333", fullName: "Admin Owner", email: "admin@example.test", role: "admin" as const };
 
 describe("TmcUserPicker", () => {
   beforeEach(() => {
@@ -65,6 +66,34 @@ describe("TmcUserPicker", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(FIRST);
     expect(input.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("shows administrators and warehouse users when choosing an inventory responsible person", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ users: [ADMIN, SECOND] }),
+    } as Response);
+    render(
+      <TmcUserPicker
+        value={null}
+        onChange={vi.fn()}
+        responsibleOnly
+        includeCurrentUser
+      />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "ad" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/inventory/transfer-recipient-candidates?q=ad&includeSelf=1",
+      expect.anything(),
+    );
+    expect(screen.getByRole("option", { name: /Admin Owner/ })).not.toBeNull();
+    expect(screen.getByRole("option", { name: /Bauyrzhan User/ })).not.toBeNull();
   });
 
   it("drops a stale response and clears the controlled value", async () => {

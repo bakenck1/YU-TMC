@@ -71,7 +71,9 @@ function parseUpdateRoom(value: unknown): UpdateRoomInput {
       typeof input.floorLabel !== "string") ||
     (input.primaryResponsibleId !== undefined &&
       input.primaryResponsibleId !== null &&
-      typeof input.primaryResponsibleId !== "string")
+      typeof input.primaryResponsibleId !== "string") ||
+    (input.accessMode !== undefined &&
+      input.accessMode !== "open" && input.accessMode !== "closed")
   ) {
     throw invalidRequest();
   }
@@ -80,6 +82,7 @@ function parseUpdateRoom(value: unknown): UpdateRoomInput {
     floorNumber: input.floorNumber,
     floorLabel: input.floorLabel as string | null | undefined,
     primaryResponsibleId: input.primaryResponsibleId as string | null | undefined,
+    accessMode: input.accessMode as "open" | "closed" | undefined,
     version: input.version,
   };
 }

@@ -24,6 +24,7 @@ import type {
   TmcLocationHistoryRecord,
   TmcTransferUserRecord,
 } from "@/lib/application/ports/tmc-operation-repositories";
+import { isInventoryTransferStateAllowed } from "@/lib/inventory-transfer-eligibility";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import { PostgresIdempotencyRequestRepository } from "@/lib/server/persistence/postgres/postgres-inventory-concurrency-repositories";
@@ -309,7 +310,12 @@ class PostgresTmcTransferRequestRepository
     );
     const item = itemResult.rows[0];
     const period = periodResult.rows[0];
-    const itemActive = item?.status === "active" && item.archived_at === null;
+    const itemActive = item
+      ? isInventoryTransferStateAllowed(
+          item.status as TmcTransferCandidateRecord["itemStatus"],
+          item.archived_at,
+        )
+      : false;
     const responsibilityCurrent = input.responsibilityPeriodIdAtRequest === null
       && input.currentResponsibleIdAtRequest === null
         ? period === undefined
@@ -549,8 +555,8 @@ class PostgresTmcTransferRequestRepository
              from locked_item item
              left join locked_period period on true
             where item.version = $4
-              and item.status = 'active'
-              and item.archived_at is null
+              and item.status in ('active', 'maintenance', 'decommissioned_in_use')
+              and (item.status = 'decommissioned_in_use' or item.archived_at is null)
               and (
                 ($5::uuid is null and $6::uuid is null and period.id is null)
                 or (
@@ -1007,7 +1013,7 @@ function atomicInsertProblem(
   input: InsertTmcTransferRequestItemRecord,
 ): TmcOperationRepositoryConflictProblem {
   if (!row.item_exists) return "item_not_found";
-  if (row.item_status !== "active" || row.archived_at) return "item_inactive";
+  if (!row.item_status || !isInventoryTransferStateAllowed(row.item_status, row.archived_at)) return "item_inactive";
   if (Number(row.item_version) !== input.expectedItemVersion) {
     return "version_conflict";
   }

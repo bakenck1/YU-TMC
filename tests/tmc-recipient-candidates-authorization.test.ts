@@ -21,6 +21,7 @@ type RecipientActor = {
 type RecipientSearch = (
   query: string,
   actor: RecipientActor,
+  options?: { includeSelf?: boolean },
 ) => Promise<unknown>;
 
 test("direct recipient search atomically reauthorizes the complete live actor", async () => {
@@ -34,7 +35,7 @@ test("direct recipient search atomically reauthorizes the complete live actor", 
       },
       searchActiveRecipients: async (
         query: string,
-        excludeUserId: string,
+        excludeUserId: string | null,
         limit: number,
       ) => {
         calls.push(`search:${query}:${excludeUserId}:${limit}`);
@@ -76,6 +77,18 @@ test("direct recipient search atomically reauthorizes the complete live actor", 
     "transaction:repeatable-read:false",
     `actor:${ACTOR_ID}`,
     `search:ali:${ACTOR_ID}:20`,
+  ]);
+
+  calls.length = 0;
+  await search("ALI", {
+    userId: ACTOR_ID,
+    role: "employee",
+    sessionVersion: 7,
+  }, { includeSelf: true });
+  assert.deepEqual(calls, [
+    "transaction:repeatable-read:false",
+    `actor:${ACTOR_ID}`,
+    "search:ali:null:20",
   ]);
 });
 

@@ -128,6 +128,7 @@ export function EmployeeItemsTabPanels({
             stateUrlPath="/items"
             stateUrlParams={{ tab: status === "active" ? undefined : status }}
             locations={locations}
+            showSummary
           />
         ) : null}
       </div>

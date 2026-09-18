@@ -98,7 +98,7 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
     );
     if (actor.role === "employee") {
       clauses.push(
-        `(r.primary_responsible_id = $${actorIdIndex} or period.responsible_user_id = $${actorIdIndex})`,
+        `period.responsible_user_id = $${actorIdIndex}`,
       );
     }
     if (filters.status) add("request.status = ?", filters.status);

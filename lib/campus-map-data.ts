@@ -129,6 +129,7 @@ function toCampusItem(item: InventoryItemDto, buildingId: string): CampusItem {
     name: item.name,
     category: "ТМЦ",
     invNo: item.inventoryNumber,
+    photoUrl: item.photoUrl,
     status: campusStatus(item.status),
     lastInv: formatDate(item.updatedAt),
     responsible: item.responsible?.name ?? "Не назначен",
@@ -145,8 +146,9 @@ function campusStatus(status: InventoryItemDto["status"]): CampusStatus {
     case "maintenance":
       return "service";
     case "decommissioned":
+      return "decommissioned";
     case "decommissioned_in_use":
-      return "writeoff";
+      return "decommissioned_in_use";
     default:
       return "ok";
   }

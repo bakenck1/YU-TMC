@@ -32,6 +32,7 @@ test.describe.serial("critical production journeys", () => {
     try {
       await login(page, ownerEmail);
       await page.goto("/tmc/issue");
+      await page.getByRole("button", { name: "Сканировать штрих-код", exact: true }).click();
 
       const scanner = page.getByRole("dialog", { name: "Сканировать штрих-код" });
       await scanner.getByLabel("Или введите код вручную").fill(inventoryNumber);

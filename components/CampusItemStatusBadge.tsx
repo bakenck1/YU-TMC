@@ -16,6 +16,8 @@ const STATUS_KEYS: Record<CampusStatus, { compact: TranslationKey; card: Transla
   check: { compact: "map.status.check", card: "map.statusCard.check" },
   service: { compact: "map.status.service", card: "map.statusCard.service" },
   writeoff: { compact: "map.status.writeoff", card: "map.statusCard.writeoff" },
+  decommissioned: { compact: "status.decommissioned", card: "status.decommissioned" },
+  decommissioned_in_use: { compact: "status.decommissioned_in_use", card: "status.decommissioned_in_use" },
 };
 
 export default function CampusItemStatusBadge({ status, variant = "compact" }: CampusItemStatusBadgeProps) {

@@ -55,6 +55,7 @@ interface RoomRow extends QueryResultRow {
   floor_label: string | null;
   primary_responsible_id: string | null;
   primary_responsible_name: string | null;
+  access_mode: RoomRecord["accessMode"];
   qr_code: string;
   status: RoomRecord["status"];
   version: number;
@@ -231,6 +232,35 @@ class PostgresInventoryLocationRepository
     return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomsPerBuilding).map(mapRoom);
   }
 
+  async listRoomsAssignedTo(buildingId: string, userId: string): Promise<RoomRecord[]> {
+    const result = await this.source.query<RoomRow>(
+      roomSelect(
+        `where r.building_id = $1 and r.status = 'active'
+           and (
+             exists (
+               select 1 from ${ITEMS} assigned_item
+               join "yu_inventory"."responsibility_periods" assigned_period
+                 on assigned_period.item_id = assigned_item.id
+                and assigned_period.ended_at is null
+              where assigned_item.room_id = r.id
+                and assigned_item.archived_at is null
+                and assigned_item.item_section = 'general'
+                and assigned_period.responsible_user_id = $2
+             )
+             or exists (
+               select 1 from "yu_inventory"."local_item_groups" assigned_group
+              where assigned_group.room_id = r.id
+                and assigned_group.status = 'active'
+                and assigned_group.responsible_user_id = $2
+             )
+           )`,
+        sqlCollectionLimit(COLLECTION_LIMITS.roomsPerBuilding),
+      ),
+      [buildingId, userId],
+    );
+    return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomsPerBuilding).map(mapRoom);
+  }
+
   async findRoomById(id: string): Promise<RoomRecord | null> {
     const result = await this.source.query<RoomRow>(
       roomSelect("where r.id = $1"),
@@ -255,9 +285,9 @@ class PostgresInventoryLocationRepository
     const result = await this.source.query<RoomRow>(
       `insert into ${ROOMS} as room
          (id, building_id, designation, designation_key, floor_number,
-          floor_label, primary_responsible_id, created_by, updated_by,
+          floor_label, primary_responsible_id, access_mode, created_by, updated_by,
           created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $9)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $10)
        returning room.*, ''::text as qr_code,
          (select responsible.full_name
             from ${USERS} responsible
@@ -271,6 +301,7 @@ class PostgresInventoryLocationRepository
         input.floorNumber,
         input.floorLabel,
         input.primaryResponsibleId,
+        input.accessMode,
         input.actorId,
         input.occurredAt,
       ],
@@ -286,10 +317,11 @@ class PostgresInventoryLocationRepository
            floor_number = $4,
            floor_label = $5,
            primary_responsible_id = $6,
-           updated_by = $7,
-           updated_at = $8,
+           access_mode = coalesce($7::varchar, room.access_mode),
+           updated_by = $8,
+           updated_at = $9,
            version = version + 1
-       where room.id = $1 and room.version = $9 and room.status = 'active'
+       where room.id = $1 and room.version = $10 and room.status = 'active'
        returning room.*, ''::text as qr_code,
          (select responsible.full_name
             from ${USERS} responsible
@@ -302,10 +334,25 @@ class PostgresInventoryLocationRepository
         input.floorNumber,
         input.floorLabel,
         input.primaryResponsibleId,
+        input.accessMode,
         input.actorId,
         input.occurredAt,
         input.expectedVersion,
       ],
+    );
+    return result.rows[0] ? mapRoom(result.rows[0]) : null;
+  }
+
+  async updateRoomAccess(input: import("@/lib/application/ports/inventory-location-repositories").UpdateRoomAccessRecord): Promise<RoomRecord | null> {
+    const result = await this.source.query<RoomRow>(
+      `update ${ROOMS} as room
+          set access_mode = $2, updated_by = $3, updated_at = $4,
+              version = version + 1
+        where room.id = $1 and room.version = $5 and room.status = 'active'
+        returning room.*, ''::text as qr_code,
+          (select responsible.full_name from ${USERS} responsible
+            where responsible.id = room.primary_responsible_id) as primary_responsible_name`,
+      [input.id, input.accessMode, input.actorId, input.occurredAt, input.expectedVersion],
     );
     return result.rows[0] ? mapRoom(result.rows[0]) : null;
   }
@@ -399,7 +446,7 @@ function mapBuilding(row: BuildingRow): BuildingRecord {
 function roomSelect(whereClause: string, limitClause = "") {
   return `
     select r.id, r.building_id, r.designation, r.designation_key,
-           r.floor_number, r.floor_label, r.status, r.version,
+           r.floor_number, r.floor_label, r.access_mode, r.status, r.version,
            r.created_at, r.updated_at,
            coalesce(q.original_value, '') as qr_code,
            r.primary_responsible_id,
@@ -429,6 +476,7 @@ function mapRoom(row: RoomRow): RoomRecord {
     floorLabel: row.floor_label,
     primaryResponsibleId: row.primary_responsible_id,
     primaryResponsibleName: row.primary_responsible_name,
+    accessMode: row.access_mode,
     qrCode: row.qr_code,
     status: row.status,
     version: row.version,

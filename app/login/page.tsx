@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import AuthPageFrame from "@/components/AuthPageFrame";
 import LoginForm from "@/components/LoginForm";
-import { isSafeReturnPath } from "@/lib/security/authorization";
-import { defaultPathForRole } from "@/lib/security/authorization";
+import {
+  canAccessPath,
+  defaultPathForRole,
+  isSafeReturnPath,
+} from "@/lib/security/authorization";
 import { isPasswordLoginConfigured } from "@/lib/security/credentials";
 import { isGoogleSsoConfigured } from "@/lib/security/google-sso";
 import { automaticYessenovLoginTarget } from "@/lib/security/login-entry";
@@ -27,12 +30,6 @@ export default async function LoginPage({
     manual?: string | string[];
   }>;
 }) {
-  const cookieStore = await cookies();
-  const currentUser = await resolvePageUser(
-    cookieStore.get(SESSION_COOKIE_NAME)?.value,
-  );
-  if (currentUser) redirect(defaultPathForRole(currentUser.role));
-
   const resolvedSearchParams = await searchParams;
   const requestedReturnTo = resolvedSearchParams.returnTo;
   const returnTo =
@@ -40,6 +37,17 @@ export default async function LoginPage({
     isSafeReturnPath(requestedReturnTo)
       ? requestedReturnTo
       : undefined;
+  const cookieStore = await cookies();
+  const currentUser = await resolvePageUser(
+    cookieStore.get(SESSION_COOKIE_NAME)?.value,
+  );
+  if (currentUser) {
+    redirect(
+      returnTo && canAccessPath(currentUser.role, returnTo)
+        ? returnTo
+        : defaultPathForRole(currentUser.role),
+    );
+  }
   const ssoError =
     typeof resolvedSearchParams.error === "string"
       ? resolvedSearchParams.error

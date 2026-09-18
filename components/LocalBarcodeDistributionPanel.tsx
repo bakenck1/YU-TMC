@@ -416,7 +416,7 @@ export default function LocalBarcodeDistributionPanel({
             ) : (
               <TmcUserPicker
                 value={recipient}
-                employeeOnly
+                responsibleOnly
                 onChange={(value) => {
                   setRecipient(value);
                   attemptKey.current = null;

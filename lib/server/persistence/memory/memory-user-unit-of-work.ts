@@ -84,7 +84,7 @@ class MemoryUserRepository implements UserRepository {
 
   async searchActiveRecipients(
     query: string,
-    excludeUserId: string,
+    excludeUserId: string | null,
     limit: number,
   ) {
     return searchEligibleTmcRecipients(

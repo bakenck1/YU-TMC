@@ -30,6 +30,7 @@ interface RoomRow extends QueryResultRow {
   floor_label: string | null;
   primary_responsible_id: string | null;
   primary_responsible_name: string | null;
+  access_mode: RoomWorkspaceRecord["accessMode"];
 }
 
 interface ItemRow extends QueryResultRow {
@@ -41,6 +42,7 @@ interface ItemRow extends QueryResultRow {
   condition: RoomWorkspaceItemRecord["condition"];
   connection_status: RoomWorkspaceItemRecord["connectionStatus"];
   responsible_name: string | null;
+  responsible_user_id: string | null;
   has_photo: boolean;
   created_at: Date;
 }
@@ -75,9 +77,10 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
   }
 
   async listRoomItems(roomId: string): Promise<RoomWorkspaceItemRecord[]> {
-    const result = await this.source.query<ItemRow>(
-      `select i.id, i.name, i.inventory_number, i.description, i.status,
+    const [result, localResult] = await Promise.all([
+      this.source.query<ItemRow>(`select i.id, i.name, i.inventory_number, i.description, i.status,
               i.condition, i.connection_status, responsible.full_name as responsible_name,
+              period.responsible_user_id,
               exists(
                 select 1 from ${PHOTOS} photo
                  where photo.item_id = i.id and photo.purpose = 'item'
@@ -98,8 +101,27 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
         order by i.name, i.inventory_number
         ${sqlCollectionLimit(COLLECTION_LIMITS.roomWorkspaceItems)}`,
       [roomId],
-    );
-    return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomWorkspaceItems).map((row) => ({
+      ),
+      this.source.query<ItemRow>(`select g.id, i.name, g.barcode_value as inventory_number,
+              i.description, i.status, i.condition, i.connection_status,
+              responsible.full_name as responsible_name, g.responsible_user_id,
+              exists(
+                select 1 from ${PHOTOS} photo
+                 where photo.item_id = i.id and photo.purpose = 'item'
+                   and photo.status = 'attached'
+              ) as has_photo,
+              g.created_at
+         from "yu_inventory"."local_item_groups" g
+         join ${ITEMS} i on i.id = g.item_id
+         join ${USERS} responsible on responsible.id = g.responsible_user_id
+        where g.room_id = $1 and g.status = 'active'
+          and i.item_section = 'general'
+        order by i.name, g.barcode_value
+        ${sqlCollectionLimit(COLLECTION_LIMITS.roomWorkspaceItems)}`,
+      [roomId],
+      ),
+    ]);
+    const regular = result.rows.map((row) => ({
       id: row.id,
       name: row.name,
       inventoryNumber: row.inventory_number,
@@ -108,15 +130,39 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
       condition: row.condition,
       connectionStatus: row.connection_status,
       responsibleName: row.responsible_name,
+      responsibleUserId: row.responsible_user_id,
       hasPhoto: row.has_photo,
       createdAt: new Date(row.created_at),
+      href: `/items/${row.id}`,
     }));
+    const local = localResult.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      inventoryNumber: row.inventory_number,
+      description: row.description,
+      status: row.status,
+      condition: row.condition,
+      connectionStatus: row.connection_status,
+      responsibleName: row.responsible_name,
+      responsibleUserId: row.responsible_user_id,
+      hasPhoto: row.has_photo,
+      createdAt: new Date(row.created_at),
+      href: `/local-barcodes/${row.id}`,
+    }));
+    return assertCollectionSize(
+      [...regular, ...local].sort((left, right) =>
+        left.name.localeCompare(right.name, "ru") ||
+        left.inventoryNumber.localeCompare(right.inventoryNumber, "ru"),
+      ),
+      COLLECTION_LIMITS.roomWorkspaceItems,
+    );
   }
 }
 
 function roomSelect(joinAndWhere: string) {
   return `select r.id, r.designation, b.name as building_name,
                  r.floor_number, r.floor_label, r.primary_responsible_id,
+                 r.access_mode,
                  responsible.full_name as primary_responsible_name
             from ${ROOMS} r
             join ${BUILDINGS} b on b.id = r.building_id
@@ -134,5 +180,6 @@ function mapRoom(row: RoomRow): RoomWorkspaceRecord {
     floorLabel: row.floor_label,
     primaryResponsibleId: row.primary_responsible_id,
     primaryResponsibleName: row.primary_responsible_name,
+    accessMode: row.access_mode,
   };
 }

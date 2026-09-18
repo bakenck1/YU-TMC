@@ -1,7 +1,6 @@
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
-import InventorySummaryAccordions from "@/components/InventorySummaryAccordions";
 import Wrapper from "@/components/Wrapper";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
@@ -69,7 +68,6 @@ export default async function ItemsPage({
 
   return (
     <Wrapper direction="column" gap="md">
-      <InventorySummaryAccordions items={items} />
       {user.role === "employee" ? (
         <EmployeeItemsTabs
           items={items}
@@ -102,6 +100,7 @@ export default async function ItemsPage({
           initialViewState={initialViewState}
           stateUrlPath="/items"
           invoiceActions
+          showSummary
         />
       )}
     </Wrapper>

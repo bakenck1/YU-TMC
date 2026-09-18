@@ -373,6 +373,36 @@ test("a scanned-item claim goes to the current owner and acceptance assigns the 
   assert.equal(harness.repository.decisionCalls[0]?.recipientId, ACTOR.userId);
 });
 
+test("administrators and warehouse users can request an occupied scanned item for themselves", async () => {
+  for (const role of ["admin", "warehouse"] as const) {
+    const itemId = role === "admin" ? uuid(41) : uuid(42);
+    const actorId = role === "admin" ? uuid(71) : uuid(72);
+    const currentOwner = user({ id: RECIPIENT_ID, fullName: "Current Owner" });
+    const claimCandidate = candidate(itemId, { responsibleUser: currentOwner });
+    const harness = createHarness({
+      actors: [user({ id: actorId, role })],
+      candidates: [claimCandidate],
+    });
+    harness.repository.aggregate = requestRecord([claimCandidate], {
+      initiator: operationUser(actorId, role),
+      recipient: operationUser(currentOwner.id),
+    });
+
+    const created = await harness.service.create(
+      {
+        recipientId: currentOwner.id,
+        itemIds: [itemId],
+        requestKind: "claim",
+      },
+      { userId: actorId, role },
+    );
+
+    assert.equal(created.included, 1, role);
+    assert.equal(created.request?.initiator.id, actorId, role);
+    assert.equal(created.request?.recipient.id, currentOwner.id, role);
+  }
+});
+
 test("an administrator immediately assigns grouped items and notifies the new responsible user", async () => {
   const admin = { userId: uuid(70), role: "admin" as const };
   const itemIds = [uuid(1), uuid(2)];
@@ -627,21 +657,23 @@ test("uses one neutral item outcome for missing, foreign, and inaccessible items
 test("classifies a mixed batch with deterministic precedence and input order", async () => {
   const ids = Array.from({ length: 7 }, (_, index) => uuid(index + 1));
   const valid = candidate(ids[0]!);
+  const maintenance = candidate(ids[2]!, { itemStatus: "maintenance" });
+  const unassignedMaintenance = candidate(ids[4]!, {
+    itemStatus: "maintenance",
+    responsibilityPeriodId: null,
+    responsibleUser: null,
+  });
   const harness = createHarness({
     candidates: [
       candidate(ids[5]!, { responsibleUser: user({ id: RECIPIENT_ID }) }),
-      candidate(ids[2]!, { itemStatus: "maintenance" }),
+      maintenance,
       candidate(ids[0]!),
-      candidate(ids[4]!, {
-        itemStatus: "maintenance",
-        responsibilityPeriodId: null,
-        responsibleUser: null,
-      }),
+      unassignedMaintenance,
       candidate(ids[3]!, { archivedAt: NOW }),
       candidate(ids[6]!, { hasActiveTransfer: true }),
     ],
   });
-  harness.repository.aggregate = requestRecord([valid]);
+  harness.repository.aggregate = requestRecord([valid, maintenance]);
 
   const result = await harness.service.create(
     {
@@ -652,8 +684,8 @@ test("classifies a mixed batch with deterministic precedence and input order", a
   );
 
   assert.equal(result.total, 8);
-  assert.equal(result.included, 1);
-  assert.equal(result.problems, 7);
+  assert.equal(result.included, 2);
+  assert.equal(result.problems, 6);
   assert.deepEqual(
     result.items.map((item) =>
       item.outcome === "problem" ? [item.itemId, item.problem] : [item.itemId, item.outcome]
@@ -661,7 +693,7 @@ test("classifies a mixed batch with deterministic precedence and input order", a
     [
       [ids[0], "included"],
       [ids[1], "item_unavailable"],
-      [ids[2], "item_inactive"],
+      [ids[2], "included"],
       [ids[3], "item_inactive"],
       [ids[4], "item_unavailable"],
       [ids[5], "item_unavailable"],
@@ -669,7 +701,7 @@ test("classifies a mixed batch with deterministic precedence and input order", a
       [ids[0], "duplicate_item"],
     ],
   );
-  assert.equal(harness.repository.insertedItems.length, 1);
+  assert.equal(harness.repository.insertedItems.length, 2);
 });
 
 test("does not create a parent when every item is problematic", async () => {

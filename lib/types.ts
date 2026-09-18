@@ -6,6 +6,8 @@ export interface InventoryItem {
   id: string;
   /** A locally distributed portion; it opens its local-barcode card. */
   localGroupId?: string;
+  /** Original inventory item backing a local barcode group. */
+  sourceItemId?: string;
   name: string;
   inventoryNumber: string;
   oneCCode?: string;

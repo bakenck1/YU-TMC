@@ -81,7 +81,7 @@ export class InventoryItemCommentService {
     const records = await this.unitOfWork.transaction(async ({ items }) => {
       const item = await items.findItemById(normalizedId);
       if (!item) throw itemNotFound();
-      assertItemReadable(item, actor);
+      assertItemWritable(item, actor);
       await items.appendAudit({
         id: commentId,
         actorId: actor.userId,
@@ -144,11 +144,17 @@ function assertItemReadable(item: InventoryItemRecord, actor: AuthorizationActor
     !(
       hasPermission(actor.role, "inventory.item.read_assigned") &&
       (item.responsibleId === actor.userId ||
-        item.roomResponsibleId === actor.userId)
+        item.roomAccessMode === "open")
     )
   ) {
     throw itemNotFound();
   }
+}
+
+function assertItemWritable(item: InventoryItemRecord, actor: AuthorizationActor) {
+  if (actor.role === "admin") return;
+  if (actor.role === "employee" && item.responsibleId === actor.userId) return;
+  throw itemNotFound();
 }
 
 function requirePermission(

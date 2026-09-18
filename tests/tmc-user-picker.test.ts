@@ -77,6 +77,14 @@ test("UserService delegates to a bounded recipient directory that excludes delet
   }), [
     { id: uuid(2), fullName: "Active Ali", email: "active@example.com", role: "employee" },
   ]);
+  assert.deepEqual(await service.searchTmcRecipients("ALI", {
+    userId: ACTOR_ID,
+    role: "employee",
+    sessionVersion: 1,
+  }, { includeSelf: true }), [
+    { id: uuid(2), fullName: "Active Ali", email: "active@example.com", role: "employee" },
+    { id: ACTOR_ID, fullName: "Self Ali", email: "self@example.com", role: "employee" },
+  ]);
 });
 
 test("PostgreSQL recipient directory selects only safe columns with bounded parameters", async () => {
@@ -99,7 +107,7 @@ test("PostgreSQL recipient directory selects only safe columns with bounded para
   assert.match(queries[0].text, /select id, full_name, email, role/i);
   assert.match(queries[0].text, /is_active = true/i);
   assert.match(queries[0].text, /deleted_at is null/i);
-  assert.match(queries[0].text, /id <> \$2/i);
+  assert.match(queries[0].text, /\$2::uuid is null or id <> \$2::uuid/i);
   assert.match(queries[0].text, /limit \$3/i);
   assert.deepEqual(queries[0].values, ["ali", ACTOR_ID, 20]);
 });
@@ -198,6 +206,7 @@ test("picker is controlled, accessible, mobile-safe and absent from receive", ()
   assert.match(picker, /maxLength=\{TMC_RECIPIENT_QUERY_MAX_LENGTH\}/);
   assert.match(picker, /value\.email/);
   assert.match(picker, /ROLE_LABEL_KEYS\[value\.role\]/);
+  assert.match(picker, /isInventoryResponsibleRole\(user\.role\)/);
   assert.doesNotMatch(picker, /dangerouslySetInnerHTML/);
 
   assert.match(flow, /operation\.id !== "receive"/);

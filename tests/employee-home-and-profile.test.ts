@@ -13,7 +13,7 @@ test("the employee home keeps the assigned-item map without embedding the transf
   assert.doesNotMatch(dashboard, /Передача ТМЦ/);
 });
 
-test("every authenticated role has a profile route and a profile navigation entry", () => {
+test("every authenticated role keeps the profile route while navigation uses only the header avatar", () => {
   const page = readFileSync("app/(protected)/profile/page.tsx", "utf8");
   const profile = [
     "components/UserProfileCard.tsx",
@@ -26,6 +26,7 @@ test("every authenticated role has a profile route and a profile navigation entr
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
   const authorization = readFileSync("lib/security/authorization.ts", "utf8");
+  const header = readFileSync("components/Header.tsx", "utf8");
 
   assert.match(page, /requireAuthorizedPage\("\/profile"\)/);
   assert.match(page, /getProfile/);
@@ -36,6 +37,7 @@ test("every authenticated role has a profile route and a profile navigation entr
   assert.match(profile, /USER_PROFILE_ROLE_COPY/);
   assert.match(profile, /bg-gradient-to-br/);
   assert.match(profile, /profile\.emailVerified/);
-  assert.match(sidebar, /\/profile/);
+  assert.doesNotMatch(sidebar, /\/profile/);
+  assert.match(header, /href="\/profile"/);
   assert.match(authorization, /\["\/profile", "legacy\.dashboard\.read"\]/);
 });

@@ -19,6 +19,9 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
   const preset = findCampusBuildingPreset(building.name);
   const floorNumbers = preset ? campusBuildingFloorNumbers(preset) : [1];
   const [floorNumber, setFloorNumber] = useState(String(room?.floorNumber ?? 1));
+  const [accessMode, setAccessMode] = useState<"open" | "closed">(
+    room?.accessMode ?? "open",
+  );
   const [responsible, setResponsible] = useState<{ id: string; fullName: string } | null>(
     room?.primaryResponsible
       ? { id: room.primaryResponsible.id, fullName: room.primaryResponsible.name }
@@ -37,7 +40,7 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
     if (saving || !canSubmit) return;
     setSaving(true); setError(null);
     try {
-      const response = await fetch(room ? `/api/inventory/rooms/${encodeURIComponent(room.id)}` : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`, { method: room ? "PATCH" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ designation: designation.trim(), floorNumber: selectedFloor, floorLabel: null, primaryResponsibleId: responsible?.id ?? null, ...(room ? { version: room.version } : {}) }) });
+      const response = await fetch(room ? `/api/inventory/rooms/${encodeURIComponent(room.id)}` : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`, { method: room ? "PATCH" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ designation: designation.trim(), floorNumber: selectedFloor, floorLabel: null, primaryResponsibleId: responsible?.id ?? null, accessMode, ...(room ? { version: room.version } : {}) }) });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok || !body || typeof body !== "object" || !("room" in body)) { setError(t("inventory.saveFailed")); return; }
       onSave((body as { room: RoomDto }).room);
@@ -50,8 +53,9 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
         <div className="flex items-center justify-between"><h2 id="room-form-title" className="text-lg font-semibold text-zinc-900">{room ? t("inventory.editRoom") : t("inventory.createRoom")}</h2><IconButton label={t("common.close")} icon={X} onClick={onClose} disabled={saving} size="sm" /></div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <TextField label={t("inventory.roomDesignation")} value={designation} onChange={(event) => setDesignation(event.target.value)} maxLength={80} required />
-          <div className="sm:col-span-2"><TmcUserPicker value={responsible} onChange={(user) => setResponsible(user)} employeeOnly label={t("room.responsible")} /></div>
+          <div className="sm:col-span-2"><TmcUserPicker value={responsible} onChange={(user) => setResponsible(user)} responsibleOnly includeCurrentUser label={t("room.responsible")} /></div>
           <SelectField label={t("inventory.floor")} fieldSize="lg" value={floorNumber} onChange={(event) => setFloorNumber(event.target.value)} required options={floorNumbers.map((value) => ({ value, label: `${value} ${t("inventory.floorShort")}` }))} />
+          <SelectField label={t("room.accessLabel")} fieldSize="lg" value={accessMode} onChange={(event) => setAccessMode(event.target.value as "open" | "closed")} required options={[{ value: "open", label: t("room.accessOpen") }, { value: "closed", label: t("room.accessClosedOption") }]} />
         </div>
         {error ? <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
         <div className="mt-6 grid grid-cols-2 gap-3"><Button onClick={onClose} disabled={saving} fullWidth>{t("common.cancel")}</Button><Button type="submit" variant="primary" disabled={!canSubmit} loading={saving} fullWidth>{saving ? t("inventory.saving") : t("common.save")}</Button></div>

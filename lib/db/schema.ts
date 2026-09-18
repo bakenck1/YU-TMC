@@ -611,6 +611,7 @@ export const roomsTable = inventorySchema.table(
       onDelete: "restrict",
       onUpdate: "restrict",
     }),
+    accessMode: varchar({ length: 16 }).notNull().default("open"),
     status: recordStatusEnum().notNull().default("active"),
     createdBy: uuid()
       .notNull()
@@ -646,6 +647,10 @@ export const roomsTable = inventorySchema.table(
     check(
       "rooms_floor_number_check",
       sql`${table.floorNumber} BETWEEN -5 AND 200`,
+    ),
+    check(
+      "rooms_access_mode_check",
+      sql`${table.accessMode} in ('open', 'closed')`,
     ),
     check(
       "rooms_archive_state_check",
@@ -855,9 +860,6 @@ export const itemsTable = inventorySchema.table(
       )`,
     ),
     check("items_version_check", sql`${table.version} > 0`),
-    uniqueIndex("items_inventory_number_key_unique").on(
-      table.inventoryNumberKey,
-    ),
     index("items_room_status_idx").on(table.roomId, table.status),
     index("items_status_idx").on(table.status),
     index("items_section_status_idx").on(table.itemSection, table.status),
@@ -1038,9 +1040,6 @@ export const itemInventoryNumberHistoryTable = inventorySchema.table(
       table.assignedAt,
     ),
     index("item_inventory_number_history_key_idx").on(table.comparisonKey),
-    uniqueIndex("item_inventory_number_history_key_unique").on(
-      table.comparisonKey,
-    ),
     uniqueIndex("item_inventory_number_history_open_item_unique")
       .on(table.itemId)
       .where(sql`${table.replacedAt} IS NULL`),
@@ -1198,7 +1197,7 @@ export const itemNetworkAddressesTable = inventorySchema.table(
 export const barcodeRegistryTable = inventorySchema.table(
   "barcode_registry",
   {
-    canonicalKey: text().primaryKey(),
+    canonicalKey: text().notNull(),
     originalValue: varchar({ length: 128 }).notNull(),
     kind: varchar({ length: 16 }).notNull(),
     itemId: uuid()
@@ -1216,6 +1215,10 @@ export const barcodeRegistryTable = inventorySchema.table(
       .defaultNow(),
   },
   (table) => [
+    primaryKey({
+      name: "barcode_registry_pk",
+      columns: [table.canonicalKey, table.itemId],
+    }),
     check(
       "barcode_registry_values_check",
       sql`btrim(${table.canonicalKey}) <> ''
@@ -1225,6 +1228,7 @@ export const barcodeRegistryTable = inventorySchema.table(
             OR (${table.kind} = 'local' AND ${table.localGroupId} IS NOT NULL))`,
     ),
     index("barcode_registry_item_idx").on(table.itemId),
+    index("barcode_registry_key_idx").on(table.canonicalKey),
   ],
 );
 

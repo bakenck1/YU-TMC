@@ -56,6 +56,9 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
   const hasExactRoom = Boolean(room) && items.some((item) =>
     normalizeFilterText(item.room ?? item.location.split("/").at(-1)) === room,
   );
+  const hasExactResponsible = Boolean(responsible) && items.some((item) =>
+    normalizeFilterText(item.responsible) === responsible,
+  );
   return items.filter((item) => {
     const matchesQuery =
       !query ||
@@ -85,7 +88,9 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
           normalizeFilterText(item.name).includes(itemType) ||
           normalizeFilterText(item.itemType ?? item.category).includes(itemType)) &&
         (!building || (hasExactBuilding ? itemBuilding === building : itemBuilding.includes(building))) &&
-        (!responsible || normalizeFilterText(item.responsible).includes(responsible)) &&
+        (!responsible || (hasExactResponsible
+          ? normalizeFilterText(item.responsible) === responsible
+          : normalizeFilterText(item.responsible).includes(responsible))) &&
         matchesStatusFilter(item, filters.statusKey),
     );
   });

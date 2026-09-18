@@ -234,13 +234,37 @@ test("assigned override canonicalizes IDs/reason and binds SQL CAS, responsibili
   assert.deepEqual(harness.transactionOptions, [{ isolation: "serializable", maxAttempts: 3 }]);
 });
 
-test("override permits only active non-deleted employee targets and rejects the live owner", async () => {
+test("override permits active administrator and warehouse targets and rejects unavailable users", async () => {
+  const administratorTarget = createHarness({
+    findAuthorizationUserForUpdate: async (id) =>
+      id === ADMIN_ID
+        ? authorizationUser(ADMIN_ID, "admin", 7)
+        : authorizationUser(TARGET_ID, "admin", 3),
+  });
+  await administratorTarget.service.overrideTransfer(
+    TRANSFER_ID,
+    assignedInput(),
+    ACTOR,
+  );
+  assert.equal(administratorTarget.overrideInputs.length, 1);
+
+  const warehouseTarget = createHarness({
+    findAuthorizationUserForUpdate: async (id) =>
+      id === ADMIN_ID
+        ? authorizationUser(ADMIN_ID, "admin", 7)
+        : authorizationUser(TARGET_ID, "warehouse", 3),
+  });
+  await warehouseTarget.service.overrideTransfer(
+    TRANSFER_ID,
+    assignedInput(),
+    ACTOR,
+  );
+  assert.equal(warehouseTarget.overrideInputs.length, 1);
+
   const deniedTargets = [
     null,
     authorizationUser(TARGET_ID, "employee", 3, { active: false }),
     authorizationUser(TARGET_ID, "employee", 3, { deletedAt: new Date() }),
-    authorizationUser(TARGET_ID, "admin", 3),
-    authorizationUser(TARGET_ID, "warehouse", 3),
   ];
   for (const target of deniedTargets) {
     const harness = createHarness({

@@ -14,14 +14,15 @@ test("a room QR web link resolves to the stored opaque identifier", () => {
   if (result.ok) assert.equal(result.canonicalKey, token);
 });
 
-test("public room QR rendering exposes only the designation before login", () => {
+test("public room QR rendering requires login without exposing room metadata", () => {
   const page = read("app/rooms/qr/[token]/page.tsx");
   const contract = read("lib/contracts/room-workspace.ts");
   assert.match(page, /findPublicByQr/);
   assert.match(page, /findByQr\(token, authorizationActor\(user\)\)/);
   assert.match(page, /returnTo/);
-  assert.match(contract, /interface PublicRoomDto \{\s*designation: string;\s*\}/);
-  assert.doesNotMatch(contract.match(/interface PublicRoomDto[\s\S]*?\}/)?.[0] ?? "", /responsible|items/);
+  const publicContract = contract.match(/interface PublicRoomDto[\s\S]*?\}/)?.[0] ?? "";
+  assert.match(publicContract, /access: "authentication_required"/);
+  assert.doesNotMatch(publicContract, /designation|responsible|items/);
 });
 
 test("service requests have required photos, bounded types, statuses and admin-only transitions", () => {

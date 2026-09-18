@@ -58,14 +58,18 @@ export default async function ItemPage({
       user.role,
       "inventory.item.manage_components",
     );
-    const canComment = hasPermission(user.role, "inventory.item.comment");
-    const [components, operations, comments, localDistribution] = await readHiddenPageResource(
+    const ownsItem = item.responsible?.id === user.userId;
+    const canMutateAsEmployee = user.role !== "employee" || ownsItem;
+    const canComment = canMutateAsEmployee && hasPermission(user.role, "inventory.item.comment");
+    const [components, operations, comments, localGroups] = await readHiddenPageResource(
       () =>
         Promise.all([
           services.items.listComponents(id, actor),
           services.items.listOperations(id, actor),
           services.items.listComments(id, actor),
-          services.localBarcodes.getDistribution(id, actor),
+          user.role !== "employee" || ownsItem
+            ? services.localBarcodes.getDistribution(id, actor).then((value) => value.groups)
+            : Promise.resolve([]),
         ]),
       notFound,
     );
@@ -90,7 +94,7 @@ export default async function ItemPage({
         initialItem={item}
         canEditContent={canEditContent}
         initialEditing={canEditContent && requestedEditor === "content"}
-        canSendToService={hasPermission(user.role, "inventory.item.send_to_service")}
+        canSendToService={canMutateAsEmployee && hasPermission(user.role, "inventory.item.send_to_service")}
         requiresServicePhoto
         canManageCode={hasPermission(user.role, "inventory.qr.manage")}
         operations={operations}
@@ -99,13 +103,13 @@ export default async function ItemPage({
         canManageProtected={canManageProtected}
         rooms={rooms}
         initialComponents={components}
-        localGroups={localDistribution.groups}
+        localGroups={localGroups}
         canManageComponents={canManageComponents}
         actorId={user.userId}
         actorRole={user.role}
         returnHref={returnHref}
       />
-      {user.role === "admin" || user.role === "employee" ? (
+      {user.role === "admin" || (user.role === "employee" && ownsItem) ? (
         <Wrapper width="full" responsive={{ at: "md", display: "inline-flex", width: "auto" }}>
           <ProblemReportButton
             items={[{ id: item.id, name: item.name, inventoryNumber: item.inventoryNumber }]}

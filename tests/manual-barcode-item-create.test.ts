@@ -36,7 +36,7 @@ test("barcode input is optional, except components are always stored without one
   assert.match(form, /t\("createItem\.noRooms"\)/);
 });
 
-test("item creation service accepts a missing barcode", async () => {
+test("item creation keeps the material statement code only for supported categories", async () => {
   let inserted: InventoryItemRecord | undefined;
   const repositories = {
     items: {
@@ -77,7 +77,7 @@ test("item creation service accepts a missing barcode", async () => {
   );
   const input = {
     name: "Monitor",
-    itemType: "Equipment",
+    category: "electrical_equipment" as const,
     oneCCode: "00000001491",
     roomId: "11111111-1111-4111-8111-111111111111",
   };
@@ -88,6 +88,14 @@ test("item creation service accepts a missing barcode", async () => {
   assert.equal(inserted?.inventoryNumberKind, "temporary");
   assert.equal(inserted?.inventoryNumber, "unused");
   assert.equal(inserted?.oneCCode, "00000001491");
+
+  await service.createItem({
+    ...input,
+    name: "Office chair",
+    category: "furniture",
+    oneCCode: "MUST-NOT-BE-STORED",
+  }, actor);
+  assert.equal(inserted?.oneCCode, null);
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {

@@ -31,7 +31,10 @@ import type { TranslationKey } from "@/lib/i18n";
 import InventoryFilterInput from "./InventoryFilterInput";
 import InventoryThumbnail from "./InventoryThumbnail";
 import InventoryVisibleStatus from "./InventoryVisibleStatus";
+import InventorySummaryAccordions from "./InventorySummaryAccordions";
+import { isInventoryTransferAllowed } from "@/lib/inventory-transfer-eligibility";
 import { code39PayloadForItem } from "@/lib/domain/code39";
+import { needsUniqueItemBarcode } from "@/lib/inventory-number-pair-policy";
 import {
   inventoryItemCategoryTranslationKey,
 } from "@/lib/inventory-categories";
@@ -135,7 +138,11 @@ function categoryLabel(
 function barcodeValue(item: InventoryItem) {
   if (item.localGroupId) return item.inventoryNumber;
   if (isTemporaryBarcode(item.inventoryNumber)) return null;
-  return code39PayloadForItem(item.inventoryNumber, item.id);
+  return code39PayloadForItem(
+    item.inventoryNumber,
+    item.id,
+    needsUniqueItemBarcode(item.name),
+  );
 }
 
 function isTemporaryBarcode(value: string) {
@@ -213,6 +220,7 @@ export default function ItemsTable({
   stateUrlParams,
   itemReturnHref,
   variant = "general",
+  showSummary = false,
 }: {
   items: InventoryItem[];
   showFilters?: boolean;
@@ -243,6 +251,7 @@ export default function ItemsTable({
   /** Static fallback for tables whose own filters are not URL-managed. */
   itemReturnHref?: string;
   variant?: "general" | "it";
+  showSummary?: boolean;
 }) {
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
@@ -460,12 +469,18 @@ export default function ItemsTable({
     ? inventoryTableViewHref(stateUrlPath, viewState, stateUrlParams)
     : itemReturnHref;
 
-  const selectablePageItems = pageItems.filter((item) => invoiceActions || !item.localGroupId);
+  const issueMode = bulkActions?.variant === "issue";
+  const canSelectItem = (item: InventoryItem) =>
+    (!issueMode || isInventoryTransferAllowed(item.status)) &&
+    (invoiceActions || !item.localGroupId || issueMode);
+  const selectablePageItems = pageItems.filter(canSelectItem);
   const allVisibleSelected =
     selectablePageItems.length > 0 && selectablePageItems.every((item) => selected.has(item.id));
   const someVisibleSelected = selectablePageItems.some((item) => selected.has(item.id));
-  const selectedItems = items.filter((item) => selected.has(item.id));
-  const bulkSelectedItems = selectedItems.filter((item) => !item.localGroupId);
+  const selectedItems = items.filter((item) => selected.has(item.id) && canSelectItem(item));
+  const bulkSelectedItems = selectedItems.filter(
+    (item) => !item.localGroupId || issueMode,
+  );
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -506,6 +521,8 @@ export default function ItemsTable({
   }, [stateUrlPath]);
 
   function toggleItem(id: string) {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item || !canSelectItem(item)) return;
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -656,6 +673,7 @@ export default function ItemsTable({
       {variant === "it" ? (
         <h1 className="text-2xl font-semibold text-zinc-900">{t("it.title")}</h1>
       ) : null}
+      {showSummary ? <InventorySummaryAccordions items={filtered} /> : null}
       {excelDataset || itemCreation || invoiceActions ? (
         <div className="flex flex-col-reverse items-stretch justify-end gap-2.5 sm:flex-row sm:items-center">
           {invoiceActions ? (
@@ -886,10 +904,10 @@ export default function ItemsTable({
                   onClick={() => router.push(itemHref(item, listHref))}
                   className={`border-b border-black/5 last:border-0 hover:bg-zinc-50/80 cursor-pointer`}
                 >
-                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
+                  <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={!canSelectItem(item)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} title={!canSelectItem(item) ? t("tmc.issue.decommissionedBlocked") : undefined} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
                   {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
-                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></td> : null}
+                  {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link>{issueMode && !canSelectItem(item) ? <p className="mt-1 text-xs font-medium text-red-700">{t("tmc.issue.decommissionedBlocked")}</p> : null}</td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
                   {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
@@ -938,28 +956,31 @@ export default function ItemsTable({
             <article key={item.id} onClick={() => router.push(itemHref(item, listHref))} className="cursor-pointer rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex items-start gap-3">
                 <label onClick={(event) => event.stopPropagation()} className="-ml-2 -mt-2 inline-flex min-h-12 min-w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl active:bg-zinc-100">
-                  <input type="checkbox" disabled={Boolean(item.localGroupId) && !invoiceActions} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
+                  <input type="checkbox" disabled={!canSelectItem(item)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} title={!canSelectItem(item) ? t("tmc.issue.decommissionedBlocked") : undefined} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" />
                 </label>
-                {visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
+                {issueMode || visibleColumns.photo ? <InventoryThumbnail photo={item.photo} /> : null}
                 <div className="min-w-0 flex-1">
-                  {visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
+                  {issueMode || visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
                   {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{categoryLabel(item.category, t)}</p> : null}
                   {visibleColumns.brandModel ? <p className="mt-1 text-xs text-zinc-500">{item.brandModel ?? "—"}</p> : null}
-                  {visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item) ?? t("items.barcodeMissing")}</p> : null}
+                  {issueMode || visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item) ?? t("items.barcodeMissing")}</p> : null}
+                  {issueMode ? <p className="mt-1 text-xs font-medium text-zinc-600">{item.inventoryNumber}</p> : null}
                   {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "вЂ”"}</p> : null}
                 </div>
-                {visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} /> : null}
+                {issueMode || visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} /> : null}
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
-                {visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}
+                {issueMode || visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}
+                {issueMode ? <><dt className="text-zinc-400">{t("itemDetails.room")}</dt><dd className="text-right">{item.room || "—"}</dd></> : null}
                 {visibleColumns.ipAddress ? <><dt className="text-zinc-400">{t("it.ipAddress")}</dt><dd className="text-right"><NetworkAddressCell item={item} field="ipAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></dd></> : null}
                 {visibleColumns.macAddress ? <><dt className="text-zinc-400">{t("it.macAddress")}</dt><dd className="text-right"><NetworkAddressCell item={item} field="macAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></dd></> : null}
-                {visibleColumns.responsible ? <><dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd></> : null}
+                {issueMode || visibleColumns.responsible ? <><dt className="text-zinc-400">{t("items.responsible")}</dt><dd className="text-right">{item.responsible}</dd></> : null}
                 {visibleColumns.updatedAt ? <><dt className="text-zinc-400">{dateLabel ?? t("items.updated")}</dt><dd className="text-right">{item.updatedAt ?? "вЂ”"}</dd></> : null}
                 {visibleColumns.createdAt ? <><dt className="text-zinc-400">{t("items.createdAt")}</dt><dd className="text-right">{item.createdAt ?? "вЂ”"}</dd></> : null}
-                {visibleColumns.quantity ? <><dt className="text-zinc-400">{t("items.quantity")}</dt><dd className="text-right">{item.quantity ?? 1}</dd></> : null}
+                {issueMode || visibleColumns.quantity ? <><dt className="text-zinc-400">{t("items.quantity")}</dt><dd className="text-right">{item.quantity ?? 1}</dd></> : null}
                 {visibleColumns.price ? <><dt className="text-zinc-400">{t("items.price")}</dt><dd className="text-right">{(item.price ?? 0).toFixed(2)} {t("common.currency")}</dd></> : null}
               </dl>
+              {issueMode && !canSelectItem(item) ? <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{t("tmc.issue.decommissionedBlocked")}</p> : null}
             </article>
           );
         })}

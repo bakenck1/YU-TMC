@@ -282,6 +282,7 @@ function roomWorkspaceRecord(overrides: Partial<RoomWorkspaceRecord> = {}): Room
     floorLabel: "First floor",
     primaryResponsibleId: EMPLOYEE.userId,
     primaryResponsibleName: "Alice Employee",
+    accessMode: "open",
     ...overrides,
   };
 }
@@ -296,6 +297,7 @@ function roomItem(overrides: Partial<RoomWorkspaceItemRecord> = {}): RoomWorkspa
     condition: "good",
     connectionStatus: "connected",
     responsibleName: "Alice Employee",
+    responsibleUserId: EMPLOYEE.userId,
     hasPhoto: true,
     createdAt: FIXED_DATE,
     ...overrides,
@@ -318,27 +320,44 @@ function roomWorkspaceService(
 
 test("room workspace separates public, limited and full projections", async () => {
   const roomId = "11111111-1111-4111-8111-111111111111";
-  const service = roomWorkspaceService(roomWorkspaceRecord({ id: roomId }), [
+  const items = [
     roomItem(),
     roomItem({ id: "item-2", connectionStatus: "disconnected", hasPhoto: false }),
-  ]);
+  ];
+  const service = roomWorkspaceService(
+    roomWorkspaceRecord({ id: roomId, accessMode: "closed" }),
+    items,
+  );
 
-  assert.deepEqual(await service.findPublicByQr(QR_KEY), { designation: "101" });
+  assert.deepEqual(await service.findPublicByQr(QR_KEY), {
+    access: "authentication_required",
+  });
 
   const limited = await service.findById(roomId, {
     userId: "employee-2",
     role: "employee",
   });
-  assert.equal(limited.access, "limited");
+  assert.equal(limited.access, "denied");
   assert.deepEqual(limited.items, []);
   assert.equal("buildingName" in limited, false);
 
-  const full = await service.findByQr(QR_KEY, EMPLOYEE);
+  const ownerLimited = await service.findByQr(QR_KEY, EMPLOYEE);
+  assert.equal(ownerLimited.access, "limited");
+  assert.equal(ownerLimited.items.length, 2);
+
+  const full = await service.findByQr(QR_KEY, ADMIN);
   assert.equal(full.access, "full");
   assert.equal(full.itemCount, 2);
   assert.equal(full.connectedCount, 1);
   assert.equal(full.disconnectedCount, 1);
   assert.equal(full.items[0]?.photoUrl, "/api/inventory/items/item-1/photo");
+
+  const openForEmployee = await roomWorkspaceService(
+    roomWorkspaceRecord({ id: roomId, accessMode: "open" }),
+    items,
+  ).findById(roomId, { userId: "employee-2", role: "employee" });
+  assert.equal(openForEmployee.access, "full");
+  assert.equal(openForEmployee.items.length, 2);
 
   await assert.rejects(
     service.findById("not-a-uuid", EMPLOYEE),
@@ -373,6 +392,7 @@ function roomRecord(overrides: Partial<RoomRecord> = {}): RoomRecord {
     floorLabel: "First floor",
     primaryResponsibleId: EMPLOYEE.userId,
     primaryResponsibleName: "Alice Employee",
+    accessMode: "open",
     qrCode: QR_KEY,
     status: "active",
     version: 1,
@@ -449,6 +469,7 @@ test("location service covers successful building and room mutation workflows", 
       (() => {
         assert.equal(input.buildingId, "building-1");
         assert.equal(input.primaryResponsibleId, null);
+        assert.equal(input.accessMode, "open");
         return roomRecord({
           id: input.id,
           buildingId: input.buildingId,
@@ -457,6 +478,7 @@ test("location service covers successful building and room mutation workflows", 
           floorNumber: input.floorNumber,
           floorLabel: input.floorLabel,
           primaryResponsibleId: input.primaryResponsibleId,
+          accessMode: input.accessMode,
         });
       })(),
     insertRoomQr: async () => undefined,
@@ -547,6 +569,123 @@ test("location service maps compare-and-swap failures to version conflicts", asy
     ),
     rejectsWithCode("version_conflict"),
   );
+});
+
+test("room access mutation is admin-only, versioned and idempotent", async () => {
+  let current = roomRecord({
+    id: "11111111-1111-4111-8111-111111111111",
+    accessMode: "open",
+    version: 1,
+  });
+  let updateCalls = 0;
+  const audits: string[] = [];
+  const service = locationService({
+    findRoomByIdForUpdate: async () => current,
+    updateRoomAccess: async (input) => {
+      updateCalls += 1;
+      if (input.expectedVersion !== current.version) return null;
+      current = roomRecord({
+        ...current,
+        accessMode: input.accessMode,
+        version: current.version + 1,
+      });
+      return current;
+    },
+    appendAudit: async (input) => { audits.push(input.action); },
+  });
+
+  const closed = await service.updateRoomAccess(
+    current.id,
+    { accessMode: "closed", version: 1 },
+    ADMIN,
+  );
+  assert.equal(closed.accessMode, "closed");
+  assert.equal(closed.version, 2);
+  assert.equal(updateCalls, 1);
+  assert.deepEqual(audits, ["room.access_mode_updated"]);
+
+  const unchanged = await service.updateRoomAccess(
+    current.id,
+    { accessMode: "closed", version: 2 },
+    ADMIN,
+  );
+  assert.equal(unchanged.version, 2);
+  assert.equal(updateCalls, 1);
+  assert.equal(audits.length, 1);
+
+  await assert.rejects(
+    service.updateRoomAccess(current.id, { accessMode: "open", version: 1 }, ADMIN),
+    rejectsWithCode("version_conflict"),
+  );
+  for (const actor of [WAREHOUSE, EMPLOYEE]) {
+    await assert.rejects(
+      service.updateRoomAccess(current.id, { accessMode: "open", version: 2 }, actor),
+      rejectsWithCode("forbidden"),
+    );
+  }
+});
+
+test("bulk room access reports updated, unchanged and failed rooms separately", async () => {
+  const roomA = "11111111-1111-4111-8111-111111111111";
+  const roomB = "22222222-2222-4222-8222-222222222222";
+  const missing = "33333333-3333-4333-8333-333333333333";
+  const records = new Map<string, RoomRecord>([
+    [roomA, roomRecord({ id: roomA, accessMode: "open", version: 1 })],
+    [roomB, roomRecord({ id: roomB, accessMode: "closed", version: 2 })],
+  ]);
+  const service = locationService({
+    findRoomById: async (id) => records.get(id) ?? null,
+    findRoomByIdForUpdate: async (id) => records.get(id) ?? null,
+    updateRoomAccess: async (input) => {
+      const value = records.get(input.id);
+      if (!value || value.version !== input.expectedVersion) return null;
+      const updated = roomRecord({
+        ...value,
+        accessMode: input.accessMode,
+        version: value.version + 1,
+      });
+      records.set(input.id, updated);
+      return updated;
+    },
+    appendAudit: async () => undefined,
+  });
+
+  const result = await service.bulkUpdateRoomAccess({
+    accessMode: "closed",
+    rooms: [
+      { id: roomA, version: 1 },
+      { id: roomB, version: 2 },
+      { id: missing, version: 1 },
+    ],
+  }, ADMIN);
+
+  assert.deepEqual(result.results.map(({ id, status }) => ({ id, status })), [
+    { id: roomA, status: "updated" },
+    { id: roomB, status: "unchanged" },
+    { id: missing, status: "failed" },
+  ]);
+  assert.equal(result.results[2]?.status === "failed" && result.results[2].error, "room_not_found");
+});
+
+test("room creation accepts an explicit closed access mode", async () => {
+  let insertedAccessMode: string | undefined;
+  const service = locationService({
+    findBuildingByIdForUpdate: async () => building(),
+    insertRoom: async (input) => {
+      insertedAccessMode = input.accessMode;
+      return roomRecord({ id: input.id, accessMode: input.accessMode });
+    },
+    insertRoomQr: async () => undefined,
+    appendAudit: async () => undefined,
+  });
+
+  const created = await service.createRoom(
+    "building-1",
+    { designation: "202", floorNumber: 2, accessMode: "closed" },
+    ADMIN,
+  );
+  assert.equal(insertedAccessMode, "closed");
+  assert.equal(created.accessMode, "closed");
 });
 
 test("location service blocks unauthorized, stale and unsafe location mutations", async () => {

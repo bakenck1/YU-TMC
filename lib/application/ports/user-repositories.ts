@@ -91,7 +91,7 @@ export interface UserRepository {
   list(): Promise<UserRecord[]>;
   searchActiveRecipients(
     query: string,
-    excludeUserId: string,
+    excludeUserId: string | null,
     limit: number,
   ): Promise<UserDirectoryEntryRecord[]>;
   findById(id: string): Promise<UserRecord | null>;

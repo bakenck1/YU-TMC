@@ -5,7 +5,7 @@ import type {
 } from "@/lib/contracts/inventory-domain";
 
 export interface PublicRoomDto {
-  designation: string;
+  access: "authentication_required";
 }
 
 export interface RoomWorkspaceItemDto {
@@ -19,9 +19,10 @@ export interface RoomWorkspaceItemDto {
   responsibleName: string | null;
   photoUrl: string | null;
   createdAt: string;
+  href: string;
 }
 
-export interface RoomWorkspaceDto {
+export interface VisibleRoomWorkspaceDto {
   access: "full" | "limited";
   id: string;
   designation: string;
@@ -34,3 +35,10 @@ export interface RoomWorkspaceDto {
   disconnectedCount?: number;
   items: RoomWorkspaceItemDto[];
 }
+
+export interface DeniedRoomWorkspaceDto {
+  access: "denied";
+  items: [];
+}
+
+export type RoomWorkspaceDto = VisibleRoomWorkspaceDto | DeniedRoomWorkspaceDto;

@@ -98,7 +98,7 @@ class PostgresUserRepository implements UserRepository {
 
   async searchActiveRecipients(
     query: string,
-    excludeUserId: string,
+    excludeUserId: string | null,
     limit: number,
   ): Promise<UserDirectoryEntryRecord[]> {
     const boundedLimit = Math.max(1, Math.min(limit, 20));
@@ -107,7 +107,7 @@ class PostgresUserRepository implements UserRepository {
        from ${USERS}
        where is_active = true
          and deleted_at is null
-         and id <> $2
+         and ($2::uuid is null or id <> $2::uuid)
          and (
            position($1 in lower(full_name)) > 0
            or position($1 in lower(email)) > 0

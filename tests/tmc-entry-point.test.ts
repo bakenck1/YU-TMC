@@ -64,7 +64,7 @@ test("TMC entry route loads participant-scoped requests and the user's own items
   assert.match(page, /requireAuthorizedPage\(TMC_ENTRY_POINT\.href\)/);
   assert.match(page, /listHistory\(/);
   assert.match(page, /recipientId: user\.userId/);
-  assert.match(page, /responsibleId === user\.userId/);
+  assert.match(page, /responsible\?\.id === user\.userId/);
   assert.match(page, /<TmcLanding[\s\S]*incomingRequests=/);
   assert.match(landing, /t\(TMC_ENTRY_POINT\.labelKey\)/);
   assert.match(header, /"\/tmc": "tmc\.entryPoint"/);

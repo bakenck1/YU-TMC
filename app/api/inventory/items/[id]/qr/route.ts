@@ -9,6 +9,7 @@ import {
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { hasPermission } from "@/lib/security/permissions";
+import { needsUniqueItemBarcode } from "@/lib/inventory-number-pair-policy";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -52,7 +53,11 @@ export async function GET(
       "x-content-type-options": "nosniff",
     });
     if (kind === "barcode") {
-      const payload = code39PayloadForItem(item.inventoryNumber, item.id);
+      const payload = code39PayloadForItem(
+        item.inventoryNumber,
+        item.id,
+        needsUniqueItemBarcode(item.name),
+      );
       const svg = renderCode39Svg(payload, { heading: "YESSENOV UNIVERSITY" });
       headers.set("content-type", "image/svg+xml; charset=utf-8");
       return new Response(svg, { headers });

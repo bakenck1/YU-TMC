@@ -33,6 +33,7 @@ export interface LocalBarcodeGroupRecord {
   id: string;
   itemId: string;
   itemName: string;
+  itemStatus?: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
   originalBarcode: string;
   itemType: string;
   itemBrand: string | null;
@@ -51,6 +52,7 @@ export interface LocalBarcodeGroupRecord {
   responsibleName: string;
   roomId: string;
   roomDesignation: string;
+  roomAccessMode?: "open" | "closed";
   floorNumber?: number;
   buildingId: string;
   buildingName: string;

@@ -7,6 +7,7 @@ import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
+import { createPostgresQrResolutionRepositories } from "@/lib/server/persistence/postgres/postgres-qr-resolution-repositories";
 
 let config: DatabaseConfig;
 let database: Pool;
@@ -134,6 +135,86 @@ describe("PostgreSQL inventory collection cursor", () => {
       new Set([directDecommissioned, roomDecommissionedInUse]),
     );
     expect((await repository.listDecommissionedItems()).map((item) => item.id)).toContain(unrelatedDecommissioned);
+  });
+
+  it("allows only one monitor/system-unit pair and keeps duplicate scans unambiguous", async () => {
+    const actorId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    await database.query(
+      `insert into yu_inventory.users (id, code, email, full_name, role, created_at, updated_at)
+       values ($1, $2, $3, 'Pair Admin', 'admin', now(), now())`,
+      [actorId, `PA-${actorId.slice(0, 8)}`, `${actorId}@example.com`],
+    );
+    await database.query(
+      `insert into yu_inventory.buildings
+         (id, name, name_key, address, address_key, created_by, updated_by)
+       values ($1, 'Pair Building', $2, 'Pair Address', $2, $3, $3)`,
+      [buildingId, `pair-${buildingId}`, actorId],
+    );
+    await database.query(
+      `insert into yu_inventory.rooms
+         (id, building_id, designation, designation_key, floor_number, created_by, updated_by)
+       values ($1, $2, 'PAIR', $3, 1, $4, $4)`,
+      [roomId, buildingId, `pair-${roomId}`, actorId],
+    );
+    const insert = (id: string, name: string, number: string) => database.query(
+      `insert into yu_inventory.items
+         (id, name, quantity, unit_price, room_id, inventory_number_kind,
+          inventory_number, inventory_number_key, created_by, updated_by)
+       values ($1, $2, 1, 1, $3, 'official', $4::varchar, lower($4::text), $5, $5)`,
+      [id, name, roomId, number, actorId],
+    );
+
+    const monitorId = randomUUID();
+    const systemUnitId = randomUUID();
+    await insert(monitorId, "Монитор Dell", "PAIR-100");
+    await insert(systemUnitId, "Системный блок Dell", "PAIR-100");
+    expect((await database.query(
+      `select count(*)::int as count from yu_inventory.barcode_registry
+        where canonical_key = 'pair-100'`,
+    )).rows[0]?.count).toBe(2);
+
+    await expect(insert(randomUUID(), "Моноблок", "PAIR-100"))
+      .rejects.toMatchObject({ code: "23505" });
+    await expect(insert(randomUUID(), "Монитор HP", "PAIR-100"))
+      .rejects.toMatchObject({ code: "23505" });
+
+    const qr = createPostgresQrResolutionRepositories(database).qr;
+    expect(await qr.findItemByBarcode("PAIR-100", "pair-100", null)).toBeNull();
+    const monitorFallback = monitorId.replaceAll("-", "").slice(0, 16).toUpperCase();
+    expect((await qr.findItemByBarcode(`YUI-${monitorFallback}`, "", monitorFallback))?.targetId)
+      .toBe(monitorId);
+
+    const raceNumber = `RACE-${randomUUID().slice(0, 8)}`;
+    const race = await Promise.allSettled([
+      insert(randomUUID(), "Монитор A", raceNumber),
+      insert(randomUUID(), "Монитор B", raceNumber),
+    ]);
+    expect(race.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(race.filter(({ status }) => status === "rejected")).toHaveLength(1);
+
+    const sourceItemId = randomUUID();
+    await insert(sourceItemId, "Source item", `SOURCE-${randomUUID().slice(0, 8)}`);
+    const crossNamespaceNumber = `CROSS-${randomUUID().slice(0, 8)}`;
+    const crossNamespaceRace = await Promise.allSettled([
+      insert(randomUUID(), "Ordinary official item", crossNamespaceNumber),
+      database.query(
+        `insert into yu_inventory.local_item_groups
+           (id, item_id, sequence_number, barcode_value, barcode_key, quantity,
+            responsible_user_id, room_id, created_by)
+         values ($1, $2, nextval('yu_inventory.local_barcode_sequence'), $3::varchar, lower($3::text),
+                 1, $4, $5, $4)`,
+        [randomUUID(), sourceItemId, crossNamespaceNumber, actorId, roomId],
+      ),
+    ]);
+    expect(crossNamespaceRace.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(crossNamespaceRace.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect((await database.query(
+      `select count(*)::int as count from yu_inventory.barcode_registry
+        where canonical_key = lower($1)`,
+      [crossNamespaceNumber],
+    )).rows[0]?.count).toBe(1);
   });
 });
 

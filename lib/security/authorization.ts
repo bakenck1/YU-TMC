@@ -75,7 +75,8 @@ export function canAccessPath(role: unknown, pathname: string) {
 }
 
 export function defaultPathForRole(role: AuthRole) {
-  return role === "employee" ? "/items" : "/";
+  void role;
+  return "/items";
 }
 
 export function isSafeReturnPath(value: string | null | undefined) {

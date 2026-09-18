@@ -740,6 +740,7 @@ const RESOLUTION_STATUS_KEYS: Record<
   Exclude<QrResolutionDto["status"], "resolved">,
   TranslationKey
 > = {
+  denied: "room.accessClosed",
   revoked: "inspections.resolution.revoked",
   cancelled: "inspections.resolution.revoked",
   unissued_system_code: "inspections.resolution.unissued_system_code",

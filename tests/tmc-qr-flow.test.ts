@@ -53,7 +53,7 @@ test("classifies only a resolved active item as a TMC QR selection", () => {
   assert.equal(optionalFields.kind, "selected");
 });
 
-test("rejects non-item, unavailable, and unresolved QR responses explicitly", () => {
+test("accepts transferable lifecycle states and rejects final write-offs and invalid QR responses", () => {
   assert.deepEqual(
     classifyTmcQrResolution({
       ...ACTIVE_ITEM,
@@ -62,7 +62,17 @@ test("rejects non-item, unavailable, and unresolved QR responses explicitly", ()
     { kind: "error", reason: "not_item" },
   );
 
-  for (const status of ["maintenance", "decommissioned"] as const) {
+  for (const status of ["maintenance", "decommissioned_in_use"] as const) {
+    assert.equal(
+      classifyTmcQrResolution({
+        ...ACTIVE_ITEM,
+        target: { ...ACTIVE_ITEM.target!, status },
+      }).kind,
+      "selected",
+    );
+  }
+
+  for (const status of ["decommissioned"] as const) {
     assert.deepEqual(
       classifyTmcQrResolution({
         ...ACTIVE_ITEM,

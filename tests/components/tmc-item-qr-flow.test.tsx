@@ -36,6 +36,7 @@ describe("TmcItemQrFlow", () => {
   it("resolves an item after scan, targets item QR scope, and offers a picker only for issue/transfer", async () => {
     vi.mocked(fetch).mockResolvedValue(responseForItem());
     const { rerender } = render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     expect(screen.getByRole("status").textContent).toContain("tmc.qr.resolving");
     await screen.findByRole("heading", { name: "Laptop" });
@@ -62,7 +63,7 @@ describe("TmcItemQrFlow", () => {
     expect(screen.getByTestId("scanner")).not.toBeNull();
   });
 
-  it("shows the user's own-item list immediately after the issue scanner is closed", async () => {
+  it("shows the user's own-item list immediately and only opens the scanner on request", async () => {
     render(
       <TmcItemQrFlow
         operation={TMC_OPERATION_BY_ID.issue}
@@ -71,6 +72,11 @@ describe("TmcItemQrFlow", () => {
         actorRole="employee"
       />,
     );
+    expect(screen.getByText("owned-items-list")).not.toBeNull();
+    expect(screen.queryByTestId("scanner")).toBeNull();
+
+    openIssueScanner();
+    expect(screen.getByTestId("scanner")).not.toBeNull();
     expect(screen.queryByText("owned-items-list")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "close scanner" }));
@@ -99,6 +105,7 @@ describe("TmcItemQrFlow", () => {
       .mockResolvedValueOnce(responseForItem())
       .mockResolvedValueOnce(createdRequestResponse());
     render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
     fireEvent.click(screen.getByTestId("recipient-picker"));
@@ -127,6 +134,7 @@ describe("TmcItemQrFlow", () => {
       .mockResolvedValueOnce(createdRequestResponse());
 
     render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Chair" });
     fireEvent.click(screen.getByTestId("recipient-picker"));
@@ -275,6 +283,7 @@ describe("TmcItemQrFlow", () => {
       .mockResolvedValueOnce(allProblemResponse())
       .mockResolvedValueOnce(createdRequestResponse());
     const fresh = render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
     fireEvent.click(screen.getByTestId("recipient-picker"));
@@ -302,6 +311,7 @@ describe("TmcItemQrFlow", () => {
       } as Response)
       .mockResolvedValueOnce(createdRequestResponse());
     render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
     fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
     await screen.findByRole("heading", { name: "Laptop" });
     fireEvent.click(screen.getByTestId("recipient-picker"));
@@ -316,6 +326,10 @@ describe("TmcItemQrFlow", () => {
     expect(randomUUID).toHaveBeenCalledTimes(1);
   });
 });
+
+function openIssueScanner() {
+  fireEvent.click(screen.getByRole("button", { name: "tmc.qr.scan" }));
+}
 
 function responseForItem({
   isAssigned = false,

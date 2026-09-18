@@ -160,6 +160,54 @@ describe("inventory setup actions", () => {
     );
   });
 
+  it("shows the material statement 1C code only for electrical equipment and components", async () => {
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => {
+      void _input;
+      void _init;
+      return { ok: true, json: async () => ({ item: {} }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+
+    const typeInput = screen.getByLabelText(/items\.type/);
+    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+
+    fireEvent.change(typeInput, { target: { value: "electrical_equipment" } });
+    fireEvent.change(screen.getByLabelText(/itemDetails\.oneCCode/), {
+      target: { value: "00000001491" },
+    });
+
+    fireEvent.change(typeInput, { target: { value: "components" } });
+    expect(screen.getByLabelText(/itemDetails\.oneCCode/)).toBeDefined();
+    expect((screen.getByLabelText(/itemDetails\.oneCCode/) as HTMLInputElement).value).toBe("00000001491");
+
+    fireEvent.change(typeInput, { target: { value: "electronics" } });
+    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    fireEvent.change(typeInput, { target: { value: "furniture" } });
+    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/items\.name/), {
+      target: { value: "Office chair" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "createItem.create" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input]) =>
+        String(input) === "/api/inventory/items",
+      );
+      expect(createCall).toBeDefined();
+      expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
+        category: "furniture",
+        oneCCode: null,
+      });
+    });
+  });
+
   it("orders item room choices by floor and then A, B, D and E blocks", () => {
     const rooms = [
       { ...ROOM, id: "room-e-2", designation: "E201", floorNumber: 2 },
@@ -265,12 +313,12 @@ describe("inventory setup actions", () => {
     });
   });
 
-  it("searches after two characters and submits the selected responsible employee", async () => {
-    const employee = {
+  it("searches after two characters and submits the selected responsible administrator", async () => {
+    const administrator = {
       id: "33333333-3333-4333-8333-333333333333",
       fullName: "Алия Серикова",
       email: "aliya@example.test",
-      role: "employee" as const,
+      role: "admin" as const,
     };
     const fetchMock = vi.fn(async (
       input: RequestInfo | URL,
@@ -278,7 +326,7 @@ describe("inventory setup actions", () => {
     ) => {
       void _init;
       if (String(input).startsWith("/api/inventory/transfer-recipient-candidates")) {
-        return { ok: true, json: async () => ({ users: [employee] }) } as Response;
+        return { ok: true, json: async () => ({ users: [administrator] }) } as Response;
       }
       return { ok: true, json: async () => ({ item: {} }) } as Response;
     });
@@ -315,7 +363,7 @@ describe("inventory setup actions", () => {
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
         category: "electrical_equipment",
         oneCCode: "00000001491",
-        responsibleUserId: employee.id,
+        responsibleUserId: administrator.id,
         photos: [
           {
             imageDataUrl: "data:image/jpeg;base64,/9j/",
@@ -325,6 +373,9 @@ describe("inventory setup actions", () => {
         ],
       });
     });
+    expect(fetchMock.mock.calls.some(([input]) =>
+      String(input).includes("includeSelf=1"),
+    )).toBe(true);
   });
 
   it("creates components without a barcode", async () => {

@@ -8,6 +8,7 @@ import type {
   TmcTransferUserRecord,
   TmcStageFourRepository,
 } from "@/lib/application/ports/tmc-operation-repositories";
+import { isInventoryTransferStateAllowed } from "@/lib/inventory-transfer-eligibility";
 import { TmcOperationRepositoryConflictError } from "@/lib/application/ports/tmc-operation-repositories";
 import { executeIdempotentCommand } from "@/lib/application/services/idempotent-command-service";
 import { applyApprovedLocalBarcodeTransfer } from "@/lib/application/services/local-barcode-service";
@@ -29,6 +30,7 @@ import type {
 import { parseCreateTmcTransferRequestResult, parseTmcTransferRequest } from "@/lib/contracts/tmc-operations";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
+import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 import {
   canPerformInventoryOperation,
   hasPermission,
@@ -1706,7 +1708,7 @@ function classifyItems(
     if (!candidate) return problem(itemId, "item_unavailable");
     const canCreateClaim =
       requestKind === "claim" &&
-      actor.role === "employee" &&
+      isInventoryResponsibleRole(actor.role) &&
       candidate.responsibleUser?.id === recipientId;
     const canCreateHandover =
       requestKind === "handover" &&
@@ -1717,7 +1719,7 @@ function classifyItems(
     if (!canCreateClaim && !canCreateHandover) {
       return problem(itemId, "item_unavailable");
     }
-    if (candidate.itemStatus !== "active" || candidate.archivedAt) {
+    if (!isInventoryTransferStateAllowed(candidate.itemStatus, candidate.archivedAt)) {
       return problem(itemId, "item_inactive");
     }
     if (
@@ -2043,7 +2045,7 @@ async function quantityTransferProblem(
   actor: AuthorizationActor,
 ): Promise<TmcOperationProblemCode | null> {
   if (!candidate) return "item_unavailable";
-  if (candidate.itemStatus !== "active" || candidate.archivedAt) return "item_inactive";
+  if (!isInventoryTransferStateAllowed(candidate.itemStatus, candidate.archivedAt)) return "item_inactive";
   if (candidate.hasActiveTransfer) return "active_transfer_exists";
   const item = await localBarcodes.findItemForUpdate(transfer.itemId);
   if (!item || /^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {

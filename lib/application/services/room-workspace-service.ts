@@ -18,7 +18,7 @@ export class RoomWorkspaceService {
       rooms.findRoomByQr(canonicalKey),
     );
     if (!room) throw new ApplicationError("not_found", "room_not_found");
-    return { designation: room.designation };
+    return { access: "authentication_required" };
   }
 
   async findByQr(value: unknown, actor: AuthorizationActor) {
@@ -45,31 +45,28 @@ function buildWorkspace(
   actor: AuthorizationActor,
   items: Awaited<ReturnType<RoomWorkspaceRepositories["rooms"]["listRoomItems"]>>,
 ): RoomWorkspaceDto {
-  const fullAccess =
-    actor.role === "admin" ||
-    actor.role === "warehouse" ||
-    room.primaryResponsibleId === actor.userId;
-  if (!fullAccess) {
+  const privileged = actor.role === "admin" || actor.role === "warehouse";
+  const ownItems = items.filter((item) => item.responsibleUserId === actor.userId);
+  const fullAccess = privileged || room.accessMode === "open";
+  if (!fullAccess && ownItems.length === 0) {
     return {
-      access: "limited",
-      id: room.id,
-      designation: room.designation,
-      responsibleName: room.primaryResponsibleName,
+      access: "denied",
       items: [],
     };
   }
+  const visibleItems = fullAccess ? items : ownItems;
   return {
-    access: "full",
+    access: fullAccess ? "full" : "limited",
     id: room.id,
     designation: room.designation,
     buildingName: room.buildingName,
     floorNumber: room.floorNumber,
     floorLabel: room.floorLabel,
     responsibleName: room.primaryResponsibleName,
-    itemCount: items.length,
-    connectedCount: items.filter((item) => item.connectionStatus === "connected").length,
-    disconnectedCount: items.filter((item) => item.connectionStatus === "disconnected").length,
-    items: items.map((item) => ({
+    itemCount: visibleItems.length,
+    connectedCount: visibleItems.filter((item) => item.connectionStatus === "connected").length,
+    disconnectedCount: visibleItems.filter((item) => item.connectionStatus === "disconnected").length,
+    items: visibleItems.map((item) => ({
       id: item.id,
       name: item.name,
       inventoryNumber: item.inventoryNumber,
@@ -80,6 +77,7 @@ function buildWorkspace(
       responsibleName: item.responsibleName,
       photoUrl: item.hasPhoto ? `/api/inventory/items/${item.id}/photo` : null,
       createdAt: item.createdAt.toISOString(),
+      href: item.href ?? `/items/${item.id}`,
     })),
   };
 }

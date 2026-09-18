@@ -12,6 +12,7 @@ export interface RoomWorkspaceRecord {
   floorLabel: string | null;
   primaryResponsibleId: string | null;
   primaryResponsibleName: string | null;
+  accessMode: "open" | "closed";
 }
 
 export interface RoomWorkspaceItemRecord {
@@ -23,8 +24,10 @@ export interface RoomWorkspaceItemRecord {
   condition: ItemCondition;
   connectionStatus: ConnectionStatus;
   responsibleName: string | null;
+  responsibleUserId: string | null;
   hasPhoto: boolean;
   createdAt: Date;
+  href?: string;
 }
 
 export interface RoomWorkspaceRepository {

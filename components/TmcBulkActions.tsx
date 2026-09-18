@@ -26,7 +26,10 @@ import type { InventoryItemCategory } from "@/lib/inventory-categories";
 type Mode = "transfer" | "location" | "category" | "delete";
 type Outcome = TmcTransferRequestCreationItemOutcomeDto | TmcOperationItemOutcomeDto;
 type LocalSource = {
-  distribution: LocalBarcodeDistributionDto;
+  itemId: string;
+  sourceGroupId: string | null;
+  sourceVersion: number;
+  available: number;
   quantity: string;
 };
 
@@ -77,7 +80,7 @@ export default function TmcBulkActions({
   const displayedItems = mode ? operationItems : items;
   const usesLocalQuantityTransfer =
     mode === "transfer" &&
-    operationItems.some((item) => (item.quantity ?? 1) >= 2);
+    operationItems.some((item) => Boolean(item.localGroupId) || (item.quantity ?? 1) >= 2);
   const selectionValid = displayedItems.length > 0 && displayedItems.length <= (mode === "transfer" || mode === "location" ? 50 : 2_000);
   const standardSelectionValid = items.length > 0 && items.length <= 50;
   const categorySelectionValid = items.length > 0 && items.length <= 2_000;
@@ -95,7 +98,7 @@ export default function TmcBulkActions({
         return (
           Number.isSafeInteger(quantity) &&
           quantity >= 1 &&
-          quantity <= source.distribution.originalRemainder
+          quantity <= source.available
         );
       }));
 
@@ -109,7 +112,19 @@ export default function TmcBulkActions({
     setCategory("electronics");
     setComment("");
     setOutcomes(null);
-    setLocalSources({});
+    setLocalSources(Object.fromEntries(
+      items.flatMap((item) =>
+        item.localGroupId && item.sourceItemId && item.version
+          ? [[item.id, {
+              itemId: item.sourceItemId,
+              sourceGroupId: item.localGroupId,
+              sourceVersion: item.version,
+              available: item.quantity ?? 1,
+              quantity: String(item.quantity ?? 1),
+            } satisfies LocalSource]]
+          : [],
+      ),
+    ));
     setLocalSourcesLoading(false);
     setLocalGroups(null);
     setRequestId(null);
@@ -119,7 +134,7 @@ export default function TmcBulkActions({
     localSourceSequence.current += 1;
     if (
       nextMode === "transfer" &&
-      items.some((item) => (item.quantity ?? 1) >= 2)
+      items.some((item) => !item.localGroupId && (item.quantity ?? 1) >= 2)
     ) {
       void loadLocalSources(items);
     }
@@ -139,6 +154,21 @@ export default function TmcBulkActions({
     try {
       const entries = await Promise.all(
         nextItems.map(async (item) => {
+          if (item.localGroupId) {
+            if (!item.sourceItemId || !item.version) {
+              throw new Error("local_group_source_missing");
+            }
+            return [
+              item.id,
+              {
+                itemId: item.sourceItemId,
+                sourceGroupId: item.localGroupId,
+                sourceVersion: item.version,
+                available: item.quantity ?? 1,
+                quantity: String(item.quantity ?? 1),
+              },
+            ] as const;
+          }
           const response = await fetch(
             `/api/inventory/local-barcodes?itemId=${encodeURIComponent(item.id)}`,
             { cache: "no-store", credentials: "same-origin" },
@@ -152,7 +182,13 @@ export default function TmcBulkActions({
           }
           return [
             item.id,
-            { distribution: body.distribution, quantity: "1" },
+            {
+              itemId: item.id,
+              sourceGroupId: null,
+              sourceVersion: body.distribution.originalVersion,
+              available: body.distribution.originalRemainder,
+              quantity: "1",
+            },
           ] as const;
         }),
       );
@@ -188,15 +224,15 @@ export default function TmcBulkActions({
         },
         body: JSON.stringify({
           recipientId: recipient.id,
-          itemIds: operationItems.map((item) => item.id),
+          itemIds: operationItems.map((item) => item.sourceItemId ?? item.id),
           ...(usesLocalQuantityTransfer
             ? {
                 quantityTransfers: operationItems.map((item) => {
                   const source = localSources[item.id]!;
                   return {
-                    itemId: item.id,
-                    sourceLocalGroupId: null,
-                    sourceVersion: source.distribution.originalVersion,
+                    itemId: source.itemId,
+                    sourceLocalGroupId: source.sourceGroupId,
+                    sourceVersion: source.sourceVersion,
                     quantity: Number(source.quantity),
                   };
                 }),
@@ -246,11 +282,11 @@ export default function TmcBulkActions({
               "idempotency-key": key,
             },
             body: JSON.stringify({
-              itemId: item.id,
-              sourceGroupId: null,
+              itemId: source.itemId,
+              sourceGroupId: source.sourceGroupId,
               recipientUserId: recipient.id,
               quantity: Number(source.quantity),
-              sourceVersion: source.distribution.originalVersion,
+              sourceVersion: source.sourceVersion,
               comment: comment.trim() || null,
             }),
           });
@@ -474,7 +510,7 @@ export default function TmcBulkActions({
                       {operationItems.map((item) => {
                         const source = localSources[item.id];
                         if (!source) return null;
-                        const available = source.distribution.originalRemainder;
+                        const available = source.available;
                         return (
                           <label key={item.id} className="block rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm font-semibold text-zinc-800">
                             {t("tmc.localBarcode.quantityQuestion")}

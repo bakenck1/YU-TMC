@@ -69,6 +69,7 @@ export interface RoomRecord {
   floorLabel: string | null;
   primaryResponsibleId: string | null;
   primaryResponsibleName: string | null;
+  accessMode: "open" | "closed";
   qrCode: string;
   status: "active" | "archived";
   version: number;
@@ -84,12 +85,22 @@ export interface InsertRoomRecord {
   floorNumber: number;
   floorLabel: string | null;
   primaryResponsibleId: string | null;
+  accessMode: "open" | "closed";
   actorId: string;
   occurredAt: Date;
 }
 
-export interface UpdateRoomRecord extends Omit<InsertRoomRecord, "buildingId"> {
+export interface UpdateRoomRecord extends Omit<InsertRoomRecord, "buildingId" | "accessMode"> {
+  accessMode?: "open" | "closed";
   expectedVersion: number;
+}
+
+export interface UpdateRoomAccessRecord {
+  id: string;
+  accessMode: "open" | "closed";
+  actorId: string;
+  expectedVersion: number;
+  occurredAt: Date;
 }
 
 export interface ArchiveRoomRecord {
@@ -117,10 +128,12 @@ export interface InventoryLocationRepository {
   insertBuildingQr(input: InsertBuildingQrRecord): Promise<void>;
   appendAudit(input: AppendLocationAuditRecord): Promise<void>;
   listRooms(buildingId: string): Promise<RoomRecord[]>;
+  listRoomsAssignedTo(buildingId: string, userId: string): Promise<RoomRecord[]>;
   findRoomById(id: string): Promise<RoomRecord | null>;
   findRoomByIdForUpdate(id: string): Promise<RoomRecord | null>;
   insertRoom(input: InsertRoomRecord): Promise<RoomRecord>;
   updateRoom(input: UpdateRoomRecord): Promise<RoomRecord | null>;
+  updateRoomAccess(input: UpdateRoomAccessRecord): Promise<RoomRecord | null>;
   archiveRoom(input: ArchiveRoomRecord): Promise<RoomRecord | null>;
   countActiveItems(roomId: string): Promise<number>;
   insertRoomQr(input: InsertRoomQrRecord): Promise<void>;

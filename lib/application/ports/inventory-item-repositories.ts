@@ -41,6 +41,7 @@ export interface InventoryItemRecord {
   responsibleId: string | null;
   responsibleName: string | null;
   roomResponsibleId?: string | null;
+  roomAccessMode?: "open" | "closed";
   photoUrl: string | null;
   photoIds?: string[];
   servicePhotoUrl?: string | null;

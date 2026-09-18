@@ -8,7 +8,10 @@ test("inventory list displays the same Code 39 payload as the printable barcode"
     "utf8",
   );
 
-  assert.match(source, /code39PayloadForItem\(item\.inventoryNumber, item\.id\)/);
+  assert.match(
+    source,
+    /code39PayloadForItem\([\s\S]*?item\.inventoryNumber,[\s\S]*?item\.id,[\s\S]*?needsUniqueItemBarcode\(item\.name\)/,
+  );
   assert.doesNotMatch(source, /item\.qrCode \?\? item\.inventoryNumber/);
   assert.doesNotMatch(source, /replace\(\/\\D\/g/);
 });

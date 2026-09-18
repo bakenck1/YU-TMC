@@ -56,11 +56,78 @@ export default function InventoryBuildingsManager({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedRoom, setScannedRoom] = useState<RoomDto | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [accessSaving, setAccessSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
   const canCreate = hasPermission(actorRole, "inventory.building.create");
   const canEdit = hasPermission(actorRole, "inventory.building.manage");
   const canCreateItem = hasPermission(actorRole, "inventory.item.create");
+
+  function replaceRoom(updated: RoomDto) {
+    setRooms((current) => ({
+      ...current,
+      [updated.buildingId]: (current[updated.buildingId] ?? []).map((room) =>
+        room.id === updated.id ? updated : room,
+      ),
+    }));
+  }
+
+  async function changeRoomAccess(room: RoomDto, accessMode: "open" | "closed") {
+    if (accessSaving) return;
+    setAccessSaving(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/inventory/rooms/${encodeURIComponent(room.id)}/access`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessMode, version: room.version }),
+      });
+      const body = await response.json().catch(() => null) as { room?: RoomDto } | null;
+      if (!response.ok || !body?.room) throw new Error(t("room.accessSaveError"));
+      replaceRoom(body.room);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : t("room.accessSaveError"));
+    } finally {
+      setAccessSaving(false);
+    }
+  }
+
+  async function bulkChangeRoomAccess(accessMode: "open" | "closed") {
+    if (accessSaving || selectedRoomIds.size === 0) return;
+    if (!window.confirm(t("room.accessBulkConfirm", {
+      count: selectedRoomIds.size,
+      mode: t(accessMode === "open" ? "room.accessOpen" : "room.accessClosedOption"),
+    }))) return;
+    const selected = Object.values(rooms).flat().filter((room) => selectedRoomIds.has(room.id));
+    setAccessSaving(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/inventory/rooms/access", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessMode,
+          rooms: selected.map((room) => ({ id: room.id, version: room.version })),
+        }),
+      });
+      const body = await response.json().catch(() => null) as {
+        results?: Array<{ id: string; status: "updated" | "unchanged" | "failed"; room?: RoomDto }>;
+      } | null;
+      if (!response.ok || !body?.results) throw new Error(t("room.accessSaveError"));
+      for (const result of body.results) if (result.room) replaceRoom(result.room);
+      const failed = body.results.filter((result) => result.status === "failed");
+      setActionError(failed.length
+        ? t("room.accessBulkPartial", { changed: body.results.length - failed.length, failed: failed.length })
+        : t("room.accessBulkSuccess", { count: body.results.length }));
+      if (!failed.length) setSelectedRoomIds(new Set());
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : t("room.accessSaveError"));
+    } finally {
+      setAccessSaving(false);
+    }
+  }
 
   function saveBuilding(building: BuildingDto) {
     setBuildings((current) => {
@@ -200,6 +267,9 @@ export default function InventoryBuildingsManager({
           <span className="shrink-0 text-xs text-zinc-400">
             · {room.floorNumber} {t("inventory.floorShort")}
           </span>
+          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${room.accessMode === "closed" ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>
+            {t(room.accessMode === "closed" ? "room.accessClosedOption" : "room.accessOpen")}
+          </span>
         </div>
         {canEdit ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -210,6 +280,14 @@ export default function InventoryBuildingsManager({
               <Download className="h-3.5 w-3.5" />
               {t("room.qrDownload")}
             </a>
+            <button
+              type="button"
+              onClick={() => void changeRoomAccess(room, room.accessMode === "closed" ? "open" : "closed")}
+              disabled={accessSaving}
+              className="min-h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 disabled:opacity-50"
+            >
+              {t(room.accessMode === "closed" ? "room.openAccessAction" : "room.closeAccessAction")}
+            </button>
             <button
               type="button"
               onClick={() => setRoomEditor({ building, room })}
@@ -287,6 +365,13 @@ export default function InventoryBuildingsManager({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
         {canEdit ? (
+          <>
+          <button type="button" onClick={() => void bulkChangeRoomAccess("open")} disabled={accessSaving || !selectedRoomIds.size} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-300 px-4 text-sm font-semibold text-emerald-800 disabled:opacity-50">
+            {t("room.openAccessAction")}{selectedRoomIds.size ? ` (${selectedRoomIds.size})` : ""}
+          </button>
+          <button type="button" onClick={() => void bulkChangeRoomAccess("closed")} disabled={accessSaving || !selectedRoomIds.size} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-300 px-4 text-sm font-semibold text-amber-900 disabled:opacity-50">
+            {t("room.closeAccessAction")}{selectedRoomIds.size ? ` (${selectedRoomIds.size})` : ""}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -306,6 +391,7 @@ export default function InventoryBuildingsManager({
             {t("room.qrPrint")}
             {selectedRoomIds.size ? ` (${selectedRoomIds.size})` : null}
           </button>
+          </>
         ) : null}
         {canCreate ? (
           <button
@@ -513,6 +599,7 @@ export default function InventoryBuildingsManager({
               floorNumber: 0,
               floorLabel: null,
               primaryResponsible: null,
+              accessMode: "open",
               qrCode: "",
               status: "active",
               version: 1,

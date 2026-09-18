@@ -9,6 +9,7 @@ export function toLocalBarcodeInventoryItem(
   return {
     id: group.id,
     localGroupId: group.id,
+    sourceItemId: group.itemId,
     name: group.itemName,
     inventoryNumber: group.localBarcode,
     category: categoryFromLegacyType(group.itemType),
@@ -24,7 +25,7 @@ export function toLocalBarcodeInventoryItem(
       : `${group.location.buildingName} / ${group.location.floorNumber} этаж / ${group.location.roomDesignation}`,
     responsibleId: group.responsible.id,
     responsible: group.responsible.fullName,
-    status: "active",
+    status: group.itemStatus ?? "active",
     photoColor: "#0ea5e9",
     photo: group.photoUrl ?? undefined,
     updatedAt: new Date(group.transferredAt).toLocaleDateString(),

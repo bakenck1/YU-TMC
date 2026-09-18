@@ -1,7 +1,7 @@
 // Deterministic campus data for the "Главная" interactive map.
 // Ported from the design handoff prototype (seeded RNG → stable output).
 
-export type CampusStatus = "ok" | "check" | "service" | "writeoff";
+export type CampusStatus = "ok" | "check" | "service" | "writeoff" | "decommissioned" | "decommissioned_in_use";
 
 export type CampusHistoryTone = "neutral" | "info" | "danger" | "warning" | "success";
 
@@ -18,6 +18,7 @@ export interface CampusItem {
   name: string;
   category: string;
   invNo: string;
+  photoUrl?: string | null;
   status: CampusStatus;
   lastInv: string;
   responsible: string;
@@ -220,6 +221,8 @@ const STATUS_META: Record<CampusStatus, StatusMeta> = {
   check: { list: "Требует проверки", card: "Требует проверки", color: "#c98a2b", bg: "#fbf1df" },
   service: { list: "На обслуживании", card: "На обслуживании", color: "#2f74c9", bg: "#e7f0fb" },
   writeoff: { list: "Списано", card: "Списано", color: "#b0483a", bg: "#f8e8e5" },
+  decommissioned: { list: "Списано", card: "Списано", color: "#b0483a", bg: "#f8e8e5" },
+  decommissioned_in_use: { list: "Списано, но используется", card: "Списано, но используется", color: "#9a5b18", bg: "#fff2d8" },
 };
 
 export function statusMeta(status: CampusStatus): StatusMeta {

@@ -17,6 +17,8 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { buildLocalBarcode, localBarcodeComparisonKey } from "@/lib/domain/local-barcode";
 import { hasPermission, type AuthorizationActor } from "@/lib/security/permissions";
+import { isInventoryTransferAllowed } from "@/lib/inventory-transfer-eligibility";
+import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 
 const IDEMPOTENCY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
@@ -41,13 +43,13 @@ export async function applyApprovedLocalBarcodeTransfer(
   ids: { create(): string },
 ): Promise<LocalBarcodeTransferResultDto> {
   const recipient = await localBarcodes.findRecipientForUpdate(input.recipientUserId);
-  if (!recipient || !recipient.active || recipient.deletedAt || recipient.role !== "employee") {
+  if (!recipient || !recipient.active || recipient.deletedAt || !isInventoryResponsibleRole(recipient.role)) {
     throw validation("recipient_unavailable");
   }
   const item = await localBarcodes.findItemForUpdate(input.itemId);
   if (!item) throw notFound("item_not_found");
   assertLocalBarcodeMutationAllowed(item, input.initiator.role);
-  if (item.status !== "active") throw conflict("item_not_available");
+  if (!isInventoryTransferAllowed(item.status)) throw conflict("item_not_available");
   if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
     throw validation("source_barcode_required");
   }
@@ -58,9 +60,6 @@ export async function applyApprovedLocalBarcodeTransfer(
     if (source.status !== "active") throw conflict("local_group_cancelled");
     if (source.version !== input.sourceVersion) throw conflict("version_conflict");
     if (source.responsibleUserId !== input.initiator.id) throw forbidden();
-    if (!source.previousResponsibleUserId || source.previousResponsibleUserId !== recipient.id) {
-      throw conflict("local_group_return_only");
-    }
     if (source.responsibleUserId === recipient.id) throw conflict("already_responsible");
     if (input.quantity > source.quantity) throw conflict("quantity_exceeds_available");
     if (input.quantity === source.quantity) {
@@ -192,13 +191,13 @@ export class LocalBarcodeService {
       const currentActor = await requireLiveActor(localBarcodes, actor);
       if (!hasPermission(currentActor.role, "inventory.local_barcode.transfer")) throw forbidden();
       const recipient = await localBarcodes.findRecipientForUpdate(normalized.recipientUserId);
-      if (!recipient || !recipient.active || recipient.deletedAt || recipient.role !== "employee") {
+      if (!recipient || !recipient.active || recipient.deletedAt || !isInventoryResponsibleRole(recipient.role)) {
         throw validation("recipient_unavailable");
       }
       const item = await localBarcodes.findItemForUpdate(normalized.itemId);
       if (!item) throw notFound("item_not_found");
       assertLocalBarcodeMutationAllowed(item, currentActor.role);
-      if (item.status !== "active") throw conflict("item_not_available");
+      if (!isInventoryTransferAllowed(item.status)) throw conflict("item_not_available");
       if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
         throw validation("source_barcode_required");
       }
@@ -210,9 +209,6 @@ export class LocalBarcodeService {
         if (source.status !== "active") throw conflict("local_group_cancelled");
         if (source.version !== normalized.sourceVersion) throw conflict("version_conflict");
         if (source.responsibleUserId !== currentActor.id) throw forbidden();
-        if (!source.previousResponsibleUserId || source.previousResponsibleUserId !== recipient.id) {
-          throw conflict("local_group_return_only");
-        }
         if (source.responsibleUserId === recipient.id) throw conflict("already_responsible");
         if (normalized.quantity > source.quantity) throw conflict("quantity_exceeds_available");
         if (normalized.quantity === source.quantity) {
@@ -312,7 +308,7 @@ export class LocalBarcodeService {
         assertItItemAccess(group, actor.role);
         if (group.itemSection === "it") throw notFound("local_group_not_found");
       }
-      if (!group || !canRead(actor, group.responsibleUserId)) throw notFound("local_group_not_found");
+      if (!group || !canRead(actor, group)) throw notFound("local_group_not_found");
       return toDto(group);
     });
   }
@@ -325,7 +321,7 @@ export class LocalBarcodeService {
         assertItItemAccess(group, actor.role);
         if (group.itemSection === "it") throw notFound("local_group_not_found");
       }
-      if (!group || !canRead(actor, group.responsibleUserId)) {
+      if (!group || !canRead(actor, group)) {
         throw notFound("local_group_not_found");
       }
       const photo = await localBarcodes.findGroupPhoto(group.id);
@@ -362,7 +358,7 @@ export class LocalBarcodeService {
         if (group.itemSection === "it") return null;
       }
       return group &&
-        (canRead(actor, group.responsibleUserId) ||
+        (canRead(actor, group) ||
           (group.status === "active" && canResolveScannedBarcode(actor)))
         ? toDto(group)
         : null;
@@ -401,10 +397,15 @@ export class LocalBarcodeService {
 }
 
 function toDto(group: LocalBarcodeGroupRecord): LocalBarcodeGroupDto {
-  return { id: group.id, itemId: group.itemId, itemName: group.itemName, originalBarcode: group.originalBarcode, itemType: group.itemType, brand: group.itemBrand, model: group.itemModel, description: group.itemDescription, unitPrice: group.unitPrice, condition: group.itemCondition, connectionStatus: group.itemConnectionStatus, photoUrl: group.itemPhotoId ? `/api/inventory/local-barcodes/${group.id}/photo?v=${group.version}` : null, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, previousResponsible: group.previousResponsibleUserId ? { id: group.previousResponsibleUserId, fullName: group.previousResponsibleName ?? "" } : null, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, floorNumber: group.floorNumber, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
+  return { id: group.id, itemId: group.itemId, itemName: group.itemName, itemStatus: group.itemStatus, originalBarcode: group.originalBarcode, itemType: group.itemType, brand: group.itemBrand, model: group.itemModel, description: group.itemDescription, unitPrice: group.unitPrice, condition: group.itemCondition, connectionStatus: group.itemConnectionStatus, photoUrl: group.itemPhotoId ? `/api/inventory/local-barcodes/${group.id}/photo?v=${group.version}` : null, localBarcode: group.barcodeValue, parentGroupId: group.parentGroupId, quantity: group.quantity, responsible: { id: group.responsibleUserId, fullName: group.responsibleName }, previousResponsible: group.previousResponsibleUserId ? { id: group.previousResponsibleUserId, fullName: group.previousResponsibleName ?? "" } : null, location: { roomId: group.roomId, roomDesignation: group.roomDesignation, floorNumber: group.floorNumber, buildingId: group.buildingId, buildingName: group.buildingName }, transferredAt: group.transferredAt.toISOString(), status: group.status, version: group.version, cancellation: group.status === "cancelled" ? { reason: group.cancellationReason!, cancelledAt: group.cancelledAt!.toISOString(), administrator: { id: group.cancelledBy!, fullName: group.cancelledByName ?? "" } } : null };
 }
 
-function canRead(actor: AuthorizationActor, responsibleId: string) { return hasPermission(actor.role, "inventory.local_barcode.read_all") || (actor.userId === responsibleId && hasPermission(actor.role, "inventory.local_barcode.read_assigned")); }
+function canRead(actor: AuthorizationActor, group: LocalBarcodeGroupRecord) {
+  return hasPermission(actor.role, "inventory.local_barcode.read_all") ||
+    (hasPermission(actor.role, "inventory.local_barcode.read_assigned") &&
+      (actor.userId === group.responsibleUserId ||
+        (group.status === "active" && group.roomAccessMode === "open")));
+}
 function canResolveScannedBarcode(actor: AuthorizationActor) { return hasPermission(actor.role, "inventory.qr.resolve_full") || hasPermission(actor.role, "inventory.qr.resolve_item"); }
 function assertItItemAccess(
   record: { itemSection?: "general" | "it" },

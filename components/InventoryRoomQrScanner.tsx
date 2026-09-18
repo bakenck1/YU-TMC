@@ -137,7 +137,7 @@ export default function InventoryRoomQrScanner({
         return;
       }
       if (resolution.status !== "resolved" || !resolution.target) {
-        setMessageKey("scanner.invalidCode");
+        setMessageKey(resolution.status === "denied" ? "room.accessClosed" : "scanner.invalidCode");
         return;
       }
       if (resolution.target.kind !== "room") {

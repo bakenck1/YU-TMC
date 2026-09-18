@@ -80,7 +80,7 @@ test("only employees receive the tabbed inventory interface", async () => {
   assert.match(source, /<EmployeeItemsTabs/);
   assert.match(source, /<EmployeeItemsTabs[\s\S]*items=\{items\}/);
   assert.doesNotMatch(source, /recipientName/);
-  assert.match(source, /invoiceActions\s*\/>/);
+  assert.match(source, /invoiceActions[\s\S]*showSummary[\s\S]*\/>/);
   assert.doesNotMatch(source, /items\/active|items\/maintenance|items\/decommissioned/);
 });
 

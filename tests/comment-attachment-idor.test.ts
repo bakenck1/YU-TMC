@@ -47,12 +47,16 @@ test("an employee cannot discover a known attachment below an unassigned parent 
   );
 });
 
-test("a room-responsible employee can read only attachments below that readable item", async () => {
+test("an employee can read only attachments below an item in an open room", async () => {
   const calls: string[][] = [];
   const service = createService({
     findItemById: async (id) =>
       id === ITEM_ID
-        ? inventoryItem({ responsibleId: null, roomResponsibleId: EMPLOYEE_ID })
+        ? inventoryItem({
+            responsibleId: null,
+            roomResponsibleId: EMPLOYEE_ID,
+            roomAccessMode: "open",
+          })
         : null,
     findCommentAttachment: async (itemId, commentId, attachmentId) => {
       calls.push([itemId, commentId, attachmentId]);

@@ -21,7 +21,7 @@ export type TmcRecipientCandidate = Omit<
 
 export function searchEligibleTmcRecipients(
   users: readonly RecipientSearchSource[],
-  actorUserId: string,
+  excludeUserId: string | null,
   queryInput: string,
   limit = TMC_RECIPIENT_RESULT_LIMIT,
 ): TmcRecipientCandidate[] {
@@ -33,7 +33,7 @@ export function searchEligibleTmcRecipients(
       (user) =>
         user.active &&
         !user.deletedAt &&
-        user.id !== actorUserId &&
+        (excludeUserId === null || user.id !== excludeUserId) &&
         [user.fullName, user.email].some((value) =>
           normalizeTmcRecipientQuery(value).includes(query),
         ),
@@ -90,6 +90,7 @@ interface SearchControllerOptions {
     },
   ): Promise<SearchResponse>;
   onState(state: TmcRecipientSearchState): void;
+  includeCurrentUser?: boolean;
 }
 
 export class TmcRecipientSearchController {
@@ -146,7 +147,7 @@ export class TmcRecipientSearchController {
     this.controller = controller;
     try {
       const response = await this.options.fetcher(
-        `/api/inventory/transfer-recipient-candidates?q=${encodeURIComponent(query)}`,
+        `/api/inventory/transfer-recipient-candidates?q=${encodeURIComponent(query)}${this.options.includeCurrentUser ? "&includeSelf=1" : ""}`,
         {
           credentials: "same-origin",
           cache: "no-store",

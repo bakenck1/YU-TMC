@@ -17,6 +17,7 @@ export interface LocalBarcodeGroupDto {
   id: string;
   itemId: string;
   itemName: string;
+  itemStatus?: import("@/lib/contracts/inventory-domain").ItemStatus;
   originalBarcode: string;
   itemType: string;
   brand: string | null;

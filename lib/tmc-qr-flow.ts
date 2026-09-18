@@ -5,7 +5,7 @@ type QrTarget = NonNullable<QrResolutionDto["target"]>;
 
 export type TmcQrSelectedItem = QrTarget & {
   kind: "item";
-  status: "active";
+  status: "active" | "maintenance" | "decommissioned_in_use";
   distribution?: LocalBarcodeDistributionDto;
 };
 
@@ -29,7 +29,11 @@ export function classifyTmcQrResolution(
   if (resolution.target.kind !== "item") {
     return { kind: "error", reason: "not_item" };
   }
-  if (resolution.target.status !== "active") {
+  if (
+    resolution.target.status !== "active" &&
+    resolution.target.status !== "maintenance" &&
+    resolution.target.status !== "decommissioned_in_use"
+  ) {
     return { kind: "error", reason: "item_unavailable" };
   }
   return {
@@ -37,7 +41,7 @@ export function classifyTmcQrResolution(
     item: {
       ...resolution.target,
       kind: "item",
-      status: "active",
+      status: resolution.target.status,
       distribution: resolution.distribution,
     },
   };

@@ -18,7 +18,7 @@ test("recipient route uses the TMC permission without widening the admin users e
   const route = readFileSync("app/api/inventory/transfer-recipient-candidates/route.ts", "utf8");
   const legacyUsersRoute = readFileSync("app/api/users/route.ts", "utf8");
   assert.match(route, /requirePermission\(request, "inventory\.tmc\.transfer_request\.create"\)/);
-  assert.match(route, /searchTmcRecipients\(query, actor\)/);
+  assert.match(route, /searchTmcRecipients\(query, actor, options\)/);
   assert.match(legacyUsersRoute, /requirePermission\(request, "legacy\.users\.read"\)/);
   for (const role of ["admin", "warehouse", "employee"] as const) {
     assert.equal(hasPermission(role, "inventory.tmc.transfer_request.create"), true);
@@ -29,7 +29,7 @@ test("recipient endpoint authenticates actor, preserves the full session proof a
   const calls: unknown[][] = [];
   const handler = createTmcRecipientCandidatesGetHandler({
     authenticate: async (request) => { calls.push(["auth", request.url]); return ACTOR; },
-    search: async (query, actorId) => { calls.push(["search", query, actorId]); return [RESULT]; },
+    search: async (query, actorId, options) => { calls.push(["search", query, actorId, options]); return [RESULT]; },
   });
   const response = await handler(new Request("https://example.test/api/inventory/transfer-recipient-candidates?q=%20%EF%BC%A1LI%20"));
 
@@ -39,8 +39,25 @@ test("recipient endpoint authenticates actor, preserves the full session proof a
     "private, no-store, max-age=0, must-revalidate",
   );
   assert.deepEqual(await response.json(), { users: [RESULT] });
-  assert.deepEqual(calls, [["auth", "https://example.test/api/inventory/transfer-recipient-candidates?q=%20%EF%BC%A1LI%20"], ["search", "ali", ACTOR]]);
+  assert.deepEqual(calls, [["auth", "https://example.test/api/inventory/transfer-recipient-candidates?q=%20%EF%BC%A1LI%20"], ["search", "ali", ACTOR, { includeSelf: false }]]);
   assert.equal(JSON.stringify(RESULT).includes("phone"), false);
+});
+
+test("assignment search can include the authenticated user without trusting a supplied user id", async () => {
+  const calls: unknown[][] = [];
+  const handler = createTmcRecipientCandidatesGetHandler({
+    authenticate: async () => ACTOR,
+    search: async (query, actor, options) => {
+      calls.push([query, actor.userId, options]);
+      return [RESULT];
+    },
+  });
+  const response = await handler(new Request(
+    "https://example.test/api/inventory/transfer-recipient-candidates?q=admin&includeSelf=1",
+  ));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [["admin", ACTOR.userId, { includeSelf: true }]]);
 });
 
 test("recipient endpoint rejects oversized query before reading users", async () => {

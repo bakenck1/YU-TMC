@@ -11,7 +11,10 @@ import InventoryItemCameraCapture from "@/components/InventoryItemCameraCapture"
 import ItNetworkAddressEditor from "@/components/ItNetworkAddressEditor";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
-import type { InventoryItemCategory } from "@/lib/inventory-categories";
+import {
+  supportsMaterialStatementOneCCode,
+  type InventoryItemCategory,
+} from "@/lib/inventory-categories";
 import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
 import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 
@@ -104,7 +107,12 @@ export default function InventoryItemCreateForm({
           ...(inventorySection === "it" ? { itType: category } : { category }),
           brand: restricted ? null : (brand || null),
           model: restricted ? null : (model || null),
-          oneCCode: restricted || inventorySection === "it" ? null : (oneCCode.trim() || null),
+          oneCCode:
+            restricted ||
+            inventorySection === "it" ||
+            !supportsMaterialStatementOneCCode(category)
+              ? null
+              : (oneCCode.trim() || null),
           quantity: restricted ? 1 : Number(quantity),
           unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
@@ -183,13 +191,13 @@ export default function InventoryItemCreateForm({
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => { const nextCategory = event.target.value as typeof category; setCategory(nextCategory); if (!supportsMaterialStatementOneCCode(nextCategory)) setOneCCode(""); }} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select></label>
               {inventorySection !== "it" && category === "components" ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{t("createItem.componentsNoBarcode")}</p> : null}
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                  {inventorySection !== "it" ? <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.oneCCode")} <span>({t("createItem.optional")})</span></span><input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" placeholder={t("createItem.oneCCodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span></label> : null}
+                  {inventorySection !== "it" && supportsMaterialStatementOneCCode(category) ? <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.oneCCode")} <span>({t("createItem.optional")})</span></span><input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" placeholder={t("createItem.oneCCodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span></label> : null}
                   <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                 </div>
@@ -215,7 +223,8 @@ export default function InventoryItemCreateForm({
                 <TmcUserPicker
                   value={responsible}
                   onChange={setResponsible}
-                  employeeOnly
+                  responsibleOnly
+                  includeCurrentUser
                   label={(
                     <>
                       <span className="font-normal text-zinc-500">{t("createItem.responsible")} </span>

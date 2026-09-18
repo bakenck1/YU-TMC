@@ -7,7 +7,7 @@ test("employee sidebar exposes the dedicated receive/issue workspace instead of 
   const items = sidebarItemsForRole("employee");
   const hrefs = items.map((item) => item.href);
 
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/tmc", "/profile"]);
+  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/tmc"]);
   assert.equal(items.find((item) => item.href === "/tmc")?.labelKey, "tmc.entryPoint");
   assert.equal(items.some((item) => item.href === "/transfers"), false);
 });
@@ -23,7 +23,7 @@ test("administrator sidebar keeps facilities and inspections", () => {
 test("warehouse sidebar exposes analytics and decommissioned items", () => {
   const hrefs = sidebarItemsForRole("warehouse").map((item) => item.href);
 
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/tmc", "/items/decommissioned", "/analytics", "/profile"]);
+  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/tmc", "/items/decommissioned", "/analytics"]);
 });
 //
 

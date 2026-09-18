@@ -446,7 +446,7 @@ class PostgresInventoryResponsibilityRepository
                 select 1
                   from ${USERS} target
                  where target.id = $6::uuid
-                   and target.role = 'employee'
+                   and target.role in ('employee', 'warehouse', 'admin')
                    and target.is_active = true
                    and target.deleted_at is null
               )

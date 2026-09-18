@@ -631,6 +631,7 @@ export class UserService {
   async searchTmcRecipients(
     query: string,
     actor: AuthenticatedRecipientSearchActor,
+    options: { includeSelf?: boolean } = {},
   ): Promise<TmcOperationUserDto[]> {
     const normalizedQuery = normalizeTmcRecipientQuery(query);
     if (
@@ -667,7 +668,7 @@ export class UserService {
       if (Array.from(normalizedQuery).length < 2) return [];
       const candidates = await users.searchActiveRecipients(
         normalizedQuery,
-        actorUserId,
+        options.includeSelf ? null : actorUserId,
         TMC_RECIPIENT_RESULT_LIMIT,
       );
       return candidates

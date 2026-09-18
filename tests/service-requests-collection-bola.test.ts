@@ -91,7 +91,7 @@ test("revoked session is revalidated under the POST transaction lock", async () 
     findItemContext: async () => ({
       roomId: ROOM_ID,
       roomResponsibleId: ACTOR_ID,
-      itemResponsibleId: null,
+      itemResponsibleId: ACTOR_ID,
     }),
     findCreateAuthorizationForUpdate: async () => ({
       actor: {
@@ -104,7 +104,7 @@ test("revoked session is revalidated under the POST transaction lock", async () 
       item: {
         roomId: ROOM_ID,
         roomResponsibleId: ACTOR_ID,
-        itemResponsibleId: null,
+        itemResponsibleId: ACTOR_ID,
       },
     }),
     insert: async () => {

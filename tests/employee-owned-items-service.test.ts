@@ -88,15 +88,53 @@ test("an employee receives only their assigned items and derived summary", async
     "mine-decommissioned",
   ]);
   assert.deepEqual(summarizeInventory(items.map(toInventoryItemView)), {
-    totalValue: 2_000,
-    totalItems: 3,
-    maintenance: 1,
+    totalValue: 3_000,
+    totalItems: 6,
+    maintenance: 2,
     decommissioned: 1,
   });
+});
+
+test("employee collection drops legacy room-primary items without personal assignment", async () => {
+  const mine = item("mine", "employee-1");
+  const foreign = item("foreign", "employee-2");
+  foreign.roomResponsibleId = "employee-1";
+  const service = createService({
+    listItemsAssignedTo: async () => [mine, foreign],
+  });
+
+  const result = await service.listItems({ userId: "employee-1", role: "employee" });
+  assert.deepEqual(result.map(({ id }) => id), ["mine"]);
 });
 
 test("employees cannot use the global inventory read permission", () => {
   assert.equal(hasPermission("employee", "inventory.item.read_all"), false);
   assert.equal(hasPermission("employee", "inventory.item.read_assigned"), true);
   assert.equal(hasPermission("warehouse", "inventory.item.read_all"), true);
+});
+
+test("closed-room direct item access ignores legacy room responsibility", async () => {
+  const foreign = item("foreign", "employee-2", "active");
+  foreign.roomResponsibleId = "employee-1";
+  foreign.roomAccessMode = "closed";
+  const guarded = createService({ findItemById: async () => foreign });
+
+  await assert.rejects(
+    guarded.findItem("foreign", { userId: "employee-1", role: "employee" }),
+    (error: unknown) =>
+      error instanceof Error && error.message === "item_not_found",
+  );
+});
+
+test("open-room direct item access is read-only-visible to an employee", async () => {
+  const foreign = item("foreign", "employee-2", "active");
+  foreign.roomAccessMode = "open";
+  const service = createService({ findItemById: async () => foreign });
+
+  const result = await service.findItem("foreign", {
+    userId: "employee-1",
+    role: "employee",
+  });
+  assert.equal(result.id, "foreign");
+  assert.equal(result.responsible?.id, "employee-2");
 });

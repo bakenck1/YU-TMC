@@ -21,21 +21,22 @@ export function createTmcRecipientCandidatesGetHandler(dependencies: {
   search(
     query: string,
     actor: RecipientSearchActor,
+    options: { includeSelf: boolean },
   ): Promise<TmcOperationUserDto[]>;
 }) {
   return async function GET(request: Request): Promise<Response> {
     try {
       const actor = await dependencies.authenticate(request);
-      const query = normalizeTmcRecipientQuery(
-        new URL(request.url).searchParams.get("q") ?? "",
-      );
+      const searchParams = new URL(request.url).searchParams;
+      const query = normalizeTmcRecipientQuery(searchParams.get("q") ?? "");
+      const includeSelf = searchParams.get("includeSelf") === "1";
       if (Array.from(query).length > TMC_RECIPIENT_QUERY_MAX_LENGTH) {
         throw new ApplicationError("validation", "recipient_query_too_long");
       }
       const users =
         Array.from(query).length < 2
           ? []
-          : await dependencies.search(query, actor);
+          : await dependencies.search(query, actor, { includeSelf });
       return Response.json(
         { users },
         { headers: privateHeaders() },

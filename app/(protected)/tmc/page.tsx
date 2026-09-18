@@ -23,10 +23,24 @@ export default async function TmcPage() {
     services.items.listItems(actor),
     services.localBarcodes.listActiveGroupsAssignedTo(actor).catch(() => []),
   ]);
+  const ownedServerItems = serverItems.filter(
+    (item) => item.responsible?.id === user.userId,
+  );
+  const originalRemainders = new Map(
+    await Promise.all(
+      ownedServerItems.map(async (item) => {
+        const distribution = await services.localBarcodes.getDistribution(item.id, actor);
+        return [item.id, distribution.originalRemainder] as const;
+      }),
+    ),
+  );
   const issueItems = [
-    ...serverItems
-    .map(toInventoryItemView)
-    .filter((item) => item.status === "active" && item.responsibleId === user.userId),
+    ...ownedServerItems
+      .map((item) => ({
+        ...toInventoryItemView(item),
+        quantity: originalRemainders.get(item.id) ?? item.quantity,
+      }))
+      .filter((item) => (item.quantity ?? 0) > 0),
     ...localGroups.map(toLocalBarcodeInventoryItem),
   ];
   return (

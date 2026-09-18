@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Cable, CircleUserRound, DoorOpen, ImageIcon, Layers3, Package } from "lucide-react";
-import type { RoomWorkspaceDto } from "@/lib/contracts/room-workspace";
+import { ArrowLeft, Cable, CircleUserRound, DoorOpen, ImageIcon, Layers3, Package } from "lucide-react";
+import type { PublicRoomDto, RoomWorkspaceDto } from "@/lib/contracts/room-workspace";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import ProblemReportButton from "@/components/ProblemReportButton";
 import RoomMetric from "./RoomMetric";
@@ -12,27 +12,50 @@ export default function RoomWorkspaceView({
   room,
   authenticated,
   returnTo,
+  backTo,
 }: {
-  room: RoomWorkspaceDto | { designation: string };
+  room: RoomWorkspaceDto | PublicRoomDto;
   authenticated: boolean;
   returnTo: string;
+  backTo?: "/scan";
 }) {
   const { t } = useAppSettings();
-  if (!("access" in room)) {
+  if (!("items" in room)) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl items-center px-5 py-10">
         <section className="w-full rounded-3xl border border-black/5 bg-white p-6 text-center shadow-sm">
           <DoorOpen className="mx-auto h-12 w-12 text-emerald-600" />
           <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-emerald-700">{t("room.title")}</p>
-          <h1 className="mt-2 text-2xl font-bold text-zinc-900">{room.designation}</h1>
           <p className="mt-3 text-base text-zinc-600">{t("room.publicHint")}</p>
           <Link href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#002060] px-4 text-base font-semibold text-white">{t("room.login")}</Link>
         </section>
       </main>
     );
   }
+  if (room.access === "denied") {
+    return (
+      <main className="mx-auto min-h-[60vh] max-w-xl space-y-5 px-5 py-10">
+        {backTo ? (
+          <Link href={backTo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            {t("scanner.backToScan")}
+          </Link>
+        ) : null}
+        <section className="w-full rounded-3xl border border-amber-200 bg-amber-50 p-7 text-center shadow-sm">
+          <DoorOpen className="mx-auto h-12 w-12 text-amber-700" />
+          <h1 className="mt-4 text-xl font-bold text-amber-950">{t("room.accessClosed")}</h1>
+        </section>
+      </main>
+    );
+  }
   return (
     <main className={`mx-auto w-full max-w-5xl space-y-5 ${authenticated ? "pb-24 md:pb-6" : ""}`}>
+      {backTo ? (
+        <Link href={backTo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          {t("scanner.backToScan")}
+        </Link>
+      ) : null}
       <section className="rounded-3xl bg-gradient-to-br from-[#002060] to-[#064b8e] p-5 text-white shadow-sm sm:p-7">
         <p className="text-sm font-semibold uppercase tracking-wider text-blue-100">{t("room.title")}</p>
         <h1 className="mt-2 text-2xl font-bold sm:text-3xl">{room.designation}</h1>
@@ -43,8 +66,8 @@ export default function RoomWorkspaceView({
         </div>
       </section>
       {room.access === "limited" ? (
-        <p className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-base text-amber-900">{t("room.noAccess")}</p>
-      ) : (
+        <p className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">{t("room.limitedAccess")}</p>
+      ) : null}
         <>
           <section className="grid grid-cols-3 gap-3">
             <RoomMetric icon={Package} label={t("room.itemCount")} value={room.itemCount ?? 0} />
@@ -55,7 +78,7 @@ export default function RoomWorkspaceView({
             <div className="grid gap-4 sm:grid-cols-2">
               {room.items.map((item) => (
                 <article key={item.id} className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
-                  <Link href={`/items/${item.id}`} className="block">
+                  <Link href={item.href} className="block">
                     <div className="relative flex aspect-[16/9] items-center justify-center bg-zinc-100">
                       {item.photoUrl ? <Image src={item.photoUrl} alt={item.name} fill sizes="(max-width: 640px) 100vw, 50vw" unoptimized className="object-cover" /> : <ImageIcon className="h-10 w-10 text-zinc-400" />}
                     </div>
@@ -74,9 +97,8 @@ export default function RoomWorkspaceView({
               ))}
             </div>
           ) : <p className="rounded-2xl bg-white p-6 text-center text-zinc-500">{t("room.empty")}</p>}
-          <ProblemReportButton items={room.items} fullWidth />
+          <ProblemReportButton items={room.items.filter((item) => item.href.startsWith("/items/"))} fullWidth />
         </>
-      )}
     </main>
   );
 }

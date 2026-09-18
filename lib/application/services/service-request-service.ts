@@ -67,7 +67,6 @@ export class ServiceRequestService {
       if (!context) throw new ApplicationError("not_found", "item_not_found");
       if (
         actor.role === "employee" &&
-        context.roomResponsibleId !== actor.userId &&
         context.itemResponsibleId !== actor.userId
       ) {
         throw itemNotFound();
@@ -94,7 +93,6 @@ export class ServiceRequestService {
       if (!context) throw itemNotFound();
       if (
         actor.role === "employee" &&
-        context.roomResponsibleId !== actor.userId &&
         context.itemResponsibleId !== actor.userId
       ) {
         throw itemNotFound();
@@ -231,7 +229,6 @@ function canRead(
   actor: AuthorizationActor,
 ) {
   return actor.role === "admin" || actor.role === "warehouse" ||
-    request.roomResponsibleId === actor.userId ||
     request.itemResponsibleId === actor.userId;
 }
 

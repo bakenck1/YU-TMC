@@ -46,7 +46,7 @@ export default function TmcItemQrFlow({
   actorRole?: UserRole;
 }) {
   const { t } = useAppSettings();
-  const [scannerOpen, setScannerOpen] = useState(true);
+  const [scannerOpen, setScannerOpen] = useState(operation.id !== "issue");
   const [flowState, setFlowState] = useState<TmcQrFlowState>({ status: "idle" });
   const [recipient, setRecipient] = useState<TmcOperationUserDto | null>(null);
   const [quantity, setQuantity] = useState("1");

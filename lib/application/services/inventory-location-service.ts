@@ -5,6 +5,9 @@ import type {
   RoomDto,
   UpdateBuildingInput,
   UpdateRoomInput,
+  BulkUpdateRoomAccessInput,
+  BulkUpdateRoomAccessResult,
+  UpdateRoomAccessInput,
 } from "@/lib/contracts/inventory-locations";
 import type {
   AppendLocationAuditRecord,
@@ -196,7 +199,10 @@ export class InventoryLocationService {
       if (!building || building.status !== "active") {
         throw new ApplicationError("not_found", "building_not_found");
       }
-      return (await locations.listRooms(buildingId)).map(toRoomDto);
+      const rooms = actor.role === "employee"
+        ? await locations.listRoomsAssignedTo(buildingId, actor.userId)
+        : await locations.listRooms(buildingId);
+      return rooms.map(toRoomDto);
     });
   }
 
@@ -215,7 +221,7 @@ export class InventoryLocationService {
     actor: AuthorizationActor,
   ): Promise<RoomDto> {
     requirePermission(actor, "inventory.room.create");
-    const values = normalizeRoomInput(input);
+    const values = normalizeRoomInput(input, "open");
     const occurredAt = this.clock.now();
     const roomId = this.ids.create();
     const qrId = this.ids.create();
@@ -252,6 +258,7 @@ export class InventoryLocationService {
             designation: room.designation,
             floorNumber: room.floorNumber,
             primaryResponsibleId: room.primaryResponsibleId,
+            accessMode: room.accessMode,
             qrIdentifierId: qrId,
           },
           occurredAt,
@@ -267,7 +274,6 @@ export class InventoryLocationService {
     actor: AuthorizationActor,
   ): Promise<RoomDto> {
     requirePermission(actor, "inventory.room.manage");
-    const values = normalizeRoomInput(input);
     if (!Number.isInteger(input.version) || input.version < 1) {
       throw new ApplicationError("validation", "invalid_version");
     }
@@ -280,6 +286,7 @@ export class InventoryLocationService {
       if (current.version !== input.version) {
         throw new ApplicationError("conflict", "version_conflict");
       }
+      const values = normalizeRoomInput(input, current.accessMode);
       const updated = await locations.updateRoom({
         id,
         ...values,
@@ -305,18 +312,94 @@ export class InventoryLocationService {
             floorNumber: current.floorNumber,
             floorLabel: current.floorLabel,
             primaryResponsibleId: current.primaryResponsibleId,
+            accessMode: current.accessMode,
           },
           afterValues: {
             designation: updated.designation,
             floorNumber: updated.floorNumber,
             floorLabel: updated.floorLabel,
             primaryResponsibleId: updated.primaryResponsibleId,
+            accessMode: updated.accessMode,
           },
           occurredAt,
         }),
       );
       return toRoomDto(updatedWithRelations);
     });
+  }
+
+  async updateRoomAccess(
+    id: string,
+    input: UpdateRoomAccessInput,
+    actor: AuthorizationActor,
+  ): Promise<RoomDto> {
+    requirePermission(actor, "inventory.room.manage");
+    requireVersion(input.version);
+    const accessMode = normalizeAccessMode(input.accessMode);
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ locations }) => {
+      const current = await locations.findRoomByIdForUpdate(id);
+      if (!current || current.status !== "active") {
+        throw new ApplicationError("not_found", "room_not_found");
+      }
+      if (current.version !== input.version) throw versionConflict();
+      if (current.accessMode === accessMode) return toRoomDto(current);
+      const updated = await locations.updateRoomAccess({
+        id,
+        accessMode,
+        actorId: actor.userId,
+        expectedVersion: input.version,
+        occurredAt,
+      });
+      if (!updated) throw versionConflict();
+      const result = { ...updated, qrCode: current.qrCode };
+      await locations.appendAudit(createAudit({
+        id: this.ids.create(),
+        actor,
+        subjectKind: "room",
+        subjectId: id,
+        subjectRevision: updated.version,
+        action: "room.access_mode_updated",
+        beforeValues: { accessMode: current.accessMode },
+        afterValues: { accessMode },
+        occurredAt,
+      }));
+      return toRoomDto(result);
+    });
+  }
+
+  async bulkUpdateRoomAccess(
+    input: BulkUpdateRoomAccessInput,
+    actor: AuthorizationActor,
+  ): Promise<BulkUpdateRoomAccessResult> {
+    requirePermission(actor, "inventory.room.manage");
+    const accessMode = normalizeAccessMode(input.accessMode);
+    if (!Array.isArray(input.rooms) || input.rooms.length < 1 || input.rooms.length > 500) {
+      throw new ApplicationError("validation", "invalid_room_selection");
+    }
+    const seen = new Set<string>();
+    for (const entry of input.rooms) {
+      if (!isUuid(entry.id) || seen.has(entry.id)) {
+        throw new ApplicationError("validation", "invalid_room_selection");
+      }
+      requireVersion(entry.version);
+      seen.add(entry.id);
+    }
+    const results: BulkUpdateRoomAccessResult["results"] = [];
+    for (const entry of input.rooms) {
+      try {
+        const before = await this.findRoom(entry.id, actor);
+        const room = await this.updateRoomAccess(entry.id, { accessMode, version: entry.version }, actor);
+        results.push({ id: entry.id, status: before.accessMode === accessMode ? "unchanged" : "updated", room });
+      } catch (error) {
+        results.push({
+          id: entry.id,
+          status: "failed",
+          error: error instanceof ApplicationError ? error.publicCode : "locations_unavailable",
+        });
+      }
+    }
+    return { results };
   }
 
   async archiveRoom(
@@ -406,7 +489,8 @@ function normalizeRoomInput(input: {
   floorNumber: unknown;
   floorLabel?: unknown;
   primaryResponsibleId?: unknown;
-}) {
+  accessMode?: unknown;
+}, fallbackAccessMode: "open" | "closed") {
   const designation = normalizeRequiredText(
     input.designation,
     80,
@@ -441,7 +525,17 @@ function normalizeRoomInput(input: {
     floorNumber: input.floorNumber,
     floorLabel,
     primaryResponsibleId,
+    accessMode: input.accessMode === undefined
+      ? fallbackAccessMode
+      : normalizeAccessMode(input.accessMode),
   };
+}
+
+function normalizeAccessMode(value: unknown): "open" | "closed" {
+  if (value !== "open" && value !== "closed") {
+    throw new ApplicationError("validation", "invalid_room_access_mode");
+  }
+  return value;
 }
 
 function comparisonKey(value: string) {
@@ -517,6 +611,7 @@ function toRoomDto(record: RoomRecord): RoomDto {
           name: record.primaryResponsibleName ?? "",
         }
       : null,
+    accessMode: record.accessMode,
     qrCode: record.qrCode,
     status: record.status,
     version: record.version,
