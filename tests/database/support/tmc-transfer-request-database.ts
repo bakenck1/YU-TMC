@@ -47,6 +47,9 @@ export function createService(
     id: string,
     response: IdempotencyResponse,
   ) => Promise<void>,
+  beforeReserve?: (
+    source: PostgresRepositorySource,
+  ) => Promise<void>,
 ) {
   const unitOfWork = new PostgresUnitOfWork<TmcOperationRepositories>(
     () => database,
@@ -71,6 +74,17 @@ export function createService(
               ),
             }
           : {}),
+        ...(beforeReserve
+          ? {
+              idempotency: wrapReserve(
+                afterComplete
+                  ? wrapIdempotency(repositories.idempotency, afterComplete)
+                  : repositories.idempotency,
+                source,
+                beforeReserve,
+              ),
+            }
+          : {}),
       };
     },
     { retryBaseDelayMs: 1 },
@@ -80,6 +94,20 @@ export function createService(
     { now: () => new Date() },
     { create: randomUUID },
   );
+}
+
+function wrapReserve(
+  repository: IdempotencyRequestRepository,
+  source: PostgresRepositorySource,
+  beforeReserve: (source: PostgresRepositorySource) => Promise<void>,
+): IdempotencyRequestRepository {
+  return {
+    async reserve(input) {
+      await beforeReserve(source);
+      return repository.reserve(input);
+    },
+    complete: repository.complete.bind(repository),
+  };
 }
 
 function wrapIdempotency(

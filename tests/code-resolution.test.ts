@@ -308,6 +308,59 @@ test("employee resolution exposes assignment state and the responsible person af
   assert.equal(warehouseResult.target?.isAssigned, true);
 });
 
+test("employee scans cannot disclose a foreign item from a closed cabinet", async () => {
+  let record: QrResolutionRecord = {
+    ...BARCODE_RECORD,
+    roomAccessMode: "closed",
+    responsibleName: "Foreign Owner",
+    responsibleUserId: "foreign-employee",
+  };
+  const service = createService({
+    async findByCanonicalKey() {
+      return record;
+    },
+    async findItemByBarcode() {
+      return record;
+    },
+  });
+  const employee = { userId: "employee", role: "employee" } as const;
+
+  for (const kind of ["barcode", "qr"] as const) {
+    const hidden = await service.resolve("INV-42", employee, kind, "item");
+    assert.equal(hidden.status, "unknown", kind);
+    assert.equal(hidden.target, null, kind);
+  }
+
+  record = { ...record, responsibleUserId: employee.userId };
+  assert.equal(
+    (await service.resolve("INV-42", employee, "barcode", "item")).status,
+    "resolved",
+  );
+
+  record = {
+    ...record,
+    responsibleUserId: "foreign-employee",
+    roomAccessMode: "open",
+  };
+  assert.equal(
+    (await service.resolve("INV-42", employee, "barcode", "item")).status,
+    "resolved",
+  );
+
+  record = { ...record, roomAccessMode: "closed" };
+  assert.equal(
+    (
+      await service.resolve(
+        "INV-42",
+        { userId: "warehouse", role: "warehouse" },
+        "barcode",
+        "item",
+      )
+    ).status,
+    "resolved",
+  );
+});
+
 test("scan-scoped item photos require a valid item barcode", async () => {
   let record: QrResolutionRecord = BARCODE_RECORD;
   let photoReads = 0;

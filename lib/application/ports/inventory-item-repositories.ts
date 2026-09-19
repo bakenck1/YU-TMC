@@ -258,6 +258,12 @@ export interface InventoryItemOperationRecord {
   occurredAt: Date;
   beforeValues: Record<string, unknown> | null;
   afterValues: Record<string, unknown> | null;
+  componentItem?: {
+    id: string;
+    responsibleId: string | null;
+    roomAccessMode: "open" | "closed" | null;
+    itemSection: InventorySection | null;
+  } | null;
 }
 
 export interface InventoryItemCommentRecord {

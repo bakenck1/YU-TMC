@@ -43,6 +43,7 @@ export class QrResolutionService {
           barcode.value,
           inventoryNumberComparisonKey(barcode.inventoryNumber),
           barcode.fallbackKey,
+          actor.userId,
         ),
       );
       assertItItemAccess(record, actor);
@@ -56,6 +57,7 @@ export class QrResolutionService {
         };
       }
       if (
+        isClosedForeignItem(record, actor) ||
         !record ||
         !isRecordAccessible(record, {
           fullAccess,
@@ -98,6 +100,7 @@ export class QrResolutionService {
           barcode.value,
           inventoryNumberComparisonKey(barcode.inventoryNumber),
           barcode.fallbackKey,
+          actor.userId,
         ),
         fromBarcode: true,
       };
@@ -132,6 +135,7 @@ export class QrResolutionService {
       };
     }
     if (
+      isClosedForeignItem(record, actor) ||
       !record ||
       !isRecordAccessible(record, {
         fullAccess,
@@ -181,6 +185,16 @@ export class QrResolutionService {
     }
     return photo;
   }
+}
+
+function isClosedForeignItem(
+  record: QrResolutionRecord | null,
+  actor: AuthorizationActor,
+): boolean {
+  return record?.targetKind === "item" &&
+    record.roomAccessMode === "closed" &&
+    actor.role === "employee" &&
+    record.responsibleUserId !== actor.userId;
 }
 
 function assertItItemAccess(

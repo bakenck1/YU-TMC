@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { database, createService, seedFixture, setupTmcTransferDatabase, teardownTmcTransferDatabase } from "./support/tmc-transfer-request-database";
+import type { PostgresRepositorySource } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 
 describe("TMC transfer request transactions", () => {
   beforeAll(setupTmcTransferDatabase);
@@ -26,14 +27,15 @@ describe("TMC transfer request transactions", () => {
         decision: "accept" as const,
       }],
     };
+    const cancellationDecisionBarrier = twoConnectionBarrier();
     const cancellationVsDecision = await Promise.allSettled([
-      createService().cancelIdempotent(
+      createService(undefined, undefined, cancellationDecisionBarrier.wait).cancelIdempotent(
         decisionRace.id,
         cancelInput,
         initiator,
         "tmc-db-cancel-decision-a",
       ),
-      createService().decideIdempotent(
+      createService(undefined, undefined, cancellationDecisionBarrier.wait).decideIdempotent(
         decisionRace.id,
         decisionInput,
         {
@@ -48,19 +50,21 @@ describe("TMC transfer request transactions", () => {
       .toHaveLength(1);
     expect(cancellationVsDecision.filter(({ status }) => status === "rejected"))
       .toHaveLength(1);
+    expect(cancellationDecisionBarrier.backendPids).toHaveLength(2);
 
     const duplicateRace = (await createService().create({
       recipientId: fixture.recipientIds[1]!,
       itemIds: [fixture.itemIds[1]!],
     }, initiator)).request!;
+    const duplicateCancellationBarrier = twoConnectionBarrier();
     const duplicateCancellations = await Promise.allSettled([
-      createService().cancelIdempotent(
+      createService(undefined, undefined, duplicateCancellationBarrier.wait).cancelIdempotent(
         duplicateRace.id,
         { requestVersion: duplicateRace.version },
         initiator,
         "tmc-db-cancel-race-a",
       ),
-      createService().cancelIdempotent(
+      createService(undefined, undefined, duplicateCancellationBarrier.wait).cancelIdempotent(
         duplicateRace.id,
         { requestVersion: duplicateRace.version },
         initiator,
@@ -71,6 +75,7 @@ describe("TMC transfer request transactions", () => {
       .toHaveLength(1);
     expect(duplicateCancellations.filter(({ status }) => status === "rejected"))
       .toHaveLength(1);
+    expect(duplicateCancellationBarrier.backendPids).toHaveLength(2);
 
     const terminalAudits = await database.query<{
       subject_id: string;
@@ -91,3 +96,29 @@ describe("TMC transfer request transactions", () => {
     ]));
   });
 });
+
+function twoConnectionBarrier() {
+  const backendPids: number[] = [];
+  let release!: () => void;
+  const bothArrived = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  return {
+    backendPids,
+    wait: async (source: PostgresRepositorySource) => {
+      if (backendPids.length >= 2) return;
+      const result = await source.query<{ backendPid: number }>(
+        'select pg_backend_pid()::int as "backendPid"',
+      );
+      const backendPid = result.rows[0]?.backendPid;
+      if (!backendPid || backendPids.includes(backendPid)) {
+        release();
+        throw new Error("race_barrier_requires_distinct_postgres_connections");
+      }
+      backendPids.push(backendPid);
+      if (backendPids.length === 2) release();
+      await bothArrived;
+    },
+  };
+}

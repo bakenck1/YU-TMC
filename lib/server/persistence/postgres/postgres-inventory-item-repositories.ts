@@ -260,6 +260,12 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       occurredAt: Date;
       beforeValues: Record<string, unknown> | null;
       afterValues: Record<string, unknown> | null;
+      componentItemId: string | null;
+      componentResponsibleId: string | null;
+      componentRoomAccessMode: "open" | "closed" | null;
+      componentItemSection:
+        | NonNullable<InventoryItemRecord["itemSection"]>
+        | null;
     }>(
       `select a.id, 'item'::text as "kind", a.action,
               u.full_name as "actorName", u.email as "actorEmail",
@@ -267,9 +273,23 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
               a.before_values->>'roomLabel' as "fromLocation",
               a.after_values->>'roomLabel' as "toLocation",
               a.occurred_at as "occurredAt", a.before_values as "beforeValues",
-              a.after_values as "afterValues"
+              a.after_values as "afterValues",
+              component_item.id as "componentItemId",
+              component_period.responsible_user_id as "componentResponsibleId",
+              component_room.access_mode as "componentRoomAccessMode",
+              component_item.item_section::text as "componentItemSection"
          from ${AUDIT} a
          left join ${USERS} u on u.id = a.actor_id
+         left join ${ITEMS} component_item on component_item.id =
+           coalesce(a.after_values->>'componentId', a.before_values->>'componentId')::uuid
+         left join ${ROOMS} component_room on component_room.id = component_item.room_id
+         left join lateral (
+           select responsible_user_id
+             from "yu_inventory"."responsibility_periods"
+            where item_id = component_item.id and ended_at is null
+            order by started_at desc
+            limit 1
+         ) component_period on true
         where a.subject_kind = 'item' and a.subject_id = $1
           and a.action in (
             'item.created',
@@ -289,7 +309,11 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
               target.full_name as "targetName",
               null::text as "fromLocation", null::text as "toLocation",
               a.occurred_at as "occurredAt", a.before_values as "beforeValues",
-              a.after_values as "afterValues"
+              a.after_values as "afterValues",
+              null::uuid as "componentItemId",
+              null::uuid as "componentResponsibleId",
+              null::text as "componentRoomAccessMode",
+              null::text as "componentItemSection"
          from ${AUDIT} a
          left join ${USERS} u on u.id = a.actor_id
          left join ${USERS} target on target.id::text =
@@ -301,7 +325,11 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
               target.full_name as "targetName",
               null::text as "fromLocation", null::text as "toLocation",
               a.occurred_at as "occurredAt", a.before_values as "beforeValues",
-              a.after_values as "afterValues"
+              a.after_values as "afterValues",
+              null::uuid as "componentItemId",
+              null::uuid as "componentResponsibleId",
+              null::text as "componentRoomAccessMode",
+              null::text as "componentItemSection"
          from ${AUDIT} a
          join "yu_inventory"."transfers" t on t.id = a.subject_id
          left join ${USERS} u on u.id = a.actor_id
@@ -334,6 +362,14 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       occurredAt: new Date(row.occurredAt),
       beforeValues: row.beforeValues,
       afterValues: row.afterValues,
+      componentItem: row.componentItemId
+        ? {
+            id: row.componentItemId,
+            responsibleId: row.componentResponsibleId,
+            roomAccessMode: row.componentRoomAccessMode,
+            itemSection: row.componentItemSection,
+          }
+        : null,
     }));
   }
 

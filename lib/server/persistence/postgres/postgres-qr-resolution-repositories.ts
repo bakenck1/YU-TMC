@@ -61,13 +61,25 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
       `select q.canonical_key, q.format, q.status as qr_status,
               q.target_kind,
               coalesce(q.building_id, q.room_id, q.item_id) as target_id,
-              coalesce(b.status::text, r.status::text, i.status::text) as target_status,
-              coalesce(b.name, r.designation, i.name) as title,
+              case q.target_kind
+                when 'building' then b.status::text
+                when 'room' then r.status::text
+                when 'item' then i.status::text
+              end as target_status,
+              case q.target_kind
+                when 'building' then b.name
+                when 'room' then r.designation
+                when 'item' then i.name
+              end as title,
               b.name as building_name,
               r.designation as room_designation,
               i.inventory_number,
               u.full_name as responsible_name,
-              coalesce(rp.responsible_user_id, r.primary_responsible_id) as responsible_user_id,
+              case q.target_kind
+                when 'item' then rp.responsible_user_id
+                when 'room' then r.primary_responsible_id
+                else null
+              end as responsible_user_id,
               i.item_type, i.item_section, i.brand as item_brand, i.model as item_model,
               i.description as item_description, i.quantity as item_quantity,
               i.unit_price as item_unit_price, i.condition as item_condition,
@@ -98,9 +110,9 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
                 )
               ) end as current_user_has_room_item
          from ${QR} q
-         left join ${ROOMS} r on r.id = q.room_id
-         left join ${BUILDINGS} b on b.id = coalesce(q.building_id, r.building_id)
          left join ${ITEMS} i on i.id = q.item_id
+         left join ${ROOMS} r on r.id = coalesce(q.room_id, i.room_id)
+         left join ${BUILDINGS} b on b.id = coalesce(q.building_id, r.building_id)
          left join lateral (
            select responsible_user_id
              from ${RESPONSIBILITY}
@@ -108,7 +120,11 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
             order by started_at desc
             limit 1
          ) rp on true
-         left join ${USERS} u on u.id = coalesce(rp.responsible_user_id, r.primary_responsible_id)
+         left join ${USERS} u on u.id = case q.target_kind
+           when 'item' then rp.responsible_user_id
+           when 'room' then r.primary_responsible_id
+           else null
+         end
         where q.canonical_key = $1
         limit 1`,
       [canonicalKey, actorUserId ?? null],
@@ -150,6 +166,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
     barcodeValue: string,
     inventoryNumberKey: string,
     fallbackKey: string | null,
+    actorUserId?: string,
   ): Promise<QrResolutionRecord | null> {
     const result = await this.source.query<QrRow>(
       `select $1::text as canonical_key, 'legacy_raw'::text as format,
@@ -169,8 +186,9 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
                    and photo.status = 'attached'
               ) as item_has_photo,
               i.created_at as item_created_at,
-              null::text as room_access_mode,
-              false as current_user_has_room_item
+              r.access_mode as room_access_mode,
+              coalesce(rp.responsible_user_id = $4::uuid, false)
+                as current_user_has_room_item
          from (
            select candidate.*,
                   count(*) over () as candidate_count
@@ -191,7 +209,7 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
          left join ${USERS} u on u.id = rp.responsible_user_id
         where i.candidate_count = 1
         limit 1`,
-      [barcodeValue, inventoryNumberKey, fallbackKey ?? null],
+      [barcodeValue, inventoryNumberKey, fallbackKey ?? null, actorUserId ?? null],
     );
     const row = result.rows[0];
     if (!row) return null;

@@ -86,7 +86,9 @@ async function validPack() {
   };
   const localEvidence = execFileSync("git", ["show", `${commitSha}:docs/release-checklist.md`], { cwd: process.cwd(), windowsHide: true });
   const localEvidenceHash = createHash("sha256").update(localEvidence).digest("hex");
-  const baselineBytes = await readFile("scripts/release-evidence-gates.json");
+  const baselineBytes = Buffer.from(
+    (await readFile("scripts/release-evidence-gates.json", "utf8")).replace(/\r\n/g, "\n"),
+  );
   const pack = {
     formatVersion: 1,
     packId: "release-2026-09-08-test",

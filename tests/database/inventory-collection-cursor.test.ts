@@ -216,6 +216,113 @@ describe("PostgreSQL inventory collection cursor", () => {
       [crossNamespaceNumber],
     )).rows[0]?.count).toBe(1);
   });
+
+  it("hydrates closed-cabinet scope for scanned items and component history", async () => {
+    const adminId = randomUUID();
+    const viewerId = randomUUID();
+    const componentOwnerId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    const parentItemId = randomUUID();
+    const componentItemId = randomUUID();
+    await database.query(
+      `insert into yu_inventory.users (id, code, email, full_name, role, created_at, updated_at)
+       values ($1,$4,$5,'Security Admin','admin',now(),now()),
+              ($2,$6,$7,'History Viewer','employee',now(),now()),
+              ($3,$8,$9,'Component Owner','employee',now(),now())`,
+      [
+        adminId,
+        viewerId,
+        componentOwnerId,
+        `SC-${adminId.slice(0, 8)}`,
+        `${adminId}@example.com`,
+        `SV-${viewerId.slice(0, 8)}`,
+        `${viewerId}@example.com`,
+        `SO-${componentOwnerId.slice(0, 8)}`,
+        `${componentOwnerId}@example.com`,
+      ],
+    );
+    await database.query(
+      `insert into yu_inventory.buildings
+         (id,name,name_key,address,address_key,created_by,updated_by)
+       values ($1,'Security Building',$2,'Security Address',$2,$3,$3)`,
+      [buildingId, `security-${buildingId}`, adminId],
+    );
+    await database.query(
+      `insert into yu_inventory.rooms
+         (id,building_id,designation,designation_key,floor_number,access_mode,created_by,updated_by)
+       values ($1,$2,'SEC',$3,1,'closed',$4,$4)`,
+      [roomId, buildingId, `security-${roomId}`, adminId],
+    );
+    await database.query(
+      `insert into yu_inventory.items
+         (id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+       values ($1,'Visible parent',1,1,$3,'official',$4,$5,$6,$6),
+              ($2,'Hidden component',1,1,$3,'official',$7,$8,$6,$6)`,
+      [
+        parentItemId,
+        componentItemId,
+        roomId,
+        `SEC-PARENT-${parentItemId.slice(0, 8)}`,
+        `sec-parent-${parentItemId.slice(0, 8)}`,
+        adminId,
+        `SEC-COMPONENT-${componentItemId.slice(0, 8)}`,
+        `sec-component-${componentItemId.slice(0, 8)}`,
+      ],
+    );
+    await database.query(
+      `insert into yu_inventory.responsibility_periods
+         (id,item_id,responsible_user_id,source,started_at,started_by)
+       values ($1,$2,$5,'transfer',now(),$7),
+              ($3,$4,$6,'transfer',now(),$7)`,
+      [
+        randomUUID(),
+        parentItemId,
+        randomUUID(),
+        componentItemId,
+        viewerId,
+        componentOwnerId,
+        adminId,
+      ],
+    );
+    await database.query(
+      `insert into yu_inventory.audit_records
+         (id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,after_values)
+       values ($1,$2,'admin','item',$3,'item.component_added',$4::jsonb)`,
+      [
+        randomUUID(),
+        adminId,
+        parentItemId,
+        JSON.stringify({
+          componentId: componentItemId,
+          componentName: "Hidden component",
+          componentInventoryNumber: `SEC-COMPONENT-${componentItemId.slice(0, 8)}`,
+        }),
+      ],
+    );
+
+    const items = createPostgresInventoryItemRepositories(database).items;
+    expect((await items.listOperations(parentItemId))[0]?.componentItem).toEqual({
+      id: componentItemId,
+      responsibleId: componentOwnerId,
+      roomAccessMode: "closed",
+      itemSection: "general",
+    });
+
+    const scanned = await createPostgresQrResolutionRepositories(database).qr
+      .findItemByBarcode(
+        `SEC-COMPONENT-${componentItemId.slice(0, 8)}`,
+        `sec-component-${componentItemId.slice(0, 8)}`,
+        null,
+        viewerId,
+      );
+    expect(scanned).toMatchObject({
+      targetId: componentItemId,
+      responsibleUserId: componentOwnerId,
+      roomAccessMode: "closed",
+      currentUserHasRoomItem: false,
+    });
+  });
 });
 
 async function resetSchemas(databaseConfig: DatabaseConfig) {

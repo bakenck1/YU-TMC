@@ -357,6 +357,7 @@ export class InventoryItemService {
         hasPermission(actor.role, "inventory.item.read_all"),
         actor.role === "admin",
         hasPermission(actor.role, "inventory.item.comment"),
+        canReadOperationComponent(record, actor),
       ),
     );
   }
@@ -1945,6 +1946,30 @@ function isItemReadable(
   );
 }
 
+function canReadOperationComponent(
+  record: InventoryItemOperationRecord,
+  actor: AuthorizationActor,
+): boolean {
+  if (
+    record.action !== "item.component_added" &&
+    record.action !== "item.component_removed"
+  ) {
+    return true;
+  }
+  if (hasPermission(actor.role, "inventory.item.read_all")) return true;
+  const component = record.componentItem;
+  if (!component) return false;
+  if (
+    component.itemSection === "it" &&
+    !hasPermission(actor.role, "inventory.it.read")
+  ) {
+    return false;
+  }
+  return hasPermission(actor.role, "inventory.item.read_assigned") &&
+    (component.responsibleId === actor.userId ||
+      component.roomAccessMode === "open");
+}
+
 function itemNotFound() {
   return new ApplicationError("not_found", "item_not_found");
 }
@@ -2116,14 +2141,17 @@ function toOperationDto(
   canReadAll: boolean,
   canReadAdministrative: boolean,
   canReadComments: boolean,
+  canReadComponent: boolean,
 ): InventoryItemOperationDto {
   const componentValues = record.action === "item.component_added"
     ? record.afterValues
     : record.action === "item.component_removed"
       ? record.beforeValues
       : null;
-  const componentName = componentValues?.componentName;
-  const componentInventoryNumber = canReadAdministrative
+  const componentName = canReadComponent
+    ? componentValues?.componentName
+    : undefined;
+  const componentInventoryNumber = canReadComponent && canReadAdministrative
     ? componentValues?.componentInventoryNumber
     : undefined;
   const rawValues = record.afterValues ?? record.beforeValues;

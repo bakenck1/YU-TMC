@@ -339,7 +339,12 @@ export class LocalBarcodeService {
         assertItItemAccess(group, actor.role);
         if (group.itemSection === "it") return null;
       }
-      if (!group || group.status !== "active" || !canResolveScannedBarcode(actor)) {
+      if (
+        !group ||
+        group.status !== "active" ||
+        !canResolveScannedBarcode(actor) ||
+        !canRead(actor, group)
+      ) {
         return null;
       }
       const photo = await localBarcodes.findGroupPhoto(group.id);
@@ -357,9 +362,7 @@ export class LocalBarcodeService {
         assertItItemAccess(group, actor.role);
         if (group.itemSection === "it") return null;
       }
-      return group &&
-        (canRead(actor, group) ||
-          (group.status === "active" && canResolveScannedBarcode(actor)))
+      return group && canResolveScannedBarcode(actor) && canRead(actor, group)
         ? toDto(group)
         : null;
     });

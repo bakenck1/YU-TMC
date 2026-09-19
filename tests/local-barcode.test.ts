@@ -363,6 +363,11 @@ test("a foreign local group follows its cabinet access mode on direct links", as
   }, recipients);
   const repository = {
     findGroup: async () => record,
+    findGroupByBarcodeKey: async () => record,
+    findGroupPhoto: async () => ({
+      bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+      mimeType: "image/jpeg" as const,
+    }),
   } as unknown as LocalBarcodeRepository;
   const repositories = {
     localBarcodes: repository,
@@ -383,6 +388,38 @@ test("a foreign local group follows its cabinet access mode on direct links", as
   await assert.rejects(
     service.getGroup(GROUP_ID, { userId: OWNER_ID, role: "employee" }),
     /local_group_not_found/,
+  );
+  assert.equal(
+    await service.resolveBarcode(record.barcodeValue, {
+      userId: OWNER_ID,
+      role: "employee",
+    }),
+    null,
+  );
+  assert.equal(
+    await service.getScannedGroupPhoto(record.barcodeValue, {
+      userId: OWNER_ID,
+      role: "employee",
+    }),
+    null,
+  );
+  assert.equal(
+    (
+      await service.resolveBarcode(record.barcodeValue, {
+        userId: USER_B_ID,
+        role: "employee",
+      })
+    )?.id,
+    GROUP_ID,
+  );
+  assert.equal(
+    (
+      await service.resolveBarcode(record.barcodeValue, {
+        userId: ADMIN_ID,
+        role: "admin",
+      })
+    )?.id,
+    GROUP_ID,
   );
 });
 

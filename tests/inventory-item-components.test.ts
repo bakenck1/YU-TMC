@@ -263,9 +263,16 @@ test("lists a merged operation feed with actor contact and safe component detail
       occurredAt: new Date("2026-08-01T12:00:00.000Z"),
       beforeValues: null,
       afterValues: {
+        componentId: IDS[1],
         componentName: "Monitor",
         componentInventoryNumber: "INV-2222",
         protectedValue: "must not leave the service",
+      },
+      componentItem: {
+        id: IDS[1],
+        responsibleId: "employee-1",
+        roomAccessMode: "closed",
+        itemSection: "general",
       },
     },
     {
@@ -357,6 +364,57 @@ test("lists a merged operation feed with actor contact and safe component detail
   assert.equal(warehouseResult[0]?.detail?.componentInventoryNumber, undefined);
   assert.equal(warehouseResult[1]?.detail?.comment, undefined);
   assert.equal(warehouseResult[0]?.actorEmail, null);
+});
+
+test("component history hides a foreign component from a closed cabinet", async () => {
+  const current = item(IDS[0], "employee-1");
+  const componentItem: NonNullable<InventoryItemOperationRecord["componentItem"]> = {
+    id: IDS[1],
+    responsibleId: "employee-2",
+    roomAccessMode: "closed",
+    itemSection: "general",
+  };
+  const operation: InventoryItemOperationRecord = {
+    id: "audit-hidden-component",
+    kind: "item",
+    action: "item.component_added",
+    actorName: "Admin User",
+    actorEmail: "admin@example.com",
+    targetName: null,
+    occurredAt: new Date("2026-08-01T12:00:00.000Z"),
+    beforeValues: null,
+    afterValues: {
+      componentId: IDS[1],
+      componentName: "Secret projector",
+      componentInventoryNumber: "SECRET-1",
+    },
+    componentItem,
+  };
+  const service = createService({
+    findItemById: async () => current,
+    listOperations: async () => [operation],
+  });
+
+  const employeeResult = await service.listOperations(IDS[0], {
+    userId: "employee-1",
+    role: "employee",
+  });
+  assert.equal(employeeResult[0]?.detail, null);
+
+  componentItem.roomAccessMode = "open";
+  const openResult = await service.listOperations(IDS[0], {
+    userId: "employee-1",
+    role: "employee",
+  });
+  assert.equal(openResult[0]?.detail?.componentName, "Secret projector");
+
+  componentItem.roomAccessMode = "closed";
+  const adminResult = await service.listOperations(IDS[0], {
+    userId: "admin-1",
+    role: "admin",
+  });
+  assert.equal(adminResult[0]?.detail?.componentName, "Secret projector");
+  assert.equal(adminResult[0]?.detail?.componentInventoryNumber, "SECRET-1");
 });
 
 test("administrator and assigned employee can add normalized item comments while warehouse cannot", async () => {
