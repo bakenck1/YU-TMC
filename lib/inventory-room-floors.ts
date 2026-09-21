@@ -76,7 +76,10 @@ export function mainCampusWingFromDesignation(
   const letterAfterNumber = normalized.match(
     new RegExp(`^\\d[\\d\\s]*[-–—./]?\\s*([${MAIN_CAMPUS_WING_LETTERS}])$`, "u"),
   )?.[1];
-  const wingLetter = letterBeforeNumber ?? letterAfterNumber;
+  const standaloneLetterAtEnd = normalized.match(
+    new RegExp(`(?:^|\\s|[-–—./])([${MAIN_CAMPUS_WING_LETTERS}])$`, "u"),
+  )?.[1];
+  const wingLetter = letterBeforeNumber ?? letterAfterNumber ?? standaloneLetterAtEnd;
 
   return wingLetter ? MAIN_CAMPUS_WING_BY_PREFIX[wingLetter] ?? null : null;
 }

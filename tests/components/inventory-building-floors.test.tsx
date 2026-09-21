@@ -87,12 +87,13 @@ describe("building room navigation", () => {
     const mainCampus = {
       ...BUILDING,
       name: "The Main Campus",
-      roomCount: 4,
+      roomCount: 5,
     };
     const rooms = [
       room("44444444-4444-4444-8444-444444444444", "D412", 4),
       room("55555555-5555-4555-8555-555555555555", "В404", 4),
       room("77777777-7777-4777-8777-777777777777", "401 Б", 4),
+      room("88888888-8888-4888-8888-888888888888", "Мангышлак А", 4),
       room("66666666-6666-4666-8666-666666666666", "A501", 5),
     ];
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ rooms })));
@@ -105,7 +106,7 @@ describe("building room navigation", () => {
     );
 
     fireEvent.click(screen.getByRole("button", {
-      name: /inventory\.roomsCount: 4/,
+      name: /inventory\.roomsCount: 5/,
     }));
 
     const fourthFloorLabel = await screen.findByText("4 inventory.floorShort");
@@ -132,8 +133,9 @@ describe("building room navigation", () => {
     expect(bWing?.textContent).toContain("В404");
     expect(bWing?.textContent).toContain("401 Б");
     expect(bWing?.textContent).toContain("inventory.roomsCount: 2");
-    expect(screen.getByText("A корпус").closest("details")?.textContent)
-      .toContain("inventory.roomsCount: 0");
+    const aWing = screen.getByText("A корпус").closest("details");
+    expect(aWing?.textContent).toContain("inventory.roomsCount: 1");
+    expect(aWing?.textContent).toContain("Мангышлак А");
 
     const fifthFloor = screen
       .getByText("5 inventory.floorShort")

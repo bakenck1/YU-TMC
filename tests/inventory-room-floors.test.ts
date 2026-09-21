@@ -82,6 +82,15 @@ test("recognizes a campus wing before or after a room number", () => {
     ["401 Д", "D"],
     ["E.401", "E"],
     ["401-Е", "E"],
+    ["Мангышлак A", "A"],
+    ["Мангышлак А", "A"],
+    ["Кабинет B", "B"],
+    ["Кабинет Б", "B"],
+    ["Кабинет В", "B"],
+    ["Кабинет D", "D"],
+    ["Кабинет Д", "D"],
+    ["Кабинет E", "E"],
+    ["Кабинет Е", "E"],
   ] as const;
 
   for (const [designation, expectedWing] of cases) {
@@ -95,6 +104,8 @@ test("recognizes a campus wing before or after a room number", () => {
   assert.equal(mainCampusWingFromDesignation("401"), null);
   assert.equal(mainCampusWingFromDesignation("Office A401"), null);
   assert.equal(mainCampusWingFromDesignation("A office 401"), null);
+  assert.equal(mainCampusWingFromDesignation("Комната"), null);
+  assert.equal(mainCampusWingFromDesignation("OFFICE"), null);
 });
 
 test("sorts room selections by floor, then A, B, D and E wings", () => {
