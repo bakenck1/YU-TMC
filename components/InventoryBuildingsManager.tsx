@@ -256,26 +256,30 @@ export default function InventoryBuildingsManager({
     return (
       <div
         key={room.id}
-        className="flex flex-col gap-3 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+        className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 shadow-sm"
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
           {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
-          <DoorOpen className="h-4 w-4 shrink-0 text-zinc-400" />
-          <span className="truncate text-sm text-zinc-700">
-            {room.designation}
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm ring-1 ring-zinc-200">
+            <DoorOpen className="h-4 w-4" />
           </span>
-          <span className="shrink-0 text-xs text-zinc-400">
-            · {room.floorNumber} {t("inventory.floorShort")}
-          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-zinc-800">
+              {room.designation}
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              {t("items.filterFloor")}: {room.floorNumber}
+            </p>
+          </div>
           <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${room.accessMode === "closed" ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>
             {t(room.accessMode === "closed" ? "room.accessClosedOption" : "room.accessOpen")}
           </span>
         </div>
         {canEdit ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-200 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
             <a
               href={`/api/inventory/rooms/${room.id}/qr?download=1`}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
               <Download className="h-3.5 w-3.5" />
               {t("room.qrDownload")}
@@ -284,14 +288,14 @@ export default function InventoryBuildingsManager({
               type="button"
               onClick={() => void changeRoomAccess(room, room.accessMode === "closed" ? "open" : "closed")}
               disabled={accessSaving}
-              className="min-h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 disabled:opacity-50"
+              className="min-h-10 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-50"
             >
               {t(room.accessMode === "closed" ? "room.openAccessAction" : "room.closeAccessAction")}
             </button>
             <button
               type="button"
               onClick={() => setRoomEditor({ building, room })}
-              className="min-h-9 rounded-lg px-2 text-xs font-semibold text-accent-dark hover:bg-emerald-50"
+              className="min-h-10 rounded-lg px-3 text-xs font-semibold text-accent-dark transition hover:bg-emerald-50"
             >
               {t("common.open")}
             </button>
@@ -300,7 +304,7 @@ export default function InventoryBuildingsManager({
               onClick={() => void archiveRoom(room)}
               disabled={archivingId === room.id}
               aria-label={t("building.archiveRoom", { name: room.designation })}
-              className="rounded-md p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-red-600 transition hover:bg-red-50 disabled:opacity-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
