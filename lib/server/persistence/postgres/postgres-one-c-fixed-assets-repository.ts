@@ -1,8 +1,9 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
-import { OneCImportUnavailableError, type OneCFixedAssetRepository } from "@/lib/application/ports/one-c-fixed-assets-repository";
+import { OneCImportUnavailableError, type OneCFixedAssetRepository, type OneCImportMetadata } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { oneCFixedAssetPayload } from "@/lib/server/integrations/one-c-fixed-assets";
 
@@ -52,7 +53,7 @@ export class PostgresOneCFixedAssetRepository implements OneCFixedAssetRepositor
     }
   }
 
-  async saveBatch(assets: readonly OneCFixedAsset[]) {
+  async saveBatch(assets: readonly OneCFixedAsset[], metadata?: OneCImportMetadata) {
     const client = await this.pool.connect();
     let transactionStarted = false;
     const result = { created: 0, updated: 0, unchanged: 0 };
@@ -103,6 +104,38 @@ export class PostgresOneCFixedAssetRepository implements OneCFixedAssetRepositor
       result.created = Number(counters.created);
       result.updated = Number(counters.updated);
       result.unchanged = Number(counters.unchanged);
+      if (metadata) {
+      const sourceSha256 = metadata.sourceSha256;
+      const batchId = randomUUID();
+      const insertedBatch = await client.query<{ id: string }>(
+        `insert into "yu_inventory"."one_c_import_batches"
+          (id, request_id, source_filename, source_sha256, received_count, created_count, updated_count, unchanged_count, summary)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+         on conflict (source_sha256) do nothing returning id`,
+        [batchId, metadata?.requestId ?? null, metadata?.sourceFilename ?? null, sourceSha256,
+          assets.length, result.created, result.updated, result.unchanged,
+          JSON.stringify({ snapshotKind: metadata ? "verified_source" : "unverified_legacy_snapshot", automaticPublication: false })],
+      );
+      const effectiveBatchId = insertedBatch.rows[0]?.id ?? (await client.query<{ id: string }>(
+        `select id from "yu_inventory"."one_c_import_batches" where source_sha256 = $1`, [sourceSha256],
+      )).rows[0]?.id;
+      if (!effectiveBatchId) throw new Error("one_c_import_batch_missing");
+      if (insertedBatch.rowCount) {
+        await client.query(
+          `insert into "yu_inventory"."one_c_import_batch_rows"
+             (batch_id, external_id, payload_hash, payload)
+           select $1::uuid, row.external_id, row.payload_hash, row.payload
+             from jsonb_to_recordset($2::jsonb) as row(external_id text, payload_hash varchar(64), payload jsonb)`,
+          [effectiveBatchId, JSON.stringify(batch)],
+        );
+      }
+      await client.query(
+        `update "yu_inventory"."one_c_fixed_asset_inbox" set
+           last_batch_id = $1, last_request_id = $2, last_seen_at = transaction_timestamp()
+         where external_id = any($3::text[])`,
+        [effectiveBatchId, metadata?.requestId ?? null, assets.map((asset) => asset.externalId)],
+      );
+      }
       await client.query("commit");
       transactionStarted = false;
       return result;

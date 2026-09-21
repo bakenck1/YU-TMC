@@ -28,6 +28,7 @@
     "security:check": "node scripts/security-check.mjs",
     "monitor:prod-errors": "node scripts/monitor-production-errors.mjs --since-minutes 30",
     "worker:tmc-push": "node --conditions=react-server --import tsx scripts/process-tmc-push-outbox.ts",
+    "worker:one-c-publications": "node --conditions=react-server --import tsx scripts/process-one-c-publications.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "node --import ./scripts/node-userinfo-workaround.mjs ./node_modules/drizzle-kit/bin.cjs check",
     "db:migrate": "tsx scripts/db/migrate.ts",
@@ -36,6 +37,7 @@
     "db:import-personnel": "node --conditions=react-server --import tsx scripts/db/import-personnel.ts",
     "db:smoke": "tsx scripts/db/smoke.ts",
     "db:seed": "node --conditions=react-server --import tsx scripts/db/seed.ts",
+    "db:backfill-one-c": "node --conditions=react-server --import tsx scripts/db/backfill-one-c-reconciliation.ts",
     "db:reset": "tsx scripts/db/reset.ts",
     "db:reset-users": "tsx scripts/db/reset-users.ts"
   },

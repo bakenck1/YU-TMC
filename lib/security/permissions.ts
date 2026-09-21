@@ -63,6 +63,7 @@ export const APP_PERMISSIONS = [
   "inventory.photo.dispute_preview",
   "inventory.photo.dispute_original",
   "inventory.report.export",
+  "inventory.integration.one_c.manage",
 ] as const;
 
 export type AppPermission = (typeof APP_PERMISSIONS)[number];
@@ -141,6 +142,7 @@ export const PERMISSION_ROLES = {
   "inventory.photo.dispute_preview": ALL_ROLES,
   "inventory.photo.dispute_original": ["admin", "employee"],
   "inventory.report.export": ADMIN_WAREHOUSE,
+  "inventory.integration.one_c.manage": ADMIN_ONLY,
 } as const satisfies Record<AppPermission, readonly UserRole[]>;
 
 export interface AuthorizationActor {

@@ -16,6 +16,7 @@ import { UserService } from "@/lib/application/services/user-service";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
 import { LocalBarcodeService } from "@/lib/application/services/local-barcode-service";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
+import { OneCReconciliationService } from "@/lib/server/one-c-reconciliation-service";
 import { AssetLossService } from "@/lib/application/services/asset-loss-service";
 import { MemoryUserUnitOfWork } from "@/lib/server/persistence/memory/memory-user-unit-of-work";
 import { createPostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
@@ -56,6 +57,7 @@ export interface ApplicationServices {
   readonly assetLosses: AssetLossService;
   readonly localBarcodes: LocalBarcodeService;
   readonly oneCFixedAssets: OneCFixedAssetImportService;
+  readonly oneCReconciliation: OneCReconciliationService;
 }
 
 const globalApplication = globalThis as typeof globalThis & {
@@ -170,6 +172,7 @@ function createApplicationServices(): ApplicationServices {
       { create: () => randomUUID() },
     ),
     oneCFixedAssets: new OneCFixedAssetImportService(new PostgresOneCFixedAssetRepository()),
+    oneCReconciliation: new OneCReconciliationService(),
   };
 }
 

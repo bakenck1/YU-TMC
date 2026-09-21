@@ -78,8 +78,8 @@ function normalizeAsset(record: Record<string, unknown>, index: number): OneCFix
     location: text(record, "Location", "Локация", "Подразделение", "Местонахождение"), status,
     responsibleName: text(record, "ResponsibleName", "Responsible", "МОЛ", "Ответственный", "МатериальноОтветственноеЛицо"),
     responsibleExternalId,
-    quantity: numberValue(record, index, "Quantity", "КолВо", "Количество") ?? 1,
-    residualCost: numberValue(record, index, "ResidualCost", "ResidualValue", "ЦенаОстаточная", "ОстаточнаяСтоимость", "Цена"),
+    quantity: numberValue(record, index, false, "Quantity", "КолВо", "Количество") ?? 1,
+    residualCost: numberValue(record, index, true, "ResidualCost", "ResidualValue", "ЦенаОстаточная", "ОстаточнаяСтоимость", "Цена"),
     acceptedAt: dateValue(record, index, "AcceptedAt", "AcceptanceDate", "ДатаПринятияКУчёту", "ДатаПринятия"),
     updatedAt: dateValue(record, index, "UpdatedAt", "ДатаИзменения", "Изменено"),
   };
@@ -96,11 +96,11 @@ function text(record: Record<string, unknown>, ...keys: string[]): string | null
   return null;
 }
 
-function numberValue(record: Record<string, unknown>, index: number, ...keys: string[]): number | null {
+function numberValue(record: Record<string, unknown>, index: number, allowNegative: boolean, ...keys: string[]): number | null {
   const value = text(record, ...keys);
   if (!value) return null;
   const parsed = Number(value.replace(/\s/g, "").replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed < 0) rowFail(index, "invalid_number");
+  if (!Number.isFinite(parsed) || (!allowNegative && parsed < 0)) rowFail(index, "invalid_number");
   return parsed;
 }
 

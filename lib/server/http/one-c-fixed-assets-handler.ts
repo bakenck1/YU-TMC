@@ -41,7 +41,11 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
       let xml: string;
       try { xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
       catch { throw new OneCContractError("invalid_utf8"); }
-      const result = await dependencies.service.importBatch(parseOneCFixedAssets(xml));
+      const result = await dependencies.service.importBatch(parseOneCFixedAssets(xml), {
+        sourceSha256: createHash("sha256").update(bytes).digest("hex"),
+        requestId,
+        sourceFilename: normalizedFilename(request.headers.get("x-source-filename")),
+      });
       return json({ success: true, ...result, requestId });
     } catch (error) {
       if (error instanceof ApplicationError && error.kind === "payload_too_large") return json({ success: false, error: "xml_too_large", requestId }, 413);
@@ -68,3 +72,8 @@ function logSafeFailure(dependencies: Dependencies, requestId: string, errorCode
   (dependencies.logFailure ?? defaultLogFailure)({ requestId, errorCode, errorName });
 }
 function defaultLogFailure(event: { requestId: string; errorCode: string; errorName: string }) { console.error("1C fixed-asset import failed", event); }
+function normalizedFilename(value: string | null) {
+  if (!value) return null;
+  const result = value.normalize("NFKC").trim();
+  return result && result.length <= 255 && !/[\\/\0]/u.test(result) ? result : null;
+}

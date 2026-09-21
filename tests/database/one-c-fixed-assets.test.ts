@@ -30,7 +30,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     migrationPool = createPostgresPool(migrationConfig, { max: 2 });
     runtimePool = createPostgresPool(runtimeConfig, { max: 4 });
   });
-  beforeEach(async () => { await migrationPool.query('truncate table "yu_inventory"."one_c_fixed_asset_inbox"'); });
+  beforeEach(async () => { await migrationPool.query('truncate table "yu_inventory"."one_c_publication_runs", "yu_inventory"."item_one_c_links", "yu_inventory"."one_c_import_batch_rows", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_import_batches"'); });
   afterAll(async () => {
     await runtimePool?.end(); await migrationPool?.end(); await closeDatabase(); await resetSchemas(migrationConfig);
   });
@@ -39,7 +39,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const columns = await migrationPool.query<{ column_name: string }>(
       `select column_name from information_schema.columns where table_schema = 'yu_inventory' and table_name = 'one_c_fixed_asset_inbox' order by ordinal_position`,
     );
-    expect(columns.rows.map((row) => row.column_name)).toEqual(["external_id", "payload_hash", "payload", "received_at", "updated_at"]);
+    expect(columns.rows.map((row) => row.column_name)).toEqual(["external_id", "payload_hash", "payload", "received_at", "updated_at", "last_batch_id", "last_request_id", "last_seen_at"]);
     const grants = await runtimePool.query<{ canSelect: boolean; canInsert: boolean; canUpdate: boolean; canDelete: boolean }>(
       `select has_table_privilege(current_user, 'yu_inventory.one_c_fixed_asset_inbox', 'SELECT') as "canSelect",
               has_table_privilege(current_user, 'yu_inventory.one_c_fixed_asset_inbox', 'INSERT') as "canInsert",
@@ -50,6 +50,26 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await expect(migrationPool.query<{ exists: boolean }>(
       `select exists(select 1 from pg_constraint where conname = 'one_c_fixed_asset_inbox_payload_hash_check') as exists`,
     )).resolves.toMatchObject({ rows: [{ exists: true }] });
+  });
+
+  it("creates an immutable, idempotent import snapshot alongside the inbox projection", async () => {
+    const handler = createOneCFixedAssetsPostHandler({
+      service: new OneCFixedAssetImportService(new PostgresOneCFixedAssetRepository(runtimePool)),
+      apiKey: () => "database-test-key",
+    });
+    const makeRequest = () => new Request("https://inventory.example/api/integrations/1c/fixed-assets", {
+      method: "POST", headers: { authorization: "Bearer database-test-key", "content-type": "application/xml", "x-source-filename": "snapshot.xml" },
+      body: `<FixedAssets><FixedAsset><GUID>${asset.externalId}</GUID><Name>${asset.name}</Name><ResidualCost>-1</ResidualCost></FixedAsset></FixedAssets>`,
+    });
+    expect((await handler(makeRequest())).status).toBe(200);
+    expect((await handler(makeRequest())).status).toBe(200);
+    const batches = await runtimePool.query<{ count: number }>('select count(*)::int count from "yu_inventory"."one_c_import_batches"');
+    const rows = await runtimePool.query<{ count: number }>('select count(*)::int count from "yu_inventory"."one_c_import_batch_rows"');
+    expect(batches.rows[0]?.count).toBe(1);
+    expect(rows.rows[0]?.count).toBe(1);
+    await expect(runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set payload='{}'::jsonb`)).rejects.toThrow(/immutable 1C batch source fields/);
+    const projection = await runtimePool.query<{ linked: boolean }>('select last_batch_id is not null as linked from "yu_inventory"."one_c_fixed_asset_inbox"');
+    expect(projection.rows[0]?.linked).toBe(true);
   });
 
   it("holds the per-key import lease across independent pool clients", async () => {

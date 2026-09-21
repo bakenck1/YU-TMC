@@ -22,6 +22,7 @@ export function isAuthRole(value: unknown): value is AuthRole {
 }
 
 const ROUTE_PERMISSIONS = [
+  ["/settings/integrations/1c", "inventory.integration.one_c.manage"],
   ["/it-items", "inventory.it.read"],
   ["/requests", "inventory.notification.read"],
   ["/scan", "inventory.workspace.read"],
