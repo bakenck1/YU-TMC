@@ -7,7 +7,7 @@ import { createOneCReconciliationAdminHandlers, type OneCReconciliationAdminServ
 const ID="11111111-1111-4111-8111-111111111111";
 const actor={userId:ID,role:"admin" as const};
 function service(overrides:Partial<OneCReconciliationAdminService>={}):OneCReconciliationAdminService{return {
-  listBatches:async(q)=>q,getBatch:async(id)=>({id}),listBatchRows:async(id,q)=>({id,...q}),analyzeBatch:async(id,input)=>({id,...input}),decideRow:async(id,externalId,input)=>({id,externalId,...input}),decideRowsBulk:async(id,input)=>({id,...input}),approveBatch:async(id,input)=>({id,...input}),publishBatch:async(id,input)=>({id,...input}),getPublication:async(id)=>({id}),...overrides,
+  listBatches:async(q)=>q,getBatch:async(id)=>({id}),listBatchRows:async(id,q)=>({id,...q}),exportBatch:async(id)=>({id,rows:[]}),analyzeBatch:async(id,input)=>({id,...input}),decideRow:async(id,externalId,input)=>({id,externalId,...input}),decideRowsBulk:async(id,input)=>({id,...input}),approveBatch:async(id,input)=>({id,...input}),publishBatch:async(id,input)=>({id,...input}),getPublication:async(id)=>({id}),...overrides,
 };}
 function handlers(overrides:Partial<OneCReconciliationAdminService>={}){return createOneCReconciliationAdminHandlers({authenticate:async()=>actor,service:()=>service(overrides)});}
 function context(id=ID){return{params:Promise.resolve({id})};}

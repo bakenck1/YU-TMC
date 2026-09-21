@@ -36,10 +36,33 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const clauses = ["r.batch_id = $1"];
     if (query.reviewState) clauses.push(`r.review_state = $${values.push(query.reviewState)}`);
     if (query.proposedAction) clauses.push(`r.proposed_action = $${values.push(query.proposedAction)}`);
-    if (query.search) { values.push(`%${query.search}%`); clauses.push(`(r.external_id ilike $${values.length} or r.payload->>'name' ilike $${values.length} or r.payload->>'inventoryNumber' ilike $${values.length})`); }
+    if (query.search) {
+      values.push(`%${query.search}%`);
+      clauses.push(`(r.external_id ilike $${values.length}
+        or r.payload->>'code' ilike $${values.length}
+        or r.payload->>'name' ilike $${values.length}
+        or r.payload->>'inventoryNumber' ilike $${values.length}
+        or r.payload->>'barcode' ilike $${values.length}
+        or r.payload->>'location' ilike $${values.length}
+        or r.payload->>'responsibleName' ilike $${values.length})`);
+    }
     values.push(query.pageSize, (query.page - 1) * query.pageSize);
     const result = await this.pool.query(`select r.*, i.name as matched_item_name, i.inventory_number as matched_inventory_number, count(*) over()::int as total from "yu_inventory"."one_c_import_batch_rows" r left join "yu_inventory"."items" i on i.id=r.matched_item_id where ${clauses.join(" and ")} order by r.external_id limit $${values.length - 1} offset $${values.length}`, values);
     return { data: result.rows, page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
+  }
+
+  async exportBatch(batchId: string, actor?: OneCAdminActor) {
+    void actor;
+    const [batch, rows] = await Promise.all([
+      this.pool.query(`select * from "yu_inventory"."one_c_import_batches" where id = $1`, [batchId]),
+      this.pool.query(`select r.*, i.name as matched_item_name, i.inventory_number as matched_inventory_number
+        from "yu_inventory"."one_c_import_batch_rows" r
+        left join "yu_inventory"."items" i on i.id = r.matched_item_id
+        where r.batch_id = $1
+        order by r.external_id`, [batchId]),
+    ]);
+    if (!batch.rows[0]) throw notFound();
+    return { batch: batch.rows[0], rows: rows.rows };
   }
 
   async analyzeBatch(batchId: string, input: OneCPlanInput) {
@@ -75,7 +98,10 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       }
       const versionFingerprint = candidates.rows.map((r) => `${r.id}:${r.version}`).sort().join("|");
       const plan = buildOneCPublicationPlan({ batchId, sourceHash: String(batch.source_sha256), existingItemsVersion: versionFingerprint, rows: planRows });
-      await client.query(`update "yu_inventory"."one_c_import_batches" set state='review_required',review_started_at=coalesce(review_started_at,now()),summary=$2::jsonb,version=version+1 where id=$1`, [batchId, JSON.stringify({ ...summary, plan })]);
+      const existingSummary = typeof batch.summary === "object" && batch.summary !== null
+        ? batch.summary as Record<string, unknown>
+        : {};
+      await client.query(`update "yu_inventory"."one_c_import_batches" set state='review_required',review_started_at=coalesce(review_started_at,now()),summary=$2::jsonb,version=version+1 where id=$1`, [batchId, JSON.stringify({ ...existingSummary, ...summary, plan })]);
       await client.query("commit");
       return plan;
     } catch (error) { await client.query("rollback").catch(() => undefined); throw error; }
@@ -99,7 +125,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
   }
 
   async approveBatch(batchId: string, input: Required<OneCPlanInput>, actor: OneCAdminActor) {
-    const result = await this.pool.query(`update "yu_inventory"."one_c_import_batches" set state='approved',approved_at=now(),approved_by=$3,version=version+1 where id=$1 and version=$2 and state='review_required' and summary->'plan'->>'hash'=$4 and not exists(select 1 from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and review_state not in ('excluded','approved','published')) returning *`, [batchId, input.version, actor.userId, input.planHash]);
+    const result = await this.pool.query(`update "yu_inventory"."one_c_import_batches" set state='approved',approved_at=now(),approved_by=$3,version=version+1 where id=$1 and version=$2 and state='review_required' and summary->'plan'->>'hash'=$4 and coalesce((summary->>'massPublicationBlocked')::boolean,false)=false and not (request_id is null and source_filename is null) and not exists(select 1 from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and review_state not in ('excluded','approved','published')) returning *`, [batchId, input.version, actor.userId, input.planHash]);
     if (!result.rows[0]) throw new ApplicationError("conflict", "batch_not_approvable");
     return result.rows[0];
   }

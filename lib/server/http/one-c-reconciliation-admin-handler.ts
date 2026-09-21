@@ -60,6 +60,7 @@ export interface OneCReconciliationAdminService {
   listBatches(query: OneCBatchListQuery, actor: OneCAdminActor): Promise<unknown>;
   getBatch(batchId: string, actor: OneCAdminActor): Promise<unknown>;
   listBatchRows(batchId: string, query: OneCBatchRowsQuery, actor: OneCAdminActor): Promise<unknown>;
+  exportBatch(batchId: string, actor: OneCAdminActor): Promise<unknown>;
   analyzeBatch(batchId: string, input: OneCPlanInput, actor: OneCAdminActor): Promise<unknown>;
   decideRow(batchId: string, externalId: string, input: OneCDecisionInput, actor: OneCAdminActor): Promise<unknown>;
   decideRowsBulk(batchId: string, input: OneCBulkDecisionInput, actor: OneCAdminActor): Promise<unknown>;
