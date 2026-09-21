@@ -160,6 +160,53 @@ export class QrResolutionService {
     return toDto(record, fullAccess, actor.userId);
   }
 
+  async resolveItemBarcodeCandidates(
+    input: unknown,
+    actor: AuthorizationActor,
+  ): Promise<QrResolutionDto[]> {
+    const fullAccess = hasPermission(actor.role, "inventory.qr.resolve_full");
+    const itemAccess = hasPermission(actor.role, "inventory.qr.resolve_item");
+    if (!fullAccess && !itemAccess) {
+      throw new ApplicationError("forbidden", "forbidden");
+    }
+
+    const barcode = parseCode39ScanInput(input);
+    if (!barcode.ok) {
+      throw new ApplicationError("validation", "invalid_qr");
+    }
+    const records = await this.unitOfWork.read(async ({ qr }) => {
+      if (qr.findItemsByBarcode) {
+        return qr.findItemsByBarcode(
+          barcode.value,
+          inventoryNumberComparisonKey(barcode.inventoryNumber),
+          barcode.fallbackKey,
+          actor.userId,
+        );
+      }
+      const record = await qr.findItemByBarcode(
+        barcode.value,
+        inventoryNumberComparisonKey(barcode.inventoryNumber),
+        barcode.fallbackKey,
+        actor.userId,
+      );
+      return record ? [record] : [];
+    });
+
+    return records
+      .filter((record) =>
+        record.itemSection !== "it" &&
+        !isClosedForeignItem(record, actor) &&
+        isRecordAccessible(record, {
+          fullAccess,
+          itemAccess,
+          roomAccess: false,
+          targetScope: "item",
+          allowInactiveItemScan: true,
+        }),
+      )
+      .map((record) => toDto(record, fullAccess, actor.userId));
+  }
+
   async resolveItemPhoto(
     input: unknown,
     actor: AuthorizationActor,

@@ -62,6 +62,51 @@ test("barcode mode resolves its namespace before colliding QR aliases", async ()
   assert.deepEqual(calls, ["barcode"]);
 });
 
+test("shared inventory numbers return all accessible item candidates", async () => {
+  const monitor = {
+    ...BARCODE_RECORD,
+    canonicalKey: "YUI-AAAAAAAAAAAAAAAA",
+    targetId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    title: "Monitor",
+    inventoryNumber: "123/361",
+  };
+  const systemUnit = {
+    ...BARCODE_RECORD,
+    canonicalKey: "YUI-BBBBBBBBBBBBBBBB",
+    targetId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    title: "System unit",
+    inventoryNumber: "123/361",
+  };
+  const service = createService({
+    async findByCanonicalKey() {
+      return null;
+    },
+    async findItemByBarcode() {
+      return null;
+    },
+    async findItemsByBarcode(value, inventoryNumberKey, fallbackKey) {
+      assert.equal(value, "123/361");
+      assert.equal(inventoryNumberKey, "123/361");
+      assert.equal(fallbackKey, null);
+      return [monitor, systemUnit];
+    },
+  });
+
+  const candidates = await service.resolveItemBarcodeCandidates(
+    "123/361",
+    { userId: "admin", role: "admin" },
+  );
+
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.target?.id),
+    [monitor.targetId, systemUnit.targetId],
+  );
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.canonicalKey),
+    [monitor.canonicalKey, systemUnit.canonicalKey],
+  );
+});
+
 test("QR mode never falls through to the inventory-number namespace", async () => {
   const calls: string[] = [];
   const service = createService({

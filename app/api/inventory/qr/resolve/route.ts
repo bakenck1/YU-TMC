@@ -41,6 +41,7 @@ async function resolveQr(request: Request) {
     const targetInput = url.searchParams.get("target");
     const target =
       targetInput === "item" || targetInput === "room" ? targetInput : "any";
+    const includeCandidates = url.searchParams.get("multiple") === "1";
     if (kind !== "qr" && target !== "room") {
       const localGroup = await getApplicationServices().localBarcodes.resolveBarcode(
         value,
@@ -96,6 +97,26 @@ async function resolveQr(request: Request) {
           },
         }, { headers: PRIVATE_HEADERS });
       }
+    }
+    if (kind === "barcode" && target === "item" && includeCandidates) {
+      const actor = authorizationActor(user);
+      const resolutions = await getApplicationServices().qr.resolveItemBarcodeCandidates(
+        value,
+        actor,
+      );
+      for (const candidate of resolutions) {
+        if (candidate.status !== "resolved" || candidate.target?.kind !== "item") continue;
+        try {
+          candidate.distribution = await getApplicationServices().localBarcodes.getDistribution(
+            candidate.target.id,
+            actor,
+          );
+        } catch (error) {
+          if (!(error instanceof ApplicationError && (error.kind === "not_found" || error.kind === "forbidden"))) throw error;
+        }
+      }
+      emitQrUsage(resolutions.length > 0 ? "resolved" : "not_found");
+      return Response.json({ resolutions }, { headers: PRIVATE_HEADERS });
     }
     const resolution = await getApplicationServices().qr.resolve(
       value,

@@ -109,7 +109,7 @@ test("TMC operation shell uses barcode-only scanning and sends each confirmed op
   assert.doesNotMatch(flow, /mode="qr-only"|<QrCode/);
   assert.match(flow, /TmcItemQrResolverController/);
   assert.match(flow, /useEffect\(\(\) =>\s*installTmcQrResolverController/);
-  assert.match(resolver, /\/api\/inventory\/qr\/resolve\?value=\$\{encodeURIComponent\(normalized\)\}&kind=barcode&target=item/);
+  assert.match(resolver, /\/api\/inventory\/qr\/resolve\?value=\$\{encodeURIComponent\(normalized\)\}&kind=barcode&target=item&multiple=1/);
   assert.match(resolver, /credentials: "same-origin"/);
   assert.match(resolver, /cache: "no-store"/);
   assert.match(resolver, /classifyTmcQrResolution/);
@@ -139,13 +139,59 @@ test("QR resolver coalesces duplicate scans and publishes one selected item", as
   const first = controller.resolve("  YUQ1:first  ");
   await controller.resolve("YUQ1:duplicate");
   assert.equal(requests.length, 1);
-  assert.match(requests[0].url, /value=YUQ1%3Afirst&kind=barcode&target=item$/);
+  assert.match(requests[0].url, /value=YUQ1%3Afirst&kind=barcode&target=item&multiple=1$/);
 
   requests[0].resolve(okResponse(ACTIVE_ITEM));
   await first;
   const selected = states.at(-1);
   assert.equal(selected?.status, "selected");
   assert.equal(selected?.status === "selected" ? selected.item.id : null, ACTIVE_ITEM.target?.id);
+});
+
+test("shared inventory number offers every matching item for explicit selection", async () => {
+  const requests: ControlledRequest[] = [];
+  const states: TmcQrFlowState[] = [];
+  const controller = createController(requests, states);
+  const systemUnit: QrResolutionDto = {
+    ...ACTIVE_ITEM,
+    canonicalKey: "YUI-010EC7B2037C4741",
+    target: {
+      ...ACTIVE_ITEM.target!,
+      id: "010ec7b2-037c-4741-a000-000000000000",
+      title: "Системный блок",
+      inventoryNumber: "123/361",
+    },
+  };
+  const monitor: QrResolutionDto = {
+    ...ACTIVE_ITEM,
+    canonicalKey: "YUI-8CC612FD044E4CAC",
+    target: {
+      ...ACTIVE_ITEM.target!,
+      id: "8cc612fd-044e-4cac-a000-000000000000",
+      title: "Монитор",
+      inventoryNumber: "123/361",
+    },
+  };
+
+  const pending = controller.resolve("123/361");
+  requests[0].resolve({
+    ok: true,
+    json: async () => ({ resolutions: [monitor, systemUnit] }),
+  });
+  await pending;
+
+  const candidates = states.at(-1);
+  assert.equal(candidates?.status, "candidates");
+  assert.deepEqual(
+    candidates?.status === "candidates" ? candidates.items.map(({ title }) => title) : [],
+    ["Монитор", "Системный блок"],
+  );
+
+  if (candidates?.status !== "candidates") return;
+  controller.selectCandidate(candidates.items[1]);
+  const selected = states.at(-1);
+  assert.equal(selected?.status, "selected");
+  assert.equal(selected?.status === "selected" ? selected.item.id : null, systemUnit.target?.id);
 });
 
 test("reset aborts pending work and stale responses cannot replace a newer scan", async () => {

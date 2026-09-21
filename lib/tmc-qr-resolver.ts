@@ -16,6 +16,7 @@ import {
 export type TmcQrFlowState =
   | { status: "idle" }
   | { status: "resolving" }
+  | { status: "candidates"; items: TmcQrSelectedItem[] }
   | { status: "selected"; item: TmcQrSelectedItem }
   | {
       status: "error";
@@ -62,7 +63,7 @@ export class TmcItemQrResolverController {
 
     try {
       const response = await this.options.fetcher(
-        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}&kind=barcode&target=item`,
+        `/api/inventory/qr/resolve?value=${encodeURIComponent(normalized)}&kind=barcode&target=item&multiple=1`,
         {
           credentials: "same-origin",
           cache: "no-store",
@@ -71,18 +72,29 @@ export class TmcItemQrResolverController {
       );
       const body = await response.json();
       if (!this.isCurrent(sequence)) return;
-      const resolution = response.ok ? parseResolutionBody(body) : null;
-      if (!resolution) {
+      const resolutions = response.ok ? parseResolutionBodies(body) : null;
+      if (!resolutions) {
         this.publish({ status: "error", reason: "request_failed" });
         return;
       }
 
-      const result = classifyTmcQrResolution(resolution);
-      this.publish(
-        result.kind === "selected"
-          ? { status: "selected", item: result.item }
-          : { status: "error", reason: result.reason },
+      const results = resolutions.map(classifyTmcQrResolution);
+      const selected = results.flatMap((result) =>
+        result.kind === "selected" ? [result.item] : [],
       );
+      if (selected.length > 1) {
+        this.publish({ status: "candidates", items: selected });
+        return;
+      }
+      if (selected.length === 1) {
+        this.publish({ status: "selected", item: selected[0] });
+        return;
+      }
+      const error = results.find((result) => result.kind === "error");
+      this.publish({
+        status: "error",
+        reason: error?.reason ?? "invalid_code",
+      });
     } catch (error) {
       if (!this.isCurrent(sequence)) return;
       this.publish(
@@ -96,6 +108,11 @@ export class TmcItemQrResolverController {
         this.controller = null;
       }
     }
+  }
+
+  selectCandidate(item: TmcQrSelectedItem): void {
+    if (this.disposed) return;
+    this.publish({ status: "selected", item });
   }
 
   reset(): void {
@@ -139,9 +156,21 @@ export function installTmcQrResolverController(
   };
 }
 
-function parseResolutionBody(body: unknown): QrResolutionDto | null {
-  if (!isObject(body) || !isObject(body.resolution)) return null;
-  const resolution = body.resolution;
+function parseResolutionBodies(body: unknown): QrResolutionDto[] | null {
+  if (!isObject(body)) return null;
+  if (Array.isArray(body.resolutions)) {
+    const resolutions = body.resolutions.map(parseResolution);
+    return resolutions.every((resolution): resolution is QrResolutionDto => resolution !== null)
+      ? resolutions
+      : null;
+  }
+  const resolution = parseResolution(body.resolution);
+  return resolution ? [resolution] : null;
+}
+
+function parseResolution(value: unknown): QrResolutionDto | null {
+  if (!isObject(value)) return null;
+  const resolution = value;
   if (
     !isOneOf(resolution.status, [
       "resolved",
@@ -187,6 +216,7 @@ function parseResolutionBody(body: unknown): QrResolutionDto | null {
   ) {
     return null;
   }
+
   if (target.localGroup !== undefined && !isLocalGroup(target.localGroup)) {
     return null;
   }

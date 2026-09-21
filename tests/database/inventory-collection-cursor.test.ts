@@ -182,6 +182,11 @@ describe("PostgreSQL inventory collection cursor", () => {
 
     const qr = createPostgresQrResolutionRepositories(database).qr;
     expect(await qr.findItemByBarcode("PAIR-100", "pair-100", null)).toBeNull();
+    const pairCandidates = await qr.findItemsByBarcode!("PAIR-100", "pair-100", null);
+    expect(pairCandidates.map(({ targetId }) => targetId).sort()).toEqual(
+      [monitorId, systemUnitId].sort(),
+    );
+    expect(pairCandidates.every(({ canonicalKey }) => canonicalKey.startsWith("YUI-"))).toBe(true);
     const monitorFallback = monitorId.replaceAll("-", "").slice(0, 16).toUpperCase();
     expect((await qr.findItemByBarcode(`YUI-${monitorFallback}`, "", monitorFallback))?.targetId)
       .toBe(monitorId);

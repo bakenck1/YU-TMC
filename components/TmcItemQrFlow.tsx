@@ -447,6 +447,34 @@ export default function TmcItemQrFlow({
         </div>
       ) : null}
 
+      {flowState.status === "candidates" ? (
+        <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="font-semibold text-blue-950">{t("tmc.qr.multipleTitle")}</h3>
+          <p className="mt-1 text-sm text-blue-800">{t("tmc.qr.multipleHint")}</p>
+          <div className="mt-4 grid gap-3">
+            {flowState.items.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                onClick={() => resolverRef.current?.selectCandidate(candidate)}
+                className="min-h-16 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                <span className="block font-semibold text-zinc-950">{candidate.title}</span>
+                <span className="mt-1 block text-sm text-zinc-600">
+                  {[candidate.inventoryNumber, candidate.buildingName, candidate.roomDesignation]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={scanAgain} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-950">
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            {t("tmc.qr.scanAgain")}
+          </button>
+        </div>
+      ) : null}
+
       {item ? (
         <ScannedItemDetailsCard item={item} actions={
           <div className="flex flex-wrap gap-2">

@@ -244,6 +244,59 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
     };
   }
 
+  async findItemsByBarcode(
+    barcodeValue: string,
+    inventoryNumberKey: string,
+    fallbackKey: string | null,
+    actorUserId?: string,
+  ): Promise<QrResolutionRecord[]> {
+    const result = await this.source.query<QrRow>(
+      `select case
+                when $3::text is null
+                  then 'YUI-' || upper(left(replace(i.id::text, '-', ''), 16))
+                else $1::text
+              end as canonical_key,
+              'legacy_raw'::text as format,
+              'active'::text as qr_status, 'item'::text as target_kind,
+              i.id as target_id, i.status::text as target_status,
+              i.name as title, b.name as building_name,
+              r.designation as room_designation, i.inventory_number,
+              u.full_name as responsible_name, rp.responsible_user_id,
+              i.item_type, i.item_section, i.brand as item_brand, i.model as item_model,
+              i.description as item_description, i.quantity as item_quantity,
+              i.unit_price as item_unit_price, i.condition as item_condition,
+              i.connection_status as item_connection_status,
+              exists (
+                select 1 from ${PHOTOS} photo
+                 where photo.item_id = i.id
+                   and photo.purpose = 'item'
+                   and photo.status = 'attached'
+              ) as item_has_photo,
+              i.created_at as item_created_at,
+              r.access_mode as room_access_mode,
+              coalesce(rp.responsible_user_id = $4::uuid, false)
+                as current_user_has_room_item
+         from ${ITEMS} i
+         join ${ROOMS} r on r.id = i.room_id
+         join ${BUILDINGS} b on b.id = r.building_id
+         left join lateral (
+           select responsible_user_id
+             from ${RESPONSIBILITY}
+            where item_id = i.id and ended_at is null
+            order by started_at desc
+            limit 1
+         ) rp on true
+         left join ${USERS} u on u.id = rp.responsible_user_id
+        where ($3::text is not null and
+               upper(left(replace(i.id::text, '-', ''), 16)) = upper($3))
+           or ($3::text is null and i.inventory_number_key = $2)
+        order by i.name, i.id
+        limit 3`,
+      [barcodeValue, inventoryNumberKey, fallbackKey ?? null, actorUserId ?? null],
+    );
+    return result.rows.map(toQrResolutionRecord);
+  }
+
   async findItemPhoto(itemId: string) {
     const result = await this.source.query<{
       binary_data: Buffer | null;
@@ -260,4 +313,34 @@ class PostgresQrResolutionRepository implements QrResolutionRepository {
     if (!row?.binary_data || row.trusted_mime_type !== "image/jpeg") return null;
     return { bytes: row.binary_data, mimeType: "image/jpeg" as const };
   }
+}
+
+function toQrResolutionRecord(row: QrRow): QrResolutionRecord {
+  return {
+    canonicalKey: row.canonical_key,
+    format: row.format,
+    qrStatus: row.qr_status,
+    targetKind: row.target_kind,
+    targetId: row.target_id,
+    targetStatus: row.target_status,
+    title: row.title,
+    buildingName: row.building_name,
+    roomDesignation: row.room_designation,
+    inventoryNumber: row.inventory_number,
+    responsibleName: row.responsible_name,
+    responsibleUserId: row.responsible_user_id,
+    itemType: row.item_type,
+    itemSection: row.item_section,
+    itemBrand: row.item_brand,
+    itemModel: row.item_model,
+    itemDescription: row.item_description,
+    itemQuantity: row.item_quantity === null ? null : Number(row.item_quantity),
+    itemUnitPrice: row.item_unit_price === null ? null : Number(row.item_unit_price),
+    itemCondition: row.item_condition,
+    itemConnectionStatus: row.item_connection_status,
+    itemHasPhoto: row.item_has_photo,
+    itemCreatedAt: row.item_created_at,
+    roomAccessMode: row.room_access_mode,
+    currentUserHasRoomItem: row.current_user_has_room_item,
+  };
 }

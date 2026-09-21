@@ -45,6 +45,12 @@ export interface QrResolutionRepository {
     fallbackKey: string | null,
     actorUserId?: string,
   ): Promise<QrResolutionRecord | null>;
+  findItemsByBarcode?(
+    barcodeValue: string,
+    inventoryNumberKey: string,
+    fallbackKey: string | null,
+    actorUserId?: string,
+  ): Promise<QrResolutionRecord[]>;
   findItemPhoto?(itemId: string): Promise<{
     bytes: Uint8Array;
     mimeType: "image/jpeg";

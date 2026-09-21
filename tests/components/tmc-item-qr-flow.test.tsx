@@ -41,7 +41,7 @@ describe("TmcItemQrFlow", () => {
     expect(screen.getByRole("status").textContent).toContain("tmc.qr.resolving");
     await screen.findByRole("heading", { name: "Laptop" });
     expect(fetch).toHaveBeenCalledWith(
-      "/api/inventory/qr/resolve?value=qr-1&kind=barcode&target=item",
+      "/api/inventory/qr/resolve?value=qr-1&kind=barcode&target=item&multiple=1",
       expect.objectContaining({ credentials: "same-origin", cache: "no-store" }),
     );
     expect(screen.getByTestId("recipient-picker")).not.toBeNull();
@@ -61,6 +61,30 @@ describe("TmcItemQrFlow", () => {
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "tmc.qr.scanAgain" }));
     expect(screen.getByTestId("scanner")).not.toBeNull();
+  });
+
+  it("shows both items for a shared inventory number and lets the user choose one", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        resolutions: [
+          itemResolution("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "Monitor"),
+          itemResolution("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "System unit"),
+        ],
+      }),
+    } as Response);
+
+    render(<TmcItemQrFlow operation={TMC_OPERATION_BY_ID.issue} />);
+    openIssueScanner();
+    fireEvent.click(screen.getByRole("button", { name: "resolve code" }));
+
+    await screen.findByRole("heading", { name: "tmc.qr.multipleTitle" });
+    expect(screen.getByText("Monitor")).not.toBeNull();
+    expect(screen.getByText("System unit")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /System unit/ }));
+    expect(await screen.findByRole("heading", { name: "System unit" })).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "tmc.qr.multipleTitle" })).toBeNull();
   });
 
   it("shows the user's own-item list immediately and only opens the scanner on request", async () => {
@@ -358,6 +382,28 @@ function createdRequestResponse() {
     ok: true,
     json: async () => ({ result: createdRequestResult() }),
   } as Response;
+}
+
+function itemResolution(id: string, title: string) {
+  return {
+    status: "resolved",
+    canonicalKey: `YUI-${id.replaceAll("-", "").slice(0, 16).toUpperCase()}`,
+    format: "legacy_raw",
+    qrStatus: "active",
+    target: {
+      kind: "item",
+      id,
+      status: "active",
+      title,
+      inventoryNumber: "123/361",
+      buildingName: "Main",
+      roomDesignation: "1002",
+      responsibleName: "Current owner",
+      responsibleId: "11111111-1111-4111-8111-111111111111",
+      isAssigned: true,
+      isCurrentUserResponsible: true,
+    },
+  };
 }
 
 function responseForGroupedItem() {
