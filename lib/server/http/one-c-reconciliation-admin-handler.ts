@@ -60,6 +60,7 @@ export interface OneCReconciliationAdminService {
   listBatches(query: OneCBatchListQuery, actor: OneCAdminActor): Promise<unknown>;
   getBatch(batchId: string, actor: OneCAdminActor): Promise<unknown>;
   listBatchRows(batchId: string, query: OneCBatchRowsQuery, actor: OneCAdminActor): Promise<unknown>;
+  getRowCandidates(batchId: string, externalId: string, actor: OneCAdminActor): Promise<unknown>;
   exportBatch(batchId: string, actor: OneCAdminActor): Promise<unknown>;
   analyzeBatch(batchId: string, input: OneCPlanInput, actor: OneCAdminActor): Promise<unknown>;
   decideRow(batchId: string, externalId: string, input: OneCDecisionInput, actor: OneCAdminActor): Promise<unknown>;
@@ -98,6 +99,14 @@ export function createOneCReconciliationAdminHandlers(
       const { id } = await validId(context);
       const result = await dependencies.service().listBatchRows(id, parseRowsQuery(request.url), actor);
       return json({ rows: result });
+    }),
+
+    getRowCandidates: (request: Request, context: RowContext) => execute(async () => {
+      const actor = await dependencies.authenticate(request);
+      const { id, externalId } = await context.params;
+      assertUuid(id);
+      assertUuid(externalId);
+      return json({ candidates: await dependencies.service().getRowCandidates(id, externalId, actor) });
     }),
 
     analyzeBatch: (request: Request, context: IdContext) => execute(async () => {
@@ -221,6 +230,25 @@ function decision(value: unknown): Readonly<Record<string, unknown>> {
   const parsed = object(value);
   const keys = Object.keys(parsed);
   if (keys.length < 1 || keys.length > 32) throw invalid();
+  const allowed = new Set(["exclude", "confirmLink", "itemId", "expectedItemVersion", "confirmCreate", "confirmConditionDefault", "roomId", "itemType", "confirmZeroResidual", "confirmUnassigned"]);
+  assertExactKeys(parsed, allowed);
+  for (const key of ["exclude", "confirmLink", "confirmCreate", "confirmConditionDefault", "confirmZeroResidual", "confirmUnassigned"]) {
+    if (parsed[key] !== undefined && typeof parsed[key] !== "boolean") throw invalid();
+  }
+  if (parsed.itemId !== undefined) {
+    if (typeof parsed.itemId !== "string") throw invalid();
+    assertUuid(parsed.itemId);
+  }
+  if (parsed.expectedItemVersion !== undefined && (typeof parsed.expectedItemVersion !== "number" || !Number.isInteger(parsed.expectedItemVersion) || parsed.expectedItemVersion < 1)) throw invalid();
+  if ((parsed.itemId !== undefined || parsed.expectedItemVersion !== undefined) && parsed.confirmLink !== true) throw invalid();
+  if (parsed.confirmLink === true && (parsed.itemId === undefined || parsed.expectedItemVersion === undefined)) throw invalid();
+  if (parsed.roomId !== undefined) {
+    if (typeof parsed.roomId !== "string") throw invalid();
+    assertUuid(parsed.roomId);
+  }
+  if (parsed.itemType !== undefined && (typeof parsed.itemType !== "string" || parsed.itemType.trim().length < 1 || parsed.itemType.length > 80)) throw invalid();
+  const selectedActions = [parsed.exclude === true, parsed.confirmLink === true, parsed.confirmCreate === true].filter(Boolean).length;
+  if (selectedActions > 1) throw invalid();
   return parsed;
 }
 

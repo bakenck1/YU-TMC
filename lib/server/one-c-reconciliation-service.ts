@@ -11,6 +11,17 @@ import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import type { OneCReconciliationAdminService, OneCAdminActor, OneCBatchListQuery, OneCBatchRowsQuery, OneCDecisionInput, OneCBulkDecisionInput, OneCPlanInput } from "@/lib/server/http/one-c-reconciliation-admin-handler";
 
 type Row = Record<string, unknown>;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+type CandidateReason = "guid" | "code" | "inventory_number";
+type ReconciliationCandidate = {
+  id: string;
+  name: string;
+  inventoryNumber: string;
+  oneCCode: string | null;
+  status: string;
+  version: number;
+  matchedBy: CandidateReason[];
+};
 
 export class OneCReconciliationService implements OneCReconciliationAdminService {
   constructor(private readonly pool: Pick<Pool, "query" | "connect"> = getDatabasePool()) {}
@@ -51,6 +62,10 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     return { data: result.rows, page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
   }
 
+  async getRowCandidates(batchId: string, externalId: string) {
+    return this.findRowCandidates(this.pool, batchId, externalId);
+  }
+
   async exportBatch(batchId: string, actor?: OneCAdminActor) {
     void actor;
     const [batch, rows] = await Promise.all([
@@ -73,28 +88,55 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       await client.query(`update "yu_inventory"."one_c_import_batches" set state='analyzing' where id=$1`, [batchId]);
       const [rows, candidates, links] = await Promise.all([
         client.query(`select * from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]),
-        client.query(`select i.id, i.inventory_number, i.version, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id group by i.id`),
-        client.query(`select external_id,item_id from "yu_inventory"."item_one_c_links"`),
+        client.query(`select i.id, i.inventory_number, i.one_c_code, i.version, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id group by i.id`),
+        client.query(`select external_id,item_id,source_code from "yu_inventory"."item_one_c_links"`),
       ]);
       const itemCandidates = candidates.rows.map((r) => ({ id: String(r.id), inventoryNumber: String(r.inventory_number), officialBarcodes: r.official_barcodes as string[] }));
       const linkMap = new Map(links.rows.map((r) => [String(r.external_id), String(r.item_id)]));
+      const itemLinkMap = new Map(links.rows.map((r) => [String(r.item_id), String(r.external_id)]));
+      const codeLinkMap = new Map<string, string[]>();
+      for (const link of links.rows) {
+        const key = oneCCodeComparisonKey(link.source_code);
+        if (key) codeLinkMap.set(key, [...(codeLinkMap.get(key) ?? []), String(link.item_id)]);
+      }
       const planRows = [];
       const summary: Record<string, number> = { matched: 0, create: 0, conflicts: 0, blocked: 0, excluded: 0 };
       for (const row of rows.rows) {
         const asset = row.payload as OneCFixedAsset;
         const decision = (row.decision ?? {}) as Row;
-        const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, linkedItemId: linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
+        const selectedItemId = decision.confirmLink === true ? stringOrNull(decision.itemId) : null;
+        const selectedCandidate = selectedItemId
+          ? candidates.rows.find((candidate) => String(candidate.id) === selectedItemId)
+          : null;
+        const selectedReasons = selectedCandidate
+          ? exactCandidateReasons(asset, selectedCandidate, linkMap.get(asset.externalId), codeLinkMap)
+          : [];
+        const requestedManualSelection = decision.confirmLink === true && selectedItemId !== null;
+        const actualLinkedItemId = linkMap.get(asset.externalId);
+        const selectedItemExternalId = selectedItemId ? itemLinkMap.get(selectedItemId) : undefined;
+        const expectedItemVersion = Number(decision.expectedItemVersion);
+        const versionMatches = Boolean(selectedCandidate) && Number.isInteger(expectedItemVersion) && expectedItemVersion === Number(selectedCandidate?.version);
+        const linkOccupancyMatches = (!actualLinkedItemId || actualLinkedItemId === selectedItemId)
+          && (!selectedItemExternalId || selectedItemExternalId === asset.externalId);
+        const manualSelectionValid = Boolean(selectedCandidate && selectedReasons.length && versionMatches && linkOccupancyMatches);
+        const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, linkedItemId: manualSelectionValid ? selectedItemId : linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
         let mapped = workflowFor(analysis.result, analysis.identifiers.itemId);
         if (decision.exclude === true) {
           mapped = { state: "excluded", action: "exclude", planAction: "exclude", bucket: "excluded" };
         } else if (mapped.action === "create" && decision.confirmCreate === true && decision.confirmConditionDefault === true) {
           mapped = { ...mapped, state: "approved" };
+        } else if (requestedManualSelection && !manualSelectionValid) {
+          mapped = { state: "blocked", action: "manual_review", planAction: "blocked", bucket: "blocked" };
+        } else if (manualSelectionValid && manualLinkHasNoUnresolvedBlockingIssues(analysis.issues)) {
+          mapped = { state: "approved", action: "link", planAction: "link", bucket: "matched" };
         } else if (mapped.action === "link" && decision.confirmLink === true) {
           mapped = { ...mapped, state: "approved" };
         }
+        const matchedItemId = manualSelectionValid ? selectedItemId : analysis.identifiers.itemId;
+        const matchMethod = manualSelectionValid ? `manual_${selectedReasons.join("+")}` : analysis.identifiers.status;
         summary[mapped.bucket] += 1;
-        await client.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state=$3,proposed_action=$4,matched_item_id=$5,match_method=$6,issues=$7::jsonb where batch_id=$1 and external_id=$2`, [batchId, asset.externalId, mapped.state, mapped.action, analysis.identifiers.itemId, analysis.identifiers.status, JSON.stringify(analysis.issues)]);
-        planRows.push({ externalId: asset.externalId, action: mapped.planAction, itemId: analysis.identifiers.itemId, itemVersion: candidates.rows.find((candidate) => candidate.id === analysis.identifiers.itemId)?.version ?? null, decisionVersion: batch.version, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode });
+        await client.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state=$3,proposed_action=$4,matched_item_id=$5,match_method=$6,issues=$7::jsonb where batch_id=$1 and external_id=$2`, [batchId, asset.externalId, mapped.state, mapped.action, matchedItemId, matchMethod, JSON.stringify(analysis.issues)]);
+        planRows.push({ externalId: asset.externalId, action: mapped.planAction, itemId: matchedItemId, itemVersion: candidates.rows.find((candidate) => String(candidate.id) === matchedItemId)?.version ?? null, decisionVersion: batch.version, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode });
       }
       const versionFingerprint = candidates.rows.map((r) => `${r.id}:${r.version}`).sort().join("|");
       const plan = buildOneCPublicationPlan({ batchId, sourceHash: String(batch.source_sha256), existingItemsVersion: versionFingerprint, rows: planRows });
@@ -110,13 +152,29 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
 
   async decideRow(batchId: string, externalId: string, input: OneCDecisionInput, actor: OneCAdminActor) {
     return this.withDecision(batchId, input.version, actor, async (client) => {
-      const updated = await client.query(`update "yu_inventory"."one_c_import_batch_rows" set decision=$4::jsonb,decided_by=$3,decided_at=now(),review_state='pending' where batch_id=$1 and external_id=$2 returning *`, [batchId, externalId, actor.userId, JSON.stringify(input.decision)]);
+      let normalizedDecision = input.decision;
+      if (input.decision.confirmLink === true) {
+        const itemId = stringOrNull(input.decision.itemId);
+        if (!itemId || !UUID_PATTERN.test(itemId)) throw new ApplicationError("validation", "invalid_link_candidate");
+        const candidates = await this.findRowCandidates(client, batchId, externalId);
+        const selected = candidates.find((candidate) => candidate.id === itemId);
+        if (!selected) throw new ApplicationError("conflict", "link_candidate_no_longer_matches");
+        const expectedVersion = input.decision.expectedItemVersion;
+        if (expectedVersion !== undefined && expectedVersion !== selected.version) throw new ApplicationError("conflict", "link_candidate_version_changed");
+        const conflictingLink = await client.query(`select external_id,item_id from "yu_inventory"."item_one_c_links" where (item_id=$1 and external_id<>$2) or (external_id=$2 and item_id<>$1) limit 1 for update`, [itemId, externalId]);
+        if (conflictingLink.rows[0]) throw new ApplicationError("conflict", "link_candidate_already_connected");
+        normalizedDecision = { ...input.decision, itemId, expectedItemVersion: selected.version, matchedBy: selected.matchedBy };
+      }
+      const updated = await client.query(`update "yu_inventory"."one_c_import_batch_rows" set decision=$4::jsonb,decided_by=$3,decided_at=now(),review_state='pending' where batch_id=$1 and external_id=$2 returning *`, [batchId, externalId, actor.userId, JSON.stringify(normalizedDecision)]);
       if (!updated.rows[0]) throw notFound();
       return updated.rows[0];
     });
   }
 
   async decideRowsBulk(batchId: string, input: OneCBulkDecisionInput, actor: OneCAdminActor) {
+    if (input.decision.confirmLink !== undefined || input.decision.itemId !== undefined || input.decision.expectedItemVersion !== undefined || input.decision.matchedBy !== undefined) {
+      throw new ApplicationError("validation", "bulk_manual_link_not_allowed");
+    }
     return this.withDecision(batchId, input.version, actor, async (client) => {
       const result = await client.query(`update "yu_inventory"."one_c_import_batch_rows" set decision=coalesce(decision,'{}'::jsonb)||$4::jsonb,decided_by=$3,decided_at=now(),review_state='pending' where batch_id=$1 and external_id=any($2::text[]) and review_state not in ('conflict','published') returning external_id`, [batchId, input.externalIds, actor.userId, JSON.stringify(input.decision)]);
       if (result.rowCount !== input.externalIds.length) throw new ApplicationError("conflict", "bulk_contains_ineligible_rows");
@@ -198,11 +256,19 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       } else if (row.proposed_action === "link" || row.proposed_action === "no_change" || row.proposed_action === "update") {
         itemId = stringOrNull(decision.itemId) ?? itemId;
         if (!itemId || decision.confirmLink !== true) throw new Error("link_not_confirmed");
-        await client.query(`select id from "yu_inventory"."items" where id=$1 for update`, [itemId]);
+        const currentItem = await client.query(`select id,version from "yu_inventory"."items" where id=$1 for update`, [itemId]);
+        if (!currentItem.rows[0]) throw new Error("link_item_missing");
+        if (decision.expectedItemVersion !== undefined && Number(decision.expectedItemVersion) !== Number(currentItem.rows[0].version)) throw new Error("link_item_version_changed");
+        const candidates = await this.findRowCandidates(client, batchId, asset.externalId);
+        if (!candidates.some((candidate) => candidate.id === itemId)) throw new Error("link_candidate_no_longer_matches");
+        const conflictingLink = await client.query(`select 1 from "yu_inventory"."item_one_c_links" where (item_id=$1 and external_id<>$2) or (external_id=$2 and item_id<>$1) limit 1 for update`, [itemId, asset.externalId]);
+        if (conflictingLink.rows[0]) throw new Error("link_candidate_already_connected");
         outcome = row.proposed_action === "update" ? "updated" : "linked";
       }
       if (!itemId) { await client.query("commit"); return "skipped"; }
-      await client.query(`insert into "yu_inventory"."item_one_c_links"(external_id,item_id,source_code,source_inventory_number,linked_by,link_method,last_batch_id,last_payload_hash,accounting_status,accounting_residual_value,source_department,source_responsible_name,source_updated_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(external_id) do update set last_batch_id=excluded.last_batch_id,last_payload_hash=excluded.last_payload_hash,source_code=excluded.source_code,source_inventory_number=excluded.source_inventory_number,accounting_status=excluded.accounting_status,accounting_residual_value=excluded.accounting_residual_value,source_department=excluded.source_department,source_responsible_name=excluded.source_responsible_name,source_updated_at=excluded.source_updated_at,version="yu_inventory"."item_one_c_links".version+1 where "yu_inventory"."item_one_c_links".item_id=excluded.item_id`, [asset.externalId,itemId,asset.code,asset.inventoryNumber,actor.userId,outcome === "created" ? "created_from_one_c" : "inventory_number_confirmed",batchId,row.payload_hash,asset.status,asset.residualCost,asset.location,asset.responsibleName,asset.updatedAt]);
+      const linkMethod = outcome === "created" ? "created_from_one_c" : Array.isArray(decision.matchedBy) ? "manual" : "inventory_number_confirmed";
+      const linked = await client.query(`insert into "yu_inventory"."item_one_c_links"(external_id,item_id,source_code,source_inventory_number,linked_by,link_method,last_batch_id,last_payload_hash,accounting_status,accounting_residual_value,source_department,source_responsible_name,source_updated_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(external_id) do update set last_batch_id=excluded.last_batch_id,last_payload_hash=excluded.last_payload_hash,source_code=excluded.source_code,source_inventory_number=excluded.source_inventory_number,accounting_status=excluded.accounting_status,accounting_residual_value=excluded.accounting_residual_value,source_department=excluded.source_department,source_responsible_name=excluded.source_responsible_name,source_updated_at=excluded.source_updated_at,version="yu_inventory"."item_one_c_links".version+1 where "yu_inventory"."item_one_c_links".item_id=excluded.item_id returning external_id`, [asset.externalId,itemId,asset.code,asset.inventoryNumber,actor.userId,linkMethod,batchId,row.payload_hash,asset.status,asset.residualCost,asset.location,asset.responsibleName,asset.updatedAt]);
+      if (!linked.rows[0]) throw new Error("link_conflict");
       await client.query(`insert into "yu_inventory"."audit_records"(id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,after_values,metadata) values($1,$2,$3,'item',$4,$5,$6::jsonb,$7::jsonb)`, [randomUUID(),actor.userId,actor.role,itemId,`item.one_c_${outcome}`,JSON.stringify({ externalId: asset.externalId, batchId }),JSON.stringify({ source: "one_c_reconciliation" })]);
       await client.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state='published',published_item_id=$3,published_at=now() where batch_id=$1 and external_id=$2`, [batchId,asset.externalId,itemId]);
       await client.query("commit"); return outcome;
@@ -210,6 +276,28 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
   }
 
   private async withDecision<T>(batchId: string, version: number, actor: OneCAdminActor, work: (client: PoolClient) => Promise<T>) { const client=await this.pool.connect(); try { await client.query("begin"); await this.lockBatch(client,batchId,version,["review_required"]); const value=await work(client); await client.query(`update "yu_inventory"."one_c_import_batches" set version=version+1 where id=$1`,[batchId]); await client.query("commit"); return value; } catch(e){await client.query("rollback").catch(()=>undefined);throw e;} finally{client.release();} }
+  private async findRowCandidates(queryable: Pick<Pool, "query"> | Pick<PoolClient, "query">, batchId: string, externalId: string): Promise<ReconciliationCandidate[]> {
+    const row = await queryable.query(`select payload from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and external_id=$2`, [batchId, externalId]);
+    if (!row.rows[0]) throw notFound();
+    const asset = row.rows[0].payload as OneCFixedAsset;
+    const inventoryKey = asset.inventoryNumber?.trim() ? inventoryNumberComparisonKey(asset.inventoryNumber) : null;
+    const codeKey = oneCCodeComparisonKey(asset.code);
+    const result = await queryable.query(`select i.id,i.name,i.inventory_number,i.one_c_code,i.status,i.version,
+      exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and l.external_id=$1) as by_guid,
+      ($2::text is not null and (upper(btrim(i.one_c_code))=$2 or exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and upper(btrim(l.source_code))=$2))) as by_code,
+      ($3::text is not null and i.inventory_number_key=$3) as by_inventory_number
+      from "yu_inventory"."items" i
+      where i.item_section='general' and (
+        exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and l.external_id=$1)
+        or ($2::text is not null and (upper(btrim(i.one_c_code))=$2 or exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and upper(btrim(l.source_code))=$2)))
+        or ($3::text is not null and i.inventory_number_key=$3))
+      order by by_guid desc,by_inventory_number desc,by_code desc,i.name,i.id limit 100`, [externalId, codeKey, inventoryKey]);
+    return result.rows.map((candidate) => ({
+      id: String(candidate.id), name: String(candidate.name), inventoryNumber: String(candidate.inventory_number),
+      oneCCode: stringOrNull(candidate.one_c_code), status: String(candidate.status), version: Number(candidate.version),
+      matchedBy: ([candidate.by_guid && "guid", candidate.by_code && "code", candidate.by_inventory_number && "inventory_number"].filter(Boolean) as CandidateReason[]),
+    })).sort((left, right) => right.matchedBy.length - left.matchedBy.length || left.name.localeCompare(right.name, "ru"));
+  }
   private async lockBatch(client: PoolClient,id:string,version:number,states:string[]){const r=await client.query(`select * from "yu_inventory"."one_c_import_batches" where id=$1 and version=$2 and state=any($3::text[]) for update`,[id,version,states]);if(!r.rows[0])throw new ApplicationError("conflict","batch_version_conflict");return r.rows[0];}
   private async assertBatch(id:string){if(!(await this.pool.query(`select 1 from "yu_inventory"."one_c_import_batches" where id=$1`,[id])).rows[0])throw notFound();}
 }
@@ -217,5 +305,19 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
 type Workflow={state:string;action:string;planAction:"create"|"link"|"update"|"exclude"|"blocked"|"conflict";bucket:string};
 function workflowFor(result:string,itemId:string|null):Workflow{if(result==="excluded_non_physical")return{state:"excluded",action:"exclude",planAction:"exclude",bucket:"excluded"};if(result.startsWith("blocked_")||result==="manual_review")return{state:"blocked",action:"manual_review",planAction:"blocked",bucket:"blocked"};if(result==="conflict_inventory_number")return{state:"conflict",action:"manual_review",planAction:"conflict",bucket:"conflicts"};if(result==="new_publishable")return{state:"ready",action:"create",planAction:"create",bucket:"create"};return{state:itemId?"matched":"ready",action:itemId?"link":"manual_review",planAction:itemId?"link":"blocked",bucket:"matched"};}
 function stringOrNull(value:unknown){return typeof value==="string"&&value.trim()?value.trim():null;}
+function oneCCodeComparisonKey(value:unknown){const normalized=stringOrNull(value);return normalized?normalized.normalize("NFKC").toUpperCase():null;}
+function exactCandidateReasons(asset:OneCFixedAsset,candidate:Row,linkedItemId:string|undefined,codeLinkMap:ReadonlyMap<string,string[]>):CandidateReason[]{
+  const reasons:CandidateReason[]=[];
+  const id=String(candidate.id);
+  if(linkedItemId===id)reasons.push("guid");
+  const codeKey=oneCCodeComparisonKey(asset.code);
+  if(codeKey&&(oneCCodeComparisonKey(candidate.one_c_code)===codeKey||(codeLinkMap.get(codeKey)??[]).includes(id)))reasons.push("code");
+  if(asset.inventoryNumber?.trim()&&inventoryNumberComparisonKey(String(candidate.inventory_number))===inventoryNumberComparisonKey(asset.inventoryNumber))reasons.push("inventory_number");
+  return reasons;
+}
+function manualLinkHasNoUnresolvedBlockingIssues(issues:readonly {code:string;severity:string}[]){
+  const resolvedByManualChoice=new Set(["identifier_conflict","missing_inventory_number","missing_room","unsupported_item_type","invalid_one_c_barcode"]);
+  return !issues.some((entry)=>entry.severity==="blocking"&&!resolvedByManualChoice.has(entry.code));
+}
 function notFound(){return new ApplicationError("not_found","one_c_resource_not_found");}
 function isPgUniqueViolation(error:unknown){return typeof error==="object"&&error!==null&&"code" in error&&error.code==="23505";}
