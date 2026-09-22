@@ -87,6 +87,7 @@ describe("1C reconciliation manager", () => {
       },
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      void _init;
       const url = String(input);
       if (url.includes("/decision")) {
         return new Response(JSON.stringify({ row: { ...row, matched_item_id: selectedItemId } }), {
