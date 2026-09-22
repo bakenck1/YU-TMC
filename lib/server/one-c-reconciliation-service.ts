@@ -23,6 +23,27 @@ type ReconciliationCandidate = {
   matchedBy: CandidateReason[];
 };
 
+export type OneCDecommissionedAsset = {
+  externalId: string;
+  code: string | null;
+  inventoryNumber: string | null;
+  name: string;
+  location: string | null;
+  responsibleName: string | null;
+  residualCost: string | null;
+  lastSeenAt: string | null;
+  linkedItemId: string | null;
+  linkedItemName: string | null;
+  linkedItemStatus: string | null;
+};
+
+export type OneCDecommissionedAssetPage = {
+  data: OneCDecommissionedAsset[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
 export class OneCReconciliationService implements OneCReconciliationAdminService {
   constructor(private readonly pool: Pick<Pool, "query" | "connect"> = getDatabasePool()) {}
 
@@ -33,6 +54,69 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     values.push(query.pageSize, (query.page - 1) * query.pageSize);
     const result = await this.pool.query(`select *, count(*) over()::int as total from "yu_inventory"."one_c_import_batches" ${where} order by received_at desc, id limit $${values.length - 1} offset $${values.length}`, values);
     return { data: result.rows, page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
+  }
+
+  async listDecommissionedAssets(query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+  }): Promise<OneCDecommissionedAssetPage> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const values: unknown[] = ["Снято с учёта"];
+    const clauses = ["inbox.payload->>'status' = $1"];
+    const search = query.search?.normalize("NFKC").trim();
+    if (search) {
+      values.push(`%${escapeLikePattern(search)}%`);
+      clauses.push(`(inbox.external_id ilike $${values.length} escape '\\'
+        or coalesce(inbox.payload->>'code','') ilike $${values.length} escape '\\'
+        or coalesce(inbox.payload->>'inventoryNumber','') ilike $${values.length} escape '\\'
+        or coalesce(inbox.payload->>'name','') ilike $${values.length} escape '\\'
+        or coalesce(inbox.payload->>'location','') ilike $${values.length} escape '\\'
+        or coalesce(inbox.payload->>'responsibleName','') ilike $${values.length} escape '\\')`);
+    }
+    values.push(pageSize, (page - 1) * pageSize);
+    const result = await this.pool.query(
+      `select inbox.external_id,
+              inbox.payload->>'code' as code,
+              inbox.payload->>'inventoryNumber' as inventory_number,
+              inbox.payload->>'name' as name,
+              inbox.payload->>'location' as location,
+              inbox.payload->>'responsibleName' as responsible_name,
+              inbox.payload->>'residualCost' as residual_cost,
+              coalesce(inbox.last_seen_at, inbox.received_at) as last_seen_at,
+              link.item_id as linked_item_id,
+              item.name as linked_item_name,
+              item.status::text as linked_item_status,
+              count(*) over()::int as total
+         from "yu_inventory"."one_c_fixed_asset_inbox" inbox
+         left join "yu_inventory"."item_one_c_links" link on link.external_id = inbox.external_id
+         left join "yu_inventory"."items" item on item.id = link.item_id
+        where ${clauses.join(" and ")}
+        order by coalesce(inbox.payload->>'code',''), inbox.external_id
+        limit $${values.length - 1} offset $${values.length}`,
+      values,
+    );
+    return {
+      data: result.rows.map((row) => ({
+        externalId: String(row.external_id),
+        code: stringOrNull(row.code),
+        inventoryNumber: stringOrNull(row.inventory_number),
+        name: String(row.name),
+        location: stringOrNull(row.location),
+        responsibleName: stringOrNull(row.responsible_name),
+        residualCost: stringOrNull(row.residual_cost),
+        lastSeenAt: row.last_seen_at instanceof Date
+          ? row.last_seen_at.toISOString()
+          : stringOrNull(row.last_seen_at),
+        linkedItemId: stringOrNull(row.linked_item_id),
+        linkedItemName: stringOrNull(row.linked_item_name),
+        linkedItemStatus: stringOrNull(row.linked_item_status),
+      })),
+      page,
+      pageSize,
+      total: Number(result.rows[0]?.total ?? 0),
+    };
   }
 
   async getBatch(batchId: string) {
@@ -305,6 +389,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
 type Workflow={state:string;action:string;planAction:"create"|"link"|"update"|"exclude"|"blocked"|"conflict";bucket:string};
 function workflowFor(result:string,itemId:string|null):Workflow{if(result==="excluded_non_physical")return{state:"excluded",action:"exclude",planAction:"exclude",bucket:"excluded"};if(result.startsWith("blocked_")||result==="manual_review")return{state:"blocked",action:"manual_review",planAction:"blocked",bucket:"blocked"};if(result==="conflict_inventory_number")return{state:"conflict",action:"manual_review",planAction:"conflict",bucket:"conflicts"};if(result==="new_publishable")return{state:"ready",action:"create",planAction:"create",bucket:"create"};return{state:itemId?"matched":"ready",action:itemId?"link":"manual_review",planAction:itemId?"link":"blocked",bucket:"matched"};}
 function stringOrNull(value:unknown){return typeof value==="string"&&value.trim()?value.trim():null;}
+function escapeLikePattern(value:string){return value.replace(/[\\%_]/gu,(character)=>`\\${character}`);}
 function oneCCodeComparisonKey(value:unknown){const normalized=stringOrNull(value);return normalized?normalized.normalize("NFKC").toUpperCase():null;}
 function exactCandidateReasons(asset:OneCFixedAsset,candidate:Row,linkedItemId:string|undefined,codeLinkMap:ReadonlyMap<string,string[]>):CandidateReason[]{
   const reasons:CandidateReason[]=[];
