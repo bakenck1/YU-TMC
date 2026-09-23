@@ -25,12 +25,14 @@ test("public room QR rendering requires login without exposing room metadata", (
   assert.doesNotMatch(publicContract, /designation|responsible|items/);
 });
 
-test("service requests have required photos, bounded types, statuses and admin-only transitions", () => {
+test("internal service requests require photos while dormitory requests remain photo-optional", () => {
   const schema = read("lib/db/schema.ts");
   const route = read("app/api/service-requests/route.ts");
   const service = read("lib/application/services/service-request-service.ts");
   assert.match(schema, /serviceRequestsTable/);
-  assert.match(schema, /photoBinaryData: binaryData\("photo_binary_data"\)\.notNull\(\)/);
+  assert.match(schema, /photoBinaryData: binaryData\("photo_binary_data"\)/);
+  assert.match(schema, /source} = 'internal'[\s\S]*photoBinaryData} IS NOT NULL/);
+  assert.match(schema, /source} = 'dormitory'[\s\S]*photoBinaryData} IS NULL/);
   assert.match(route, /!body\.photo/);
   for (const value of ["not_working", "not_connected", "damaged", "missing"]) {
     assert.match(route, new RegExp(value));
