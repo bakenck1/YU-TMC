@@ -108,7 +108,7 @@ export default function OneCDecommissionedAssetsView({
   );
 }
 
-function PaginationLink({ href, disabled, children }: { href: string; disabled: boolean; children: React.ReactNode }) {
+export function PaginationLink({ href, disabled, children }: { href: string; disabled: boolean; children: React.ReactNode }) {
   return disabled
     ? <span aria-disabled="true" className="rounded-lg border border-zinc-200 px-3 py-2 text-zinc-300">{children}</span>
     : <Link className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-700 hover:bg-zinc-50" href={href}>{children}</Link>;

@@ -1,7 +1,7 @@
-import Link from "next/link";
-
 import DecommissionedItemsView from "@/components/DecommissionedItemsView";
+import DecommissionedRegistryTabs from "@/components/DecommissionedRegistryTabs";
 import OneCDecommissionedAssetsView from "@/components/OneCDecommissionedAssetsView";
+import Wrapper from "@/components/Wrapper";
 import { toDecommissionedInventoryItemView } from "@/lib/inventory-item-view";
 import { getApplicationServices } from "@/lib/server/application";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -24,10 +24,10 @@ export default async function DecommissionedItemsPage({ searchParams }: { search
     const search = (firstValue(params.q) ?? "").normalize("NFKC").trim().slice(0, 100);
     const result = await services.oneCReconciliation.listDecommissionedAssets({ page, pageSize: 50, search });
     return (
-      <div className="space-y-4">
-        <RegistryTabs active="one-c" inventoryTotal={null} oneCTotal={result.total} />
+      <Wrapper direction="column" gap="md">
+        <DecommissionedRegistryTabs active="one-c" inventoryTotal={null} oneCTotal={result.total} />
         <OneCDecommissionedAssetsView result={result} search={search} />
-      </div>
+      </Wrapper>
     );
   }
 
@@ -38,39 +38,13 @@ export default async function DecommissionedItemsPage({ searchParams }: { search
       : Promise.resolve(null),
   ]);
   return (
-    <div className="space-y-4">
-      <RegistryTabs active="inventory" inventoryTotal={items.length} oneCTotal={oneCPreview?.total ?? null} />
+    <Wrapper direction="column" gap="md">
+      <DecommissionedRegistryTabs active="inventory" inventoryTotal={items.length} oneCTotal={oneCPreview?.total ?? null} />
       <DecommissionedItemsView
         items={items.map(toDecommissionedInventoryItemView)}
         canExport={hasPermission(user.role, "inventory.report.export")}
       />
-    </div>
-  );
-}
-
-function RegistryTabs({
-  active,
-  inventoryTotal,
-  oneCTotal,
-}: {
-  active: "inventory" | "one-c";
-  inventoryTotal: number | null;
-  oneCTotal: number | null;
-}) {
-  const tabClass = (selected: boolean) => selected
-    ? "rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white"
-    : "rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100";
-  return (
-    <nav aria-label="Источники списанных ОС" className="flex flex-wrap gap-2 rounded-2xl border border-black/5 bg-white p-2 shadow-sm">
-      <Link className={tabClass(active === "inventory")} href="/items/decommissioned">
-        Списанные в Inventory{inventoryTotal === null ? "" : ` (${inventoryTotal.toLocaleString("ru-RU")})`}
-      </Link>
-      {oneCTotal !== null && (
-        <Link className={tabClass(active === "one-c")} href="/items/decommissioned?source=one-c">
-          Списанные по данным 1С ({oneCTotal.toLocaleString("ru-RU")})
-        </Link>
-      )}
-    </nav>
+    </Wrapper>
   );
 }
 
