@@ -43,6 +43,7 @@ test("browser smoke blanks dotenv integrations and drops unrelated inherited sec
     PATH: "safe-path",
     AUTH_ADMIN_EMAIL: "legacy-admin@example.test",
     GOOGLE_CLIENT_SECRET: "google-secret",
+    DORMITORY_API_KEY: "dormitory-secret",
     ONE_C_FIXED_ASSETS_API_KEY: "one-c-secret",
     UNRELATED_SECRET: "must-not-be-inherited",
   });
@@ -50,6 +51,7 @@ test("browser smoke blanks dotenv integrations and drops unrelated inherited sec
   assert.equal(environment.PATH, "safe-path");
   assert.equal(environment.AUTH_ADMIN_EMAIL, "");
   assert.equal(environment.GOOGLE_CLIENT_SECRET, "");
+  assert.equal(environment.DORMITORY_API_KEY, "");
   assert.equal(environment.ONE_C_FIXED_ASSETS_API_KEY, "");
   assert.equal(environment.UNRELATED_SECRET, undefined);
 });

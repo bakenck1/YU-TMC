@@ -69,6 +69,7 @@ function normalizeAsset(record: Record<string, unknown>, index: number): OneCFix
   const responsibleExternalIdValue = text(record, "ResponsibleExternalId", "ResponsibleGUID", "ResponsibleGuid", "GUIDМОЛ");
   if (responsibleExternalIdValue && !UUID.test(responsibleExternalIdValue)) rowFail(index, "invalid_responsible_external_id");
   const responsibleExternalId = responsibleExternalIdValue?.toLowerCase() ?? null;
+  const initialCost = numberValue(record, index, false, "InitialCost", "InitialValue", "ПервоначальнаяСтоимость");
   const rawStatus = text(record, "Status", "Статус");
   const status = rawStatus ? (STATUS_ALIASES.get(rawStatus.toLocaleLowerCase("ru")) ?? null) : null;
   if (rawStatus && !status) rowFail(index, "invalid_status");
@@ -79,6 +80,7 @@ function normalizeAsset(record: Record<string, unknown>, index: number): OneCFix
     responsibleName: text(record, "ResponsibleName", "Responsible", "МОЛ", "Ответственный", "МатериальноОтветственноеЛицо"),
     responsibleExternalId,
     quantity: numberValue(record, index, false, "Quantity", "КолВо", "Количество") ?? 1,
+    ...(initialCost === null ? {} : { initialCost }),
     residualCost: numberValue(record, index, true, "ResidualCost", "ResidualValue", "ЦенаОстаточная", "ОстаточнаяСтоимость", "Цена"),
     acceptedAt: dateValue(record, index, "AcceptedAt", "AcceptanceDate", "ДатаПринятияКУчёту", "ДатаПринятия"),
     updatedAt: dateValue(record, index, "UpdatedAt", "ДатаИзменения", "Изменено"),

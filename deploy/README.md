@@ -33,7 +33,8 @@ production-переменные из `.env.example`, включая `DATABASE_UR
 `WEB_PUSH_VAPID_*` переменные. Для входа через Yessenov ID также задайте
 `YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` и точный HTTPS
 `YESSENOV_OIDC_REDIRECT_URI`. Для реального Dockflow API также нужны отдельный
-`DOCKFLOW_API_KEY` и выданный Yessenov University read-only service-токен
+`DOCKFLOW_API_KEY`, отдельные `FACILITIES_API_KEY`, `DORMITORY_API_KEY` и
+`DORMITORY_WRITE_API_KEY`, а также выданный Yessenov University read-only service-токен
 `YESSENOV_DIRECTORY_API_TOKEN` для `GET https://api.yu.edu.kz/api/v2/personnels/`.
 Для TLS БД с частным CA укажите сертификат в
 `DATABASE_SSL_CA` одной строкой с экранированными переводами строки (`\n`).

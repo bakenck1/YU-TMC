@@ -892,19 +892,23 @@ export const serviceRequestsTable = inventorySchema.table(
         onUpdate: "restrict",
       }),
     authorId: uuid()
-      .notNull()
       .references(() => usersTable.id, {
         onDelete: "restrict",
         onUpdate: "restrict",
       }),
+    source: varchar({ length: 16 }).notNull().default("internal"),
+    externalRequestId: varchar({ length: 128 }),
+    externalRequestHash: varchar({ length: 64 }),
+    reporterName: varchar({ length: 160 }),
+    requestedAction: varchar({ length: 24 }),
     type: serviceRequestTypeEnum().notNull(),
     description: text().notNull(),
     status: serviceRequestStatusEnum().notNull().default("new"),
-    photoMediaType: varchar({ length: 32 }).notNull().default("image/jpeg"),
-    photoByteSize: integer().notNull(),
-    photoWidth: integer().notNull(),
-    photoHeight: integer().notNull(),
-    photoBinaryData: binaryData("photo_binary_data").notNull(),
+    photoMediaType: varchar({ length: 32 }),
+    photoByteSize: integer(),
+    photoWidth: integer(),
+    photoHeight: integer(),
+    photoBinaryData: binaryData("photo_binary_data"),
     createdAt: timestamp({ withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
@@ -913,7 +917,6 @@ export const serviceRequestsTable = inventorySchema.table(
       .defaultNow(),
     completedAt: timestamp({ withTimezone: true, mode: "date" }),
     updatedBy: uuid()
-      .notNull()
       .references(() => usersTable.id, {
         onDelete: "restrict",
         onUpdate: "restrict",
@@ -927,11 +930,35 @@ export const serviceRequestsTable = inventorySchema.table(
     ),
     check(
       "service_requests_photo_check",
-      sql`${table.photoMediaType} = 'image/jpeg'
-          AND ${table.photoByteSize} BETWEEN 1 AND 5242880
-          AND ${table.photoWidth} BETWEEN 1 AND 1920
-          AND ${table.photoHeight} BETWEEN 1 AND 1920
-          AND ${table.photoWidth}::bigint * ${table.photoHeight}::bigint <= 2500000`,
+      sql`(
+            ${table.source} = 'internal'
+            AND ${table.authorId} IS NOT NULL
+            AND ${table.updatedBy} IS NOT NULL
+            AND ${table.externalRequestId} IS NULL
+            AND ${table.externalRequestHash} IS NULL
+            AND ${table.reporterName} IS NULL
+            AND ${table.requestedAction} IS NULL
+            AND ${table.photoMediaType} = 'image/jpeg'
+            AND ${table.photoByteSize} BETWEEN 1 AND 5242880
+            AND ${table.photoWidth} BETWEEN 1 AND 1920
+            AND ${table.photoHeight} BETWEEN 1 AND 1920
+            AND ${table.photoWidth}::bigint * ${table.photoHeight}::bigint <= 2500000
+            AND ${table.photoBinaryData} IS NOT NULL
+          ) OR (
+            ${table.source} = 'dormitory'
+            AND ${table.authorId} IS NULL
+            AND ${table.externalRequestId} IS NOT NULL
+            AND btrim(${table.externalRequestId}) <> ''
+            AND ${table.externalRequestHash} ~ '^[0-9a-f]{64}$'
+            AND ${table.reporterName} IS NOT NULL
+            AND btrim(${table.reporterName}) <> ''
+            AND ${table.requestedAction} in ('repair', 'damaged', 'missing', 'other')
+            AND ${table.photoMediaType} IS NULL
+            AND ${table.photoByteSize} IS NULL
+            AND ${table.photoWidth} IS NULL
+            AND ${table.photoHeight} IS NULL
+            AND ${table.photoBinaryData} IS NULL
+          )`,
     ),
     check(
       "service_requests_completion_check",
@@ -948,6 +975,9 @@ export const serviceRequestsTable = inventorySchema.table(
       table.authorId,
       table.createdAt,
     ),
+    uniqueIndex("service_requests_dormitory_external_unique")
+      .on(table.externalRequestId)
+      .where(sql`${table.source} = 'dormitory'`),
     uniqueIndex("service_requests_open_item_unique")
       .on(table.itemId)
       .where(sql`${table.status} in ('new', 'in_progress')`),

@@ -15,6 +15,9 @@ export interface ServiceRequestRecord {
   buildingName: string;
   authorId: string;
   authorName: string;
+  source: "internal" | "dormitory";
+  externalRequestId: string | null;
+  requestedAction: "repair" | "damaged" | "missing" | "other" | null;
   responsibleId: string | null;
   responsibleName: string | null;
   roomResponsibleId: string | null;

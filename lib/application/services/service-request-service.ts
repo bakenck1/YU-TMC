@@ -238,13 +238,16 @@ function toDto(record: NonNullable<Awaited<ReturnType<ServiceRequestRepositories
     item: { id: record.itemId, name: record.itemName, inventoryNumber: record.inventoryNumber },
     room: { id: record.roomId, designation: record.roomDesignation, buildingName: record.buildingName },
     author: { id: record.authorId, name: record.authorName },
+    source: record.source,
+    externalRequestId: record.externalRequestId,
+    requestedAction: record.requestedAction,
     responsible: record.responsibleId
       ? { id: record.responsibleId, name: record.responsibleName ?? "" }
       : null,
     type: record.type,
     description: record.description,
     status: record.status,
-    photoUrl: `/api/service-requests/${record.id}/photo?v=${record.version}`,
+    photoUrl: record.source === "internal" ? `/api/service-requests/${record.id}/photo?v=${record.version}` : null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     version: record.version,

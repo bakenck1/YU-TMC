@@ -48,6 +48,52 @@ const assignedItemExample = {
 };
 
 const bearerSecurity = [{ bearerAuth: [] }];
+const facilitiesBearerSecurity = [{ facilitiesBearerAuth: [] }];
+const dormitoryBearerSecurity = [{ dormitoryBearerAuth: [] }];
+const dormitoryWriteBearerSecurity = [{ dormitoryWriteBearerAuth: [] }];
+
+const dormitoryAssetExample = {
+  id: "00000000-0000-4000-8000-000000000021",
+  code: "000009352",
+  inventoryNumber: "INV-9352",
+  name: "Кровать",
+  category: "Мебель",
+  acceptanceDate: "2025-11-20",
+  responsiblePerson: "Иванов Иван Иванович",
+  department: "Студенческий кампус",
+  location: {
+    buildingId: "00000000-0000-4000-8000-000000000010",
+    buildingName: "Общежитие 3",
+    roomId: "00000000-0000-4000-8000-000000000011",
+    room: "205",
+    floorNumber: 2,
+  },
+  initialCost: 50000,
+  residualCost: 30000,
+  currency: "KZT",
+  status: "active",
+  condition: "good",
+  accountingStatus: "Принято к учёту",
+  updatedAt: "2026-09-22T08:00:00.000Z",
+};
+
+const buildingExample = {
+  id: "00000000-0000-4000-8000-000000000010",
+  name: "Корпус A",
+  address: "г. Актау, 32-й микрорайон",
+  roomCount: 42,
+  updatedAt: "2026-09-22T08:00:00.000Z",
+};
+
+const roomExample = {
+  id: "00000000-0000-4000-8000-000000000011",
+  buildingId: buildingExample.id,
+  buildingName: buildingExample.name,
+  designation: "205",
+  floorNumber: 2,
+  floorLabel: null,
+  updatedAt: "2026-09-22T08:00:00.000Z",
+};
 
 const errorResponses = {
   "400": {
@@ -110,11 +156,150 @@ export const dockflowOpenApiDocument = {
   },
   servers: [{ url: "/", description: "Текущий сервер" }],
   tags: [
+    { name: "Dormitory", description: "Read-only перечень ТМЦ, находящихся в общежитиях" },
+    { name: "Facilities", description: "Активные корпуса и кабинеты без данных сотрудников и ТМЦ" },
     { name: "Authentication", description: "Проверка API-ключа Dockflow" },
     { name: "Employees", description: "Активные сотрудники Yessenov ID и их ТМЦ" },
     { name: "Inventory", description: "Текущие карточки ТМЦ" },
   ],
   paths: {
+    "/api/v1/dormitory/auth/check": {
+      get: {
+        tags: ["Dormitory"],
+        summary: "Проверить ключ системы общежития",
+        security: dormitoryBearerSecurity,
+        responses: {
+          "200": {
+            description: "Ключ действителен",
+            content: { "application/json": {
+              schema: { type: "object", required: ["valid", "scope"], properties: { valid: { type: "boolean" }, scope: { type: "string" } } },
+              example: { valid: true, scope: "dormitory-assets:read" },
+            } },
+          },
+          "401": errorResponses["401"],
+          "503": errorResponses["503"],
+        },
+      },
+    },
+    "/api/v1/dormitory/items": {
+      get: {
+        tags: ["Dormitory"],
+        summary: "Получить ТМЦ общежитий",
+        description: "Возвращает только ТМЦ, физически размещённые в общежитиях. Повреждение не означает автоматическое списание.",
+        security: dormitoryBearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+        ],
+        responses: {
+          "200": {
+            description: "Страница ТМЦ общежитий",
+            content: { "application/json": {
+              schema: {
+                type: "object",
+                required: ["items", "nextCursor"],
+                properties: {
+                  items: { type: "array", items: { $ref: "#/components/schemas/DormitoryAsset" } },
+                  nextCursor: { type: ["string", "null"] },
+                },
+              },
+              example: { items: [dormitoryAssetExample], nextCursor: null },
+            } },
+          },
+          "400": { description: "Некорректная пагинация", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": errorResponses["401"],
+          "503": errorResponses["503"],
+        },
+      },
+    },
+    "/api/v1/dormitory/requests": {
+      post: {
+        tags: ["Dormitory"],
+        summary: "Создать заявку коменданта",
+        description: "Создаёт заявку на ремонт/повреждение в YU Inventory и переводит ТМЦ общежития в maintenance. Списание этим методом запрещено.",
+        security: dormitoryWriteBearerSecurity,
+        requestBody: {
+          required: true,
+          content: { "application/json": {
+            schema: { $ref: "#/components/schemas/DormitoryRequestInput" },
+            example: {
+              externalRequestId: "dormitory-3-2026-00042",
+              itemId: dormitoryAssetExample.id,
+              action: "repair",
+              description: "Необходимо отремонтировать ножку кровати",
+              reporterName: "Комендант общежития 3",
+            },
+          } },
+        },
+        responses: {
+          "201": { description: "Заявка создана" },
+          "200": { description: "Безопасный повтор уже созданной заявки" },
+          "400": { description: "Некорректная заявка", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": errorResponses["401"],
+          "404": { description: "ТМЦ не найден или находится не в общежитии" },
+          "409": { description: "externalRequestId повторно использован с другим содержимым" },
+          "503": errorResponses["503"],
+        },
+      },
+    },
+    "/api/v1/facilities/auth/check": {
+      get: {
+        tags: ["Facilities"],
+        summary: "Проверить read-only ключ корпусов и кабинетов",
+        security: facilitiesBearerSecurity,
+        responses: {
+          "200": {
+            description: "Ключ действителен",
+            content: { "application/json": {
+              schema: { type: "object", required: ["valid", "scope"], properties: { valid: { type: "boolean" }, scope: { type: "string" } } },
+              example: { valid: true, scope: "facilities:read" },
+            } },
+          },
+          "401": errorResponses["401"],
+          "503": errorResponses["503"],
+        },
+      },
+    },
+    "/api/v1/buildings": {
+      get: {
+        tags: ["Facilities"],
+        summary: "Получить активные объекты и корпуса",
+        security: facilitiesBearerSecurity,
+        responses: {
+          "200": {
+            description: "Активные корпуса",
+            content: { "application/json": {
+              schema: { type: "object", required: ["buildings"], properties: { buildings: { type: "array", items: { $ref: "#/components/schemas/FacilitiesBuilding" } } } },
+              example: { buildings: [buildingExample] },
+            } },
+          },
+          "400": { description: "Query-параметры не поддерживаются", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": errorResponses["401"],
+          "503": errorResponses["503"],
+        },
+      },
+    },
+    "/api/v1/rooms": {
+      get: {
+        tags: ["Facilities"],
+        summary: "Получить активные кабинеты",
+        description: "Необязательный buildingId фильтрует кабинеты по одному корпусу.",
+        security: facilitiesBearerSecurity,
+        parameters: [{ name: "buildingId", in: "query", required: false, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": {
+            description: "Активные кабинеты активных корпусов",
+            content: { "application/json": {
+              schema: { type: "object", required: ["rooms"], properties: { rooms: { type: "array", items: { $ref: "#/components/schemas/FacilitiesRoom" } } } },
+              example: { rooms: [roomExample] },
+            } },
+          },
+          "400": { description: "Некорректный buildingId или неизвестный параметр", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": errorResponses["401"],
+          "503": errorResponses["503"],
+        },
+      },
+    },
     "/api/v1/auth/check": {
       get: {
         tags: ["Authentication"],
@@ -306,6 +491,24 @@ export const dockflowOpenApiDocument = {
   },
   components: {
     securitySchemes: {
+      dormitoryBearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "API_KEY",
+        description: "Отдельный read-only ключ системы общежития только для ТМЦ общежитий.",
+      },
+      dormitoryWriteBearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "API_KEY",
+        description: "Отдельный write-ключ только для создания заявок коменданта.",
+      },
+      facilitiesBearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "API_KEY",
+        description: "Отдельный read-only ключ только для активных корпусов и кабинетов.",
+      },
       bearerAuth: {
         type: "http",
         scheme: "bearer",
@@ -326,6 +529,77 @@ export const dockflowOpenApiDocument = {
       },
     },
     schemas: {
+      DormitoryRequestInput: {
+        type: "object",
+        additionalProperties: false,
+        required: ["externalRequestId", "itemId", "action", "description", "reporterName"],
+        properties: {
+          externalRequestId: { type: "string", minLength: 1, maxLength: 128 },
+          itemId: { type: "string", format: "uuid" },
+          action: { type: "string", enum: ["repair", "damaged", "missing", "other"] },
+          description: { type: "string", minLength: 1, maxLength: 4000 },
+          reporterName: { type: "string", minLength: 1, maxLength: 160 },
+        },
+      },
+      DormitoryAsset: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "code", "inventoryNumber", "name", "category", "acceptanceDate", "responsiblePerson", "department", "location", "initialCost", "residualCost", "currency", "status", "condition", "accountingStatus", "updatedAt"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          code: { type: "string" },
+          inventoryNumber: { type: "string" },
+          name: { type: "string" },
+          category: { type: "string" },
+          acceptanceDate: { type: ["string", "null"], format: "date" },
+          responsiblePerson: { type: ["string", "null"] },
+          department: { type: ["string", "null"] },
+          location: {
+            type: "object",
+            required: ["buildingId", "buildingName", "roomId", "room", "floorNumber"],
+            properties: {
+              buildingId: { type: "string", format: "uuid" },
+              buildingName: { type: "string" },
+              roomId: { type: "string", format: "uuid" },
+              room: { type: "string" },
+              floorNumber: { type: "integer" },
+            },
+          },
+          initialCost: { type: "number", minimum: 0 },
+          residualCost: { type: ["number", "null"] },
+          currency: { type: "string", const: "KZT" },
+          status: { type: "string", enum: ["active", "maintenance", "written_off"] },
+          condition: { type: "string", enum: ["good", "needs_attention", "damaged"] },
+          accountingStatus: { type: ["string", "null"] },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      FacilitiesBuilding: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "name", "address", "roomCount", "updatedAt"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          name: { type: "string" },
+          address: { type: "string" },
+          roomCount: { type: "integer", minimum: 0 },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      FacilitiesRoom: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "buildingId", "buildingName", "designation", "floorNumber", "floorLabel", "updatedAt"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          buildingId: { type: "string", format: "uuid" },
+          buildingName: { type: "string" },
+          designation: { type: "string" },
+          floorNumber: { type: "integer" },
+          floorLabel: { type: ["string", "null"] },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
       Error: {
         type: "object",
         required: ["error", "message"],

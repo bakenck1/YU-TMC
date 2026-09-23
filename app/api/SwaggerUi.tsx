@@ -4,6 +4,11 @@ import { FormEvent, useState } from "react";
 
 type Op = { group: string; path: string; title: string; help: string; iin?: boolean };
 const ops: Op[] = [
+  { group: "Authentication", path: "/api/v1/dormitory/auth/check", title: "Проверить ключ системы общежития", help: "Проверяет отдельный read-only ключ с областью dormitory-assets:read." },
+  { group: "Dormitory", path: "/api/v1/dormitory/items", title: "Получить ТМЦ общежитий", help: "Возвращает только ТМЦ, находящиеся в общежитиях, с ценами и статусами." },
+  { group: "Authentication", path: "/api/v1/facilities/auth/check", title: "Проверить ключ корпусов и кабинетов", help: "Проверяет отдельный read-only ключ с областью facilities:read." },
+  { group: "Inventory", path: "/api/v1/buildings", title: "Получить объекты и корпуса", help: "Возвращает только активные объекты с адресами и количеством кабинетов." },
+  { group: "Inventory", path: "/api/v1/rooms", title: "Получить кабинеты", help: "Возвращает активные кабинеты всех активных корпусов." },
   { group: "Authentication", path: "/api/v1/auth/check", title: "Проверить API-ключ", help: "Проверяет ключ интеграции Dockflow." },
   { group: "Employees", path: "/api/v1/employees/{iin}", title: "Получить сотрудника и закреплённые ТМЦ", help: "Основной запрос: поиск активного зарегистрированного сотрудника по ИИН.", iin: true },
   { group: "Employees", path: "/api/v1/employees/{iin}/items", title: "Получить только ТМЦ сотрудника", help: "Возвращает текущие ТМЦ сотрудника.", iin: true },

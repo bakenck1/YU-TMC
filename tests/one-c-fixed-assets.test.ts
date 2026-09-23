@@ -149,10 +149,10 @@ describe("1C fixed assets XML contract", () => {
   it("parses canonical and documented aliases into normalized values", () => {
     const assets = parseOneCFixedAssets(`<?xml version="1.0" encoding="UTF-8"?><FixedAssetsExport><FixedAsset>
       <ExternalId>${GUID}</ExternalId><Code>000009352</Code><InventoryNumber>000009352</InventoryNumber>
-      <Name>Тестовое основное средство</Name><Status>Принят к учету</Status><ResidualCost>12544,50</ResidualCost><AcceptedAt>20.11.2025</AcceptedAt>
+      <Name>Тестовое основное средство</Name><Status>Принят к учету</Status><InitialCost>20000.00</InitialCost><ResidualCost>12544,50</ResidualCost><AcceptedAt>20.11.2025</AcceptedAt>
     </FixedAsset></FixedAssetsExport>`);
-    assert.deepEqual(assets[0] && { externalId: assets[0].externalId, status: assets[0].status, residualCost: assets[0].residualCost, acceptedAt: assets[0].acceptedAt }, {
-      externalId: GUID, status: "Принято к учёту", residualCost: 12544.5, acceptedAt: "2025-11-20",
+    assert.deepEqual(assets[0] && { externalId: assets[0].externalId, status: assets[0].status, initialCost: assets[0].initialCost, residualCost: assets[0].residualCost, acceptedAt: assets[0].acceptedAt }, {
+      externalId: GUID, status: "Принято к учёту", initialCost: 20000, residualCost: 12544.5, acceptedAt: "2025-11-20",
     });
   });
 

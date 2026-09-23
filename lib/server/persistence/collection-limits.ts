@@ -10,6 +10,7 @@ export const COLLECTION_LIMITS = {
   users: 5_000,
   buildings: 1_000,
   roomsPerBuilding: 5_000,
+  facilitiesRooms: 10_000,
   inventoryItems: 25_000,
   inventoryItemsPage: 500,
   itemComponents: 1_000,

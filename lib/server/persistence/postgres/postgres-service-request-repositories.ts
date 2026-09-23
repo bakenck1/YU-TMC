@@ -37,6 +37,9 @@ interface RequestRow extends QueryResultRow {
   building_name: string;
   author_id: string;
   author_name: string;
+  source: ServiceRequestRecord["source"];
+  external_request_id: string | null;
+  requested_action: ServiceRequestRecord["requestedAction"];
   responsible_id: string | null;
   responsible_name: string | null;
   room_responsible_id: string | null;
@@ -345,7 +348,9 @@ function requestSelect() {
   return `select request.id, request.item_id, i.name as item_name,
                  i.inventory_number, request.room_id,
                  r.designation as room_designation, b.name as building_name,
-                 request.author_id, author.full_name as author_name,
+                 coalesce(request.author_id::text, 'external:dormitory') as author_id,
+                 coalesce(author.full_name, request.reporter_name) as author_name,
+                 request.source, request.external_request_id, request.requested_action,
                  coalesce(period.responsible_user_id, r.primary_responsible_id) as responsible_id,
                  coalesce(item_responsible.full_name, room_responsible.full_name) as responsible_name,
                  r.primary_responsible_id as room_responsible_id,
@@ -357,7 +362,7 @@ function requestSelect() {
               and i.item_section = 'general'
             join ${ROOMS} r on r.id = request.room_id
             join ${BUILDINGS} b on b.id = r.building_id
-            join ${USERS} author on author.id = request.author_id
+            left join ${USERS} author on author.id = request.author_id
             left join lateral (
               select responsible_user_id from ${RESPONSIBILITY}
                where item_id = i.id and ended_at is null
@@ -378,6 +383,9 @@ function mapRequest(row: RequestRow): ServiceRequestRecord {
     buildingName: row.building_name,
     authorId: row.author_id,
     authorName: row.author_name,
+    source: row.source,
+    externalRequestId: row.external_request_id,
+    requestedAction: row.requested_action,
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
     roomResponsibleId: row.room_responsible_id,
