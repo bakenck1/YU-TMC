@@ -90,6 +90,34 @@ Configure `YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` and
 remain local administrator decisions. See [docs/yessenov-sso.md](docs/yessenov-sso.md)
 for provider claims and the guarded personnel JSON import.
 
+## WhatsApp notifications
+
+Set `WA_GATEWAY_URL`, `WA_API_TOKEN` and `WA_SESSION` in the server's private
+`.env.local` or deployment secret store. Obtain the Bearer token and session
+name from the YU WA Gateway administrator. Never use a `NEXT_PUBLIC_` prefix
+or put the token in a browser request. Apply database migrations before enabling
+the token. Without `WA_API_TOKEN`, this integration stays disabled.
+
+When an administrator saves a user's phone number, the server normalizes it to
+`7XXXXXXXXXX` and calls `/v1/check`. Unregistered numbers are rejected. If the
+gateway is temporarily unavailable, other user changes are saved while the new
+phone number is left unsaved and the UI shows a warning. Numbers imported from
+Yessenov ID are not checked during sign-in; they are checked before a send.
+
+For internal service requests, the author receives `generic_status` on creation
+and on status changes to “in progress” or “completed”. Chat messages and
+dormitory-origin requests do not send WhatsApp. The server records a 45-minute
+cooldown per request and template in PostgreSQL. On HTTP 429 it stores the
+gateway's `Retry-After` pause for the session; failed notifications do not
+roll back the request or status change. Delivery is best effort; skipped or
+failed sends are not replayed automatically.
+
+Gateway checks from an administrator's shell (replace `TOKEN` locally):
+
+```bash
+curl -X POST http://wa.yu.edu.kz/v1/check -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d '{"session":"otinish","to":"77011112233"}'
+curl -X POST http://wa.yu.edu.kz/v1/send -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d '{"session":"otinish","to":"77011112233","template":"generic_status","data":{"title":"YU Inventory","ticket":"ABC-123","status":"В работе","extra":"Подробности в личном кабинете"}}'
+```
 ## Web Push
 
 Generate one VAPID key pair and store it in the deployment secret store:

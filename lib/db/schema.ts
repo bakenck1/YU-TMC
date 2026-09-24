@@ -3025,3 +3025,22 @@ export const oneCPublicationRunsTable = inventorySchema.table(
     index("one_c_publication_runs_batch_state_idx").on(table.batchId, table.state),
   ],
 );
+
+export const whatsappSessionLimitsTable = inventorySchema.table(
+  "whatsapp_session_limits",
+  {
+    session: varchar({ length: 80 }).primaryKey(),
+    retryAfterAt: timestamp({ withTimezone: true, mode: "date" }),
+  },
+);
+
+export const whatsappNotificationAttemptsTable = inventorySchema.table(
+  "whatsapp_notification_attempts",
+  {
+    requestId: uuid().notNull().references(() => serviceRequestsTable.id, { onDelete: "cascade" }),
+    template: varchar({ length: 80 }).notNull(),
+    attemptedAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    sentAt: timestamp({ withTimezone: true, mode: "date" }),
+  },
+  (table) => [primaryKey({ columns: [table.requestId, table.template] })],
+);

@@ -196,7 +196,7 @@ export default function UsersManager({
       setMutationError(await userMutationError(response, t));
       return;
     }
-    const payload = (await response.json()) as { user: UserDto };
+    const payload = (await response.json()) as { user: UserDto; warning?: string };
     const saved = normalizeUser(payload.user);
     setRecords((current) =>
       existing
@@ -206,6 +206,9 @@ export default function UsersManager({
     setSelectedId(saved.id);
     if (!existing) resetPage();
     setFormUserId(undefined);
+    if (payload.warning === "whatsapp_check_unavailable") {
+      setMutationError(t("users.whatsappUnavailable"));
+    }
   }
 
   async function toggleActive(userId: string) {
@@ -581,6 +584,12 @@ async function userMutationError(
   }
   if (payload?.error === "invalid_initial_password") {
     return t("users.passwordLengthError");
+  }
+  if (payload?.error === "whatsapp_not_registered") {
+    return t("users.whatsappNotRegistered");
+  }
+  if (payload?.error === "invalid_phone") {
+    return t("users.whatsappInvalidPhone");
   }
   if (response.status === 403) {
     return t("users.forbiddenError");

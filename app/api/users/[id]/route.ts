@@ -4,6 +4,7 @@ import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { requirePermission } from "@/lib/server/security/request-user";
+import { verifyWhatsAppPhoneForSave } from "@/lib/server/whatsapp-user-phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +22,14 @@ export async function PATCH(
     requireUserId(id);
     const body = await readLimitedJson(request);
     const input = parseUpdateUser(body);
+    const checkedPhone = await verifyWhatsAppPhoneForSave(input.phone);
     const user = await getApplicationServices().users.updateUser(
       id,
-      input,
+      { ...input, phone: checkedPhone.phone },
       actor.userId,
       actor.sessionVersion,
     );
-    return Response.json({ user });
+    return Response.json({ user, ...(checkedPhone.warning ? { warning: "whatsapp_check_unavailable" } : {}) });
   } catch (error) {
     return userErrorResponse(normalizeRequestError(error));
   }

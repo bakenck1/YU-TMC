@@ -4,6 +4,7 @@ import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { requirePermission } from "@/lib/server/security/request-user";
+import { verifyWhatsAppPhoneForSave } from "@/lib/server/whatsapp-user-phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,13 +33,14 @@ export async function POST(request: Request) {
     const actor = await requirePermission(request, "legacy.users.manage");
     const body = await readLimitedJson(request);
     const input = parseCreateUser(body);
+    const checkedPhone = await verifyWhatsAppPhoneForSave(input.phone);
     const user = await getApplicationServices().users.createUser(
-      input,
+      { ...input, phone: checkedPhone.phone ?? null },
       actor.userId,
       actor.sessionVersion,
     );
     return Response.json(
-      { user },
+      { user, ...(checkedPhone.warning ? { warning: "whatsapp_check_unavailable" } : {}) },
       { status: 201, headers: PRIVATE_NO_STORE_HEADERS },
     );
   } catch (error) {

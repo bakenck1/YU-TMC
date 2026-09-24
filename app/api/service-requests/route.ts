@@ -4,6 +4,7 @@ import type {
 } from "@/lib/contracts/service-requests";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
+import { notifyServiceRequestByWhatsApp } from "@/lib/server/whatsapp-service-requests";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import {
   assertPhotoJsonRequest,
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       parseCreate(await readPhotoJsonRequest(request)),
       authorizationActor(user),
     );
+    await notifyServiceRequestByWhatsApp(serviceRequest);
     return Response.json(
       { request: serviceRequest },
       { status: 201, headers: PRIVATE_RESPONSE_HEADERS },
