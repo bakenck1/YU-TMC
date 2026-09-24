@@ -756,7 +756,7 @@ export class UserService {
   ): Promise<UserDto> {
     const fullName = requireName(input.fullName);
     const iin = normalizeIin(input.iin);
-    const phone = normalizePhone(input.phone);
+    const phone = input.phone === undefined ? undefined : normalizePhone(input.phone);
     const defaultRoomId =
       input.defaultRoomId === undefined
         ? undefined
@@ -824,7 +824,7 @@ export class UserService {
         id,
         fullName,
         iin,
-        phone,
+        phone: phone === undefined ? current.phone : phone,
         defaultRoomId: nextDefaultRoomId,
         role: input.role,
         emailVerified: input.emailVerified,
