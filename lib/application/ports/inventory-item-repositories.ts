@@ -35,6 +35,7 @@ export interface InventoryItemRecord {
   inventoryNumberKind: InventoryNumberKind;
   inventoryNumber: string;
   status: ItemStatus;
+  isProject?: boolean;
   condition?: ItemCondition;
   connectionStatus?: ConnectionStatus;
   qrCode: string | null;
@@ -58,6 +59,7 @@ export interface InventoryItemRecord {
 
 export interface InsertInventoryItemRecord {
   id: string;
+  isProject?: boolean;
   name: string;
   description: string | null;
   itemType: string;
@@ -135,6 +137,7 @@ export interface StoredItemPhoto {
 
 export interface UpdateInventoryItemProtectedRecord {
   id: string;
+  isProject?: boolean;
   roomId: string;
   inventoryNumberKind: InventoryNumberKind;
   inventoryNumber: string;
@@ -183,6 +186,7 @@ export interface ArchiveInventoryItemRecord {
 
 export interface MarkDecommissionedItemInUseRecord {
   id: string;
+  isProject?: boolean;
   roomId: string;
   reason: string | null;
   adminComment: string | null;
@@ -197,6 +201,7 @@ export interface MarkDecommissionedItemInUseRecord {
 
 export interface RestoreDecommissionedItemRecord {
   id: string;
+  isProject?: boolean;
   actorId: string;
   expectedVersion: number;
   occurredAt: Date;

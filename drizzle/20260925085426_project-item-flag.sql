@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."items" ADD COLUMN "is_project" boolean DEFAULT false NOT NULL;

@@ -115,6 +115,7 @@ export async function PATCH(
 function isMarkDecommissionedInUsePatch(value: unknown): value is {
   operation: "mark_decommissioned_in_use";
   version: number;
+  isProject?: boolean;
   roomId: string;
   responsibleUserId?: string | null;
   reason?: string | null;
@@ -125,6 +126,7 @@ function isMarkDecommissionedInUsePatch(value: unknown): value is {
   const body = value as Record<string, unknown>;
   return body.operation === "mark_decommissioned_in_use" &&
     Number.isInteger(body.version) &&
+    (body.isProject === undefined || typeof body.isProject === "boolean") &&
     typeof body.roomId === "string" &&
     (body.responsibleUserId === undefined ||
       body.responsibleUserId === null ||
@@ -137,12 +139,15 @@ function isMarkDecommissionedInUsePatch(value: unknown): value is {
 function isRestoreDecommissionedPatch(value: unknown): value is {
   operation: "restore_decommissioned";
   version: number;
+  isProject?: boolean;
   reason: string;
 } {
   if (!value || typeof value !== "object") return false;
   const body = value as Record<string, unknown>;
   return body.operation === "restore_decommissioned" &&
-    Number.isInteger(body.version) && typeof body.reason === "string";
+    Number.isInteger(body.version) &&
+    (body.isProject === undefined || typeof body.isProject === "boolean") &&
+    typeof body.reason === "string";
 }
 
 function isMaintenanceResolutionPatch(value: unknown): value is {
@@ -294,6 +299,7 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
       value.responsibleUserId !== null &&
       typeof value.responsibleUserId !== "string") ||
     (value.replaceQr !== undefined && typeof value.replaceQr !== "boolean") ||
+    (value.isProject !== undefined && typeof value.isProject !== "boolean") ||
     (value.qrReplaceReason !== undefined &&
       value.qrReplaceReason !== null &&
       typeof value.qrReplaceReason !== "string")
@@ -306,6 +312,7 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
     responsibleUserId: value.responsibleUserId as string | null | undefined,
     inventoryNumber: value.inventoryNumber,
     status: value.status,
+    isProject: value.isProject as boolean | undefined,
     condition: value.condition as UpdateInventoryItemProtectedInput["condition"],
     connectionStatus:
       value.connectionStatus as UpdateInventoryItemProtectedInput["connectionStatus"],

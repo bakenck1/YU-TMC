@@ -96,6 +96,21 @@ describe("TmcUserPicker", () => {
     expect(screen.getByRole("option", { name: /Bauyrzhan User/ })).not.toBeNull();
   });
 
+  it("keeps lower mobile results in the form flow and lets users select them", async () => {
+    const onChange = vi.fn();
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ users: [FIRST, SECOND] }) } as Response);
+    render(<div className="max-h-48 overflow-y-auto"><TmcUserPicker value={null} onChange={onChange} /></div>);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "us" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    const listbox = screen.getByRole("listbox");
+    expect(listbox.parentElement?.className).toContain("relative");
+    fireEvent.click(screen.getByRole("option", { name: /Bauyrzhan User/ }));
+    expect(onChange).toHaveBeenCalledWith(SECOND);
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("drops a stale response and clears the controlled value", async () => {
     const onChange = vi.fn();
     let resolveFirst!: (value: Response) => void;

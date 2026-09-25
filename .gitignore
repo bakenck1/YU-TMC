@@ -19,6 +19,9 @@
 /build
 /storybook-static/
 /.artifacts/browser-smoke/
+/.artifacts/local-preview-credentials.json
+/.artifacts/postgres-development/
+/.artifacts/previous-postgres-preview/
 
 # Container runtimes are intentionally not part of this project.
 Dockerfile

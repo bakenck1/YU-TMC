@@ -49,7 +49,7 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="room-form-title">
-      <form onSubmit={submit} className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl sm:p-6">
+      <form onSubmit={submit} className="max-h-[calc(100dvh-0.5rem)] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-lg sm:rounded-3xl sm:p-6">
         <div className="flex items-center justify-between"><h2 id="room-form-title" className="text-lg font-semibold text-zinc-900">{room ? t("inventory.editRoom") : t("inventory.createRoom")}</h2><IconButton label={t("common.close")} icon={X} onClick={onClose} disabled={saving} size="sm" /></div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <TextField label={t("inventory.roomDesignation")} value={designation} onChange={(event) => setDesignation(event.target.value)} maxLength={80} required />

@@ -41,6 +41,7 @@ export default function TmcUserPicker({
   const { t } = useAppSettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const controllerRef = useRef<TmcRecipientSearchController | null>(null);
   const listboxId = useId();
   const [queryState, setQueryState] = useState({
@@ -178,7 +179,7 @@ export default function TmcUserPicker({
           }}
           onKeyDown={handleKeyDown}
           placeholder={t("tmc.recipient.placeholder")}
-          className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-12 text-sm text-zinc-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+          className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-12 text-base text-zinc-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 sm:text-sm"
         />
         {value || query ? (
           <button type="button" onClick={clear} aria-label={t("tmc.recipient.clear")} className="absolute right-1 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100">
@@ -195,33 +196,42 @@ export default function TmcUserPicker({
       ) : null}
 
       {open ? (
-        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
+        <div className="relative z-30 mt-2 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
           <div
             id={listboxId}
             role="listbox"
-            className="max-h-64 overflow-y-auto p-1"
+            className="max-h-[min(16rem,40dvh)] overflow-y-auto overscroll-contain p-1"
           >
           {showsOptions ? (
             <>
               {users.map((user, index) => (
-                <div
+                <button
+                  type="button"
                   id={`${listboxId}-${user.id}`}
                   key={user.id}
                   role="option"
                   aria-selected={value?.id === user.id}
-                  onPointerDown={(event) => event.preventDefault()}
-                  onPointerUp={(event) => {
-                    if (event.pointerType !== "mouse") select(user);
+                  onMouseDown={(event) => event.preventDefault()}
+                  onPointerDown={(event) => {
+                    if (event.pointerType === "touch") {
+                      touchStartRef.current = { x: event.clientX, y: event.clientY };
+                    }
                   }}
+                  onPointerUp={(event) => {
+                    const start = touchStartRef.current;
+                    touchStartRef.current = null;
+                    if (event.pointerType === "touch" && start && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) select(user);
+                  }}
+                  onPointerCancel={() => { touchStartRef.current = null; }}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => select(user)}
-                  className={`min-h-11 cursor-pointer rounded-lg px-3 py-2.5 text-sm ${index === activeIndex ? "bg-emerald-50 text-emerald-950" : "text-zinc-800 hover:bg-zinc-50"}`}
+                  className={`block min-h-11 w-full cursor-pointer rounded-lg px-3 py-2.5 text-left text-sm ${index === activeIndex ? "bg-emerald-50 text-emerald-950" : "text-zinc-800 hover:bg-zinc-50"}`}
                 >
                   <span className="flex items-start justify-between gap-3">
-                    <span className="min-w-0"><span className="block truncate font-semibold">{user.fullName}</span><span className="block truncate text-xs text-zinc-500">{user.email} · {t(ROLE_LABEL_KEYS[user.role])}</span></span>
+                    <span className="min-w-0"><span className="block break-words font-semibold">{user.fullName}</span><span className="block truncate text-xs text-zinc-500">{user.email} · {t(ROLE_LABEL_KEYS[user.role])}</span></span>
                     {value?.id === user.id ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" /> : null}
                   </span>
-                </div>
+                </button>
               ))}
             </>
           ) : null}
