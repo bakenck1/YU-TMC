@@ -42,7 +42,11 @@ export default function InventoryRoomFormModal({ building, room, onClose, onSave
     try {
       const response = await fetch(room ? `/api/inventory/rooms/${encodeURIComponent(room.id)}` : `/api/inventory/buildings/${encodeURIComponent(building.id)}/rooms`, { method: room ? "PATCH" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ designation: designation.trim(), floorNumber: selectedFloor, floorLabel: null, primaryResponsibleId: responsible?.id ?? null, accessMode, ...(room ? { version: room.version } : {}) }) });
       const body: unknown = await response.json().catch(() => null);
-      if (!response.ok || !body || typeof body !== "object" || !("room" in body)) { setError(t("inventory.saveFailed")); return; }
+      if (!response.ok || !body || typeof body !== "object" || !("room" in body)) {
+        const code = body && typeof body === "object" && "error" in body ? body.error : null;
+        setError(code === "room_already_exists" ? t("inventory.roomAlreadyExists") : t("inventory.saveFailed"));
+        return;
+      }
       onSave((body as { room: RoomDto }).room);
     } catch { setError(t("inventory.saveFailed")); } finally { setSaving(false); }
   }

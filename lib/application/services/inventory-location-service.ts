@@ -233,6 +233,7 @@ export class InventoryLocationService {
       if (!building || building.status !== "active") {
         throw new ApplicationError("not_found", "building_not_found");
       }
+      await assertRoomDesignationAvailable(locations, buildingId, values.designationKey);
       const room = await locations.insertRoom({
         id: roomId,
         buildingId,
@@ -286,7 +287,13 @@ export class InventoryLocationService {
       if (current.version !== input.version) {
         throw new ApplicationError("conflict", "version_conflict");
       }
+      if (current.status !== "active") throw versionConflict();
       const values = normalizeRoomInput(input, current.accessMode);
+      if (values.designationKey !== roomDesignationKey(current.designation)) {
+        // Serialize room renames with creations in the same building.
+        await locations.findBuildingByIdForUpdate(current.buildingId);
+        await assertRoomDesignationAvailable(locations, current.buildingId, values.designationKey, id);
+      }
       const updated = await locations.updateRoom({
         id,
         ...values,
@@ -521,7 +528,7 @@ function normalizeRoomInput(input: {
   }
   return {
     designation,
-    designationKey: comparisonKey(designation),
+    designationKey: roomDesignationKey(designation),
     floorNumber: input.floorNumber,
     floorLabel,
     primaryResponsibleId,
@@ -540,6 +547,32 @@ function normalizeAccessMode(value: unknown): "open" | "closed" {
 
 function comparisonKey(value: string) {
   return value.toLocaleLowerCase("ru-RU");
+}
+
+// Cyrillic and Latin letters that look alike must identify the same room.
+const ROOM_LOOKALIKE_LETTERS: Record<string, string> = {
+  "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h",
+  "о": "o", "р": "p", "с": "c", "т": "t", "у": "y", "х": "x",
+  "і": "i",
+};
+
+function roomDesignationKey(value: string): string {
+  return [...comparisonKey(value.normalize("NFKC").trim())]
+    .map((letter) => ROOM_LOOKALIKE_LETTERS[letter] ?? letter)
+    .join("");
+}
+
+async function assertRoomDesignationAvailable(
+  locations: InventoryLocationRepositories["locations"],
+  buildingId: string,
+  designationKey: string,
+  exceptRoomId?: string,
+): Promise<void> {
+  const existing = await locations.listActiveRoomDesignations(buildingId);
+  if (existing.some((room) => room.id !== exceptRoomId &&
+    roomDesignationKey(room.designation) === designationKey)) {
+    throw new ApplicationError("conflict", "room_already_exists");
+  }
 }
 
 function requirePermission(

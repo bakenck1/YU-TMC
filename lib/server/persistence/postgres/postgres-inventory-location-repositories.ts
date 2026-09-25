@@ -232,6 +232,15 @@ class PostgresInventoryLocationRepository
     return assertCollectionSize(result.rows, COLLECTION_LIMITS.roomsPerBuilding).map(mapRoom);
   }
 
+  async listActiveRoomDesignations(buildingId: string): Promise<{ id: string; designation: string }[]> {
+    const result = await this.source.query<{ id: string; designation: string } & QueryResultRow>(
+      `select id, designation from ${ROOMS}
+       where building_id = $1 and status = 'active'`,
+      [buildingId],
+    );
+    return result.rows.map((row) => ({ id: row.id, designation: row.designation }));
+  }
+
   async listRoomsAssignedTo(buildingId: string, userId: string): Promise<RoomRecord[]> {
     const result = await this.source.query<RoomRow>(
       roomSelect(

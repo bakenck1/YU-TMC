@@ -482,6 +482,7 @@ test("location service covers successful building and room mutation workflows", 
         });
       })(),
     insertRoomQr: async () => undefined,
+    listActiveRoomDesignations: async () => [],
     findRoomByIdForUpdate: async (id) => {
       assert.equal(id, "room-1");
       return roomRecord();
@@ -559,6 +560,8 @@ test("location service maps compare-and-swap failures to version conflicts", asy
 
   const roomService = locationService({
     findRoomByIdForUpdate: async () => roomRecord(),
+    findBuildingByIdForUpdate: async () => building(),
+    listActiveRoomDesignations: async () => [],
     updateRoom: async () => null,
   });
   await assert.rejects(
@@ -676,6 +679,7 @@ test("room creation accepts an explicit closed access mode", async () => {
       return roomRecord({ id: input.id, accessMode: input.accessMode });
     },
     insertRoomQr: async () => undefined,
+    listActiveRoomDesignations: async () => [],
     appendAudit: async () => undefined,
   });
 
@@ -686,6 +690,90 @@ test("room creation accepts an explicit closed access mode", async () => {
   );
   assert.equal(insertedAccessMode, "closed");
   assert.equal(created.accessMode, "closed");
+});
+
+test("room creation and rename reject Cyrillic and Latin lookalike duplicates in one building", async () => {
+  let insertCalls = 0;
+  let insertedKey: string | undefined;
+  let updateCalls = 0;
+  const service = locationService({
+    findBuildingByIdForUpdate: async () => building(),
+    listActiveRoomDesignations: async (buildingId) => buildingId === "building-1"
+      ? [
+          { id: "room-1", designation: "403А" },
+          { id: "room-2", designation: "405В" },
+        ]
+      : [],
+    findRoomByIdForUpdate: async (id) => roomRecord({
+      id,
+      designation: id === "room-1" ? "403А" : "405В",
+    }),
+    insertRoom: async (input) => {
+      insertCalls += 1;
+      insertedKey = input.designationKey;
+      return roomRecord({ id: input.id, buildingId: input.buildingId, designationKey: input.designationKey });
+    },
+    insertRoomQr: async () => undefined,
+    updateRoom: async (input) => {
+      updateCalls += 1;
+      return roomRecord({ id: input.id, designation: input.designation, designationKey: input.designationKey, version: 2 });
+    },
+    appendAudit: async () => undefined,
+  });
+
+  for (const designation of ["403A", "403а", "405B"]) {
+    await assert.rejects(
+      service.createRoom("building-1", { designation, floorNumber: 9 }, ADMIN),
+      rejectsWithCode("room_already_exists"),
+    );
+  }
+  await assert.rejects(
+    service.updateRoom("room-2", { designation: "403A", floorNumber: 4, version: 1 }, ADMIN),
+    rejectsWithCode("room_already_exists"),
+  );
+  assert.equal(insertCalls, 0);
+  assert.equal(updateCalls, 0);
+
+  await service.createRoom(
+    "building-2", { designation: "403A", floorNumber: 4 }, ADMIN,
+  );
+  assert.equal(insertedKey, "403a");
+  assert.equal(insertCalls, 1);
+
+  await service.updateRoom("room-1", { designation: "403A", floorNumber: 4, version: 1 }, ADMIN);
+  assert.equal(updateCalls, 1);
+});
+
+test("room suffix comparison covers visually matching Cyrillic and Latin letters", async () => {
+  let existingDesignation = "";
+  const service = locationService({
+    findBuildingByIdForUpdate: async () => building(),
+    listActiveRoomDesignations: async () => [{ id: "room-1", designation: existingDesignation }],
+  });
+  for (const [cyrillic, latin] of [
+    ["А", "A"], ["В", "B"], ["Е", "E"], ["К", "K"],
+    ["М", "M"], ["Н", "H"], ["О", "O"], ["Р", "P"],
+    ["С", "C"], ["Т", "T"], ["У", "Y"], ["Х", "X"], ["І", "I"],
+  ]) {
+    existingDesignation = `403${cyrillic}`;
+    await assert.rejects(
+      service.createRoom("building-1", { designation: `403${latin}`, floorNumber: 4 }, ADMIN),
+      rejectsWithCode("room_already_exists"),
+    );
+  }
+});
+
+test("renaming an archived room reports a version conflict before checking other rooms", async () => {
+  const service = locationService({
+    findRoomByIdForUpdate: async () => roomRecord({ status: "archived" }),
+    findBuildingByIdForUpdate: async () => { throw new Error("unexpected building lock"); },
+    listActiveRoomDesignations: async () => { throw new Error("unexpected duplicate check"); },
+    updateRoom: async () => { throw new Error("unexpected room update"); },
+  });
+  await assert.rejects(
+    service.updateRoom("room-1", { designation: "403A", floorNumber: 4, version: 1 }, ADMIN),
+    rejectsWithCode("version_conflict"),
+  );
 });
 
 test("location service blocks unauthorized, stale and unsafe location mutations", async () => {
