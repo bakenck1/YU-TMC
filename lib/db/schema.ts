@@ -788,6 +788,7 @@ export const itemsTable = inventorySchema.table(
     inventoryNumber: varchar({ length: 64 }).notNull(),
     inventoryNumberKey: text().notNull(),
     status: itemStatusEnum().notNull().default("active"),
+    isProject: boolean().notNull().default(false),
     condition: itemConditionEnum().notNull().default("good"),
     connectionStatus: connectionStatusEnum().notNull().default("not_applicable"),
     createdInInspectionId: uuid().references(() => inspectionsTable.id, {

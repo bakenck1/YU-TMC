@@ -39,6 +39,7 @@ export interface InventoryItemDto {
     buildingName: string;
   };
   status: ItemStatus;
+  isProject?: boolean;
   condition?: ItemCondition;
   connectionStatus?: ConnectionStatus;
   qrCode: string | null;
@@ -120,6 +121,7 @@ export interface InventoryItemCommentDto {
 
 export interface CreateInventoryItemInput {
   name: string;
+  isProject?: boolean;
   category?: InventoryItemCategory | null;
   /** @deprecated Only accepted by trusted legacy import paths. Public APIs require category. */
   itemType?: string | null;
@@ -183,6 +185,7 @@ export interface UpdateInventoryItemPhotoInput {
 
 export interface UpdateInventoryItemProtectedInput {
   version: number;
+  isProject?: boolean;
   roomId: string;
   /** New responsible employee. Null releases the current assignment. */
   responsibleUserId?: string | null;
@@ -196,6 +199,7 @@ export interface UpdateInventoryItemProtectedInput {
 
 export interface MarkDecommissionedItemInUseInput {
   version: number;
+  isProject?: boolean;
   roomId: string;
   /** Optional employee assignment. Null explicitly leaves the item unassigned. */
   responsibleUserId?: string | null;
@@ -206,5 +210,6 @@ export interface MarkDecommissionedItemInUseInput {
 
 export interface RestoreDecommissionedItemInput {
   version: number;
+  isProject?: boolean;
   reason: string;
 }

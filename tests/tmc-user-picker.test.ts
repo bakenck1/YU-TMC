@@ -200,7 +200,7 @@ test("picker is controlled, accessible, mobile-safe and absent from receive", ()
   for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"]) {
     assert.match(picker, new RegExp(`event\\.key === "${key}"`));
   }
-  assert.match(picker, /max-h-64/);
+  assert.match(picker, /max-h-\[min\(16rem,40dvh\)\]/);
   assert.match(picker, /overflow-y-auto/);
   assert.match(picker, /min-h-11/);
   assert.match(picker, /maxLength=\{TMC_RECIPIENT_QUERY_MAX_LENGTH\}/);

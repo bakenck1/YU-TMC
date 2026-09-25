@@ -76,7 +76,8 @@ function parseCreate(
       typeof body.inventoryNumber !== "string") ||
     (body.responsibleUserId !== undefined &&
       body.responsibleUserId !== null &&
-      typeof body.responsibleUserId !== "string")
+      typeof body.responsibleUserId !== "string") ||
+    (body.isProject !== undefined && typeof body.isProject !== "boolean")
   ) {
     throw invalidRequest();
   }
@@ -129,6 +130,7 @@ function parseCreate(
     barcode: body.barcode as string | null | undefined,
     inventoryNumber: body.inventoryNumber as string | null | undefined,
     responsibleUserId: body.responsibleUserId as string | null | undefined,
+    isProject: body.isProject as boolean | undefined,
     photos,
   };
 }

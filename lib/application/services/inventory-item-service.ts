@@ -475,6 +475,7 @@ export class InventoryItemService {
         itemType: itType ?? values.itemType,
         itemSection,
         itType,
+        isProject: values.isProject,
         brand: values.brand,
         model: values.model,
         oneCCode: itemSection === "general" ? values.oneCCode : null,
@@ -506,6 +507,7 @@ export class InventoryItemService {
             itemType: created.itemType,
             itemSection,
             itType,
+            isProject: created.isProject ?? false,
             brand: created.brand,
             model: created.model,
             oneCCode: created.oneCCode ?? null,
@@ -1162,6 +1164,7 @@ export class InventoryItemService {
       if (!items.markDecommissionedInUse) throw new Error("decommissioned_workflow_unavailable");
       const updated = await items.markDecommissionedInUse({
         id,
+        isProject: input.isProject === undefined ? current.isProject ?? false : normalizeProjectFlag(input.isProject),
         roomId,
         reason,
         adminComment,
@@ -1186,9 +1189,10 @@ export class InventoryItemService {
         id: this.ids.create(), actor, subjectId: id,
         subjectRevision: updated.version,
         action: "item.decommissioned_usage_started",
-        beforeValues: { status: current.status, roomId: current.roomId },
+        beforeValues: { status: current.status, roomId: current.roomId, isProject: current.isProject ?? false },
         afterValues: {
           status: "decommissioned_in_use",
+          isProject: updated.isProject ?? false,
           roomId,
           responsibleUserId,
           reason,
@@ -1223,15 +1227,16 @@ export class InventoryItemService {
       const occurredAt = this.clock.now();
       if (!items.restoreDecommissionedItem) throw new Error("decommissioned_workflow_unavailable");
       const updated = await items.restoreDecommissionedItem({
-        id, actorId: actor.userId, expectedVersion: input.version, occurredAt,
+        id, isProject: input.isProject === undefined ? current.isProject ?? false : normalizeProjectFlag(input.isProject),
+        actorId: actor.userId, expectedVersion: input.version, occurredAt,
       });
       if (!updated) throw versionConflict();
       await items.appendAudit(createAudit({
         id: this.ids.create(), actor, subjectId: id,
         subjectRevision: updated.version,
         action: "item.restored_from_decommission",
-        beforeValues: { status: current.status },
-        afterValues: { status: "active", reason },
+        beforeValues: { status: current.status, isProject: current.isProject ?? false },
+        afterValues: { status: "active", isProject: updated.isProject ?? false, reason },
         occurredAt,
       }));
       return toItemDto(updated);
@@ -1275,6 +1280,7 @@ export class InventoryItemService {
       const updated = await items.updateItemProtected({
         id,
         ...values,
+        isProject: values.isProject ?? current.isProject ?? false,
         condition: values.condition ?? current.condition ?? "good",
         connectionStatus:
           values.connectionStatus ?? current.connectionStatus ?? "not_applicable",
@@ -1322,6 +1328,7 @@ export class InventoryItemService {
             roomLabel: itemLocationLabel(current),
             inventoryNumber: current.inventoryNumber,
             status: current.status,
+            isProject: current.isProject ?? false,
             ...(current.condition ? { condition: current.condition } : {}),
             ...(current.connectionStatus
               ? { connectionStatus: current.connectionStatus }
@@ -1336,6 +1343,7 @@ export class InventoryItemService {
               ? { inventoryNumberChangeReason: "Исправление номера / штрих-кода ТМЦ" }
               : {}),
             status: updated.status,
+            isProject: updated.isProject ?? false,
             ...(current.condition || updated.condition
               ? { condition: updated.condition }
               : {}),
@@ -1533,6 +1541,7 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
       : null,
     quantity: content.quantity ?? 1,
     unitPrice: content.unitPrice ?? 0,
+    isProject: input.isProject === undefined ? false : normalizeProjectFlag(input.isProject),
     roomId,
     inventoryNumber,
     responsibleUserId: normalizeOptionalResponsibleUserId(
@@ -1583,6 +1592,7 @@ function normalizeWarehouseCreateInput(
     (input.unitPrice !== undefined && input.unitPrice !== null && input.unitPrice !== 0) ||
     (input.barcode !== undefined && input.barcode !== null) ||
     (input.inventoryNumber !== undefined && input.inventoryNumber !== null) ||
+    input.isProject === true ||
     (input.responsibleUserId !== undefined && input.responsibleUserId !== null);
   if (hasProtectedValues) throw forbidden();
   return {
@@ -1724,12 +1734,20 @@ function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
     ),
     inventoryNumberKey: inventoryNumberComparisonKey(input.inventoryNumber),
     status: normalizeStatus(input.status),
+    isProject: input.isProject === undefined ? undefined : normalizeProjectFlag(input.isProject),
     condition: normalizeOptionalCondition(input.condition),
     connectionStatus: normalizeOptionalConnectionStatus(input.connectionStatus),
     responsibleUserId: normalizeOptionalResponsibleUserId(
       input.responsibleUserId,
     ),
   };
+}
+
+function normalizeProjectFlag(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new ApplicationError("validation", "invalid_project_flag");
+  }
+  return value;
 }
 
 function normalizeOptionalBlankText(value: unknown, max: number, code: string) {
@@ -2073,6 +2091,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
       buildingName: record.buildingName,
     },
     status: record.status,
+    isProject: record.isProject ?? false,
     condition: record.condition ?? "good",
     connectionStatus: record.connectionStatus ?? "not_applicable",
     qrCode: record.qrCode,

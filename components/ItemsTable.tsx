@@ -913,7 +913,7 @@ export default function ItemsTable({
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
                   {visibleColumns.ipAddress ? <td className="px-3 py-4 text-zinc-600"><NetworkAddressCell item={item} field="ipAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></td> : null}
                   {visibleColumns.macAddress ? <td className="px-3 py-4 text-zinc-600"><NetworkAddressCell item={item} field="macAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></td> : null}
-                  {visibleColumns.status ? <td className="px-3 py-4"><InventoryVisibleStatus status={visibleItemStatus(item)} /></td> : null}
+                  {visibleColumns.status ? <td className="px-3 py-4"><InventoryVisibleStatus status={visibleItemStatus(item)} isProject={item.isProject} /></td> : null}
                   {visibleColumns.responsible ? <td className="px-3 py-4 text-zinc-600">{item.responsible}</td> : null}
                   {visibleColumns.additionalInfo ? <td className="max-w-[240px] px-3 py-4 text-zinc-600">{item.additionalInfo ?? "вЂ”"}</td> : null}
                   {visibleColumns.updatedAt ? <td className="whitespace-nowrap px-3 py-4 text-zinc-600">{item.updatedAt ?? "вЂ”"}</td> : null}
@@ -967,7 +967,7 @@ export default function ItemsTable({
                   {issueMode ? <p className="mt-1 text-xs font-medium text-zinc-600">{item.inventoryNumber}</p> : null}
                   {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "вЂ”"}</p> : null}
                 </div>
-                {issueMode || visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} /> : null}
+                {issueMode || visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} isProject={item.isProject} /> : null}
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
                 {issueMode || visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}

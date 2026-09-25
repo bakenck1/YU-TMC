@@ -70,6 +70,7 @@ interface ItemRow extends QueryResultRow {
   inventory_number_kind: InventoryItemRecord["inventoryNumberKind"];
   inventory_number: string;
   status: InventoryItemRecord["status"];
+  is_project: boolean;
   condition: InventoryItemRecord["condition"];
   connection_status: InventoryItemRecord["connectionStatus"];
   qr_code: string | null;
@@ -565,8 +566,8 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
            (id, name, description, item_type, item_section, it_type,
             brand, model, one_c_code, quantity, unit_price,
             room_id, inventory_number_kind, inventory_number, inventory_number_key,
-            created_by, updated_by, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $17)
+            created_by, updated_by, created_at, updated_at, is_project)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $17, $18)
          returning id`,
         [
           input.id,
@@ -586,6 +587,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           input.inventoryNumberKey,
           input.actorId,
           input.occurredAt,
+          input.isProject ?? false,
         ],
       );
       if (!result.rows[0]) throw new Error("item_insert_failed");
@@ -803,6 +805,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
              status = $6::"yu_inventory"."item_status",
              condition = $7::"yu_inventory"."item_condition",
              connection_status = $8::"yu_inventory"."connection_status",
+             is_project = $12,
              archived_by = case
                when $6::"yu_inventory"."item_status" = 'decommissioned'
                  or $6::"yu_inventory"."item_status" = 'decommissioned_in_use'
@@ -830,6 +833,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           input.actorId,
           input.occurredAt,
           input.expectedVersion,
+          input.isProject ?? false,
         ],
       );
       if (result.rowCount !== 1) return null;
@@ -979,7 +983,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   ): Promise<InventoryItemRecord | null> {
     const updated = await this.source.query(
       `update ${ITEMS}
-          set room_id = $2, status = 'decommissioned_in_use',
+          set room_id = $2, status = 'decommissioned_in_use', is_project = $8,
               archived_by = coalesce(archived_by, $6),
               archived_at = coalesce(archived_at, $5),
               decommissioned_usage_reason = $3,
@@ -989,7 +993,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
               updated_by = $6, updated_at = $5, version = version + 1
         where id = $1 and version = $7 and status <> 'decommissioned_in_use'`,
       [input.id, input.roomId, input.reason, input.adminComment, input.occurredAt,
-       input.actorId, input.expectedVersion],
+       input.actorId, input.expectedVersion, input.isProject ?? false],
     );
     if (updated.rowCount !== 1) return null;
     if (
@@ -1018,7 +1022,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   ): Promise<InventoryItemRecord | null> {
     const result = await this.source.query(
       `update ${ITEMS}
-          set status = 'active', archived_by = null, archived_at = null,
+          set status = 'active', is_project = $5, archived_by = null, archived_at = null,
               decommissioned_usage_reason = null,
               decommissioned_usage_comment = null,
               decommissioned_usage_started_at = null,
@@ -1026,7 +1030,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
               updated_by = $2, updated_at = $3, version = version + 1
         where id = $1 and version = $4
           and status in ('decommissioned', 'decommissioned_in_use')`,
-      [input.id, input.actorId, input.occurredAt, input.expectedVersion],
+      [input.id, input.actorId, input.occurredAt, input.expectedVersion, input.isProject ?? false],
     );
     if (result.rowCount !== 1) return null;
     return this.findItemById(input.id);
@@ -1146,7 +1150,7 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false) {
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
            b.id as building_id, b.name as building_name,
-           i.inventory_number_kind, i.inventory_number, i.status,
+           i.inventory_number_kind, i.inventory_number, i.status, i.is_project,
            i.condition, i.connection_status,
            q.original_value as qr_code,
            rp.responsible_user_id as responsible_id,
@@ -1250,6 +1254,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     inventoryNumberKind: row.inventory_number_kind,
     inventoryNumber: row.inventory_number,
     status: row.status,
+    isProject: row.is_project,
     condition: row.condition,
     connectionStatus: row.connection_status,
     qrCode: row.qr_code,

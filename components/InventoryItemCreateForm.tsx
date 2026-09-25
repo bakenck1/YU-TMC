@@ -59,6 +59,7 @@ export default function InventoryItemCreateForm({
   const [buildingId, setBuildingId] = useState(initialRoom?.buildingId ?? "");
   const [roomId, setRoomId] = useState(initialRoom?.id ?? "");
   const [responsible, setResponsible] = useState<TmcOperationUserDto | null>(null);
+  const [isProject, setIsProject] = useState(false);
   const [barcode, setBarcode] = useState("");
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -116,6 +117,7 @@ export default function InventoryItemCreateForm({
           quantity: restricted ? 1 : Number(quantity),
           unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
+          ...(inventorySection !== "it" && !restricted ? { isProject } : {}),
           ...(inventorySection !== "it" ? {
             responsibleUserId: restricted ? null : responsible?.id ?? null,
             barcode: restricted || category === "components" ? null : (barcode.trim() || null),
@@ -137,6 +139,7 @@ export default function InventoryItemCreateForm({
       setUnitPrice("");
       setBarcode("");
       setResponsible(null);
+      setIsProject(false);
       setPhotos([]);
       setNetworkAddresses([]);
       onCreated?.();
@@ -178,8 +181,8 @@ export default function InventoryItemCreateForm({
       </button>
       ) : null}
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label={t("createItem.add")}>
-          <div className="max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={t("createItem.add")}>
+          <div className="max-h-[calc(100dvh-0.5rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-zinc-800">{t("createItem.new")}</h2>
               <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }} aria-label={t("common.close")} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100"><X className="h-5 w-5" /></button>
@@ -232,6 +235,12 @@ export default function InventoryItemCreateForm({
                     </>
                   )}
                 />
+              ) : null}
+              {!restricted && inventorySection !== "it" ? (
+                <label className="flex min-h-11 items-center gap-3 rounded-xl border border-black/10 px-3 py-2 text-sm text-zinc-700">
+                  <input type="checkbox" checked={isProject} onChange={(event) => setIsProject(event.target.checked)} className="h-5 w-5 accent-emerald-600" />
+                  {t("status.project")}
+                </label>
               ) : null}
               {!restricted && inventorySection !== "it" && category !== "components" && (
                 <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span>({t("createItem.optional")})</span></span><input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")} {t("createItem.barcodeOptionalHint")}</span></label>

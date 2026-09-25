@@ -152,6 +152,7 @@ export default function InventoryItemDetails({
   );
   const [inventoryNumber, setInventoryNumber] = useState(item.inventoryNumber);
   const [status, setStatus] = useState(item.status);
+  const [isProject, setIsProject] = useState(item.isProject ?? false);
   const [condition, setCondition] = useState<NonNullable<InventoryItemDto["condition"]>>(item.condition ?? "good");
   const [connectionStatus, setConnectionStatus] = useState<NonNullable<InventoryItemDto["connectionStatus"]>>(item.connectionStatus ?? "not_applicable");
   const [replaceQr, setReplaceQr] = useState(false);
@@ -381,6 +382,7 @@ export default function InventoryItemDetails({
           body: JSON.stringify({
             operation: "mark_decommissioned_in_use",
             version: item.version,
+            isProject,
             roomId: protectedRoomId,
             responsibleUserId: responsible?.id ?? null,
             reason: decommissionedUsageReason,
@@ -392,6 +394,7 @@ export default function InventoryItemDetails({
         if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
         setItem(body.item);
         setStatus(body.item.status);
+        setIsProject(body.item.isProject ?? false);
         setResponsible(responsiblePickerValue(body.item.responsible));
         setProtectedEditing(false);
         setSaved(true);
@@ -408,6 +411,7 @@ export default function InventoryItemDetails({
           body: JSON.stringify({
             operation: "restore_decommissioned",
             version: item.version,
+            isProject,
             reason: restoreReason,
           }),
         });
@@ -415,6 +419,7 @@ export default function InventoryItemDetails({
         if (!response.ok || !body.item) throw new Error(body.error ?? responseErrorCode(response.status));
         setItem(body.item);
         setStatus(body.item.status);
+        setIsProject(body.item.isProject ?? false);
         setProtectedEditing(false);
         setSaved(true);
         router.refresh();
@@ -423,11 +428,12 @@ export default function InventoryItemDetails({
       const roomChanged = protectedRoomId !== item.room.id;
       const inventoryNumberChanged = inventoryNumber.trim() !== item.inventoryNumber;
       const statusChanged = status !== item.status;
+      const projectChanged = isProject !== (item.isProject ?? false);
       const responsibleChanged =
         (responsible?.id ?? null) !== (item.responsible?.id ?? null);
       const submit = async (
         version: number,
-        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"]; condition: NonNullable<InventoryItemDto["condition"]>; connectionStatus: NonNullable<InventoryItemDto["connectionStatus"]>; responsibleUserId: string | null },
+        values: { roomId: string; inventoryNumber: string; status: InventoryItemDto["status"]; isProject: boolean; condition: NonNullable<InventoryItemDto["condition"]>; connectionStatus: NonNullable<InventoryItemDto["connectionStatus"]>; responsibleUserId: string | null },
       ) => {
         const response = await fetch(`/api/inventory/items/${item.id}`, {
           method: "PATCH",
@@ -449,6 +455,7 @@ export default function InventoryItemDetails({
         roomId: protectedRoomId,
         inventoryNumber,
         status,
+        isProject,
         condition,
         connectionStatus,
         responsibleUserId: responsible?.id ?? null,
@@ -470,6 +477,7 @@ export default function InventoryItemDetails({
             ? inventoryNumber
             : latestItem.inventoryNumber,
           status: statusChanged ? status : latestItem.status,
+          isProject: projectChanged ? isProject : latestItem.isProject ?? false,
           condition: condition !== (item.condition ?? "good") ? condition : (latestItem.condition ?? "good"),
           connectionStatus: connectionStatus !== (item.connectionStatus ?? "not_applicable") ? connectionStatus : (latestItem.connectionStatus ?? "not_applicable"),
           responsibleUserId: responsibleChanged
@@ -486,6 +494,7 @@ export default function InventoryItemDetails({
       setProtectedRoomId(body.item.room.id);
       setInventoryNumber(body.item.inventoryNumber);
       setStatus(body.item.status);
+      setIsProject(body.item.isProject ?? false);
       setCondition(body.item.condition ?? "good");
       setConnectionStatus(body.item.connectionStatus ?? "not_applicable");
       setResponsible(responsiblePickerValue(body.item.responsible));
@@ -506,6 +515,7 @@ export default function InventoryItemDetails({
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
+    setIsProject(item.isProject ?? false);
     setCondition(item.condition ?? "good");
     setConnectionStatus(item.connectionStatus ?? "not_applicable");
     setResponsible(responsiblePickerValue(item.responsible));
@@ -526,6 +536,7 @@ export default function InventoryItemDetails({
     setProtectedRoomId(item.room.id);
     setInventoryNumber(item.inventoryNumber);
     setStatus(item.status);
+    setIsProject(item.isProject ?? false);
     setCondition(item.condition ?? "good");
     setConnectionStatus(item.connectionStatus ?? "not_applicable");
     setResponsible(responsiblePickerValue(item.responsible));
@@ -682,6 +693,7 @@ export default function InventoryItemDetails({
           <span className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${item.status === "decommissioned_in_use" ? "bg-orange-100 text-orange-800 ring-1 ring-orange-300" : "bg-violet-100 text-violet-600"}`}>
             {statusLabel}
           </span>
+          {item.isProject ? <span className="rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-800 ring-1 ring-sky-200">{t("status.project")}</span> : null}
         </div>
       </div>
 
@@ -724,7 +736,7 @@ export default function InventoryItemDetails({
 
       {canManageProtected && protectedEditing ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
           role="presentation"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) closeProtectedFields();
@@ -737,7 +749,7 @@ export default function InventoryItemDetails({
           aria-labelledby="protected-fields-title"
           aria-describedby="protected-fields-description"
           onKeyDown={handleProtectedDialogKeyDown}
-          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-2xl"
+          className="max-h-[calc(100dvh-0.5rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-t-2xl border border-amber-200 bg-amber-50 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:p-6"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -856,6 +868,10 @@ export default function InventoryItemDetails({
                 )}
               </select>
             </label>
+            {item.itemSection !== "it" ? <label className="flex min-h-11 items-center gap-3 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-zinc-700 sm:col-span-2">
+              <input type="checkbox" checked={isProject} onChange={(event) => setIsProject(event.target.checked)} className="h-5 w-5 accent-sky-600" />
+              {t("status.project")}
+            </label> : null}
             {item.status !== "decommissioned_in_use" && status === "decommissioned_in_use" ? (
               <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50 p-4 sm:col-span-2">
                 <p className="font-semibold text-orange-900">{t("itemDetails.decommissionedUsageTitle")}</p>

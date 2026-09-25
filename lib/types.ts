@@ -23,6 +23,7 @@ export interface InventoryItem {
   responsibleId?: string;
   responsible: string;
   status: ItemStatus;
+  isProject?: boolean;
   photoColor: string;
   qrCode?: string;
   itemType?: string;

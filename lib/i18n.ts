@@ -454,6 +454,7 @@ const ru = {
   "map.statusCard.writeoff": "Списано",
 
   "status.active": "Активен",
+  "status.project": "Проектный",
   "status.maintenance": "На обслуживании",
   "status.decommissioned": "Списано",
   "status.decommissioned_in_use": "Списан, но используется",
@@ -1570,6 +1571,7 @@ const kk: Record<TranslationKey, string> = {
   "map.status.writeoff": "Есептен шығарылды", "map.statusCard.ok": "Пайдалануда", "map.statusCard.check": "Тексеруді қажет етеді",
   "map.statusCard.service": "Қызмет көрсетуде", "map.statusCard.writeoff": "Есептен шығарылды",
   "status.active": "Белсенді", "status.maintenance": "Қызмет көрсетуде", "status.decommissioned": "Есептен шығарылды", "status.decommissioned_in_use": "Есептен шығарылған, бірақ пайдаланылады",
+  "status.project": "Жобалық",
   "status.worker": "Қызметкер", "status.marked": "Таңбаланған", "status.unassigned": "Бөлінбеген",
   "items.allStatuses": "Барлық мәртебелер", "items.allCategories": "Барлық санаттар", "items.allLocations": "Барлық орналасулар",
   "items.photoAlt": "ТМҚ фотосы", "items.found": "Табылды: {count}", "items.recentSearches": "Соңғы сұраулар", "items.clearRecentSearches": "Тазалау", "items.filters": "Сүзгілер", "items.applyFilters": "Қолдану", "items.clearFilters": "Сүзгілерді тазалау", "items.filterBuilding": "Нысан / корпус", "items.filterFloor": "Қабат", "items.filterRoom": "Кабинет", "items.columnSettings": "Бағандарды баптау", "items.resetColumns": "Қалпына келтіру", "items.additionalInfo": "Қосымша ақпарат", "items.createdAt": "Құрылған күні", "items.selected": "Таңдалды: {count}",
@@ -2287,6 +2289,7 @@ const en: Record<TranslationKey, string> = {
   "map.status.writeoff": "Decommissioned", "map.statusCard.ok": "In operation", "map.statusCard.check": "Needs check",
   "map.statusCard.service": "Under maintenance", "map.statusCard.writeoff": "Decommissioned",
   "status.active": "Active", "status.maintenance": "Under maintenance", "status.decommissioned": "Decommissioned", "status.decommissioned_in_use": "Decommissioned but in use",
+  "status.project": "Project",
   "status.worker": "Employee", "status.marked": "Tagged", "status.unassigned": "Unassigned",
   "items.allStatuses": "All statuses", "items.allCategories": "All categories", "items.allLocations": "All locations",
   "items.photoAlt": "Item photo", "items.found": "Found: {count}", "items.recentSearches": "Recent searches", "items.clearRecentSearches": "Clear", "items.filters": "Filters", "items.applyFilters": "Apply", "items.clearFilters": "Clear filters", "items.filterBuilding": "Facility / building", "items.filterFloor": "Floor", "items.filterRoom": "Room", "items.columnSettings": "Column settings", "items.resetColumns": "Reset", "items.additionalInfo": "Additional info", "items.createdAt": "Created at", "items.selected": "Selected: {count}",

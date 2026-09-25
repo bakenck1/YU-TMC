@@ -22,6 +22,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     responsibleId: item.responsible?.id,
     responsible: item.responsible?.name ?? "",
     status: item.status,
+    isProject: item.isProject ?? false,
     photoColor: "#0ea5e9",
     qrCode: item.qrCode ?? undefined,
     photo: item.photoUrl ?? undefined,
