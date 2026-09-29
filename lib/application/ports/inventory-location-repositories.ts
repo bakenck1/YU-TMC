@@ -129,6 +129,7 @@ export interface InventoryLocationRepository {
   appendAudit(input: AppendLocationAuditRecord): Promise<void>;
   listRooms(buildingId: string): Promise<RoomRecord[]>;
   listRoomsAssignedTo(buildingId: string, userId: string): Promise<RoomRecord[]>;
+  listActiveRoomDesignations(buildingId: string): Promise<{ id: string; designation: string }[]>;
   findRoomById(id: string): Promise<RoomRecord | null>;
   findRoomByIdForUpdate(id: string): Promise<RoomRecord | null>;
   insertRoom(input: InsertRoomRecord): Promise<RoomRecord>;

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { RoomDto } from "../lib/contracts/inventory-locations";
+import { ApplicationError } from "../lib/domain/application-error";
 import { createInventoryRoomPostHandler } from "../lib/server/http/inventory-room-handler";
 
 const ROOT = new URL("../", import.meta.url);
@@ -86,6 +87,21 @@ test("room POST rejects invalid responsible employee values before persistence",
     assert.deepEqual(await response.json(), { error: "invalid_request" });
   }
   assert.equal(calls, 0);
+});
+
+test("room POST returns a conflict when the cabinet number already exists", async () => {
+  const handler = createInventoryRoomPostHandler({
+    authenticate: async () => ACTOR,
+    createRoom: async () => {
+      throw new ApplicationError("conflict", "room_already_exists");
+    },
+  });
+  const response = await handler(
+    jsonRequest({ designation: "403A", floorNumber: 4 }),
+    BUILDING_ID,
+  );
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "room_already_exists" });
 });
 
 test("the Next route delegates room POST to the tested handler", async () => {
