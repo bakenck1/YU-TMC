@@ -57,6 +57,27 @@ describe("ItemsTable adversarial location filters", () => {
     window.history.replaceState({}, "", "/items");
   });
 
+  it.each([
+    ["К201", "К201"], ["к201", "К201"], ["K201", "К201"], ["k201", "К201"],
+    ["К201", "K201"], ["к201", "K201"],
+  ])("finds a K room suggestion and its inventory using %s for %s", (query, designation) => {
+    render(<ItemsTable
+      items={[
+        item("k-room", "K room inventory", "building-main", "Main Campus", "room-k", designation, 2),
+        item("k-room-long", "Other K room", "building-main", "Main Campus", "room-k-long", `${designation}0`, 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [room("room-k", "building-main", designation, 2)] }}
+    />);
+    openFilters();
+    const roomFilter = screen.getByRole("combobox", { name: "items.filterRoom" });
+    fireEvent.focus(roomFilter);
+    fireEvent.change(roomFilter, { target: { value: query } });
+    expect(screen.getByRole("option", { name: designation })).not.toBeNull();
+    applyFilters();
+    expectVisible("K room inventory");
+    expectHidden("Other K room");
+  });
+
   it("shows the complete static building registry before the user types and then searches it", () => {
     renderTable();
     openFilters();

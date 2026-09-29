@@ -752,6 +752,7 @@ test("room suffix comparison covers visually matching Cyrillic and Latin letters
   });
   for (const [cyrillic, latin] of [
     ["А", "A"], ["В", "B"], ["Е", "E"], ["К", "K"],
+    ["Б", "B"], ["Д", "D"], ["В", "V"],
     ["М", "M"], ["Н", "H"], ["О", "O"], ["Р", "P"],
     ["С", "C"], ["Т", "T"], ["У", "Y"], ["Х", "X"], ["І", "I"],
   ]) {
@@ -760,7 +761,72 @@ test("room suffix comparison covers visually matching Cyrillic and Latin letters
       service.createRoom("building-1", { designation: `403${latin}`, floorNumber: 4 }, ADMIN),
       rejectsWithCode("room_already_exists"),
     );
+    await assert.rejects(
+      service.createRoom("building-1", { designation: `${latin} 403`, floorNumber: 4 }, ADMIN),
+      rejectsWithCode("room_already_exists"),
+    );
   }
+});
+
+test("room creation and rename reject a letter before or after the same room number", async () => {
+  let existingDesignation = "201 к";
+  const writes: string[] = [];
+  const service = locationService({
+    findBuildingByIdForUpdate: async () => building(),
+    listActiveRoomDesignations: async () => [{ id: "existing-room", designation: existingDesignation }],
+    findRoomByIdForUpdate: async () => roomRecord({ id: "another-room", designation: "202 К" }),
+    insertRoom: async () => { writes.push("insert"); throw new Error("unexpected insertion"); },
+    updateRoom: async () => { writes.push("update"); throw new Error("unexpected rename"); },
+    insertRoomQr: async () => { writes.push("qr"); },
+    appendAudit: async () => { writes.push("audit"); },
+  });
+
+  for (const existing of ["201 к", "К201", "201K", "k 201"]) {
+    existingDesignation = existing;
+    for (const designation of ["201 К", "К 201", "k201", "201k", "К-201", "201-K", "  К   201  ", "２０１ Ｋ"]) {
+      await assert.rejects(
+        service.createRoom("building-1", { designation, floorNumber: 2 }, ADMIN),
+        rejectsWithCode("room_already_exists"),
+        `${existing} -> ${designation}`,
+      );
+      await assert.rejects(
+        service.updateRoom("another-room", { designation, floorNumber: 2, version: 1 }, ADMIN),
+        rejectsWithCode("room_already_exists"),
+        `${existing} -> ${designation}`,
+      );
+    }
+  }
+  assert.deepEqual(writes, []);
+});
+
+test("room numbering aliases preserve distinct numbers, wings and the room's own identity", async () => {
+  const existing = [
+    { id: "existing-room", designation: "201 К" },
+    { id: "own-room", designation: "202 К" },
+  ];
+  const insertedKeys: string[] = [];
+  let updates = 0;
+  const service = locationService({
+    findBuildingByIdForUpdate: async () => building(),
+    listActiveRoomDesignations: async () => existing,
+    findRoomByIdForUpdate: async () => roomRecord({ id: "own-room", designation: "202 К" }),
+    insertRoom: async (input) => {
+      insertedKeys.push(input.designationKey);
+      return roomRecord({ id: input.id, designation: input.designation, designationKey: input.designationKey });
+    },
+    updateRoom: async (input) => {
+      updates += 1;
+      return roomRecord({ id: input.id, designation: input.designation, version: 2 });
+    },
+    insertRoomQr: async () => undefined,
+    appendAudit: async () => undefined,
+  });
+  for (const designation of ["201 А", "К2010", "201", "К203", "201/1К"]) {
+    await service.createRoom("building-1", { designation, floorNumber: 2 }, ADMIN);
+  }
+  assert.equal(new Set(insertedKeys).size, 5);
+  await service.updateRoom("own-room", { designation: "K 202", floorNumber: 2, version: 1 }, ADMIN);
+  assert.equal(updates, 1);
 });
 
 test("renaming an archived room reports a version conflict before checking other rooms", async () => {

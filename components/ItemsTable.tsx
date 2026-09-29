@@ -13,6 +13,7 @@ import {
   visibleItemStatus,
 } from "@/lib/inventory-list";
 import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
+import { normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
 import {
   DEFAULT_INVENTORY_COLUMNS,
   INVENTORY_COLUMN_KEYS,
@@ -835,7 +836,7 @@ export default function ItemsTable({
               <InventoryFilterInput label={t("itemDetails.model")} value={draftFilters.model} onChange={(value) => updateDraftFilter("model", value)} historyStorageKey={filterHistoryStorageKey ? `${filterHistoryStorageKey}:model` : undefined} />
               <InventoryFilterInput label={t("items.filterBuilding")} value={draftFilters.building} onChange={updateBuildingFilter} suggestions={locationDirectory.buildingNames} showSuggestionsOnFocus />
               <InventoryFilterInput label={t("items.filterFloor")} value={draftFilters.location === "all" ? "" : draftFilters.location} onChange={updateFloorFilter} suggestions={floorOptions.map((floor) => floor.label)} showSuggestionsOnFocus />
-              <InventoryFilterInput label={t("items.filterRoom")} value={draftFilters.room ?? ""} onChange={(value) => updateDraftFilter("room", value)} suggestions={roomSuggestions} showSuggestionsOnFocus />
+              <InventoryFilterInput label={t("items.filterRoom")} value={draftFilters.room ?? ""} onChange={(value) => updateDraftFilter("room", value)} suggestions={roomSuggestions} normalizeValue={normalizeInventoryRoomSearch} showSuggestionsOnFocus />
               <label className="text-sm text-zinc-600">
                 <span className="mb-1 block text-xs font-medium text-zinc-500">{t("items.status")}</span>
                 <select value={draftFilters.statusKey} onChange={(event) => updateDraftFilter("statusKey", event.target.value)} className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2.5 outline-none focus:border-accent">

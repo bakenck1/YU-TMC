@@ -556,10 +556,23 @@ const ROOM_LOOKALIKE_LETTERS: Record<string, string> = {
   "і": "i",
 };
 
+// The room navigator also uses Б/V for wing B and Д for wing D.
+const ROOM_WING_ALIASES: Record<string, string> = { "б": "b", "v": "b", "д": "d" };
+
 function roomDesignationKey(value: string): string {
-  return [...comparisonKey(value.normalize("NFKC").trim())]
+  const normalized = [...comparisonKey(value.normalize("NFKC").trim())]
     .map((letter) => ROOM_LOOKALIKE_LETTERS[letter] ?? letter)
-    .join("");
+    .join("")
+    .replace(/\s+/g, " ");
+
+  // Keep the same identity for К201, К-201, 201 К and 201K.
+  // Preserve subroom numbers (201/1) and other named-room designations.
+  const letterFirst = normalized.match(/^(\p{L})\s*[-–—./]?\s*(\d+(?:[./-]\d+)*)$/u);
+  const numberFirst = normalized.match(/^(\d+(?:[./-]\d+)*)\s*[-–—./]?\s*(\p{L})$/u);
+  const letter = letterFirst?.[1] ?? numberFirst?.[2];
+  const number = letterFirst?.[2] ?? numberFirst?.[1];
+  if (letter && number) return `${number}${ROOM_WING_ALIASES[letter] ?? letter}`;
+  return normalized;
 }
 
 async function assertRoomDesignationAvailable(

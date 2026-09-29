@@ -11,6 +11,7 @@ export const MAIN_CAMPUS_WINGS = [
   { code: "B", label: "B" },
   { code: "D", label: "D" },
   { code: "E", label: "E" },
+  { code: "K", label: "К" },
 ] as const;
 
 export type MainCampusWingCode = (typeof MAIN_CAMPUS_WINGS)[number]["code"];
@@ -26,15 +27,17 @@ const MAIN_CAMPUS_WING_BY_PREFIX: Readonly<Record<string, MainCampusWingCode>> =
   B: "B",
   D: "D",
   E: "E",
+  K: "K",
   V: "B",
   А: "A",
   Б: "B",
   В: "B",
   Д: "D",
   Е: "E",
+  К: "K",
 };
 
-const MAIN_CAMPUS_WING_LETTERS = "ABDEVАБВДЕ";
+const MAIN_CAMPUS_WING_LETTERS = "ABDEVKАБВДЕК";
 
 export function isMainCampusWingFloor(floorNumber: number): boolean {
   return floorNumber >= 0 && floorNumber <= 4;
@@ -42,13 +45,17 @@ export function isMainCampusWingFloor(floorNumber: number): boolean {
 
 export function groupInventoryRoomsByMainCampusWing(
   rooms: readonly RoomDto[],
+  floorNumber: number,
 ): { wings: InventoryRoomWing[]; unassignedRooms: RoomDto[] } {
+  const floorWings = MAIN_CAMPUS_WINGS.filter(
+    (wing) => wing.code !== "K" || floorNumber === 2,
+  );
   const roomsByWing = new Map<MainCampusWingCode, RoomDto[]>();
   const unassignedRooms: RoomDto[] = [];
 
   for (const room of rooms) {
     const wingCode = mainCampusWingFromDesignation(room.designation);
-    if (!wingCode) {
+    if (!wingCode || !floorWings.some((wing) => wing.code === wingCode)) {
       unassignedRooms.push(room);
       continue;
     }
@@ -58,12 +65,18 @@ export function groupInventoryRoomsByMainCampusWing(
   }
 
   return {
-    wings: MAIN_CAMPUS_WINGS.map((wing) => ({
+    wings: floorWings.map((wing) => ({
       ...wing,
       rooms: naturallySortRooms(roomsByWing.get(wing.code) ?? []),
     })),
     unassignedRooms: naturallySortRooms(unassignedRooms),
   };
+}
+
+/** Cyrillic К and Latin K must match in room filters and suggestions. */
+export function normalizeInventoryRoomSearch(value: string): string {
+  return value.normalize("NFKC").trim().toLocaleLowerCase()
+    .replace(/к/g, "k").replace(/\s+/g, " ");
 }
 
 export function mainCampusWingFromDesignation(
@@ -113,7 +126,7 @@ export function groupInventoryRoomsByFloor(
 
 /**
  * Keeps room pickers predictable: floors first, then the Main Campus wing
- * order shown in the inventory UI (A, B, D, E), then the room number.
+ * order shown in the inventory UI (A, B, D, E, K), then the room number.
  * Rooms without a recognized wing stay after the known wings on their floor.
  */
 export function sortInventoryRoomsForSelection<

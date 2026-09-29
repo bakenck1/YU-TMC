@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Building2,
   ChevronDown,
@@ -29,6 +29,7 @@ import {
   groupInventoryRoomsByFloor,
   groupInventoryRoomsByMainCampusWing,
   isMainCampusWingFloor,
+  mainCampusWingFromDesignation,
   type InventoryRoomFloor,
 } from "@/lib/inventory-room-floors";
 import InventoryBuildingFormModal from "./InventoryBuildingFormModal";
@@ -59,9 +60,35 @@ export default function InventoryBuildingsManager({
   const [accessSaving, setAccessSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
+  const [expandedRoomGroups, setExpandedRoomGroups] = useState<Set<string>>(new Set());
+  const [savedRoom, setSavedRoom] = useState<RoomDto | null>(null);
+  const savedRoomRef = useRef<HTMLDivElement>(null);
   const canCreate = hasPermission(actorRole, "inventory.building.create");
   const canEdit = hasPermission(actorRole, "inventory.building.manage");
   const canCreateItem = hasPermission(actorRole, "inventory.item.create");
+
+  useEffect(() => {
+    if (savedRoom) savedRoomRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [savedRoom]);
+
+  function toggleRoomGroup(key: string) {
+    setExpandedRoomGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function buildingRoomFloors(building: BuildingDto): InventoryRoomFloor[] {
+    const floors = groupInventoryRoomsByFloor(rooms[building.id] ?? []);
+    if (findCampusBuildingPreset(building.name)?.id === "main-campus" &&
+      !floors.some((floor) => floor.floorNumber === 2)) {
+      floors.push({ floorNumber: 2, label: null, rooms: [] });
+      floors.sort((left, right) => left.floorNumber - right.floorNumber);
+    }
+    return floors;
+  }
 
   function replaceRoom(updated: RoomDto) {
     setRooms((current) => ({
@@ -154,7 +181,13 @@ export default function InventoryBuildingsManager({
         | { rooms?: RoomDto[] }
         | null;
       if (response.ok && body?.rooms) {
-        setRooms((current) => ({ ...current, [buildingId]: body.rooms! }));
+        setRooms((current) => ({
+          ...current,
+          [buildingId]: [...new Map([
+            ...body.rooms!.map((room) => [room.id, room] as const),
+            ...(current[buildingId] ?? []).map((room) => [room.id, room] as const),
+          ]).values()],
+        }));
       } else {
         setActionError(t("building.saveError"));
       }
@@ -193,6 +226,13 @@ export default function InventoryBuildingsManager({
     });
     setRoomEditor(null);
     setOpenBuildingIds((current) => new Set(current).add(room.buildingId));
+    setExpandedRoomGroups((current) => {
+      const next = new Set(current).add(`floor-${room.buildingId}-${room.floorNumber}`);
+      const wingCode = mainCampusWingFromDesignation(room.designation);
+      if (wingCode) next.add(`wing-${room.buildingId}-${room.floorNumber}-${wingCode}`);
+      return next;
+    });
+    setSavedRoom(room);
   }
 
   async function archiveBuilding(building: BuildingDto) {
@@ -256,6 +296,7 @@ export default function InventoryBuildingsManager({
     return (
       <div
         key={room.id}
+        ref={savedRoom?.id === room.id ? savedRoomRef : undefined}
         className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 shadow-sm"
       >
         <div className="flex min-w-0 items-center gap-2.5">
@@ -326,15 +367,19 @@ export default function InventoryBuildingsManager({
     }
 
     const { wings, unassignedRooms } =
-      groupInventoryRoomsByMainCampusWing(floor.rooms);
+      groupInventoryRoomsByMainCampusWing(floor.rooms, floor.floorNumber);
     return (
       <>
         {wings.map((wing) => (
           <details
             key={wing.code}
+            open={expandedRoomGroups.has(`wing-${building.id}-${floor.floorNumber}-${wing.code}`)}
             className="group/wing overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50/50"
           >
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
+            <summary onClick={(event) => {
+              event.preventDefault();
+              toggleRoomGroup(`wing-${building.id}-${floor.floorNumber}-${wing.code}`);
+            }} className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
               <span className="truncate">
                 {t("building.wingName", { name: wing.label })}
               </span>
@@ -494,12 +539,16 @@ export default function InventoryBuildingsManager({
                   id={`building-floors-${building.id}`}
                   className="mt-3 space-y-2"
                 >
-                  {groupInventoryRoomsByFloor(rooms[building.id]).map((floor) => (
+                  {buildingRoomFloors(building).map((floor) => (
                     <details
                       key={floor.floorNumber}
+                      open={expandedRoomGroups.has(`floor-${building.id}-${floor.floorNumber}`)}
                       className="group overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50"
                     >
-                      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
+                      <summary onClick={(event) => {
+                        event.preventDefault();
+                        toggleRoomGroup(`floor-${building.id}-${floor.floorNumber}`);
+                      }} className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
                         <span className="flex min-w-0 items-center gap-2">
                           <Layers3 className="h-4 w-4 shrink-0 text-emerald-600" />
                           <span className="truncate">

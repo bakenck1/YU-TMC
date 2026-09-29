@@ -12,6 +12,7 @@ export interface InventoryFilterInputProps {
   historyStorageKey?: string;
   suggestions?: readonly string[];
   showSuggestionsOnFocus?: boolean;
+  normalizeValue?: (value: string) => string;
 }
 
 function normalizeSearchValue(value: string) {
@@ -28,6 +29,7 @@ export default function InventoryFilterInput({
   historyStorageKey,
   suggestions = [],
   showSuggestionsOnFocus = false,
+  normalizeValue = normalizeSearchValue,
 }: InventoryFilterInputProps) {
   const { t } = useAppSettings();
   const [history, setHistory] = useState<string[]>([]);
@@ -35,24 +37,24 @@ export default function InventoryFilterInput({
   const inputId = useId();
   const suggestionsId = `${inputId}-suggestions`;
   const blurTimeoutRef = useRef<number | null>(null);
-  const query = normalizeSearchValue(value);
+  const query = normalizeValue(value);
   const visibleSuggestions = useMemo(() => {
     if (!query && !showSuggestionsOnFocus) return [];
     return suggestions
-      .filter((entry) => !query || normalizeSearchValue(entry).includes(query));
-  }, [query, showSuggestionsOnFocus, suggestions]);
+      .filter((entry) => !query || normalizeValue(entry).includes(query));
+  }, [query, showSuggestionsOnFocus, suggestions, normalizeValue]);
   const visibleSuggestionKeys = useMemo(
-    () => new Set(visibleSuggestions.map(normalizeSearchValue)),
-    [visibleSuggestions],
+    () => new Set(visibleSuggestions.map(normalizeValue)),
+    [visibleSuggestions, normalizeValue],
   );
   const visibleHistory = useMemo(() => {
     const matchingHistory = query
-      ? history.filter((entry) => normalizeSearchValue(entry).includes(query))
+      ? history.filter((entry) => normalizeValue(entry).includes(query))
       : history;
     return matchingHistory.filter(
-      (entry) => !visibleSuggestionKeys.has(normalizeSearchValue(entry)),
+      (entry) => !visibleSuggestionKeys.has(normalizeValue(entry)),
     );
-  }, [history, query, visibleSuggestionKeys]);
+  }, [history, query, visibleSuggestionKeys, normalizeValue]);
   const optionsVisible = focused && (visibleSuggestions.length > 0 || visibleHistory.length > 0);
 
   useEffect(() => { if (!historyStorageKey) return; const timeout = window.setTimeout(() => setHistory(loadHistory(historyStorageKey)), 0); return () => window.clearTimeout(timeout); }, [historyStorageKey]);
