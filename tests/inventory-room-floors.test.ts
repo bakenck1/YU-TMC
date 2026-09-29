@@ -47,7 +47,7 @@ test("groups lower main-campus rooms into A, B, D and E wings", () => {
     room("room-b", "B403", 4),
     room("room-cyrillic-v", "В404", 4),
     room("room-other", "405", 4),
-  ]);
+  ], 4);
 
   assert.deepEqual(
     groups.wings.map((wing) => [wing.code, wing.label]),
@@ -91,6 +91,13 @@ test("recognizes a campus wing before or after a room number", () => {
     ["Кабинет Д", "D"],
     ["Кабинет E", "E"],
     ["Кабинет Е", "E"],
+    ["К201", "K"],
+    ["k-201", "K"],
+    ["２０１ Ｋ", "K"],
+    ["201 К", "K"],
+    ["201k", "K"],
+    ["Кабинет К", "K"],
+    ["Room K", "K"],
   ] as const;
 
   for (const [designation, expectedWing] of cases) {
@@ -108,6 +115,24 @@ test("recognizes a campus wing before or after a room number", () => {
   assert.equal(mainCampusWingFromDesignation("OFFICE"), null);
 });
 
+test("groups Cyrillic and Latin K rooms together only on the second floor", () => {
+  const groups = groupInventoryRoomsByMainCampusWing([
+    room("room-k-ru", "К201", 2),
+    room("room-k-en", "K202", 2),
+    room("room-k-suffix", "203 к", 2),
+  ], 2);
+  const kWing = groups.wings.find((wing) => wing.code === "K");
+  assert.equal(kWing?.label, "К");
+  assert.equal(kWing?.rooms.length, 3);
+  assert.deepEqual(groups.unassignedRooms, []);
+
+  const otherFloor = groupInventoryRoomsByMainCampusWing([
+    room("room-k-other-floor", "K301", 3),
+  ], 3);
+  assert.equal(otherFloor.wings.some((wing) => wing.code === "K"), false);
+  assert.equal(otherFloor.unassignedRooms.length, 1);
+});
+
 test("sorts room selections by floor, then A, B, D and E wings", () => {
   const sorted = sortInventoryRoomsForSelection([
     room("room-e-2", "E201", 2),
@@ -118,10 +143,12 @@ test("sorts room selections by floor, then A, B, D and E wings", () => {
     room("room-a-2", "A102", 1),
     room("room-e-1", "E101", 1),
     room("room-b-2", "B201", 2),
+    room("room-k-2", "К201", 2),
+    room("room-other-2", "Library", 2),
   ]);
 
   assert.deepEqual(
     sorted.map((value) => value.designation),
-    ["A102", "A110", "B105", "D110", "E101", "Library", "B201", "E201"],
+    ["A102", "A110", "B105", "D110", "E101", "Library", "B201", "E201", "К201", "Library"],
   );
 });

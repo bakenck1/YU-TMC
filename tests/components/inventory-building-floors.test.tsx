@@ -116,15 +116,15 @@ describe("building room navigation", () => {
     expect(fourthFloor?.open).toBe(true);
 
     await waitFor(() => {
-      expect(screen.getByText("A корпус")).toBeTruthy();
-      expect(screen.getByText("B корпус")).toBeTruthy();
-      expect(screen.getByText("D корпус")).toBeTruthy();
-      expect(screen.getByText("E корпус")).toBeTruthy();
+      expect(within(fourthFloor!).getByText("A корпус")).toBeTruthy();
+      expect(within(fourthFloor!).getByText("B корпус")).toBeTruthy();
+      expect(within(fourthFloor!).getByText("D корпус")).toBeTruthy();
+      expect(within(fourthFloor!).getByText("E корпус")).toBeTruthy();
     });
 
-    const dWing = screen.getByText("D корпус").closest("details");
+    const dWing = within(fourthFloor!).getByText("D корпус").closest("details");
     expect(dWing?.textContent).toContain("D412");
-    const bWing = screen.getByText("B корпус").closest("details");
+    const bWing = within(fourthFloor!).getByText("B корпус").closest("details");
     expect(bWing?.open).toBe(false);
     const bWingSummary = bWing?.querySelector("summary");
     if (!bWingSummary) throw new Error("B wing summary is missing");
@@ -133,7 +133,7 @@ describe("building room navigation", () => {
     expect(bWing?.textContent).toContain("В404");
     expect(bWing?.textContent).toContain("401 Б");
     expect(bWing?.textContent).toContain("inventory.roomsCount: 2");
-    const aWing = screen.getByText("A корпус").closest("details");
+    const aWing = within(fourthFloor!).getByText("A корпус").closest("details");
     expect(aWing?.textContent).toContain("inventory.roomsCount: 1");
     expect(aWing?.textContent).toContain("Мангышлак А");
 
@@ -142,6 +142,69 @@ describe("building room navigation", () => {
       .closest("details");
     expect(fifthFloor?.textContent).toContain("A501");
     expect(fifthFloor?.textContent).not.toContain("A корпус");
+  });
+
+  it("shows an empty K wing on the second floor of the main campus only", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      rooms: [room("first-floor", "A101", 1)],
+    })));
+    render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[
+      { ...BUILDING, name: "The Main Campus", roomCount: 1 },
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: /inventory\.roomsCount: 1/ }));
+    const secondFloor = (await screen.findByText("2 inventory.floorShort")).closest("details");
+    expect(within(secondFloor!).getByText("К корпус")).toBeTruthy();
+    const firstFloor = screen.getByText("1 inventory.floorShort").closest("details");
+    expect(within(firstFloor!).queryByText("К корпус")).toBeNull();
+  });
+
+  it.each(["К201", "k202", "203 К"])("reveals a saved %s room inside the second-floor K wing", async (designation) => {
+    const createdRoom = room("created-k-room", designation, 2);
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) =>
+      Response.json(init?.method === "POST" ? { room: createdRoom } : { rooms: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[
+      { ...BUILDING, name: "The Main Campus", roomCount: 0 },
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "inventory.addRoom" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("inventory.roomDesignation"), { target: { value: designation } });
+    fireEvent.change(within(dialog).getByLabelText("inventory.floor"), { target: { value: "2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const secondFloor = screen.getByText("2 inventory.floorShort").closest("details");
+    const kWing = within(secondFloor!).getByText("К корпус").closest("details");
+    expect(secondFloor?.open).toBe(true);
+    expect(kWing?.open).toBe(true);
+    expect(within(kWing!).getByText(designation)).toBeTruthy();
+    expect(scroll).toHaveBeenCalled();
+    fireEvent.click(kWing!.querySelector("summary")!);
+    expect(kWing?.open).toBe(false);
+    fireEvent.click(kWing!.querySelector("summary")!);
+    expect(kWing?.open).toBe(true);
+  });
+
+  it("keeps the new K room when the initial room list arrives after saving", async () => {
+    const createdRoom = room("created-k-room", "К201", 2);
+    let resolveRooms: (value: Response) => void = () => {};
+    const initialRooms = new Promise<Response>((resolve) => { resolveRooms = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) =>
+      init?.method === "POST" ? Response.json({ room: createdRoom }) : initialRooms));
+    render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[
+      { ...BUILDING, name: "The Main Campus", roomCount: 1 },
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "inventory.addRoom" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("inventory.roomDesignation"), { target: { value: "К201" } });
+    fireEvent.change(within(dialog).getByLabelText("inventory.floor"), { target: { value: "2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "common.save" }));
+    await screen.findByText("К201");
+    resolveRooms(Response.json({ rooms: [room("first-floor", "A101", 1)] }));
+    await screen.findByText("A101");
+    const kWing = screen.getByText("К корпус").closest("details");
+    expect(kWing?.open).toBe(true);
+    expect(within(kWing!).getByText("К201")).toBeTruthy();
   });
 
   it("lets an administrator change one room and then bulk-change an explicit selection", async () => {

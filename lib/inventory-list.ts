@@ -1,5 +1,6 @@
 import type { InventoryItem, ItemStatus } from "./types";
 import { ITEM_STATUSES } from "./contracts/inventory-domain";
+import { normalizeInventoryRoomSearch } from "./inventory-room-floors";
 
 export type VisibleItemStatus =
   | { key: `display:${string}`; kind: "display"; value: string }
@@ -44,7 +45,7 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
   const query = normalizeFilterText(filters.query);
   const location = filters.location === "all" ? "" : normalizeFilterText(filters.location);
   const floorRange = parseFloorRange(location);
-  const room = normalizeFilterText(filters.room);
+  const room = normalizeInventoryRoomSearch(filters.room ?? "");
   const brand = normalizeFilterText(filters.brand);
   const model = normalizeFilterText(filters.model);
   const itemType = normalizeFilterText(filters.itemType);
@@ -54,7 +55,7 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
     normalizeFilterText(item.building ?? item.location.split("/")[0]) === building,
   );
   const hasExactRoom = Boolean(room) && items.some((item) =>
-    normalizeFilterText(item.room ?? item.location.split("/").at(-1)) === room,
+    normalizeInventoryRoomSearch(item.room ?? item.location.split("/").at(-1) ?? "") === room,
   );
   const hasExactResponsible = Boolean(responsible) && items.some((item) =>
     normalizeFilterText(item.responsible) === responsible,
@@ -72,8 +73,8 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
       .map(normalizeFilterText)
       .filter(Boolean)
       .join(" ");
-    const itemRoom = normalizeFilterText(
-      item.room ?? item.location.split("/").at(-1),
+    const itemRoom = normalizeInventoryRoomSearch(
+      item.room ?? item.location.split("/").at(-1) ?? "",
     );
     return Boolean(
       matchesQuery &&
