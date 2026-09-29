@@ -214,6 +214,7 @@ test("records protected-field before and after snapshots with the acting adminis
     roomLabel: `${current.buildingName}, ${current.roomDesignation}`,
     inventoryNumber: current.inventoryNumber,
     status: current.status,
+    isProject: current.isProject ?? false,
     qrCode: current.qrCode,
   });
   assert.deepEqual(captured?.afterValues, {
@@ -221,6 +222,7 @@ test("records protected-field before and after snapshots with the acting adminis
     roomLabel: `${updated.buildingName}, ${updated.roomDesignation}`,
     inventoryNumber: updated.inventoryNumber,
     status: updated.status,
+    isProject: updated.isProject ?? false,
     qrCode: updated.qrCode,
     qrReplaceReason: null,
   });

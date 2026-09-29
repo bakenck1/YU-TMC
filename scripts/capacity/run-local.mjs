@@ -33,7 +33,8 @@ try {
   writeFileSync(passwordFile, `${migratorPassword}\n`, { mode: 0o600 });
   run(localInitdb, [`--pgdata=${data}`, "--auth=scram-sha-256", `--username=${migrator}`, `--pwfile=${passwordFile}`, "--encoding=UTF8", "--locale=C"]);
   rmSync(passwordFile, { force: true });
-  run(localPgCtl, ["-D", data, "-o", `-h 127.0.0.1 -p ${port}`, "-w", "start"]);
+  // The synthetic seed acquires 25,000 inventory-number locks in one transaction.
+  run(localPgCtl, ["-D", data, "-o", `-h 127.0.0.1 -p ${port} -c max_locks_per_transaction=512`, "-w", "start"]);
   started = true;
   const adminUrl = `postgresql://${migrator}:${migratorPassword}@127.0.0.1:${port}/postgres`;
   const admin = new pg.Client({ connectionString: adminUrl });
