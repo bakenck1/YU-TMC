@@ -628,7 +628,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
            it_type = case when item_section = 'it' then $5::"yu_inventory"."it_equipment_type" else null end,
            brand = $6, model = $7, one_c_code = $8, quantity = $9, unit_price = $10, updated_by = $11,
            updated_at = $12, version = version + 1
-       where id = $1 and version = $13 and status not in ('decommissioned', 'decommissioned_in_use')`,
+       where id = $1 and version = $13`,
       [
         input.id,
         input.name,

@@ -362,6 +362,56 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     ]);
   });
 
+  it("saves printer models in the same room across lifecycle states without false version conflicts", async () => {
+    const adminId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID());
+    await seedRoom(adminId, randomUUID(), roomId);
+    const service = createService(runtimeDatabase);
+    const actor = { userId: adminId, role: "admin" as const };
+    const first = await service.createItem({
+      name: "Printer", category: "electronics", roomId, barcode: `PRINTER-${randomUUID()}`,
+      model: "LBP2900",
+    }, actor);
+    let second = await service.createItem({
+      name: "Printer", category: "electronics", roomId, barcode: `PRINTER-${randomUUID()}`,
+    }, actor);
+    expect(first.id).not.toBe(second.id);
+
+    for (const status of ["active", "maintenance", "decommissioned", "decommissioned_in_use"] as const) {
+      if (status === "decommissioned_in_use") {
+        second = await service.markDecommissionedInUse(second.id, {
+          version: second.version, roomId,
+        }, actor);
+      } else if (second.status !== status) {
+        second = await service.updateProtected(second.id, {
+          version: second.version, roomId, status, inventoryNumber: second.inventoryNumber,
+        }, actor);
+      }
+      const before = second;
+      second = await service.updateContent(second.id, {
+        version: before.version, name: "Printer", model: "LBP2900", description: `Printer ${status}`,
+      }, actor);
+      expect(second).toMatchObject({
+        model: "LBP2900", description: `Printer ${status}`,
+        status, archivedAt: before.archivedAt, version: before.version + 1,
+        room: before.room, inventoryNumber: before.inventoryNumber,
+      });
+      await expect(service.updateContent(second.id, {
+        version: before.version, name: "Printer", model: "STALE",
+      }, actor)).rejects.toThrow("version_conflict");
+      await expect(service.findItem(second.id, actor)).resolves.toMatchObject({ model: "LBP2900" });
+    }
+    await expect(service.findItem(first.id, actor)).resolves.toMatchObject({
+      model: "LBP2900", description: null, version: first.version,
+    });
+    const audit = await database.query<{ action: string }>(
+      `select action from "yu_inventory"."audit_records"
+        where subject_id = $1 and action = 'item.content_updated'`, [second.id],
+    );
+    expect(audit.rows).toHaveLength(4);
+  });
+
   it("returns the responsible employee name immediately after a room assignment", async () => {
     const adminId = randomUUID();
     const firstEmployeeId = randomUUID();
