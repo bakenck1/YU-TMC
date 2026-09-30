@@ -71,12 +71,13 @@ test("linked GUID handles exact match, changed number, and foreign identifiers",
   assert.equal(matchOneCFixedAssetIdentifiers(asset({ inventoryNumber: "OTHER-2" }), { items, linkedItemId: "item-a" }).status, "inventory_number_conflict");
 });
 
-test("invalid Code 39 is blocking, while null, zero and positive residual values remain distinct", () => {
+test("invalid Code 39 warns on an exact match, while residual value states remain distinct", () => {
   const invalid = analyzeOneCFixedAsset(asset({ barcode: "КИРИЛЛИЦА" }), {
     items, selectedRoomId: "room", selectedItemType: "equipment",
   });
   assert.equal(invalid.identifiers.barcodeState, "invalid");
-  assert.ok(invalid.issues.some((entry) => entry.code === "invalid_one_c_barcode" && entry.severity === "blocking"));
+  assert.ok(invalid.issues.some((entry) => entry.code === "invalid_one_c_barcode" && entry.severity === "warning"));
+  assert.equal(invalid.identifiers.itemId, "item-a");
 
   const missing = analyzeOneCFixedAsset(asset({ residualCost: null }), { items });
   assert.ok(!missing.issues.some((entry) => entry.code.includes("residual_value")));
@@ -88,11 +89,46 @@ test("invalid Code 39 is blocking, while null, zero and positive residual values
 
 test("analysis emits the required exclusive result and actionable issues", () => {
   assert.equal(analyzeOneCFixedAsset(asset({ inventoryNumber: null }), { items }).result, "blocked_missing_inventory_number");
-  assert.equal(analyzeOneCFixedAsset(asset({ name: "Здание" }), { items }).result, "excluded_non_physical");
+  assert.equal(analyzeOneCFixedAsset(asset({ name: "Здание" }), { items }).result, "candidate_inventory_number");
+  assert.equal(analyzeOneCFixedAsset(asset({ name: "Здание", inventoryNumber: "NEW" }), { items }).result, "excluded_non_physical");
   assert.equal(analyzeOneCFixedAsset(asset({ inventoryNumber: "NEW" }), { items }).result, "blocked_missing_room");
   assert.equal(analyzeOneCFixedAsset(asset({ inventoryNumber: "NEW" }), { items, selectedRoomId: "room" }).result, "blocked_unsupported_type");
   assert.equal(analyzeOneCFixedAsset(asset({ inventoryNumber: "NEW" }), {
     items, selectedRoomId: "room", selectedItemType: "equipment",
   }).result, "new_publishable");
   assert.equal(analyzeOneCFixedAsset(asset({ quantity: 2 }), { items }).result, "manual_review");
+});
+
+test("one exact GUID, 1C code, inventory number or barcode identifies an existing item independently of its name", () => {
+  const existing = [{
+    id: "item-a", inventoryNumber: "SITE-42", oneCCode: "0001",
+    officialBarcodes: ["SITE-42"], sourceCodes: ["OLDER-CODE"],
+  }];
+  const differentName = asset({ name: "Совсем другое название", inventoryNumber: "NO-MATCH" });
+  const byCode = matchOneCFixedAssetIdentifiers(differentName, { items: existing });
+  assert.equal(byCode.itemId, "item-a");
+  assert.deepEqual(byCode.matchedBy, ["code"]);
+
+  const byNumber = matchOneCFixedAssetIdentifiers(asset({ code: "OTHER", inventoryNumber: "site-42" }), { items: existing });
+  assert.deepEqual(byNumber.matchedBy, ["inventory_number"]);
+
+  const byBarcode = matchOneCFixedAssetIdentifiers(asset({ code: "OTHER", inventoryNumber: "NO-MATCH", barcode: "*SITE-42*" }), { items: existing });
+  assert.deepEqual(byBarcode.matchedBy, ["barcode"]);
+
+  const byGuid = matchOneCFixedAssetIdentifiers(asset({ code: "OTHER", inventoryNumber: "NO-MATCH" }), { items: existing, linkedItemId: "item-a" });
+  assert.deepEqual(byGuid.matchedBy, ["guid"]);
+
+  const byOldCode = matchOneCFixedAssetIdentifiers(asset({ code: "OLDER-CODE", inventoryNumber: "NO-MATCH" }), { items: existing });
+  assert.deepEqual(byOldCode.matchedBy, ["code"]);
+});
+
+test("different identifiers pointing to different items remain a conflict", () => {
+  const existing = [
+    { id: "item-a", inventoryNumber: "A", oneCCode: "0001" },
+    { id: "item-b", inventoryNumber: "B", oneCCode: "0002" },
+  ];
+  const result = matchOneCFixedAssetIdentifiers(asset({ inventoryNumber: "B" }), { items: existing });
+  assert.equal(result.status, "ambiguous_conflict");
+  assert.equal(result.itemId, null);
+  assert.equal(result.blocking, true);
 });

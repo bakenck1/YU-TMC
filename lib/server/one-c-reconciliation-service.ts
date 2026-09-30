@@ -6,13 +6,14 @@ import { getDatabasePool } from "@/lib/db/client";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
-import { analyzeOneCFixedAsset, buildOneCPublicationPlan } from "@/lib/one-c-reconciliation";
+import { analyzeOneCFixedAsset, buildOneCPublicationPlan, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
+import { parseCode39ScanInput } from "@/lib/domain/code39";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import type { OneCReconciliationAdminService, OneCAdminActor, OneCBatchListQuery, OneCBatchRowsQuery, OneCDecisionInput, OneCBulkDecisionInput, OneCPlanInput } from "@/lib/server/http/one-c-reconciliation-admin-handler";
 
 type Row = Record<string, unknown>;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type CandidateReason = "guid" | "code" | "inventory_number";
+type CandidateReason = "guid" | "code" | "inventory_number" | "barcode";
 type ReconciliationCandidate = {
   id: string;
   name: string;
@@ -53,7 +54,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const where = query.state ? `where state = $${values.push(query.state)}` : "";
     values.push(query.pageSize, (query.page - 1) * query.pageSize);
     const result = await this.pool.query(`select *, count(*) over()::int as total from "yu_inventory"."one_c_import_batches" ${where} order by received_at desc, id limit $${values.length - 1} offset $${values.length}`, values);
-    return { data: result.rows, page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
+    return { data: result.rows.map(compactBatchForReview), page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
   }
 
   async listDecommissionedAssets(query: {
@@ -122,7 +123,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
   async getBatch(batchId: string) {
     const result = await this.pool.query(`select * from "yu_inventory"."one_c_import_batches" where id = $1`, [batchId]);
     if (!result.rows[0]) throw notFound();
-    return result.rows[0];
+    return compactBatchForReview(result.rows[0]);
   }
 
   async listBatchRows(batchId: string, query: OneCBatchRowsQuery) {
@@ -131,6 +132,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const clauses = ["r.batch_id = $1"];
     if (query.reviewState) clauses.push(`r.review_state = $${values.push(query.reviewState)}`);
     if (query.proposedAction) clauses.push(`r.proposed_action = $${values.push(query.proposedAction)}`);
+    if (query.match === "active") clauses.push(`r.matched_item_id is not null and r.review_state not in ('conflict','excluded') and r.payload->>'status' = 'Принято к учёту' and i.status = 'active'`);
     if (query.search) {
       values.push(`%${query.search}%`);
       clauses.push(`(r.external_id ilike $${values.length}
@@ -142,7 +144,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         or r.payload->>'responsibleName' ilike $${values.length})`);
     }
     values.push(query.pageSize, (query.page - 1) * query.pageSize);
-    const result = await this.pool.query(`select r.*, i.name as matched_item_name, i.inventory_number as matched_inventory_number, count(*) over()::int as total from "yu_inventory"."one_c_import_batch_rows" r left join "yu_inventory"."items" i on i.id=r.matched_item_id where ${clauses.join(" and ")} order by r.external_id limit $${values.length - 1} offset $${values.length}`, values);
+    const result = await this.pool.query(`select r.*, i.name as matched_item_name, i.inventory_number as matched_inventory_number, i.status::text as matched_item_status, count(*) over()::int as total from "yu_inventory"."one_c_import_batch_rows" r left join "yu_inventory"."items" i on i.id=r.matched_item_id where ${clauses.join(" and ")} order by r.external_id limit $${values.length - 1} offset $${values.length}`, values);
     return { data: result.rows, page: query.page, pageSize: query.pageSize, total: Number(result.rows[0]?.total ?? 0) };
   }
 
@@ -172,28 +174,31 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       await client.query(`update "yu_inventory"."one_c_import_batches" set state='analyzing' where id=$1`, [batchId]);
       const [rows, candidates, links] = await Promise.all([
         client.query(`select * from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]),
-        client.query(`select i.id, i.inventory_number, i.one_c_code, i.version, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id where i.item_section='general' group by i.id`),
+        client.query(`select i.id, i.inventory_number, i.one_c_code, i.status, i.version, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id group by i.id`),
         client.query(`select external_id,item_id,source_code from "yu_inventory"."item_one_c_links"`),
       ]);
-      const itemCandidates = candidates.rows.map((r) => ({ id: String(r.id), inventoryNumber: String(r.inventory_number), officialBarcodes: r.official_barcodes as string[] }));
       const linkMap = new Map(links.rows.map((r) => [String(r.external_id), String(r.item_id)]));
       const itemLinkMap = new Map(links.rows.map((r) => [String(r.item_id), String(r.external_id)]));
-      const codeLinkMap = new Map<string, string[]>();
+      const sourceCodesByItem = new Map<string, string[]>();
       for (const link of links.rows) {
         const key = oneCCodeComparisonKey(link.source_code);
-        if (key) codeLinkMap.set(key, [...(codeLinkMap.get(key) ?? []), String(link.item_id)]);
+        if (key) sourceCodesByItem.set(String(link.item_id), [...(sourceCodesByItem.get(String(link.item_id)) ?? []), key]);
       }
+      const itemCandidates = candidates.rows.map((r) => ({ id: String(r.id), inventoryNumber: String(r.inventory_number), oneCCode: stringOrNull(r.one_c_code), sourceCodes: sourceCodesByItem.get(String(r.id)) ?? [], officialBarcodes: r.official_barcodes as string[] }));
+      const itemStatus = new Map(candidates.rows.map((r) => [String(r.id), String(r.status)]));
+      const candidateById = new Map(candidates.rows.map((r) => [String(r.id), r]));
       const planRows = [];
-      const summary: Record<string, number> = { matched: 0, create: 0, conflicts: 0, blocked: 0, excluded: 0 };
+      const rowUpdates = [];
+      const summary: Record<string, number> = { matched: 0, activeMatched: 0, identifierMatched: 0, create: 0, conflicts: 0, blocked: 0, excluded: 0 };
       for (const row of rows.rows) {
         const asset = row.payload as OneCFixedAsset;
         const decision = (row.decision ?? {}) as Row;
         const selectedItemId = decision.confirmLink === true ? stringOrNull(decision.itemId) : null;
         const selectedCandidate = selectedItemId
-          ? candidates.rows.find((candidate) => String(candidate.id) === selectedItemId)
+          ? candidateById.get(selectedItemId)
           : null;
         const selectedReasons = selectedCandidate
-          ? exactCandidateReasons(asset, selectedCandidate, linkMap.get(asset.externalId), codeLinkMap)
+          ? exactCandidateReasons(asset, selectedCandidate, linkMap.get(asset.externalId), sourceCodesByItem)
           : [];
         const requestedManualSelection = decision.confirmLink === true && selectedItemId !== null;
         const actualLinkedItemId = linkMap.get(asset.externalId);
@@ -216,14 +221,57 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         } else if (mapped.action === "link" && decision.confirmLink === true) {
           mapped = { ...mapped, state: "approved" };
         }
-        const matchedItemId = manualSelectionValid ? selectedItemId : analysis.identifiers.itemId;
-        const matchMethod = manualSelectionValid ? `manual_${selectedReasons.join("+")}` : analysis.identifiers.status;
-        summary[mapped.bucket] += 1;
-        await client.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state=$3,proposed_action=$4,matched_item_id=$5,match_method=$6,issues=$7::jsonb where batch_id=$1 and external_id=$2`, [batchId, asset.externalId, mapped.state, mapped.action, matchedItemId, matchMethod, JSON.stringify(analysis.issues)]);
-        planRows.push({ externalId: asset.externalId, action: mapped.planAction, itemId: matchedItemId, itemVersion: candidates.rows.find((candidate) => String(candidate.id) === matchedItemId)?.version ?? null, decisionVersion: batch.version, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode });
+        const matchedItemId = manualSelectionValid ? selectedItemId
+          : analysis.identifiers.matchedBy.length ? analysis.identifiers.itemId : null;
+        const existingOwner = matchedItemId ? itemLinkMap.get(matchedItemId) : undefined;
+        if (existingOwner && existingOwner !== asset.externalId) {
+          mapped = { state: "conflict", action: "manual_review", planAction: "conflict", bucket: "conflicts" };
+        }
+        const matchMethod = manualSelectionValid ? `manual_${selectedReasons.join("+")}` : analysis.identifiers.matchedBy.join("+") || analysis.identifiers.status;
+        rowUpdates.push({ external_id: asset.externalId, review_state: mapped.state, proposed_action: mapped.action, matched_item_id: matchedItemId, match_method: matchMethod, issues: analysis.issues, source_status: asset.status });
+        planRows.push({ externalId: asset.externalId, action: mapped.planAction, itemId: matchedItemId, itemVersion: matchedItemId ? candidateById.get(matchedItemId)?.version ?? null : null, decisionVersion: batch.version, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode });
       }
+      const targetOwners = new Map<string, string[]>();
+      for (const row of planRows) {
+        if (!row.itemId || row.action === "exclude" || row.action === "conflict") continue;
+        targetOwners.set(row.itemId, [...(targetOwners.get(row.itemId) ?? []), row.externalId]);
+      }
+      const duplicateTargets = new Set([...targetOwners.values()].filter((ids) => ids.length > 1).flat());
       const versionFingerprint = candidates.rows.map((r) => `${r.id}:${r.version}`).sort().join("|");
-      const plan = buildOneCPublicationPlan({ batchId, sourceHash: String(batch.source_sha256), existingItemsVersion: versionFingerprint, rows: planRows });
+      const plan = buildOneCPublicationPlan({
+        batchId, sourceHash: String(batch.source_sha256), existingItemsVersion: versionFingerprint,
+        rows: planRows.map((row) => duplicateTargets.has(row.externalId) ? { ...row, action: "conflict" as const } : row),
+      });
+      const planActionById = new Map(plan.rows.map((row) => [row.externalId, row.action]));
+      for (const update of rowUpdates) {
+        if (planActionById.get(update.external_id) === "conflict") {
+          update.review_state = "conflict";
+          update.proposed_action = "manual_review";
+        }
+        if (update.matched_item_id && update.review_state !== "conflict" && update.review_state !== "excluded") {
+          summary.identifierMatched += 1;
+          if (update.source_status === "Принято к учёту" && itemStatus.get(update.matched_item_id) === "active") summary.activeMatched += 1;
+        }
+      }
+      Object.assign(summary, { matched: plan.link + plan.update, create: plan.create, conflicts: plan.conflicts, blocked: plan.blocked, excluded: plan.exclude });
+      for (let start = 0; start < rowUpdates.length; start += 500) {
+        const chunk = rowUpdates.slice(start, start + 500);
+        const updated = await client.query(
+          `update "yu_inventory"."one_c_import_batch_rows" r
+              set review_state = incoming.review_state,
+                  proposed_action = incoming.proposed_action,
+                  matched_item_id = incoming.matched_item_id,
+                  match_method = incoming.match_method,
+                  issues = incoming.issues
+             from jsonb_to_recordset($2::jsonb) as incoming(
+               external_id text, review_state text, proposed_action text,
+               matched_item_id uuid, match_method text, issues jsonb
+             )
+            where r.batch_id = $1 and r.external_id = incoming.external_id`,
+          [batchId, JSON.stringify(chunk)],
+        );
+        if (updated.rowCount !== chunk.length) throw new Error("one_c_analysis_row_count_mismatch");
+      }
       const existingSummary = typeof batch.summary === "object" && batch.summary !== null
         ? batch.summary as Record<string, unknown>
         : {};
@@ -366,20 +414,28 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const asset = row.rows[0].payload as OneCFixedAsset;
     const inventoryKey = asset.inventoryNumber?.trim() ? inventoryNumberComparisonKey(asset.inventoryNumber) : null;
     const codeKey = oneCCodeComparisonKey(asset.code);
+    const barcode = asset.barcode ? parseCode39ScanInput(asset.barcode) : { ok: false as const };
+    const barcodeKey = barcode.ok && !barcode.fallbackKey ? inventoryNumberComparisonKey(barcode.inventoryNumber) : null;
+    const barcodeFallback = barcode.ok ? barcode.fallbackKey : null;
     const result = await queryable.query(`select i.id,i.name,i.inventory_number,i.one_c_code,i.status,i.version,
+      coalesce((select array_agg(br.original_value) from "yu_inventory"."barcode_registry" br where br.item_id=i.id and br.kind='official'), '{}') as official_barcodes,
       exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and l.external_id=$1) as by_guid,
       ($2::text is not null and (upper(btrim(i.one_c_code))=$2 or exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and upper(btrim(l.source_code))=$2))) as by_code,
-      ($3::text is not null and i.inventory_number_key=$3) as by_inventory_number
+      ($3::text is not null and i.inventory_number_key=$3) as by_inventory_number,
+      (($4::text is not null and (i.inventory_number_key=$4 or exists(select 1 from "yu_inventory"."barcode_registry" br where br.item_id=i.id and br.kind='official' and br.canonical_key=$4)))
+       or ($5::text is not null and upper(left(replace(i.id::text,'-',''),16))=$5)) as by_barcode
       from "yu_inventory"."items" i
-      where i.item_section='general' and (
+      where (
         exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and l.external_id=$1)
         or ($2::text is not null and (upper(btrim(i.one_c_code))=$2 or exists(select 1 from "yu_inventory"."item_one_c_links" l where l.item_id=i.id and upper(btrim(l.source_code))=$2)))
-        or ($3::text is not null and i.inventory_number_key=$3))
-      order by by_guid desc,by_inventory_number desc,by_code desc,i.name,i.id limit 100`, [externalId, codeKey, inventoryKey]);
+        or ($3::text is not null and i.inventory_number_key=$3)
+        or ($4::text is not null and (i.inventory_number_key=$4 or exists(select 1 from "yu_inventory"."barcode_registry" br where br.item_id=i.id and br.kind='official' and br.canonical_key=$4)))
+        or ($5::text is not null and upper(left(replace(i.id::text,'-',''),16))=$5))
+      order by by_guid desc,by_inventory_number desc,by_code desc,by_barcode desc,i.id limit 100`, [externalId, codeKey, inventoryKey, barcodeKey, barcodeFallback]);
     return result.rows.map((candidate) => ({
       id: String(candidate.id), name: String(candidate.name), inventoryNumber: String(candidate.inventory_number),
       oneCCode: stringOrNull(candidate.one_c_code), status: String(candidate.status), version: Number(candidate.version),
-      matchedBy: ([candidate.by_guid && "guid", candidate.by_code && "code", candidate.by_inventory_number && "inventory_number"].filter(Boolean) as CandidateReason[]),
+      matchedBy: ([candidate.by_guid && "guid", candidate.by_code && "code", candidate.by_inventory_number && "inventory_number", candidate.by_barcode && "barcode"].filter(Boolean) as CandidateReason[]),
     })).sort((left, right) => right.matchedBy.length - left.matchedBy.length || left.name.localeCompare(right.name, "ru"));
   }
   private async lockBatch(client: PoolClient,id:string,version:number,states:string[]){const r=await client.query(`select * from "yu_inventory"."one_c_import_batches" where id=$1 and version=$2 and state=any($3::text[]) for update`,[id,version,states]);if(!r.rows[0])throw new ApplicationError("conflict","batch_version_conflict");return r.rows[0];}
@@ -391,21 +447,24 @@ function workflowFor(result:string,itemId:string|null):Workflow{if(result==="exc
 function stringOrNull(value:unknown){return typeof value==="string"&&value.trim()?value.trim():null;}
 function escapeLikePattern(value:string){return value.replace(/[\\%_]/gu,(character)=>`\\${character}`);}
 function oneCCodeComparisonKey(value:unknown){const normalized=stringOrNull(value);return normalized?normalized.normalize("NFKC").toUpperCase():null;}
-function exactCandidateReasons(asset:OneCFixedAsset,candidate:Row,linkedItemId:string|undefined,codeLinkMap:ReadonlyMap<string,string[]>):CandidateReason[]{
-  const reasons:CandidateReason[]=[];
+function exactCandidateReasons(asset:OneCFixedAsset,candidate:Row,linkedItemId:string|undefined,sourceCodesByItem:ReadonlyMap<string,string[]>):CandidateReason[]{
   const id=String(candidate.id);
-  if(linkedItemId===id)reasons.push("guid");
-  const codeKey=oneCCodeComparisonKey(asset.code);
-  if(codeKey&&(oneCCodeComparisonKey(candidate.one_c_code)===codeKey||(codeLinkMap.get(codeKey)??[]).includes(id)))reasons.push("code");
-  if(asset.inventoryNumber?.trim()&&inventoryNumberComparisonKey(String(candidate.inventory_number))===inventoryNumberComparisonKey(asset.inventoryNumber))reasons.push("inventory_number");
-  return reasons;
+  return [...matchOneCFixedAssetIdentifiers(asset,{items:[{id,inventoryNumber:String(candidate.inventory_number),oneCCode:stringOrNull(candidate.one_c_code),sourceCodes:sourceCodesByItem.get(id)??[],officialBarcodes:candidate.official_barcodes as string[]??[]}],linkedItemId:linkedItemId===id?id:null}).matchedBy];
 }
 function manualLinkHasNoUnresolvedBlockingIssues(issues:readonly {code:string;severity:string}[]){
   // The administrator's explicit item choice resolves disagreement between the
-  // three requested source identifiers. Link occupancy and optimistic version
+  // four requested source identifiers. Link occupancy and optimistic version
   // conflicts are checked separately and can never be overridden here.
   const resolvedByManualChoice=new Set(["identifier_conflict","missing_inventory_number","missing_room","unsupported_item_type","invalid_one_c_barcode"]);
   return !issues.some((entry)=>entry.severity==="blocking"&&!resolvedByManualChoice.has(entry.code));
 }
 function notFound(){return new ApplicationError("not_found","one_c_resource_not_found");}
 function isPgUniqueViolation(error:unknown){return typeof error==="object"&&error!==null&&"code" in error&&error.code==="23505";}
+function compactBatchForReview(batch:Row):Row{
+  const summary=typeof batch.summary==="object"&&batch.summary!==null?batch.summary as Row:null;
+  const plan=summary?.plan;
+  if(!summary||typeof plan!=="object"||plan===null)return batch;
+  const planSummary={...plan as Row};
+  delete planSummary.rows;
+  return {...batch,summary:{...summary,plan:planSummary}};
+}

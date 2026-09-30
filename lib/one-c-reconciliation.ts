@@ -39,6 +39,8 @@ export type OneCIssue = {
 export type OneCInventoryCandidate = {
   readonly id: string;
   readonly inventoryNumber: string;
+  readonly oneCCode?: string | null;
+  readonly sourceCodes?: readonly string[];
   /** Official values from barcode_registry. Local barcodes are deliberately excluded. */
   readonly officialBarcodes?: readonly string[];
 };
@@ -47,6 +49,8 @@ export type OneCIdentifierMatchStatus =
   | "match_ok"
   | "strong_candidate"
   | "inventory_candidate"
+  | "code_candidate"
+  | "barcode_candidate"
   | "barcode_conflict"
   | "inventory_number_conflict"
   | "linked_number_changed"
@@ -58,8 +62,10 @@ export type OneCIdentifierMatch = {
   readonly status: OneCIdentifierMatchStatus;
   readonly itemId: string | null;
   readonly inventoryItemIds: readonly string[];
+  readonly codeItemIds: readonly string[];
   readonly barcodeItemIds: readonly string[];
   readonly possibleItemIds: readonly string[];
+  readonly matchedBy: readonly ("guid" | "code" | "inventory_number" | "barcode")[];
   readonly barcodeState: "missing" | "matched" | "unknown" | "invalid";
   readonly blocking: boolean;
 };
@@ -100,7 +106,7 @@ export function softInventoryNumberComparisonKey(value: string): string {
 }
 
 export function matchOneCFixedAssetIdentifiers(
-  asset: Pick<OneCFixedAsset, "inventoryNumber" | "barcode">,
+  asset: Pick<OneCFixedAsset, "code" | "inventoryNumber" | "barcode">,
   options: {
     readonly items: readonly OneCInventoryCandidate[];
     readonly linkedItemId?: string | null;
@@ -117,10 +123,22 @@ export function matchOneCFixedAssetIdentifiers(
       : [],
   );
 
+  const codeKey = oneCCodeComparisonKey(asset.code);
+  const codeItemIds = uniqueSorted(codeKey
+    ? options.items.filter((item) =>
+        oneCCodeComparisonKey(item.oneCCode) === codeKey
+        || (item.sourceCodes ?? []).some((value) => oneCCodeComparisonKey(value) === codeKey),
+      ).map((item) => item.id)
+    : []);
+
   const barcode = parseOneCBarcode(asset.barcode);
   const barcodeItemIds = barcode.state === "valid"
     ? uniqueSorted(options.items.filter((item) =>
-        (item.officialBarcodes ?? []).some((value) => barcodeComparisonKey(value) === barcode.key),
+        (item.officialBarcodes ?? []).some((value) => barcodeComparisonKey(value) === barcode.key)
+        || (barcode.inventoryNumberKey !== null
+          && inventoryNumberComparisonKey(item.inventoryNumber) === barcode.inventoryNumberKey)
+        || (barcode.fallbackKey !== null
+          && item.id.replaceAll("-", "").slice(0, 16).toUpperCase() === barcode.fallbackKey),
       ).map((item) => item.id))
     : [];
   const possibleItemIds = !inventoryItemIds.length && exactKey
@@ -137,46 +155,44 @@ export function matchOneCFixedAssetIdentifiers(
     status,
     itemId,
     inventoryItemIds,
+    codeItemIds,
     barcodeItemIds,
     possibleItemIds,
+    matchedBy: itemId ? ([
+      linkedItemId === itemId && "guid",
+      codeItemIds.includes(itemId) && "code",
+      inventoryItemIds.includes(itemId) && "inventory_number",
+      barcodeItemIds.includes(itemId) && "barcode",
+    ].filter(Boolean) as OneCIdentifierMatch["matchedBy"]) : [],
     barcodeState,
     blocking: status === "barcode_conflict"
       || status === "inventory_number_conflict"
       || status === "ambiguous_conflict",
   });
 
-  if (inventoryItemIds.length > 1 || barcodeItemIds.length > 1) {
-    return result("ambiguous_conflict", null);
+  const exactIds = uniqueSorted([
+    ...inventoryItemIds, ...codeItemIds, ...barcodeItemIds,
+    ...(linkedItemId ? [linkedItemId] : []),
+  ]);
+  if (exactIds.length > 1) {
+    const status = barcodeItemIds.length && exactIds.some((id) => !barcodeItemIds.includes(id))
+      ? "barcode_conflict"
+      : linkedItemId && exactIds.some((id) => id !== linkedItemId)
+        ? "inventory_number_conflict"
+        : "ambiguous_conflict";
+    return result(status, null);
   }
-  const inventoryItemId = inventoryItemIds[0] ?? null;
-  const barcodeItemId = barcodeItemIds[0] ?? null;
-  if (inventoryItemId && barcodeItemId && inventoryItemId !== barcodeItemId) {
-    return result("barcode_conflict", null);
+  const itemId = exactIds[0] ?? null;
+  if (linkedItemId && itemId) {
+    return result(inventoryItemIds.includes(itemId) || codeItemIds.includes(itemId) || barcodeItemIds.includes(itemId)
+      ? "match_ok" : "linked_number_changed", itemId);
   }
-
-  if (linkedItemId) {
-    if (barcodeItemId && barcodeItemId !== linkedItemId) return result("barcode_conflict", linkedItemId);
-    if (inventoryItemId && inventoryItemId !== linkedItemId) {
-      return result("inventory_number_conflict", linkedItemId);
-    }
-    if (inventoryItemId === linkedItemId && (!barcodeItemId || barcodeItemId === linkedItemId)) {
-      return result("match_ok", linkedItemId);
-    }
-    if (!inventoryItemId && barcodeItemId === linkedItemId) {
-      return result("inventory_number_conflict", linkedItemId);
-    }
-    if (!inventoryItemId && barcode.state === "missing") {
-      return result("linked_number_changed", linkedItemId);
-    }
-    return result("barcode_conflict", linkedItemId);
+  if (itemId) {
+    if (inventoryItemIds.includes(itemId) && barcodeItemIds.includes(itemId)) return result("strong_candidate", itemId);
+    if (inventoryItemIds.includes(itemId)) return result("inventory_candidate", itemId);
+    if (codeItemIds.includes(itemId)) return result("code_candidate", itemId);
+    return result("barcode_candidate", itemId);
   }
-
-  if (inventoryItemId) {
-    if (barcode.state === "missing") return result("inventory_candidate", inventoryItemId);
-    if (barcodeItemId === inventoryItemId) return result("strong_candidate", inventoryItemId);
-    return result("barcode_conflict", inventoryItemId);
-  }
-  if (barcodeItemId) return result("inventory_number_conflict", barcodeItemId);
   if (possibleItemIds.length) return result("possible_match", possibleItemIds.length === 1 ? possibleItemIds[0] : null);
   return result("new_candidate", null);
 }
@@ -203,8 +219,8 @@ export function analyzeOneCFixedAsset(
     linkedItemId: options.linkedItemId,
   });
   const issues: OneCIssue[] = [];
-  if (classification.kind === "non_physical") issues.push(issue("non_physical_asset", "excluded"));
-  if (!asset.inventoryNumber?.trim()) issues.push(issue("missing_inventory_number", "blocking"));
+  if (classification.kind === "non_physical") issues.push(issue("non_physical_asset", identifiers.itemId ? "warning" : "excluded"));
+  if (!asset.inventoryNumber?.trim()) issues.push(issue("missing_inventory_number", identifiers.itemId ? "warning" : "blocking"));
   if (asset.residualCost !== null && asset.residualCost < 0) issues.push(issue("negative_residual_value", "blocking"));
   if (asset.residualCost === 0 && !options.zeroResidualValueConfirmed) {
     issues.push(issue("zero_residual_value_unconfirmed", "warning"));
@@ -218,7 +234,7 @@ export function analyzeOneCFixedAsset(
   if (asset.status === "Снято с учёта" || asset.status === "Не в учёте") {
     issues.push(issue("accounting_status_requires_review", "blocking"));
   }
-  if (identifiers.barcodeState === "invalid") issues.push(issue("invalid_one_c_barcode", "blocking"));
+  if (identifiers.barcodeState === "invalid") issues.push(issue("invalid_one_c_barcode", identifiers.itemId ? "warning" : "blocking"));
   if (identifiers.blocking) issues.push(issue("identifier_conflict", "blocking"));
 
   const isNew = identifiers.status === "new_candidate";
@@ -226,14 +242,14 @@ export function analyzeOneCFixedAsset(
   if (isNew && !options.selectedItemType) issues.push(issue("unsupported_item_type", "blocking"));
 
   let result: OneCAnalysisResult;
-  if (classification.kind === "non_physical") result = "excluded_non_physical";
-  else if (!asset.inventoryNumber?.trim()) result = "blocked_missing_inventory_number";
-  else if (identifiers.blocking) result = "conflict_inventory_number";
+  if (identifiers.blocking) result = "conflict_inventory_number";
+  else if (classification.kind === "non_physical" && !identifiers.itemId) result = "excluded_non_physical";
+  else if (!asset.inventoryNumber?.trim() && !identifiers.itemId) result = "blocked_missing_inventory_number";
   else if (isNew && !options.selectedRoomId) result = "blocked_missing_room";
   else if (isNew && !options.selectedItemType) result = "blocked_unsupported_type";
   else if (issues.some((entry) => entry.severity === "blocking") || identifiers.status === "possible_match") result = "manual_review";
   else if (identifiers.status === "match_ok") result = "linked_exact_guid";
-  else if (identifiers.status === "strong_candidate" || identifiers.status === "inventory_candidate") result = "candidate_inventory_number";
+  else if (identifiers.itemId) result = "candidate_inventory_number";
   else if (isNew) result = "new_publishable";
   else result = "manual_review";
 
@@ -340,13 +356,19 @@ function duplicateOwners(
 function parseOneCBarcode(value: string | null | undefined):
   | { readonly state: "missing" }
   | { readonly state: "invalid" }
-  | { readonly state: "valid"; readonly key: string } {
+  | { readonly state: "valid"; readonly key: string; readonly inventoryNumberKey: string | null; readonly fallbackKey: string | null } {
   if (!value?.trim()) return { state: "missing" };
   const parsed = parseCode39ScanInput(value);
   if (!parsed.ok) return { state: "invalid" };
+  const inventoryNumberKey = parsed.fallbackKey ? null : inventoryNumberComparisonKey(parsed.inventoryNumber);
   return { state: "valid", key: parsed.fallbackKey
     ? `fallback:${parsed.fallbackKey}`
-    : `inventory:${inventoryNumberComparisonKey(parsed.inventoryNumber)}` };
+    : `inventory:${inventoryNumberKey}`, inventoryNumberKey, fallbackKey: parsed.fallbackKey };
+}
+
+function oneCCodeComparisonKey(value: string | null | undefined): string | null {
+  const normalized = value?.normalize("NFKC").trim().toUpperCase();
+  return normalized || null;
 }
 
 function barcodeComparisonKey(value: string | null | undefined): string | null {

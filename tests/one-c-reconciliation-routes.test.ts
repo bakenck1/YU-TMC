@@ -14,6 +14,13 @@ function context(id=ID){return{params:Promise.resolve({id})};}
 
 test("1C management permission belongs only to administrators",()=>{assert.equal(hasPermission("admin","inventory.integration.one_c.manage"),true);assert.equal(hasPermission("warehouse","inventory.integration.one_c.manage"),false);assert.equal(hasPermission("employee","inventory.integration.one_c.manage"),false);});
 test("batch and row list queries enforce bounded server pagination",async()=>{const h=handlers();assert.equal((await h.listBatches(new Request("https://x.test/api?state=received&page=2&pageSize=100"))).status,200);assert.equal((await h.listBatches(new Request("https://x.test/api?pageSize=101"))).status,400);assert.equal((await h.listBatchRows(new Request("https://x.test/api?search=abc&pageSize=50"),context())).status,200);});
+test("active-match filter is accepted only with its explicit value",async()=>{
+  let received:unknown;
+  const h=handlers({listBatchRows:async(_id,query)=>{received=query;return{data:[],total:0,...query};}});
+  assert.equal((await h.listBatchRows(new Request("https://x.test/api?match=active"),context())).status,200);
+  assert.deepEqual(received,{page:1,pageSize:50,match:"active"});
+  assert.equal((await h.listBatchRows(new Request("https://x.test/api?match=all"),context())).status,400);
+});
 test("row candidates are scoped by validated batch and external identifiers",async()=>{const h=handlers();const ctx={params:Promise.resolve({id:ID,externalId:ID})};assert.equal((await h.getRowCandidates(new Request("https://x.test/api"),ctx)).status,200);});
 test("candidate lookup forwards 1C GUID, 1C code and inventory number searches exactly",async()=>{
   const searches=[ID,"000009352","2416/1056"];
