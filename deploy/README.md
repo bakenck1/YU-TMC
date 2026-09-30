@@ -47,7 +47,7 @@ Backup читает только database-переменные из строк �
 
 ```bash
 cd /opt/yu-inventory/current
-npm ci
+npm ci --include=dev
 npm run build
 npm run db:migrate -- --target=production
 npm run db:import-settings -- --target=production
@@ -162,9 +162,13 @@ Nginx должен быть единственным публичным вход
 1. Сделайте и проверьте резервную копию PostgreSQL.
 2. Остановите web и worker: `sudo systemctl stop yu-inventory yu-inventory-push-worker`.
 3. Обновите код в `/opt/yu-inventory/current`, затем от имени `yu-inventory`
-   выполните `npm ci`, `npm run build`, `npm run db:migrate -- --target=production`,
+   выполните `npm ci --include=dev`, `npm run build`, `npm run db:migrate -- --target=production`,
    `npm run db:import-settings -- --target=production` и
    `npm run db:smoke -- --target=production`.
+   Флаг `--include=dev` нужен и при `NODE_ENV=production`: сборка CSS использует
+   `@tailwindcss/postcss` из `devDependencies`. Если предыдущая сборка началась
+   без этого пакета, перед повторной сборкой переименуйте `.next` в том же
+   каталоге: Turbopack сохраняет кэш сборки внутри `.next`.
 4. Выполните `sudo systemctl restart yu-inventory yu-inventory-push-worker`.
 5. Проверьте `https://<домен>/login` и `journalctl -u yu-inventory -u yu-inventory-push-worker -n 100`.
 
