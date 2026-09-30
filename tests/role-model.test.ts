@@ -93,6 +93,10 @@ test("employee retains assigned-session permissions without direct inspection ro
   assert.equal(hasPermission("employee", "inventory.workspace.read"), true);
   assert.equal(hasPermission("employee", "inventory.item.edit_content"), false);
   assert.equal(canAccessPath("employee", "/inventory/inspections"), false);
+  assert.equal(canAccessPath("employee", "/"), false);
+  assert.equal(canAccessPath("employee", "/items"), true);
+  assert.equal(canAccessPath("admin", "/"), true);
+  assert.equal(canAccessPath("warehouse", "/"), true);
   assert.equal(canAccessPath("employee", "/inventory"), true);
   assert.equal(canAccessPath("employee", "/locations"), true);
 });

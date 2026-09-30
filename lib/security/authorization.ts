@@ -54,6 +54,9 @@ export function permissionForPath(pathname: string): AppPermission | null {
 
 export function canAccessPath(role: unknown, pathname: string) {
   const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
+  if (pathOnly === "/" && role === "employee") {
+    return false;
+  }
   if (matchesRoute(pathOnly, "/tmc/transfer")) {
     return role === "admin" && hasPermission(role, "inventory.tmc.transfer_request.create");
   }

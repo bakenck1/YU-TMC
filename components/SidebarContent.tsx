@@ -51,7 +51,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
-const EMPLOYEE_NAV_PATHS = new Set(["/", "/items", "/scan", "/requests", "/tmc"]);
+const EMPLOYEE_NAV_PATHS = new Set(["/items", "/scan", "/requests", "/tmc"]);
 
 export function sidebarItemsForRole(role: UserRole) {
   return NAV_ITEMS.filter(
