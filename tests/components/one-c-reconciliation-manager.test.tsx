@@ -133,4 +133,33 @@ describe("1C reconciliation manager", () => {
       });
     });
   });
+
+  it("keeps the batch open after dry-run and lists active identifier matches", async () => {
+    const batch = {
+      id: BATCH_ID, received_at: "2026-09-22T08:00:00Z", received_count: 10617,
+      state: "received", version: 1, source_filename: "inventory.xml",
+      source_sha256: "e".repeat(64), request_id: "request-1",
+    };
+    const matchedRow = {
+      external_id: "33333333-3333-4333-8333-333333333333",
+      review_state: "matched", matched_item_id: "44444444-4444-4444-8444-444444444444",
+      matched_item_name: "Наш моноблок", matched_item_status: "active", match_method: "code+inventory_number",
+      issues: [], payload: { code: "0001", inventoryNumber: "2416/1056", barcode: null, name: "Другое название", location: "АУП", responsibleName: null, residualCost: 0 },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(`/batches/${BATCH_ID}/analyze`)) return new Response(JSON.stringify({ analysis: {} }), { status: 200 });
+      if (url.endsWith(`/batches/${BATCH_ID}`)) return new Response(JSON.stringify({ batch: { ...batch, version: 2, state: "review_required", summary: { identifierMatched: 1, activeMatched: 1, conflicts: 0 } } }), { status: 200 });
+      return new Response(JSON.stringify({ rows: { data: [matchedRow], page: 1, pageSize: 50, total: 1 } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<OneCReconciliationManager initialBatches={{ data: [batch], page: 1, pageSize: 50, total: 1 }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
+    await screen.findByText("Наш моноблок");
+    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await screen.findByText(/Точные совпадения с ТМЦ: 1/);
+    expect(screen.getByText(/Совпало: Код 1С, Инвентарный номер/)).toBeTruthy();
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("match=active");
+  });
 });

@@ -60,7 +60,7 @@ test("candidate search combines the 1C GUID, normalized 1C code and exact invent
   ).getRowCandidates(BATCH_ID, EXTERNAL_ID);
 
   const candidateQuery = calls.find(({ sql }) => sql.includes('from "yu_inventory"."items"'));
-  assert.deepEqual(candidateQuery?.values, [EXTERNAL_ID, "CODE-42", "аб-12"]);
+  assert.deepEqual(candidateQuery?.values, [EXTERNAL_ID, "CODE-42", "аб-12", null, null]);
   assert.match(candidateQuery?.sql ?? "", /external_id=\$1/);
   assert.match(candidateQuery?.sql ?? "", /source_code/);
   assert.match(candidateQuery?.sql ?? "", /inventory_number_key=\$3/);
@@ -103,7 +103,25 @@ test("candidate search keeps an absent 1C code and inventory number neutral", as
   ).getRowCandidates(BATCH_ID, EXTERNAL_ID);
 
   assert.deepEqual(candidates, []);
-  assert.deepEqual(candidateValues, [EXTERNAL_ID, null, null]);
+  assert.deepEqual(candidateValues, [EXTERNAL_ID, null, null, null, null]);
+});
+
+test("candidate lookup also includes an exact official barcode", async () => {
+  let candidateValues: unknown[] | undefined;
+  const pool = {
+    query: async (sql: string, values?: unknown[]) => {
+      if (sql.includes("one_c_import_batch_rows")) {
+        return { rows: [{ payload: { externalId: EXTERNAL_ID, code: null, inventoryNumber: null, barcode: "*YUB-2416/1056*" } }], rowCount: 1 };
+      }
+      candidateValues = values;
+      return { rows: [{ id: BATCH_ID, name: "Моноблок", inventory_number: "2416/1056", one_c_code: null, status: "active", version: 2, by_guid: false, by_code: false, by_inventory_number: false, by_barcode: true }], rowCount: 1 };
+    },
+  };
+  const candidates = await new OneCReconciliationService(
+    pool as unknown as Pick<Pool, "query" | "connect">,
+  ).getRowCandidates(BATCH_ID, EXTERNAL_ID);
+  assert.deepEqual(candidateValues, [EXTERNAL_ID, null, null, "2416/1056", null]);
+  assert.deepEqual(candidates[0]?.matchedBy, ["barcode"]);
 });
 
 test("bulk decisions cannot inject one manual link target into multiple rows", async () => {

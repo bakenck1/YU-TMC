@@ -39,6 +39,7 @@ export type OneCBatchRowsQuery = {
   reviewState?: string;
   proposedAction?: string;
   search?: string;
+  match?: "active";
 };
 
 export type OneCDecisionInput = {
@@ -174,7 +175,7 @@ function parseBatchQuery(url: string): OneCBatchListQuery {
 
 function parseRowsQuery(url: string): OneCBatchRowsQuery {
   const query = new URL(url).searchParams;
-  assertKnownQuery(query, new Set(["page", "pageSize", "reviewState", "proposedAction", "search"]));
+  assertKnownQuery(query, new Set(["page", "pageSize", "reviewState", "proposedAction", "search", "match"]));
   const result: OneCBatchRowsQuery = {
     page: parsePositiveInteger(query.get("page"), 1),
     pageSize: parsePageSize(query.get("pageSize")),
@@ -194,6 +195,11 @@ function parseRowsQuery(url: string): OneCBatchRowsQuery {
     const normalized = search.trim();
     if (normalized.length < 1 || normalized.length > 160) throw invalid();
     result.search = normalized;
+  }
+  const match = query.get("match");
+  if (match !== null) {
+    if (match !== "active") throw invalid();
+    result.match = match;
   }
   return result;
 }
