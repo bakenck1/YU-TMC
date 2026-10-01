@@ -27,7 +27,7 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
           quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null,
         }, decision: null }], rowCount: 1 };
       }
-      if (sql.includes("array_agg(br.original_value)")) {
+      if (sql.includes("array_agg(br.original_value")) {
         return { rows: [
           { id: itemId, name: "Предмет сайта", inventory_number: "SITE-42", inventory_number_kind: "official", one_c_code: "00042", status: "active", version: 1, archived_at: null, official_barcodes: [] },
           { id: "55555555-5555-4555-8555-555555555555", name: "Удалённый предмет", inventory_number: "ARCHIVED-1", inventory_number_kind: "official", one_c_code: null, status: "active", version: 1, archived_at: new Date(), official_barcodes: [] },
