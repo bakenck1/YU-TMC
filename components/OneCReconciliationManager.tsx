@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { ButtonHTMLAttributes } from "react";
+import InventorySourceAuditPanel, { type AuditPage } from "@/components/InventorySourceAuditPanel";
+import MaterialSnapshotUploadPanel from "@/components/MaterialSnapshotUploadPanel";
+import type { MaterialSnapshotMetadata } from "@/lib/server/material-snapshot-service";
 
 type Row = Record<string, unknown>;
 type Page = { data: Row[]; page: number; pageSize: number; total: number };
 type Reason = "guid" | "code" | "inventory_number" | "barcode";
 type Candidate = { id: string; name: string; inventoryNumber: string; oneCCode: string | null; status: string; version: number; matchedBy: Reason[] };
 
-export default function OneCReconciliationManager({ initialBatches }: { initialBatches: Page }) {
+export default function OneCReconciliationManager({ initialBatches, initialSnapshot }: { initialBatches: Page; initialSnapshot?: MaterialSnapshotMetadata | null }) {
   const [selected, setSelected] = useState<Row | null>(null);
   const [rows, setRows] = useState<Page | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,6 +25,19 @@ export default function OneCReconciliationManager({ initialBatches }: { initialB
   const [candidateRowId, setCandidateRowId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candidateBusy, setCandidateBusy] = useState(false);
+  const [audit, setAudit] = useState<AuditPage | null>(null);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [activeSnapshot, setActiveSnapshot] = useState(initialSnapshot ?? null);
+
+  async function loadAudit(batch: Row, page: number, filters: { search?: string; result?: string; source?: string; pageSize?: number } = {}) {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(filters.pageSize ?? 50) });
+    if (filters.search?.trim()) params.set("search", filters.search.trim());
+    if (filters.result) params.set("result", filters.result);
+    if (filters.source) params.set("source", filters.source);
+    setAuditBusy(true);
+    try { const value = await request(`/api/integrations/1c/batches/${batch.id}/audit?${params}`); setAudit(value.audit as AuditPage); }
+    finally { setAuditBusy(false); }
+  }
 
   async function loadRows(batch: Row, page: number, overrides: { pageSize?: number; reviewState?: string; proposedAction?: string; match?: "" | "active"; search?: string } = {}) {
     const params = new URLSearchParams({ page: String(page), pageSize: String(overrides.pageSize ?? pageSize) });
@@ -37,8 +53,8 @@ export default function OneCReconciliationManager({ initialBatches }: { initialB
   }
 
   async function openBatch(batch: Row) {
-    setSelected(batch); setBusy(true); setError(null); setCandidateRowId(null); setCandidates([]); setMatchFilter(""); setReviewState(""); setProposedAction(""); setSearch("");
-    try { await loadRows(batch, 1, { match: "", reviewState: "", proposedAction: "", search: "" }); } catch { setError("Не удалось загрузить строки сверки"); } finally { setBusy(false); }
+    setSelected(batch); setAudit(null); setBusy(true); setError(null); setCandidateRowId(null); setCandidates([]); setMatchFilter(""); setReviewState(""); setProposedAction(""); setSearch("");
+    try { await loadRows(batch, 1, { match: "", reviewState: "", proposedAction: "", search: "" }); if ((batch.summary as Row | undefined)?.inventoryAudit) await loadAudit(batch, 1); } catch { setError("Не удалось загрузить строки сверки"); } finally { setBusy(false); }
   }
 
   async function analyze() {
@@ -51,8 +67,9 @@ export default function OneCReconciliationManager({ initialBatches }: { initialB
       setSelected(batch);
       setReviewState(""); setProposedAction(""); setMatchFilter("active"); setSearch("");
       await loadRows(batch, 1, { reviewState: "", proposedAction: "", match: "active", search: "" });
+      if ((batch.summary as Row | undefined)?.inventoryAudit) await loadAudit(batch, 1);
       setBusy(false);
-    } catch { setError("Анализ не выполнен. Обновите страницу и проверьте версию выгрузки."); setBusy(false); }
+    } catch (cause) { const code = cause instanceof Error ? cause.message : ""; setError(code.includes("material_snapshot") ? "Снимок Excel не загружен или повреждён. Dry-run не выполнен; обратитесь к администратору сервера." : code.includes("one_c_registry_empty") ? "Текущий реестр 1С пуст. Dry-run не выполнен." : "Анализ не выполнен. Обновите страницу и проверьте версию выгрузки и снимок Excel."); setBusy(false); }
   }
 
   async function decide(row: Row, decision: Row) {
@@ -107,11 +124,13 @@ export default function OneCReconciliationManager({ initialBatches }: { initialB
       {selected ? <div className="flex flex-wrap gap-2"><a href={`/api/integrations/1c/batches/${selected.id}/export`} className="rounded-xl border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700">Скачать Excel ({String(selected.received_count)})</a><button disabled={busy} onClick={() => void analyze()} className="rounded-xl bg-[#002060] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Запустить dry-run</button>{selected.state === "review_required" && !massBlocked ? <button disabled={busy} onClick={() => void transition("approve")} className="rounded-xl border px-4 py-2 text-sm">Утвердить</button> : null}{selected.state === "approved" && !massBlocked ? <button disabled={busy} onClick={() => void transition("publish")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm text-white">Опубликовать</button> : null}</div> : null}
     </header>
     {error ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+    <MaterialSnapshotUploadPanel initialSnapshot={initialSnapshot} onUploaded={(snapshot) => { setActiveSnapshot(snapshot); setAudit(null); setError(null); }} />
     {selected && massBlocked ? <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Это исторический снимок без исходного XML. Его можно просматривать, искать и выгружать в Excel, но утверждение и публикация заблокированы. Для публикации используйте новый полный XML-пакет от 1С.</p> : null}
     <BatchTable batches={initialBatches.data} onOpen={openBatch}/>
     {selected ? <section className="space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Card label="Всего" value={selected.received_count}/><Card label="Создано во входящем реестре" value={selected.created_count}/><Card label="Обновлено" value={selected.updated_count}/><Card label="Без изменений" value={selected.unchanged_count}/></div>
       {hasAnalysis ? <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h2 className="font-semibold text-emerald-900">Результат dry-run</h2><p className="mt-1 text-sm text-emerald-800">Точные совпадения с ТМЦ: {String(summary?.identifierMatched)}. Из них действующие в 1С и активные на сайте: {String(summary?.activeMatched)}. Конфликты: {String(summary?.conflicts)}. Название для поиска совпадений не используется.</p><button type="button" className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-sm font-medium text-emerald-900" onClick={() => { setMatchFilter("active"); setReviewState(""); setProposedAction(""); setBusy(true); void loadRows(selected, 1, { match: "active", reviewState: "", proposedAction: "" }).finally(() => setBusy(false)); }}>Показать активные совпадения</button></div> : null}
+      {audit ? <InventorySourceAuditPanel key={audit.run.id} batchId={String(selected.id)} audit={audit} activeSnapshotSha256={activeSnapshot?.sha256} busy={auditBusy} onLoad={(page, filters) => { void loadAudit(selected, page, filters).catch(() => setError("Не удалось загрузить сводку ТМЦ.")); }} /> : null}
       <div className="overflow-hidden rounded-2xl border border-black/5 bg-white">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-black/5 p-4"><div><h2 className="font-semibold">Строки сверки</h2><p className="text-xs text-zinc-500">{rows ? `Показано ${rows.total ? (rows.page - 1) * rows.pageSize + 1 : 0}–${Math.min(rows.page * rows.pageSize, rows.total)} из ${rows.total}` : "Загрузка списка"}</p></div>
           <form onSubmit={(event) => { event.preventDefault(); void reloadRows(); }} className="flex flex-wrap gap-2"><input aria-label="Поиск по строкам" value={search} onChange={(event) => setSearch(event.target.value)} className="min-w-64 rounded-lg border border-zinc-200 px-3 py-2" placeholder="GUID, код, номер, barcode, название"/><Filter value={matchFilter} label="Совпадения" onChange={(value) => { const match = value as "" | "active"; setMatchFilter(match); setBusy(true); void loadRows(selected, 1, { match }).catch(() => setError("Фильтр не применён")).finally(() => setBusy(false)); }} options={[["", "Все строки"], ["active", "Активные совпадения"]]}/><Filter value={reviewState} label="Статус проверки" onChange={(value) => { setReviewState(value); setBusy(true); void loadRows(selected, 1, { reviewState: value }).catch(() => setError("Фильтр не применён")).finally(() => setBusy(false)); }} options={[["", "Все статусы"], ["matched", "Найдено совпадение"], ["blocked", "Заблокировано"], ["conflict", "Конфликт"], ["excluded", "Исключено"], ["approved", "Подтверждено"], ["published", "Опубликовано"]]}/><Filter value={proposedAction} label="Действие" onChange={(value) => { setProposedAction(value); setBusy(true); void loadRows(selected, 1, { proposedAction: value }).catch(() => setError("Фильтр не применён")).finally(() => setBusy(false)); }} options={[["", "Все действия"], ["link", "Связать"], ["create", "Создать"], ["manual_review", "Ручная проверка"], ["exclude", "Исключить"]]}/><select aria-label="Строк на странице" value={pageSize} onChange={(event) => { const value = Number(event.target.value); setPageSize(value); setBusy(true); void loadRows(selected, 1, { pageSize: value }).finally(() => setBusy(false)); }} className="rounded-lg border border-zinc-200 px-3 py-2"><option value="50">50 строк</option><option value="100">100 строк</option></select><button className="rounded-lg border px-3 py-2">Найти</button></form>
@@ -133,7 +152,7 @@ export function CandidateList({ row, candidates, busy, decide }: { row: Row; can
 
 export function Filter({ value, label, onChange, options }: { value: string; label: string; onChange(value: string): void; options: string[][] }) { return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-lg border border-zinc-200 px-3 py-2">{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select>; }
 export function PageButton({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) { return <button type="button" {...props} className="rounded-lg border px-3 py-2 disabled:opacity-40">{children}</button>; }
-async function request(url: string, init?: RequestInit) { const response = await fetch(url, { ...init, credentials: "same-origin" }); if (!response.ok) throw new Error("request_failed"); return response.json() as Promise<Row>; }
+async function request(url: string, init?: RequestInit) { const response = await fetch(url, { ...init, credentials: "same-origin" }); if (!response.ok) { const body = await response.json().catch(() => null) as Row | null; throw new Error(String(body?.error ?? "request_failed")); } return response.json() as Promise<Row>; }
 function formatDate(value: unknown) { const date = new Date(String(value)); return Number.isNaN(date.valueOf()) ? "—" : new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date); }
 export function Card({ label, value }: { label: string; value: unknown }) { return <div className="rounded-2xl border border-black/5 bg-white p-4"><div className="text-xs text-zinc-500">{label}</div><div className="mt-1 text-xl font-semibold">{String(value ?? 0)}</div></div>; }
 const STATUS: Record<string, string> = { received: "Получено", analyzing: "Анализ", review_required: "Требует проверки", approved: "Утверждено", publishing: "Публикуется", published: "Опубликовано", failed: "Ошибка", rejected: "Отклонено", superseded: "Заменено", pending: "Ожидает анализа", ready: "Готово", matched: "Найдено совпадение", conflict: "Конфликт", blocked: "Заблокировано", excluded: "Исключено" };

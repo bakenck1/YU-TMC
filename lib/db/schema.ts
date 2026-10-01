@@ -2976,6 +2976,64 @@ export const oneCImportBatchRowsTable = inventorySchema.table(
   ],
 );
 
+export const materialSnapshotTable = inventorySchema.table("material_snapshots", {
+  id: uuid().primaryKey(),
+  filename: text().notNull(),
+  sha256: varchar({ length: 64 }).notNull().unique(),
+  byteSize: integer().notNull(),
+  sourceFile: binaryData("source_file").notNull(),
+  receivedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  acceptedCount: integer().notNull(),
+  skippedCount: integer().notNull(),
+}, (table) => [
+  check("material_snapshots_counts_check", sql`${table.byteSize} > 0 AND ${table.acceptedCount} >= 0 AND ${table.skippedCount} >= 0 AND octet_length(${table.sourceFile}) = ${table.byteSize}`),
+]);
+
+export const materialSnapshotSelectionTable = inventorySchema.table("material_snapshot_selection", {
+  id: integer().primaryKey().default(1),
+  snapshotId: uuid().notNull().references(() => materialSnapshotTable.id, { onDelete: "restrict" }),
+  selectedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  selectedBy: uuid().notNull().references(() => usersTable.id, { onDelete: "restrict" }),
+}, (table) => [check("material_snapshot_selection_singleton_check", sql`${table.id} = 1`)]);
+
+export const materialSnapshotRowsTable = inventorySchema.table("material_snapshot_rows", {
+  snapshotId: uuid().notNull().references(() => materialSnapshotTable.id, { onDelete: "restrict" }),
+  rowNumber: integer().notNull(),
+  nomenclature: text().notNull(),
+  inventoryNumber: text().notNull(),
+  numberKey: text().notNull(),
+  endingBalance: text(),
+}, (table) => [
+  primaryKey({ name: "material_snapshot_rows_pk", columns: [table.snapshotId, table.rowNumber] }),
+  index("material_snapshot_rows_number_idx").on(table.snapshotId, table.numberKey),
+]);
+
+export const inventorySourceAuditRunsTable = inventorySchema.table("inventory_source_audit_runs", {
+  id: uuid().primaryKey(),
+  batchId: uuid().notNull().references(() => oneCImportBatchesTable.id, { onDelete: "restrict" }),
+  batchVersion: integer().notNull(),
+  snapshotId: uuid().notNull().references(() => materialSnapshotTable.id, { onDelete: "restrict" }),
+  oneCRegistrySha256: varchar({ length: 64 }).notNull(),
+  runAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  counts: jsonb().$type<Record<string, number>>().notNull(),
+}, (table) => [index("inventory_source_audit_runs_batch_idx").on(table.batchId, table.runAt)]);
+
+export const inventorySourceAuditRowsTable = inventorySchema.table("inventory_source_audit_rows", {
+  runId: uuid().notNull().references(() => inventorySourceAuditRunsTable.id, { onDelete: "restrict" }),
+  itemId: uuid().notNull(),
+  itemName: text().notNull(),
+  siteNumber: text().notNull(),
+  numberKind: text().notNull(),
+  itemVersion: integer().notNull(),
+  result: varchar({ length: 24 }).notNull(),
+  source: varchar({ length: 24 }),
+  oneCMatches: jsonb().$type<unknown[]>().notNull(),
+  excelMatches: jsonb().$type<unknown[]>().notNull(),
+}, (table) => [
+  primaryKey({ name: "inventory_source_audit_rows_pk", columns: [table.runId, table.itemId] }),
+  index("inventory_source_audit_rows_result_idx").on(table.runId, table.result, table.source),
+]);
+
 export const itemOneCLinksTable = inventorySchema.table(
   "item_one_c_links",
   {

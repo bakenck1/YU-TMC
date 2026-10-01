@@ -8,6 +8,22 @@ const BATCH_ID = "11111111-1111-4111-8111-111111111111";
 describe("1C reconciliation manager", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("uploads the administrator's XLS and shows the selected snapshot hash", async () => {
+    const snapshot = { id: "11111111-1111-4111-8111-111111111111", filename: "материалы 2026.xls", sha256: "A".repeat(64), byteSize: 4, receivedAt: "2026-10-01T08:00:00.000Z", acceptedCount: 1, skippedCount: 2, selectedAt: "2026-10-01T08:00:00.000Z" };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ snapshot }), { status: 201, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<OneCReconciliationManager initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} />);
+    const file = new File(["test"], "материалы 2026.xls", { type: "application/vnd.ms-excel" });
+    fireEvent.change(screen.getByLabelText("Файл материальной ведомости XLS"), { target: { files: [file] } });
+    fireEvent.submit(screen.getByRole("button", { name: "Загрузить Excel" }).closest("form")!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/integrations/1c/material-snapshot");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBe(file);
+    expect(await screen.findByText("A".repeat(64))).toBeTruthy();
+  });
+
   it("shows all-row pagination and exposes a safe Excel export for a legacy snapshot", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ rows: {
       data: [], page: 1, pageSize: 50, total: 6552,

@@ -8,6 +8,7 @@ import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
 import { analyzeOneCFixedAsset, buildOneCPublicationPlan, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
+import { createInventorySourceAudit, getInventorySourceAuditPage, exportInventorySourceAudit, getInventorySourceExcelRow } from "@/lib/server/inventory-source-audit-service";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import type { OneCReconciliationAdminService, OneCAdminActor, OneCBatchListQuery, OneCBatchRowsQuery, OneCDecisionInput, OneCBulkDecisionInput, OneCPlanInput } from "@/lib/server/http/one-c-reconciliation-admin-handler";
 
@@ -47,6 +48,18 @@ export type OneCDecommissionedAssetPage = {
 
 export class OneCReconciliationService implements OneCReconciliationAdminService {
   constructor(private readonly pool: Pick<Pool, "query" | "connect"> = getDatabasePool()) {}
+
+  getInventoryAuditPage(batchId: string, query: { page: number; pageSize: number; search?: string; result?: string; source?: string }) {
+    return getInventorySourceAuditPage(this.pool, batchId, query);
+  }
+
+  exportInventoryAudit(batchId: string) {
+    return exportInventorySourceAudit(this.pool, batchId);
+  }
+
+  getInventoryAuditExcelRow(batchId: string, rowNumber: number) {
+    return getInventorySourceExcelRow(this.pool, batchId, rowNumber);
+  }
 
   async listBatches(query: OneCBatchListQuery, actor?: OneCAdminActor) {
     void actor;
@@ -174,7 +187,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       await client.query(`update "yu_inventory"."one_c_import_batches" set state='analyzing' where id=$1`, [batchId]);
       const [rows, candidates, links] = await Promise.all([
         client.query(`select * from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]),
-        client.query(`select i.id, i.inventory_number, i.one_c_code, i.status, i.version, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id group by i.id`),
+        client.query(`select i.id, i.name, i.inventory_number, i.inventory_number_kind, i.one_c_code, i.status, i.version, i.archived_at, coalesce(array_agg(br.original_value) filter (where br.kind='official'), '{}') as official_barcodes from "yu_inventory"."items" i left join "yu_inventory"."barcode_registry" br on br.item_id=i.id group by i.id`),
         client.query(`select external_id,item_id,source_code from "yu_inventory"."item_one_c_links"`),
       ]);
       const linkMap = new Map(links.rows.map((r) => [String(r.external_id), String(r.item_id)]));
@@ -275,7 +288,8 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       const existingSummary = typeof batch.summary === "object" && batch.summary !== null
         ? batch.summary as Record<string, unknown>
         : {};
-      await client.query(`update "yu_inventory"."one_c_import_batches" set state='review_required',review_started_at=coalesce(review_started_at,now()),summary=$2::jsonb,version=version+1 where id=$1`, [batchId, JSON.stringify({ ...existingSummary, ...summary, plan })]);
+      const inventoryAudit = await createInventorySourceAudit(client, batchId, Number(batch.version) + 1, candidates.rows, links.rows);
+      await client.query(`update "yu_inventory"."one_c_import_batches" set state='review_required',review_started_at=coalesce(review_started_at,now()),summary=$2::jsonb,version=version+1 where id=$1`, [batchId, JSON.stringify({ ...existingSummary, ...summary, plan, inventoryAudit })]);
       await client.query("commit");
       return plan;
     } catch (error) { await client.query("rollback").catch(() => undefined); throw error; }

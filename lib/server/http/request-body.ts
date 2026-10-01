@@ -99,9 +99,10 @@ export async function readLimitedJson(
 export async function readLimitedFormData(
   request: Request,
   maximumBytes: number,
+  options: { timeoutMs?: number } = {},
 ): Promise<FormData> {
   requireMediaType(request, "multipart/form-data");
-  const bytes = await readLimitedBody(request, maximumBytes);
+  const bytes = await readLimitedBody(request, maximumBytes, options);
   const boundedBody = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(boundedBody).set(bytes);
   const boundedRequest = new Request(request.url, {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
+import * as XLSX from "xlsx";
 
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { closeDatabase } from "@/lib/db/client";
@@ -9,6 +10,7 @@ import { createPostgresPool } from "@/lib/db/pool";
 import { oneCFixedAssetPayload, parseOneCFixedAssets, type OneCFixedAsset } from "@/lib/server/integrations/one-c-fixed-assets";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
+import { getSelectedMaterialSnapshot, uploadMaterialSnapshot } from "@/lib/server/material-snapshot-service";
 
 let migrationConfig: DatabaseConfig;
 let runtimeConfig: DatabaseConfig;
@@ -30,7 +32,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     migrationPool = createPostgresPool(migrationConfig, { max: 2 });
     runtimePool = createPostgresPool(runtimeConfig, { max: 4 });
   });
-  beforeEach(async () => { await migrationPool.query('truncate table "yu_inventory"."one_c_publication_runs", "yu_inventory"."item_one_c_links", "yu_inventory"."one_c_import_batch_rows", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_import_batches"'); });
+  beforeEach(async () => { await migrationPool.query('truncate table "yu_inventory"."inventory_source_audit_rows", "yu_inventory"."inventory_source_audit_runs", "yu_inventory"."one_c_publication_runs", "yu_inventory"."item_one_c_links", "yu_inventory"."one_c_import_batch_rows", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_import_batches"'); });
   afterAll(async () => {
     await runtimePool?.end(); await migrationPool?.end(); await closeDatabase(); await resetSchemas(migrationConfig);
   });
@@ -50,6 +52,33 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await expect(migrationPool.query<{ exists: boolean }>(
       `select exists(select 1 from pg_constraint where conname = 'one_c_fixed_asset_inbox_payload_hash_check') as exists`,
     )).resolves.toMatchObject({ rows: [{ exists: true }] });
+  });
+
+  it("stores an uploaded XLS privately, selects it for dry-run, and reuses identical bytes", async () => {
+    const userId = "e50d9aec-b46b-4e28-835b-119249259e76";
+    await migrationPool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
+      values($1,'xls-admin','xls-admin@example.test','XLS admin','admin',now(),now())`, [userId]);
+    const header: unknown[] = Array(12).fill("");
+    header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
+    const row: unknown[] = Array(12).fill("");
+    row[0] = 1; row[1] = "холодильник №1350/16812 от 06.11.2025"; row[11] = 0;
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, row]), "Лист_1");
+    const bytes = Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" }));
+    const first = await uploadMaterialSnapshot("материалы 2026.xls", bytes, userId, runtimePool);
+    expect(first).toMatchObject({ filename: "материалы 2026.xls", acceptedCount: 1, skippedCount: 0, byteSize: bytes.length });
+    expect(await getSelectedMaterialSnapshot(runtimePool)).toEqual(first);
+    const second = await uploadMaterialSnapshot("материалы 2026.xls", bytes, userId, runtimePool);
+    expect(second.id).toBe(first.id);
+    const stored = await runtimePool.query<{ source_file: Buffer; count: number }>(`select s.source_file,count(r.*)::int count from "yu_inventory"."material_snapshots" s
+      join "yu_inventory"."material_snapshot_rows" r on r.snapshot_id=s.id where s.id=$1 group by s.id`, [first.id]);
+    expect(stored.rows[0]?.source_file.equals(bytes)).toBe(true);
+    expect(stored.rows[0]?.count).toBe(1);
+    const auditItemForeignKey = await migrationPool.query<{ count: number }>(`select count(*)::int count from pg_constraint
+      where conname='inventory_source_audit_rows_item_id_items_id_fk'`);
+    expect(auditItemForeignKey.rows[0]?.count).toBe(0);
+    await expect(runtimePool.query(`update "yu_inventory"."material_snapshots" set filename='changed.xls' where id=$1`, [first.id])).rejects.toThrow(/immutable/);
+    await expect(uploadMaterialSnapshot("bad.xls", Buffer.from("fake"), userId, runtimePool)).rejects.toThrow();
   });
 
   it("creates an immutable, idempotent import snapshot alongside the inbox projection", async () => {
