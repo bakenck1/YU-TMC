@@ -28,10 +28,16 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
         }, decision: null }], rowCount: 1 };
       }
       if (sql.includes("array_agg(br.original_value)")) {
-        return { rows: [{ id: itemId, inventory_number: "SITE-42", one_c_code: "00042", status: "active", version: 1, official_barcodes: [] }], rowCount: 1 };
+        return { rows: [
+          { id: itemId, name: "Предмет сайта", inventory_number: "SITE-42", inventory_number_kind: "official", one_c_code: "00042", status: "active", version: 1, archived_at: null, official_barcodes: [] },
+          { id: "55555555-5555-4555-8555-555555555555", name: "Удалённый предмет", inventory_number: "ARCHIVED-1", inventory_number_kind: "official", one_c_code: null, status: "active", version: 1, archived_at: new Date(), official_barcodes: [] },
+        ], rowCount: 2 };
       }
       if (sql.startsWith("select external_id,item_id,source_code")) return { rows: [], rowCount: 0 };
-      if (sql.includes("from jsonb_to_recordset")) {
+      if (sql.includes("material_snapshots") && sql.startsWith("select")) return { rows: [{ id: "44444444-4444-4444-8444-444444444444", sha256: "ae42981816c9498a24710c7517fc5863b77ba6ea75b9d89799ab2f808faecd00", accepted_count: 0 }], rowCount: 1 };
+      if (sql.includes("material_snapshot_rows") && sql.startsWith("select")) return { rows: [], rowCount: 0 };
+      if (sql.includes("one_c_fixed_asset_inbox") && sql.startsWith("select")) return { rows: [{ external_id: externalId, payload_hash: "a".repeat(64), payload: { externalId, code: "OTHER", inventoryNumber: "DIFFERENT", barcode: null, name: "Другая запись текущего реестра", status: "Принято к учёту" } }], rowCount: 1 };
+      if (sql.includes("update \"yu_inventory\".\"one_c_import_batch_rows\"")) {
         rowUpdateCount += 1;
         rowUpdate = (JSON.parse(String(values?.[1])) as Record<string, unknown>[])[0];
         return { rows: [], rowCount: 1 };
@@ -55,5 +61,6 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
   assert.equal(rowUpdate?.review_state, "matched");
   assert.equal(savedSummary?.identifierMatched, 1);
   assert.equal(savedSummary?.activeMatched, 1);
+  assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: 0, excelOnly: 0, both: 0, missing: 1, temporary: 0 });
   assert.equal(plan.link, 1);
 });
