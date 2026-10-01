@@ -6,7 +6,7 @@ import { exportInventorySourceAuditExcel } from "../lib/server/excel/inventory-s
 test("audit workbook mirrors item rows, retains duplicate details and writes untrusted cells as text", async () => {
   const bytes = await exportInventorySourceAuditExcel({
     run: { batch_id: "batch-1", batch_version: 4, batch_sha256: "a".repeat(64), one_c_registry_sha256: "c".repeat(64), filename: "материалы 2026.xls", sha256: "b".repeat(64), run_at: new Date("2026-10-01T08:00:00Z"), counts: { total: 1, oneCOnly: 0, excelOnly: 1, both: 0, missing: 0, temporary: 0 } },
-    rows: [{ itemId: "item-1", itemName: "Ноутбук", siteNumber: "1350-00065", numberKind: "official", itemVersion: 1, result: "matched", source: "excel", oneC: [], excel: [{ rowNumber: 13, inventoryNumber: "1350-00065", nomenclature: "=HYPERLINK(\"bad\")", endingBalance: "0" }, { rowNumber: 100, inventoryNumber: "1350-00065", nomenclature: "ноутбук", endingBalance: "0" }] }],
+    rows: [{ itemId: "item-1", itemName: "Ноутбук", siteNumber: "1350-00065", siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: "excel", oneC: [], excel: [{ rowNumber: 13, inventoryNumber: "1350-00065", nomenclature: "=HYPERLINK(\"bad\")", endingBalance: "0" }, { rowNumber: 100, inventoryNumber: "1350-00065", nomenclature: "ноутбук", endingBalance: "0" }] }],
   });
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);

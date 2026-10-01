@@ -3023,6 +3023,7 @@ export const inventorySourceAuditRowsTable = inventorySchema.table("inventory_so
   itemId: uuid().notNull(),
   itemName: text().notNull(),
   siteNumber: text().notNull(),
+  siteBarcodes: jsonb().$type<{ value: string; kind: "official" | "local" }[]>().notNull().default(sql`'[]'::jsonb`),
   numberKind: text().notNull(),
   itemVersion: integer().notNull(),
   result: varchar({ length: 24 }).notNull(),

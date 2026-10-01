@@ -45,7 +45,8 @@ export default function MaterialSnapshotUploadPanel({ initialSnapshot, onUploade
     {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
     {snapshot ? <div className="mt-3 text-sm text-zinc-700">
       <p>Активный снимок: <strong>{snapshot.filename}</strong> · загружен {new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(snapshot.receivedAt))} · выбран {new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(snapshot.selectedAt))}</p>
-      <p>Принято строк: {snapshot.acceptedCount}; пропущено: {snapshot.skippedCount}; размер: {snapshot.byteSize} байт.</p>
+      <p>Строк с инвентарным № для точного поиска: {snapshot.acceptedCount}; строк без инвентарного №: {snapshot.skippedCount}; размер: {snapshot.byteSize} байт.</p>
+      <p className="text-xs text-zinc-500">Все строки ведомости прочитаны. Строки без № не дают автоматического совпадения по одному названию или коду Excel.</p>
       <p>SHA-256: <code className="break-all">{snapshot.sha256}</code></p>
     </div> : <p className="mt-3 text-sm text-amber-800">Снимок Excel ещё не загружен. Для общего dry-run загрузите XLS.</p>}
   </section>;

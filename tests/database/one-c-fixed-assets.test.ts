@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import * as XLSX from "xlsx";
 
@@ -11,6 +12,7 @@ import { oneCFixedAssetPayload, parseOneCFixedAssets, type OneCFixedAsset } from
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
 import { getSelectedMaterialSnapshot, uploadMaterialSnapshot } from "@/lib/server/material-snapshot-service";
+import { OneCReconciliationService } from "@/lib/server/one-c-reconciliation-service";
 
 let migrationConfig: DatabaseConfig;
 let runtimeConfig: DatabaseConfig;
@@ -79,6 +81,53 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(auditItemForeignKey.rows[0]?.count).toBe(0);
     await expect(runtimePool.query(`update "yu_inventory"."material_snapshots" set filename='changed.xls' where id=$1`, [first.id])).rejects.toThrow(/immutable/);
     await expect(uploadMaterialSnapshot("bad.xls", Buffer.from("fake"), userId, runtimePool)).rejects.toThrow();
+  });
+
+  it("runs the real dry-run against PostgreSQL with an Excel number and an active site barcode", async () => {
+    const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID();
+    const groupId = randomUUID(), externalId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Audit admin','admin',now(),now())`, [userId, `audit-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    await runtimePool.query(`insert into "yu_inventory"."buildings"(id,name,name_key,address,address_key,created_by,updated_by)
+      values($1,'Audit building',$2,'Audit address',$2,$3,$3)`, [buildingId, `audit-${buildingId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."rooms"(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+      values($1,$2,'101',$3,1,$4,$4)`, [roomId, buildingId, `audit-${roomId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      values($1,'Ноутбук',1,100,$2,'official',$3,$4,$5,$5)`, [itemId, roomId, "1350-00065", "1350-00065", userId]);
+    const sequence = await runtimePool.query<{ value: string }>(`select nextval('"yu_inventory"."local_barcode_sequence"')::text as value`);
+    const localBarcode = `1350-00065-${sequence.rows[0]!.value.padStart(4, "0")}`;
+    await runtimePool.query(`insert into "yu_inventory"."local_item_groups"
+      (id,item_id,sequence_number,barcode_value,barcode_key,quantity,responsible_user_id,room_id,created_by)
+      values($1,$2,$3,$4,$5,1,$6,$7,$6)`, [groupId, itemId, sequence.rows[0]!.value, localBarcode, localBarcode.toLowerCase(), userId, roomId]);
+
+    const header: unknown[] = Array(12).fill(""); header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
+    const row: unknown[] = Array(12).fill(""); row[0] = 1; row[1] = "ноутбук №1350-00065"; row[11] = 0;
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, row]), "Лист_1");
+    await uploadMaterialSnapshot("материалы 2026.xls", Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" })), userId, runtimePool);
+
+    const oneCAsset: OneCFixedAsset = { ...asset, externalId, code: null, inventoryNumber: null, barcode: localBarcode, name: "Ноутбук" };
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([oneCAsset], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "audit.xml" });
+    const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" order by received_at desc limit 1`);
+    const reconciliation = new OneCReconciliationService(runtimePool);
+    await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
+    const audit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    const found = audit.data.find((entry) => entry.itemId === itemId);
+    expect(found?.source).toBe("1c+excel");
+    expect(found?.oneC[0]?.matchedBy).toContain("barcode");
+    expect(found?.oneC[0]?.matchedBarcodes).toContain(localBarcode);
+    expect(found?.excel[0]?.inventoryNumber).toBe("1350-00065");
+    expect(audit.run.counts.total).toBe(audit.data.length);
+    const searched = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50, search: localBarcode });
+    expect(searched.data.map((entry) => entry.itemId)).toContain(itemId);
+    const planRow = await runtimePool.query<{ proposed_action: string; matched_item_id: string | null }>(
+      `select proposed_action,matched_item_id from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and external_id=$2`,
+      [batch.rows[0]!.id, externalId],
+    );
+    expect(planRow.rows[0]?.proposed_action).not.toBe("link");
+    expect(planRow.rows[0]?.matched_item_id).toBeNull();
+    const links = await runtimePool.query<{ count: number }>(`select count(*)::int as count from "yu_inventory"."item_one_c_links" where item_id=$1`, [itemId]);
+    expect(links.rows[0]?.count).toBe(0);
   });
 
   it("creates an immutable, idempotent import snapshot alongside the inbox projection", async () => {
