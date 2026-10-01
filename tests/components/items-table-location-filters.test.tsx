@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ItemsTable from "@/components/ItemsTable";
@@ -187,10 +187,150 @@ describe("ItemsTable adversarial location filters", () => {
   });
 });
 
-function renderTable() {
+describe("ItemsTable inventory search suggestions", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/items");
+  });
+
+  it("offers unique inventory names on focus with no typing or search history, including later pages", () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      ...ITEMS[0],
+      id: `item-${index}`,
+      name: `Моноблок ${index + 1}`,
+    }));
+    renderTable([...items, { ...items[0], id: "duplicate", name: "  МОНОБЛОК  1  " }]);
+
+    expect(screen.queryAllByText("Моноблок 12")).toHaveLength(0);
+    fireEvent.focus(searchInput());
+
+    expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(12);
+    expect(screen.getByRole("option", { name: "Моноблок 12" })).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Моноблок 1" })).not.toBeNull();
+  });
+
+  it("offers only names from the applied room and refreshes them when the room changes", () => {
+    renderTable();
+    openFilters();
+    choose("items.filterRoom", "101");
+    applyFilters();
+    fireEvent.focus(searchInput());
+
+    expect(screen.getByRole("option", { name: "Main 101" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Main 1010" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Annex A201" })).toBeNull();
+
+    fireEvent.keyDown(searchInput(), { key: "Escape" });
+    openFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), {
+      target: { value: "" },
+    });
+    choose("items.filterRoom", "A201");
+    applyFilters();
+    fireEvent.focus(searchInput());
+
+    expect(screen.getByRole("option", { name: "Annex A201" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Main 101" })).toBeNull();
+  });
+
+  it("uses all applied filters, while a draft room does not change suggestions", () => {
+    renderTable([
+      { ...ITEMS[0], name: "Моноблок", category: "electronics" },
+      { ...ITEMS[1], name: "Стол", category: "furniture" },
+    ]);
+    openFilters();
+    choose("items.filterRoom", "1010");
+    fireEvent.focus(searchInput());
+    expect(screen.getByRole("option", { name: "Моноблок" })).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Стол" })).not.toBeNull();
+
+    fireEvent.keyDown(searchInput(), { key: "Escape" });
+    fireEvent.change(screen.getByRole("combobox", { name: "items.type" }), {
+      target: { value: "electronics" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), {
+      target: { value: "" },
+    });
+    applyFilters();
+    fireEvent.focus(searchInput());
+    expect(screen.getByRole("option", { name: "Моноблок" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Стол" })).toBeNull();
+  });
+
+  it("selects a name by mouse, filters the rows, and returns to page one", () => {
+    renderTable(Array.from({ length: 12 }, (_, index) => ({
+      ...ITEMS[0], id: `item-${index}`, name: `Equipment ${index + 1}`,
+    })));
+    fireEvent.click(screen.getByRole("button", { name: "common.next" }));
+    fireEvent.focus(searchInput());
+    fireEvent.click(screen.getByRole("option", { name: "Equipment 12" }));
+
+    expect(searchInput().value).toBe("Equipment 12");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByText('items.range:{"from":1,"to":1,"total":1}')).not.toBeNull();
+    expect(screen.getAllByRole("link").every((link) => link.textContent === "Equipment 12")).toBe(true);
+  });
+
+  it("narrows suggestions as the user types and selects with arrows and Enter", () => {
+    renderTable([
+      { ...ITEMS[0], name: "Моноблок" },
+      { ...ITEMS[1], name: "Принтер" },
+    ]);
+    fireEvent.focus(searchInput());
+    fireEvent.change(searchInput(), { target: { value: "  МОНО  " } });
+    expect(screen.getByRole("option", { name: "Моноблок" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Принтер" })).toBeNull();
+    fireEvent.keyDown(searchInput(), { key: "ArrowDown" });
+    const selectedOption = screen.getByRole("option", { name: "Моноблок", selected: true });
+    expect(searchInput().getAttribute("aria-activedescendant")).toBe(selectedOption.id);
+    fireEvent.keyDown(searchInput(), { key: "Enter" });
+
+    expect(searchInput().value).toBe("Моноблок");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expectHidden("Принтер");
+    fireEvent.click(searchInput());
+    expect(screen.getByRole("listbox")).not.toBeNull();
+    fireEvent.keyDown(searchInput(), { key: "Escape" });
+    expect(searchInput().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("excludes history from other rooms and avoids duplicating names in history", async () => {
+    window.localStorage.setItem(
+      "yu-inventory:item-search-history:v1:test",
+      JSON.stringify(["Main 101", "Annex A201", "INV-main-101", "INV-annex-a201"]),
+    );
+    render(<ItemsTable items={ITEMS} searchHistoryScope="test" />);
+    openFilters();
+    choose("items.filterRoom", "101");
+    applyFilters();
+    fireEvent.focus(searchInput());
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "INV-main-101" })).not.toBeNull());
+    expect(screen.getAllByRole("option", { name: "Main 101" })).toHaveLength(1);
+    expect(screen.queryByRole("option", { name: "Annex A201" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "INV-annex-a201" })).toBeNull();
+  });
+
+  it("does not offer inventory from elsewhere for an empty room", () => {
+    renderTable();
+    openFilters();
+    choose("items.filterBuilding", "Tech Park");
+    choose("items.filterRoom", "404");
+    applyFilters();
+    fireEvent.focus(searchInput());
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(searchInput().getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+function searchInput() {
+  return screen.getByRole("combobox", { name: "common.search" }) as HTMLInputElement;
+}
+
+function renderTable(items = ITEMS) {
   return render(
     <ItemsTable
-      items={ITEMS}
+      items={items}
       locations={{ buildings: BUILDINGS, rooms: ROOMS }}
     />,
   );

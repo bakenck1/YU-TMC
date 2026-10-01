@@ -44,7 +44,7 @@ test("search history menu retains keyboard focus and supports Escape", async () 
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /event\.key === "Enter"/);
   assert.match(source, /visibleSearchHistory/);
-  assert.match(source, /entry\.toLocaleLowerCase\(\)\.includes\(normalizedQuery\)/);
+  assert.match(source, /normalizedLocationValue\(entry\)\.includes\(normalizedQuery\)/);
   assert.match(source, /function InventoryFilterInput/);
   assert.match(source, /item-filter-history:v1/);
   assert.match(source, /historyStorageKey=\{filterHistoryStorageKey/);

@@ -65,7 +65,7 @@ describe("ItemsTable summary synchronization", () => {
   it("updates both rows and all four cards immediately from the search string", () => {
     render(<ItemsTable items={ITEMS} showSummary />);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "common.search" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "common.search" }), {
       target: { value: "Beta" },
     });
 

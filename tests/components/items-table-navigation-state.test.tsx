@@ -58,7 +58,7 @@ describe("ItemsTable navigation state", () => {
       />,
     );
 
-    const search = screen.getByRole("textbox", { name: "common.search" });
+    const search = screen.getByRole("combobox", { name: "common.search" });
     fireEvent.change(search, { target: { value: "Item" } });
     fireEvent.click(screen.getByRole("button", { name: /^items\.filters/ }));
     fireEvent.change(screen.getByLabelText("itemDetails.brand"), {
@@ -100,7 +100,7 @@ describe("ItemsTable navigation state", () => {
     );
 
     expect(
-      (screen.getByRole("textbox", { name: "common.search" }) as HTMLInputElement)
+      (screen.getByRole("combobox", { name: "common.search" }) as HTMLInputElement)
         .value,
     ).toBe("Item");
     expect(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Columns3, Search, SlidersHorizontal } from "lucide-react";
@@ -274,6 +274,8 @@ export default function ItemsTable({
   const [query, setQuery] = useState(startingViewState.query);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [activeSearchOption, setActiveSearchOption] = useState<string | null>(null);
+  const searchOptionsId = useId();
   const [filters, setFilters] = useState({ ...startingViewState.filters });
   const [draftFilters, setDraftFilters] = useState({ ...startingViewState.filters });
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
@@ -432,13 +434,37 @@ export default function ItemsTable({
       .filter((room) => selectedFloorNumber === undefined || room.floorNumber === selectedFloorNumber)
       .map((room) => room.designation),
   )].sort(compareLocationValues);
-  const visibleSearchHistory = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return searchHistory;
-    return searchHistory.filter((entry) =>
-      entry.toLocaleLowerCase().includes(normalizedQuery),
+  const searchItems = useMemo(
+    () => filterInventoryItems(items, { ...filters, query: "" }),
+    [items, filters],
+  );
+  const searchSuggestions = useMemo(() => {
+    const names = new Map<string, string>();
+    searchItems.forEach((item) => {
+      const name = item.name.trim();
+      const key = normalizedLocationValue(name);
+      if (key && !names.has(key)) names.set(key, name);
+    });
+    return [...names.values()].sort(compareLocationValues);
+  }, [searchItems]);
+  const visibleSearchSuggestions = useMemo(() => {
+    const normalizedQuery = normalizedLocationValue(query);
+    return searchSuggestions.filter((name) =>
+      normalizedLocationValue(name).includes(normalizedQuery),
     );
-  }, [query, searchHistory]);
+  }, [query, searchSuggestions]);
+  const visibleSearchHistory = useMemo(() => {
+    const normalizedQuery = normalizedLocationValue(query);
+    const suggestionKeys = new Set(searchSuggestions.map(normalizedLocationValue));
+    return searchHistory.filter((entry) =>
+      normalizedLocationValue(entry).includes(normalizedQuery) &&
+      !suggestionKeys.has(normalizedLocationValue(entry)) &&
+      filterInventoryItems(searchItems, { ...EMPTY_TABLE_FILTERS, query: entry }).length > 0,
+    );
+  }, [query, searchHistory, searchItems, searchSuggestions]);
+  const searchOptions = [...visibleSearchSuggestions, ...visibleSearchHistory];
+  const searchOptionsVisible = searchFocused && searchOptions.length > 0;
+  const activeSearchOptionIndex = searchOptions.indexOf(activeSearchOption ?? "");
 
   const filtered = useMemo(() => {
     return filterInventoryItems(items, {
@@ -536,6 +562,7 @@ export default function ItemsTable({
     setQuery(value);
     setPage(1);
     setSearchFocused(false);
+    setActiveSearchOption(null);
     setSearchHistory((current) => {
       const next = addSearchHistoryEntry(current, value);
       if (searchHistoryStorageKey) saveSearchHistory(searchHistoryStorageKey, next);
@@ -706,6 +733,7 @@ export default function ItemsTable({
           onFocus={() => {
             if (searchFocusTimeoutRef.current) window.clearTimeout(searchFocusTimeoutRef.current);
             setSearchFocused(true);
+            setActiveSearchOption(null);
           }}
           onBlur={(event) => {
             if (event.currentTarget.contains(event.relatedTarget)) return;
@@ -714,11 +742,30 @@ export default function ItemsTable({
         >
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={searchOptionsVisible}
+            aria-controls={searchOptionsVisible ? searchOptionsId : undefined}
+            aria-activedescendant={searchOptionsVisible && activeSearchOptionIndex >= 0 ? `${searchOptionsId}-${activeSearchOptionIndex}` : undefined}
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+            onChange={(event) => { setQuery(event.target.value); setPage(1); setSearchFocused(true); setActiveSearchOption(null); }}
             onKeyDown={(event) => {
+              if ((event.key === "ArrowDown" || event.key === "ArrowUp") && searchOptions.length > 0) {
+                event.preventDefault();
+                const nextIndex = activeSearchOptionIndex < 0
+                  ? event.key === "ArrowDown" ? 0 : searchOptions.length - 1
+                  : (activeSearchOptionIndex + (event.key === "ArrowDown" ? 1 : -1) + searchOptions.length) % searchOptions.length;
+                setSearchFocused(true);
+                setActiveSearchOption(searchOptions[nextIndex]);
+                document.getElementById(`${searchOptionsId}-${nextIndex}`)?.scrollIntoView({ block: "nearest" });
+              }
               if (event.key === "Escape") setSearchFocused(false);
               if (event.key === "Enter") {
+                if (searchOptionsVisible && activeSearchOptionIndex >= 0) {
+                  event.preventDefault();
+                  selectSearchQuery(searchOptions[activeSearchOptionIndex]);
+                  return;
+                }
                 rememberCurrentSearch();
                 setSearchFocused(false);
               }
@@ -728,21 +775,39 @@ export default function ItemsTable({
             aria-label={t("common.search")}
             className="w-full rounded-xl border border-black/10 bg-zinc-50 py-2.5 pl-9 pr-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 md:text-sm"
           />
-          {searchFocused && visibleSearchHistory.length ? (
-            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg">
-              <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-zinc-500">
-                <span>{t("items.recentSearches")}</span>
-                <button type="button" onClick={clearSearchHistory} className="rounded text-emerald-700 hover:underline">{t("items.clearRecentSearches")}</button>
-              </div>
-              <ul className="border-t border-black/5 py-1">
-                {visibleSearchHistory.map((entry) => (
-                  <li key={entry}>
-                    <button type="button" onClick={() => selectSearchQuery(entry)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50">
-                      <Search className="h-3.5 w-3.5 text-zinc-400" /> {entry}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+          {searchOptionsVisible ? (
+            <div id={searchOptionsId} role="listbox" aria-label={t("common.search")} className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-black/10 bg-white shadow-lg">
+              {visibleSearchSuggestions.length > 0 ? (
+                <>
+                  <div className="px-3 py-2 text-xs text-zinc-500">{t("items.name")}</div>
+                  <ul className="border-t border-black/5 py-1">
+                    {visibleSearchSuggestions.map((entry, index) => (
+                      <li key={entry}>
+                        <button id={`${searchOptionsId}-${index}`} role="option" aria-selected={activeSearchOption === entry} type="button" onClick={() => selectSearchQuery(entry)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 ${activeSearchOption === entry ? "bg-zinc-100" : ""}`}>
+                          <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" /> <span>{entry}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {visibleSearchHistory.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-zinc-500">
+                    <span>{t("items.recentSearches")}</span>
+                    <button type="button" onClick={clearSearchHistory} className="rounded text-emerald-700 hover:underline">{t("items.clearRecentSearches")}</button>
+                  </div>
+                  <ul className="border-t border-black/5 py-1">
+                    {visibleSearchHistory.map((entry, index) => (
+                      <li key={entry}>
+                        <button id={`${searchOptionsId}-${visibleSearchSuggestions.length + index}`} role="option" aria-selected={activeSearchOption === entry} type="button" onClick={() => selectSearchQuery(entry)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 ${activeSearchOption === entry ? "bg-zinc-100" : ""}`}>
+                          <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" /> <span>{entry}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
             </div>
           ) : null}
           </div>
