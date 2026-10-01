@@ -18,7 +18,7 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
   if (!registry.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
   const oneCRegistrySha256 = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
   if (xls.rows.length !== Number(snapshot.rows[0].accepted_count)) throw new Error("material_snapshot_row_count_mismatch");
-  const items: AuditItem[] = candidateRows.filter((row) => row.archived_at == null).map((row) => ({ id: String(row.id), name: String(row.name), inventoryNumber: String(row.inventory_number), inventoryNumberKind: String(row.inventory_number_kind), oneCCode: nullable(row.one_c_code), version: Number(row.version), officialBarcodes: strings(row.official_barcodes), sourceCodes: linkRows.filter((link) => link.item_id === row.id).map((link) => String(link.source_code ?? "")).filter(Boolean) }));
+  const items: AuditItem[] = candidateRows.filter((row) => row.archived_at == null).map((row) => ({ id: String(row.id), name: String(row.name), inventoryNumber: String(row.inventory_number), inventoryNumberKind: String(row.inventory_number_kind), oneCCode: nullable(row.one_c_code), version: Number(row.version), officialBarcodes: strings(row.official_barcodes), localBarcodes: strings(row.local_barcodes), sourceCodes: linkRows.filter((link) => link.item_id === row.id).map((link) => String(link.source_code ?? "")).filter(Boolean) }));
   const assets: AuditOneCRow[] = registry.rows.map((row) => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset }));
   const excel: ExcelSourceRow[] = xls.rows.map((row) => ({ rowNumber: Number(row.row_number), nomenclature: String(row.nomenclature), inventoryNumber: String(row.inventory_number), endingBalance: nullable(row.ending_balance) }));
   const links = linkRows.map((row) => ({ externalId: String(row.external_id), itemId: String(row.item_id) }));
@@ -27,10 +27,10 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
   const id = randomUUID();
   await client.query(`insert into ${SCHEMA}."inventory_source_audit_runs"(id,batch_id,batch_version,snapshot_id,one_c_registry_sha256,counts) values($1,$2,$3,$4,$5,$6::jsonb)`, [id, batchId, batchVersion, snapshot.rows[0].id, oneCRegistrySha256, JSON.stringify(counts)]);
   for (let start = 0; start < rows.length; start += 500) {
-    const chunk = rows.slice(start, start + 500).map((row) => ({ item_id: row.itemId, item_name: row.itemName, site_number: row.siteNumber, number_kind: row.numberKind, item_version: row.itemVersion, result: row.result, source: row.source, one_c_matches: row.oneC, excel_matches: row.excel }));
-    await client.query(`insert into ${SCHEMA}."inventory_source_audit_rows"(run_id,item_id,item_name,site_number,number_kind,item_version,result,source,one_c_matches,excel_matches)
-      select $1,x.item_id,x.item_name,x.site_number,x.number_kind,x.item_version,x.result,x.source,x.one_c_matches,x.excel_matches
-      from jsonb_to_recordset($2::jsonb) as x(item_id uuid,item_name text,site_number text,number_kind text,item_version integer,result text,source text,one_c_matches jsonb,excel_matches jsonb)`, [id, JSON.stringify(chunk)]);
+    const chunk = rows.slice(start, start + 500).map((row) => ({ item_id: row.itemId, item_name: row.itemName, site_number: row.siteNumber, site_barcodes: row.siteBarcodes, number_kind: row.numberKind, item_version: row.itemVersion, result: row.result, source: row.source, one_c_matches: row.oneC, excel_matches: row.excel }));
+    await client.query(`insert into ${SCHEMA}."inventory_source_audit_rows"(run_id,item_id,item_name,site_number,site_barcodes,number_kind,item_version,result,source,one_c_matches,excel_matches)
+      select $1,x.item_id,x.item_name,x.site_number,x.site_barcodes,x.number_kind,x.item_version,x.result,x.source,x.one_c_matches,x.excel_matches
+      from jsonb_to_recordset($2::jsonb) as x(item_id uuid,item_name text,site_number text,site_barcodes jsonb,number_kind text,item_version integer,result text,source text,one_c_matches jsonb,excel_matches jsonb)`, [id, JSON.stringify(chunk)]);
   }
   return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, batchVersion, snapshotId: String(snapshot.rows[0].id) };
 }
@@ -41,7 +41,7 @@ export async function getInventorySourceAuditPage(db: Db, batchId: string, query
   const conditions = ["run_id=$1"];
   if (query.search) {
     values.push(`%${query.search.replace(/[\\%_]/gu, (character) => `\\${character}`)}%`);
-    conditions.push(`(item_name ilike $${values.length} escape '\\' or site_number ilike $${values.length} escape '\\' or item_id::text ilike $${values.length} escape '\\' or one_c_matches::text ilike $${values.length} escape '\\' or excel_matches::text ilike $${values.length} escape '\\')`);
+    conditions.push(`(item_name ilike $${values.length} escape '\\' or site_number ilike $${values.length} escape '\\' or site_barcodes::text ilike $${values.length} escape '\\' or item_id::text ilike $${values.length} escape '\\' or one_c_matches::text ilike $${values.length} escape '\\' or excel_matches::text ilike $${values.length} escape '\\')`);
   }
   if (query.result) conditions.push(`result=$${values.push(query.result)}`);
   if (query.source) conditions.push(`source=$${values.push(query.source)}`);
@@ -74,7 +74,7 @@ async function latestRun(db: Db, batchId: string) {
 }
 
 function mapAuditRow(row: Raw): AuditMatch {
-  return { itemId: String(row.item_id), itemName: String(row.item_name), siteNumber: String(row.site_number), numberKind: String(row.number_kind), itemVersion: Number(row.item_version), result: row.result as AuditMatch["result"], source: row.source as AuditMatch["source"], oneC: row.one_c_matches as AuditMatch["oneC"], excel: row.excel_matches as AuditMatch["excel"] };
+  return { itemId: String(row.item_id), itemName: String(row.item_name), siteNumber: String(row.site_number), siteBarcodes: row.site_barcodes as AuditMatch["siteBarcodes"], numberKind: String(row.number_kind), itemVersion: Number(row.item_version), result: row.result as AuditMatch["result"], source: row.source as AuditMatch["source"], oneC: row.one_c_matches as AuditMatch["oneC"], excel: row.excel_matches as AuditMatch["excel"] };
 }
 function nullable(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }

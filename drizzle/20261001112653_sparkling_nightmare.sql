@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."inventory_source_audit_rows" ADD COLUMN "site_barcodes" jsonb DEFAULT '[]'::jsonb NOT NULL;

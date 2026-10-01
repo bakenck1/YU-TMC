@@ -28,10 +28,10 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
   ]);
   summary.getColumn(1).width = 32; summary.getColumn(2).width = 80;
   const sheet = workbook.addWorksheet("Все ТМЦ", { views: [{ state: "frozen", ySplit: 1 }] });
-  sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ"]);
+  sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по"]);
   for (const row of data.rows) {
     const excel = row.excel[0], oneC = row.oneC[0];
-    sheet.addRow([label(row.result), source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`]);
+    sheet.addRow([label(row.result), source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", "))]);
   }
   const details = workbook.addWorksheet("Все совпадения Excel", { views: [{ state: "frozen", ySplit: 1 }] });
   details.addRow(["ID ТМЦ", "Наименование сайта", "Основная строка", "Строка Excel", "Инв. номер Excel", "Номенклатура Excel", "Конечный остаток Excel"]);
