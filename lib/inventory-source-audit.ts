@@ -1,5 +1,5 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
+import { createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { extractExcelInventoryReferences, inventoryAuditNumberKey, inventoryAuditSlashlessKey, type ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 export { extractExcelInventoryNumber, extractExcelInventoryReference, extractExcelInventoryReferences } from "@/lib/inventory-audit-numbers";
@@ -75,6 +75,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   const oneCByItem = new Map<string, AuditMatch["oneC"]>();
   const linkByExternalId = new Map(links.map((link) => [link.externalId, link.itemId]));
   const candidates = items.map((item) => ({ id: item.id, inventoryNumber: item.inventoryNumber, oneCCode: item.oneCCode, sourceCodes: item.sourceCodes, officialBarcodes: item.officialBarcodes }));
+  const identifierIndex = createOneCIdentifierIndex(candidates);
   const itemById = new Map(items.map((item) => [item.id, item]));
   const localOwnersByBarcode = new Map<string, string[]>();
   for (const item of items) for (const barcode of item.localBarcodes ?? []) {
@@ -98,7 +99,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   }
   for (const { externalId, asset, origins: sourceOrigins, batchMatchedItemId, reviewState } of oneCRows) {
     const origins: AuditOneCOrigin[] = sourceOrigins ?? ["current_registry"];
-    const matches = matchOneCFixedAssetIdentifiers(asset, { items: candidates, linkedItemId: linkByExternalId.get(externalId) });
+    const matches = matchOneCFixedAssetIdentifiers(asset, { items: candidates, index: identifierIndex, linkedItemId: linkByExternalId.get(externalId) });
     const ids = new Set([...matches.inventoryItemIds, ...matches.codeItemIds, ...matches.barcodeItemIds]);
     const linked = linkByExternalId.get(externalId);
     if (linked) ids.add(linked);

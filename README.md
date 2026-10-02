@@ -98,6 +98,9 @@ and scans cabinet QR codes to view their contents. It has no item management,
 transfer, inspection, analytics, or user management access.
 The user form hides the phone field for this role. Creation and role assignment
 skip WhatsApp verification, and sign-in does not require phone setup.
+Batch print sheets embed their QR images in the authorized page response, so
+printing all cabinets does not exhaust the shared API request limit. Production
+QR links use the configured `APP_PUBLIC_ORIGIN`.
 Apply the role migration with `npm run db:migrate -- --target=development`
 (use `production` on the production server). `npm run dev` also applies local migrations.
 

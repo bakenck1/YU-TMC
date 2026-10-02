@@ -7,7 +7,7 @@ import { Download, Printer } from "lucide-react";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 
-export default function RoomQrBatchPrintView({ rooms, buildings = [] }: { rooms: RoomDto[]; buildings?: BuildingDto[] }) {
+export default function RoomQrBatchPrintView({ rooms, buildings = [], qrImages }: { rooms: RoomDto[]; buildings?: BuildingDto[]; qrImages: Record<string, string> }) {
   const { t } = useAppSettings();
   const [loadedRoomIds, setLoadedRoomIds] = useState<Set<string>>(new Set());
   const [loadFailed, setLoadFailed] = useState(false);
@@ -25,7 +25,7 @@ export default function RoomQrBatchPrintView({ rooms, buildings = [] }: { rooms:
           <div key={room.id} className="flex break-inside-avoid flex-col items-center justify-center p-2 print:p-1">
             <h2 className="text-center text-lg font-bold">{room.designation}</h2>
             <p className="text-center text-xs">{buildings.find((building) => building.id === room.buildingId)?.name}</p>
-            <Image src={`/api/inventory/rooms/${room.id}/qr?format=svg`} alt={`QR ${room.designation}`} width={768} height={768} unoptimized loading="eager" onLoad={() => setLoadedRoomIds((current) => new Set(current).add(room.id))} onError={() => setLoadFailed(true)} className="aspect-square h-auto w-full object-contain" />
+            <Image src={qrImages[room.id]} alt={`QR ${room.designation}`} width={768} height={768} unoptimized loading="eager" onLoad={() => setLoadedRoomIds((current) => new Set(current).add(room.id))} onError={() => setLoadFailed(true)} className="aspect-square h-auto w-full object-contain" />
           </div>
         ))}
       </section>

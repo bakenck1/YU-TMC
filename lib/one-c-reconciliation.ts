@@ -45,6 +45,35 @@ export type OneCInventoryCandidate = {
   readonly officialBarcodes?: readonly string[];
 };
 
+export type OneCIdentifierIndex = {
+  readonly inventory: ReadonlyMap<string, readonly string[]>;
+  readonly code: ReadonlyMap<string, readonly string[]>;
+  readonly barcode: ReadonlyMap<string, readonly string[]>;
+  readonly fallback: ReadonlyMap<string, readonly string[]>;
+  readonly possible: ReadonlyMap<string, readonly string[]>;
+};
+
+/** Normalize site identifiers once per dry-run instead of once per 1C row. */
+export function createOneCIdentifierIndex(items: readonly OneCInventoryCandidate[]): OneCIdentifierIndex {
+  const inventory = new Map<string, string[]>(), code = new Map<string, string[]>();
+  const barcode = new Map<string, string[]>(), fallback = new Map<string, string[]>(), possible = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, key: string | null, id: string) => {
+    if (key === null) return;
+    const owners = map.get(key) ?? [];
+    owners.push(id);
+    map.set(key, owners);
+  };
+  for (const item of items) {
+    add(inventory, inventoryNumberComparisonKey(item.inventoryNumber), item.id);
+    add(possible, softInventoryNumberComparisonKey(item.inventoryNumber), item.id);
+    add(code, oneCCodeComparisonKey(item.oneCCode), item.id);
+    for (const value of item.sourceCodes ?? []) add(code, oneCCodeComparisonKey(value), item.id);
+    for (const value of item.officialBarcodes ?? []) add(barcode, barcodeComparisonKey(value), item.id);
+    add(fallback, item.id.replaceAll("-", "").slice(0, 16).toUpperCase(), item.id);
+  }
+  return { inventory, code, barcode, fallback, possible };
+}
+
 export type OneCIdentifierMatchStatus =
   | "match_ok"
   | "strong_candidate"
@@ -109,6 +138,7 @@ export function matchOneCFixedAssetIdentifiers(
   asset: Pick<OneCFixedAsset, "code" | "inventoryNumber" | "barcode">,
   options: {
     readonly items: readonly OneCInventoryCandidate[];
+    readonly index?: OneCIdentifierIndex;
     readonly linkedItemId?: string | null;
   },
 ): OneCIdentifierMatch {
@@ -117,7 +147,7 @@ export function matchOneCFixedAssetIdentifiers(
   const exactKey = inventoryNumber ? inventoryNumberComparisonKey(inventoryNumber) : "";
   const inventoryItemIds = uniqueSorted(
     exactKey
-      ? options.items
+      ? options.index ? options.index.inventory.get(exactKey) ?? [] : options.items
           .filter((item) => inventoryNumberComparisonKey(item.inventoryNumber) === exactKey)
           .map((item) => item.id)
       : [],
@@ -125,7 +155,7 @@ export function matchOneCFixedAssetIdentifiers(
 
   const codeKey = oneCCodeComparisonKey(asset.code);
   const codeItemIds = uniqueSorted(codeKey
-    ? options.items.filter((item) =>
+    ? options.index ? options.index.code.get(codeKey) ?? [] : options.items.filter((item) =>
         oneCCodeComparisonKey(item.oneCCode) === codeKey
         || (item.sourceCodes ?? []).some((value) => oneCCodeComparisonKey(value) === codeKey),
       ).map((item) => item.id)
@@ -133,7 +163,11 @@ export function matchOneCFixedAssetIdentifiers(
 
   const barcode = parseOneCBarcode(asset.barcode);
   const barcodeItemIds = barcode.state === "valid"
-    ? uniqueSorted(options.items.filter((item) =>
+    ? uniqueSorted(options.index ? [
+        ...(options.index.barcode.get(barcode.key) ?? []),
+        ...(barcode.inventoryNumberKey !== null ? options.index.inventory.get(barcode.inventoryNumberKey) ?? [] : []),
+        ...(barcode.fallbackKey !== null ? options.index.fallback.get(barcode.fallbackKey) ?? [] : []),
+      ] : options.items.filter((item) =>
         (item.officialBarcodes ?? []).some((value) => barcodeComparisonKey(value) === barcode.key)
         || (barcode.inventoryNumberKey !== null
           && inventoryNumberComparisonKey(item.inventoryNumber) === barcode.inventoryNumberKey)
@@ -142,7 +176,7 @@ export function matchOneCFixedAssetIdentifiers(
       ).map((item) => item.id))
     : [];
   const possibleItemIds = !inventoryItemIds.length && exactKey
-    ? uniqueSorted(options.items.filter((item) =>
+    ? uniqueSorted(options.index ? options.index.possible.get(softInventoryNumberComparisonKey(inventoryNumber)) ?? [] : options.items.filter((item) =>
         softInventoryNumberComparisonKey(item.inventoryNumber) === softInventoryNumberComparisonKey(inventoryNumber),
       ).map((item) => item.id))
     : [];
@@ -201,6 +235,7 @@ export function analyzeOneCFixedAsset(
   asset: OneCFixedAsset,
   options: {
     readonly items?: readonly OneCInventoryCandidate[];
+    readonly index?: OneCIdentifierIndex;
     readonly linkedItemId?: string | null;
     readonly selectedRoomId?: string | null;
     readonly selectedItemType?: string | null;
@@ -216,6 +251,7 @@ export function analyzeOneCFixedAsset(
   const classification = classifyOneCFixedAsset(asset);
   const identifiers = matchOneCFixedAssetIdentifiers(asset, {
     items: options.items ?? [],
+    index: options.index,
     linkedItemId: options.linkedItemId,
   });
   const issues: OneCIssue[] = [];

@@ -58,3 +58,43 @@ test("manual link decisions require an item version and reject client-supplied m
 });
 test("mutations require optimistic versions, plan hashes and idempotency keys",async()=>{const h=handlers();const post=(body:unknown,headers:Record<string,string>={})=>new Request("https://x.test/api",{method:"POST",headers:{"content-type":"application/json",...headers},body:JSON.stringify(body)});assert.equal((await h.approveBatch(post({version:1}),context())).status,400);assert.equal((await h.publishBatch(post({version:1,planHash:"a".repeat(64)}),context())).status,400);assert.equal((await h.publishBatch(post({version:1,planHash:"a".repeat(64)},{"idempotency-key":"publish-123"}),context())).status,202);});
 test("authentication failures are returned without invoking the service",async()=>{const h=createOneCReconciliationAdminHandlers({authenticate:async()=>{throw new ApplicationError("forbidden","forbidden");},service:()=>{throw new Error("must_not_run");}});assert.equal((await h.getBatch(new Request("https://x.test"),context())).status,403);});
+
+test("analysis reports timeout and migration failures without exposing database details", async () => {
+  for (const [sqlState, publicCode] of [["57014", "one_c_analysis_timeout"], ["25P03", "one_c_analysis_timeout"], ["42703", "one_c_analysis_schema_outdated"], ["42P01", "one_c_analysis_schema_outdated"], ["23505", "one_c_reconciliation_unavailable"]]) {
+    const h = handlers({ analyzeBatch: async () => { throw Object.assign(new Error("private SQL and inventory data"), { code: sqlState }); } });
+    const response = await h.analyzeBatch(new Request("https://x.test/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 1 }) }), context());
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: publicCode });
+    assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+  }
+});
+
+test("analysis preserves optimistic conflicts and safely logs its invariant failures", async () => {
+  const logs: string[] = [];
+  const originalError = console.error, originalWarn = console.warn;
+  const originalLogSetting = process.env.OBSERVABILITY_TEST_STDOUT;
+  process.env.OBSERVABILITY_TEST_STDOUT = "true";
+  console.error = (line: string) => { logs.push(line); };
+  console.warn = (line: string) => { logs.push(line); };
+  try {
+    for (const error of [new ApplicationError("conflict", "batch_version_conflict"), new Error("inventory_audit_batch_match_missing")]) {
+      const response = await handlers({ analyzeBatch: async () => { throw error; } }).analyzeBatch(new Request("https://x.test/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 1 }) }), context());
+      assert.equal(response.status, error instanceof ApplicationError ? 409 : 503);
+    }
+    assert.deepEqual(logs.map((line) => JSON.parse(line).errorCode), ["batch_version_conflict", "inventory_audit_batch_match_missing"]);
+    assert.ok(logs.every((line) => JSON.parse(line).route === "/api/integrations/1c/batches/[id]/analyze"));
+  } finally {
+    console.error = originalError; console.warn = originalWarn;
+    if (originalLogSetting === undefined) delete process.env.OBSERVABILITY_TEST_STDOUT;
+    else process.env.OBSERVABILITY_TEST_STDOUT = originalLogSetting;
+  }
+});
+
+test("a client-side query timeout does not claim that an unacknowledged commit rolled back", async () => {
+  const response = await handlers({ analyzeBatch: async () => { throw new Error("Query read timeout"); } }).analyzeBatch(
+    new Request("https://x.test/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 1 }) }), context(),
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "one_c_reconciliation_unavailable" });
+});
