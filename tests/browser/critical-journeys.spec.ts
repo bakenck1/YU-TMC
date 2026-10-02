@@ -37,6 +37,7 @@ test.describe.serial("critical production journeys", () => {
     const evidence = captureSafeEvidence(page);
     try {
       await login(page, ownerEmail);
+      await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole("button", { name: /Общая стоимость/ }).click();
       const valueList = page.getByRole("region", { name: "Общая стоимость", exact: true });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 import manifest from "../app/manifest";
 import {
@@ -42,7 +43,7 @@ test("publishes an installable standalone manifest with phone-sized icons", asyn
   assert.deepEqual(await pngSize("public/icons/icon-maskable-512.png"), [512, 512]);
 });
 
-test("registers a network-only service worker because offline mode is out of scope", async () => {
+test("registers a notification worker and leaves network requests to the browser", async () => {
   const [registration, worker, layout] = await Promise.all([
     source("components/PwaRegistration.tsx"),
     source("public/sw.js"),
@@ -51,10 +52,10 @@ test("registers a network-only service worker because offline mode is out of sco
 
   assert.match(registration, /serviceWorker\.register\("\/sw\.js"/);
   assert.match(registration, /window\.isSecureContext/);
-  assert.match(worker, /addEventListener\("install"/);
-  assert.match(worker, /addEventListener\("activate"/);
-  assert.match(worker, /addEventListener\("fetch"/);
-  assert.match(worker, /respondWith\(fetch\(event\.request\)\)/);
+  const events = new Set<string>();
+  runInNewContext(worker, { self: { addEventListener: (name: string) => events.add(name) } });
+  for (const event of ["install", "activate", "push", "notificationclick"]) assert.ok(events.has(event));
+  assert.equal(events.has("fetch"), false, "network requests must bypass the worker");
   assert.doesNotMatch(worker, /\bcaches\./);
   assert.match(layout, /<PwaRegistration \/>/);
   assert.match(layout, /export const viewport: Viewport/);
