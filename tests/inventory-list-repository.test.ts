@@ -4,6 +4,31 @@ import test from "node:test";
 import { createPostgresInventoryItemRepositories } from "../lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 
+test("only employee collections check responsibility before pagination while every row retains its responsible person", async () => {
+  const queries: string[] = [];
+  const source = { query: async (sql: string) => {
+    queries.push(sql);
+    return { rows: [], rowCount: 0 };
+  } } as unknown as PostgresRepositorySource;
+  const repository = createPostgresInventoryItemRepositories(source).items;
+  await repository.listItems();
+  await repository.listItItems();
+  await repository.listDecommissionedItems();
+  await repository.listItemsAssignedTo("employee-1");
+  await repository.listDecommissionedItemsAssignedTo("employee-1");
+  for (const [index, sql] of queries.entries()) {
+    const selected = sql.slice(0, sql.indexOf("select i.id, i.name"));
+    const projection = sql.slice(sql.indexOf("select i.id, i.name"));
+    if (index < 3) assert.doesNotMatch(selected, /responsibility_periods/);
+    else {
+      assert.match(selected, /responsibility_periods/);
+      assert.match(selected, /rp\.responsible_user_id = \$1 or r\.primary_responsible_id = \$1/);
+    }
+    assert.match(projection, /responsibility_periods/);
+    assert.match(projection, /u\.full_name as responsible_name/);
+  }
+});
+
 test("general inventory queries include archived and decommissioned items", async () => {
   const queries: string[] = [];
   const source = {

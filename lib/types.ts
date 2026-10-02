@@ -11,6 +11,10 @@ export interface InventoryItem {
   name: string;
   inventoryNumber: string;
   oneCCode?: string;
+  /** Additional identifiers from published source records, used only for search. */
+  searchIdentifiers?: string[];
+  /** Names from published source records, used for search and suggestions. */
+  searchNames?: string[];
   category: ItemCategory;
   brand?: string;
   model?: string;

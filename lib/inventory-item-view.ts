@@ -8,6 +8,8 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     name: item.name,
     inventoryNumber: item.inventoryNumber,
     oneCCode: item.oneCCode ?? undefined,
+    searchIdentifiers: item.searchIdentifiers ?? [],
+    searchNames: item.searchNames ?? [],
     category: item.itemSection === "it" && item.itType
       ? item.itType
       : item.category ?? categoryFromLegacyType(item.itemType),

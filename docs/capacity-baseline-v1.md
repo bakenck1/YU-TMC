@@ -1,14 +1,14 @@
 # Capacity baseline capacity-v1
 
-Generated 2026-09-29T10:43:40.637Z. Synthetic data only; no production dump or PII was used. Full PostgreSQL plans are stored in the adjacent JSON report. This is a nightly/release baseline, not a PR timing gate.
+Generated 2026-10-02T05:11:18.574Z. Synthetic data only; no production dump or PII was used. Full PostgreSQL plans are stored in the adjacent JSON report. This is a nightly/release baseline, not a PR timing gate.
 
 ## Environment
 
 - Node: v24.19.0; PostgreSQL: 17.10; platform: win32-x64
 - CPU: 12 × 11th Gen Intel(R) Core(TM) i5-11400H @ 2.70GHz
 - PostgreSQL: max_connections=100, shared_buffers=128MB, effective_cache_size=4GB
-- Next production build: DPfPVn6VUNNmMwWZsecHE
-- Statement timeout: 2000ms, enforced=true, observed=2001.79ms
+- Next production build: APywTFYFbiUiPuKIKpF-5
+- Statement timeout: 2000ms, enforced=true, observed=2013.95ms
 
 ## Dataset
 
@@ -36,26 +36,26 @@ Each scenario ran 2 warmups plus 7 measured samples in `BEGIN READ ONLY` with `E
 
 | Scenario (statements) | SHA-256 fingerprint | P50 ms | P95 ms | SLO ms | Plan summary |
 | --- | --- | ---: | ---: | ---: | --- |
-| inventory_list (2) | `f6ac173a612e` | 128.55 | 130.72 | 750 | 1× Sort; hit/read 1568320/0 + 1× Sort; hit/read 1539864/0 |
-| export_source (2) | `f6ac173a612e` | 128.89 | 130.18 | 750 | 1× Sort; hit/read 1568320/0 + 1× Sort; hit/read 1539864/0 |
-| dockflow_projection (1) | `54d47fc34b29` | 49.31 | 50.22 | 250 | 1× Sort; hit/read 54319/0 |
-| tmc_history (103) | `7377d4faa325` | 43.18 | 152.91 | 250 | 1× Limit; hit/read 2070/0 + 101× Sort; hit/read 239/0 + 1× Limit; hit/read 9503/0 |
-| tmc_notifications (2) | `eb5fb0d563ab` | 98.22 | 99.31 | 250 | 1× Limit; hit/read 14603/0 + 1× Aggregate; hit/read 907800/0 |
-| asset_loss_list (1) | `2ca47a58b033` | 10.42 | 10.77 | 250 | 1× Limit; hit/read 4007/0 |
-| worker_due_scan (1) | `89201235596c` | 0.02 | 0.03 | 250 | 1× Limit; hit/read 6/0 |
+| inventory_list (2) | `e6c020357565` | 78.96 | 87.75 | 750 | 1× Sort; hit/read 149340/0 + 1× Sort; hit/read 149384/0 |
+| export_source (2) | `e6c020357565` | 88.17 | 93.94 | 750 | 1× Sort; hit/read 149340/0 + 1× Sort; hit/read 149384/0 |
+| dockflow_projection (1) | `54d47fc34b29` | 67.37 | 78.86 | 250 | 1× Sort; hit/read 54319/0 |
+| tmc_history (103) | `7377d4faa325` | 50.06 | 172.93 | 250 | 1× Limit; hit/read 2070/0 + 101× Sort; hit/read 239/0 + 1× Limit; hit/read 9503/0 |
+| tmc_notifications (2) | `eb5fb0d563ab` | 102.89 | 105.28 | 250 | 1× Limit; hit/read 14603/0 + 1× Aggregate; hit/read 907800/0 |
+| asset_loss_list (1) | `2ca47a58b033` | 11.47 | 14.18 | 250 | 1× Limit; hit/read 4007/0 |
+| worker_due_scan (1) | `89201235596c` | 0.02 | 0.02 | 250 | 1× Limit; hit/read 6/0 |
 
 ## XML and export workloads
 
 | Scenario | Records | P50 ms | P95 ms | SLO ms |
 | --- | ---: | ---: | ---: | ---: |
-| xml_parse | 5000 | 120.25 | 128.14 | 1000 |
-| export_workbook | 25000 | 1468.38 | 1480.25 | 3000 |
+| xml_parse | 5000 | 143.38 | 197.27 | 1000 |
+| export_workbook | 25000 | 1689.85 | 2227.47 | 3000 |
 
-Pool saturation: 16 requests through 8 connections, P50 179.66ms, P95 240.25ms, total 240.4ms, max waiting 8, errors 0.
+Pool saturation: 16 requests through 8 connections, P50 196.76ms, P95 281ms, total 281.17ms, max waiting 8, errors 0.
 
-Worker probe: 4 one-cycle workers claimed 200 distinct events (duplicates 0); natural shutdown 23.72ms against 2000ms budget, verified production lease 300s
+Worker probe: 4 one-cycle workers claimed 200 distinct events (duplicates 0); natural shutdown 28.27ms against 2000ms budget, verified production lease 300s
 
-Process RSS: 114.82 MiB → 179.02 MiB; heap used: 32.37 MiB → 83.48 MiB. Production client and server route chunks are recorded in the JSON report from the Next build manifests; Storybook is not used as a proxy.
+Process RSS: 112.22 MiB → 183.52 MiB; heap used: 39.02 MiB → 82.2 MiB. Production client and server route chunks are recorded in the JSON report from the Next build manifests; Storybook is not used as a proxy.
 
 ## Ranked bottlenecks
 

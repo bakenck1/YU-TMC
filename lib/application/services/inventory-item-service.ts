@@ -2079,6 +2079,8 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     brand: record.brand,
     model: record.model,
     oneCCode: record.oneCCode ?? null,
+    searchIdentifiers: record.searchIdentifiers ?? [],
+    searchNames: record.searchNames ?? [],
     quantity: record.quantity,
     unitPrice: record.unitPrice,
     inventoryNumberKind: record.inventoryNumberKind,

@@ -27,6 +27,10 @@ export interface InventoryItemDto {
   model: string | null;
   /** Separate 1C nomenclature code used in the material statement. */
   oneCCode?: string | null;
+  /** Supplemental identifiers from confirmed, published 1C links; search only. */
+  searchIdentifiers?: string[];
+  /** Published 1C name aliases used in catalogue search and suggestions. */
+  searchNames?: string[];
   quantity: number;
   unitPrice: number;
   inventoryNumberKind: InventoryNumberKind;
