@@ -128,16 +128,40 @@ async function logout(page: Page) {
 
 function captureSafeEvidence(page: Page) {
   const requestIds = new Set<string>();
-  const trace: Array<{ method: string; path: string; status: number; requestId?: string }> = [];
+  const startedAt = Date.now();
+  const trace: Array<{ method: string; path: string; status: number; elapsedMs: number; phase: string; error?: string; requestId?: string }> = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "started" });
+    }
+  });
+  page.on("requestfinished", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "finished" });
+    }
+  });
+  page.on("requestfailed", (request) => {
+    const path = new URL(request.url()).pathname;
+    const error = request.failure()?.errorText;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "failed",
+        ...(error && /^net::[A-Z_]+$/.test(error) ? { error } : {}),
+      });
+    }
+  });
   page.on("response", (response) => {
     const requestId = response.headers()["x-request-id"];
     if (requestId && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId)) requestIds.add(requestId);
-    if (trace.length < 200) {
+    if (trace.length < 400 && !new URL(response.url()).pathname.startsWith("/_next/static/")) {
       const url = new URL(response.url());
       trace.push({
         method: response.request().method(),
         path: url.pathname,
         status: response.status(),
+        elapsedMs: Date.now() - startedAt,
+        phase: "response",
         ...(requestId && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId) ? { requestId } : {}),
       });
     }
