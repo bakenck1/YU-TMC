@@ -84,7 +84,18 @@ test.describe.serial("critical production journeys", () => {
       await login(page, recipientEmail);
       await page.goto(requestPath!);
       await expect(page.getByRole("heading", { name: "Групповая заявка" })).toBeVisible();
+      const decisionPath = `/api/inventory/${requestPath!.slice("/tmc/".length)}/decision`;
+      const decisionResponsePromise = page.waitForResponse((response) =>
+        response.request().method() === "POST" && new URL(response.url()).pathname === decisionPath,
+      );
       await page.getByRole("button", { name: "Принять все" }).click();
+      const decisionResponse = await decisionResponsePromise;
+      expect(decisionResponse.status()).toBe(200);
+      const decisionBody = await decisionResponse.json();
+      expect(decisionBody.request).toMatchObject({
+        status: "accepted",
+        summary: { total: 1, pending: 0, accepted: 1 },
+      });
       await expect(page.getByRole("status").filter({ hasText: "Принято 1 из 1" })).toBeVisible();
       await expect(page.getByText("Принята", { exact: true })).toBeVisible();
       await page.goto("/profile");

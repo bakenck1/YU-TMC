@@ -17,14 +17,14 @@ import {
   shouldRetainTmcDecisionAttempt,
   toggleTmcRequestSelection,
 } from "@/lib/tmc-transfer-request-card";
-import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";
+import { toTmcTransferRequestCardView, type TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";
 
 function formatContact(user: { fullName: string; email: string | null }) {
   return user.email ? `${user.fullName} · ${user.email}` : user.fullName;
 }
 
 export default function TmcTransferRequestCard({
-  request,
+  request: initialRequest,
   canDecide,
   canCancel = false,
   showOverdue,
@@ -40,13 +40,16 @@ export default function TmcTransferRequestCard({
 }) {
   const { t, language } = useAppSettings();
   const router = useRouter();
+  const [completedRequest, setCompletedRequest] = useState<TmcTransferRequestCardView | null>(null);
+  const request = completedRequest?.id === initialRequest.id && completedRequest.version >= initialRequest.version
+    ? completedRequest
+    : initialRequest;
   const [selection, setSelection] = useState<ReadonlySet<string>>(() =>
     createTmcRequestSelection(request, canDecide),
   );
   const [administrativeReason, setAdministrativeReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<
-    | { kind: "success"; accepted: number; total: number }
     | { kind: "error"; message: TranslationKey }
     | null
   >(null);
@@ -180,12 +183,10 @@ export default function TmcTransferRequestCard({
       }
       const updated = parseTmcTransferRequest(body.request);
       if (sequence !== submissionSequence.current) return;
+      if (updated.id !== request.id || updated.version < request.version) throw new Error("decision_failed");
       logicalAttempt.current = null;
-      setFeedback({
-        kind: "success",
-        accepted: updated.summary.accepted,
-        total: updated.summary.total,
-      });
+      setCompletedRequest({ ...toTmcTransferRequestCardView(updated), kind: request.kind });
+      setFeedback(null);
       router.refresh();
     } catch (error) {
       if (sequence === submissionSequence.current && !(error instanceof DOMException && error.name === "AbortError")) {
@@ -275,7 +276,7 @@ export default function TmcTransferRequestCard({
           );
         })}
       </div>
-      {canDecide && pendingItems.length > 0 && feedback?.kind !== "success" ? (
+      {canDecide && pendingItems.length > 0 ? (
         <div aria-busy={submitting} className="sticky bottom-3 rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-xl backdrop-blur">
           {requiresAdministrativeReason ? (
             <label className="block text-sm font-semibold text-zinc-800">
@@ -304,9 +305,7 @@ export default function TmcTransferRequestCard({
           </div>
         </div>
       ) : null}
-      {feedback?.kind === "success" ? (
-        <p role="status" className="rounded-xl bg-emerald-50 p-4 font-semibold text-emerald-900">{t("tmc.request.result").replace("{accepted}", String(feedback.accepted)).replace("{total}", String(feedback.total))}</p>
-      ) : feedback?.kind === "error" && feedback.message !== "tmc.request.administrativeReasonRequired" ? (
+      {feedback?.kind === "error" && feedback.message !== "tmc.request.administrativeReasonRequired" ? (
         <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">{t(feedback.message)}</p>
       ) : null}
     </section>

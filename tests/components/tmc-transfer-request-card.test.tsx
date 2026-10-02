@@ -61,6 +61,7 @@ function acceptedRequest(): TmcTransferRequestDto {
   const decidedAt = "2026-08-10T01:00:00.000Z";
   return {
     ...base,
+    version: 2,
     status: "accepted",
     closedAt: decidedAt,
     closedBy: user("22222222-2222-4222-8222-222222222222"),
@@ -114,6 +115,38 @@ describe("TmcTransferRequestCard", () => {
     expect(document.activeElement).toBe(reason);
     expect(reason.getAttribute("aria-invalid")).toBe("true");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows committed status and row decisions while route refresh is delayed or returns an older revision", async () => {
+    const pending = request();
+    const props = { canDecide: true, showOverdue: false, requiresAdministrativeReason: false };
+    const card = render(<TmcTransferRequestCard request={pending} {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.request.acceptAll" }));
+
+    await screen.findByText("tmc.request.status.accepted");
+    expect(screen.getByText("tmc.request.item.accepted")).toBeTruthy();
+    expect(screen.getByText("tmc.request.item.rejected")).toBeTruthy();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "tmc.request.acceptAll" })).toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    card.rerender(<TmcTransferRequestCard request={{ ...pending }} {...props} />);
+    expect(screen.getByText("tmc.request.status.accepted")).toBeTruthy();
+    expect(screen.queryByText("tmc.request.status.pending")).toBeNull();
+  });
+
+  it("keeps the pending card when the server response belongs to another request", async () => {
+    const other = acceptedRequest();
+    other.id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    other.items = other.items.map((row) => ({ ...row, requestId: other.id }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ request: other }) }));
+    render(<TmcTransferRequestCard request={request()} canDecide showOverdue={false} requiresAdministrativeReason={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.request.acceptAll" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("tmc.request.status.pending")).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("offers an explicit reject action and rejects every pending position", async () => {
