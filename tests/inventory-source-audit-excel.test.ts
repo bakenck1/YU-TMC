@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Workbook } from "exceljs";
 import { exportInventorySourceAuditExcel } from "../lib/server/excel/inventory-source-audit-excel";
+import { buildInventorySourceAudit, extractExcelInventoryReferences, type AuditItem, type ExcelSourceRow } from "../lib/inventory-source-audit";
+import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
 
 test("audit workbook mirrors item rows, retains duplicate details and writes untrusted cells as text", async () => {
   const bytes = await exportInventorySourceAuditExcel({
@@ -60,4 +62,71 @@ test("audit workbook retains unmarked and literal range evidence with effective 
   assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("J2").value, "Да — проверить");
   assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("I3").value, "206/486-487");
   assert.equal(workbook.getWorksheet("Сводка")!.getCell("B10").value, 3);
+});
+
+test("export uses the matched later bare reference rather than the first marked range in its source row", async () => {
+  const item: AuditItem = { id: "tablet", name: "Планшет", inventoryNumber: "1350/14464", inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: [], version: 1 };
+  const nomenclature = "Комплект №206/1832-1837; планшет Samsung Galaxy Tab 1350/14464 от 26.03.20";
+  const references = extractExcelInventoryReferences(nomenclature);
+  const excel: ExcelSourceRow[] = [{ rowNumber: 3831, nomenclature, ...references[0], inventoryReferences: references, endingBalance: "0" }];
+  const audit = buildInventorySourceAudit([item], [], excel, []);
+  assert.equal(audit.rows[0].excel[0].sourceInventoryNumber, "206/1832-1837");
+  assert.equal(audit.rows[0].excel[0].matchedReference?.inventoryNumber, "1350/14464");
+  assert.equal(audit.rows[0].excel[0].matchedReference?.numberIsUnmarked, true);
+  assert.equal(audit.rows[0].excel[0].matchedReference?.sourceInventoryNumber, undefined);
+  const bytes = await exportInventorySourceAuditExcel({
+    run: { batch_id: "batch", batch_version: 5, algorithm_version: "5", counts: audit.counts },
+    rows: audit.rows,
+  });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  const main = workbook.getWorksheet("Все ТМЦ")!;
+  const details = workbook.getWorksheet("Все совпадения Excel")!;
+  assert.equal(main.rowCount, 2);
+  assert.equal(main.getCell("F2").value, "1350/14464");
+  assert.equal(main.getCell("A2").value, "Возможное совпадение — проверьте номер");
+  assert.equal(details.getCell("E2").value, "1350/14464");
+  assert.equal(details.getCell("I2").value, "");
+  assert.equal(details.getCell("J2").value, "Да — проверить");
+  assert.equal(details.getCell("F2").value, nomenclature);
+});
+
+test("export preserves the matched later literal range and names the closest duplicate as primary in both sources", async () => {
+  const item: AuditItem = { id: "plate", name: "Плита Gefest", inventoryNumber: "206/486-487", inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: [], version: 1 };
+  const nomenclature = "Плита Gefest №123/768; инв.№206/486-487 15 этаж";
+  const references = extractExcelInventoryReferences(nomenclature);
+  const excel: ExcelSourceRow[] = [
+    { rowNumber: 2, inventoryNumber: "206/486", sourceInventoryNumber: "206/486-487", nomenclature: "Стол №206/486-487", endingBalance: "0" },
+    { rowNumber: 500, nomenclature, ...references[0], inventoryReferences: references, endingBalance: "0" },
+  ];
+  const asset = (externalId: string, name: string) => ({ externalId, asset: { externalId, code: null, inventoryNumber: "206/486-487", barcode: null, name, status: "Снято с учёта" } as OneCFixedAsset });
+  const audit = buildInventorySourceAudit([item], [asset("a-unrelated", "Стол"), asset("z-similar", "Плита Gefest")], excel, []);
+  assert.equal(audit.rows[0].excel[0].inventoryNumber, "123/768");
+  assert.equal(audit.rows[0].excel[0].matchedReference?.inventoryNumber, "206/486");
+  assert.equal(audit.rows[0].excel[0].matchedReference?.sourceInventoryNumber, "206/486-487");
+  const bytes = await exportInventorySourceAuditExcel({
+    run: { batch_id: "batch", batch_version: 5, algorithm_version: "5", counts: audit.counts },
+    rows: audit.rows,
+  });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  const main = workbook.getWorksheet("Все ТМЦ")!;
+  const excelDetails = workbook.getWorksheet("Все совпадения Excel")!;
+  const oneCDetails = workbook.getWorksheet("Все совпадения 1С")!;
+  assert.equal(main.getCell("A2").value, "Найдено совпадение");
+  assert.equal(main.getCell("F2").value, "206/486-487");
+  assert.equal(main.getCell("H2").value, 500);
+  assert.equal(main.getCell("J2").value, "z-similar");
+  assert.equal(main.getCell("L2").value, "Плита Gefest");
+  assert.equal(excelDetails.rowCount, 3);
+  assert.equal(excelDetails.getCell("D2").value, 500);
+  assert.equal(excelDetails.getCell("C2").value, "Да");
+  assert.equal(excelDetails.getCell("C3").value, "Нет");
+  assert.equal(excelDetails.getCell("I2").value, "206/486-487");
+  assert.equal(excelDetails.getCell("J2").value, "Нет");
+  assert.equal(oneCDetails.rowCount, 3);
+  assert.equal(oneCDetails.getCell("C2").value, "z-similar");
+  assert.equal(oneCDetails.getCell("C3").value, "a-unrelated");
+  assert.equal(oneCDetails.getCell("L2").value, "Да");
+  assert.equal(oneCDetails.getCell("L3").value, "Нет");
 });

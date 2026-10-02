@@ -46,7 +46,7 @@ export default function MaterialSnapshotUploadPanel({ initialSnapshot, onUploade
     {snapshot ? <div className="mt-3 text-sm text-zinc-700">
       <p>Активный снимок: <strong>{snapshot.filename}</strong> · загружен {new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(snapshot.receivedAt))} · выбран {new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(snapshot.selectedAt))}</p>
       <p>Строк с номерами для поиска: {snapshot.acceptedCount}; строк без распознаваемого номера: {snapshot.skippedCount}; размер: {snapshot.byteSize} байт.</p>
-      <p className="text-xs text-zinc-500">Вся ведомость прочитана. Номера вида 1350/14464 без № тоже участвуют в поиске и требуют проверки. Название и код Excel сами по себе не дают совпадения.</p>
+      <p className="text-xs text-zinc-500">Вся ведомость прочитана. Поиск проверяет все номера в описании, с № и без него, с / и без /. При повторах основной вариант выбирается по похожести названия. Возможные совпадения требуют проверки; название и код Excel сами по себе не дают совпадения.</p>
       {snapshot.importedAcceptedCount !== snapshot.acceptedCount || snapshot.importedSkippedCount !== snapshot.skippedCount ? <p className="text-xs text-zinc-500">При первоначальной загрузке: {snapshot.importedAcceptedCount} строк с номерами, {snapshot.importedSkippedCount} без номера. Текущий поиск использует обновлённый разбор исходного файла.</p> : null}
       <p>SHA-256: <code className="break-all">{snapshot.sha256}</code></p>
     </div> : <p className="mt-3 text-sm text-amber-800">Снимок Excel ещё не загружен. Для общего dry-run загрузите XLS.</p>}

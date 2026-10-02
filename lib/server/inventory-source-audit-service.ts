@@ -83,7 +83,7 @@ export async function getInventorySourceExcelRow(db: Db, batchId: string, rowNum
   const run = await latestRun(db, batchId);
   // Read the exact evidence saved by this run, including rows omitted by an older parser.
   const result = await db.query(`select (match->>'rowNumber')::int as row_number,match->>'nomenclature' as nomenclature,
-    match->>'inventoryNumber' as inventory_number,match->>'sourceInventoryNumber' as source_inventory_number,match->>'endingBalance' as ending_balance
+    match->>'inventoryNumber' as inventory_number,match->>'sourceInventoryNumber' as source_inventory_number,match->'inventoryReferences' as inventory_references,match->>'endingBalance' as ending_balance
     from ${SCHEMA}."inventory_source_audit_rows" r cross join lateral jsonb_array_elements(r.excel_matches) match
     where r.run_id=$1 and match->>'rowNumber'=$2 order by r.item_id limit 1`, [run.id, String(rowNumber)]);
   if (!result.rows[0]) throw new ApplicationError("not_found", "material_snapshot_row_not_found");

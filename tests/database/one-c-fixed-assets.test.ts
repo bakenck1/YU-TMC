@@ -19,6 +19,7 @@ import type { InventoryItemRepositories } from "@/lib/application/ports/inventor
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
 import { filterInventoryItems } from "@/lib/inventory-list";
+import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 
 let migrationConfig: DatabaseConfig;
 let runtimeConfig: DatabaseConfig;
@@ -244,6 +245,85 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const afterItems = await runtimePool.query(`select id,inventory_number,version from "yu_inventory"."items" where id=any($1::uuid[]) order by id`, [[...itemIds.values()]]);
     expect(afterItems.rows).toEqual(beforeItems.rows);
     expect((await runtimePool.query<{ count: number }>(`select count(*)::int count from "yu_inventory"."item_one_c_links" where item_id=any($1::uuid[])`, [[...itemIds.values()]])).rows[0]?.count).toBe(0);
+  });
+
+  it("recovers all number references from an old XLS and ranks duplicate source names without changing publication", async () => {
+    const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), snapshotId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Broad audit admin','admin',now(),now())`, [userId, `broad-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    await runtimePool.query(`insert into "yu_inventory"."buildings"(id,name,name_key,address,address_key,created_by,updated_by)
+      values($1,'Broad audit building',$2,'Broad audit address',$2,$3,$3)`, [buildingId, `broad-${buildingId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."rooms"(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+      values($1,$2,'101',$3,1,$4,$4)`, [roomId, buildingId, `broad-${roomId}`, userId]);
+    const itemIds = new Map<string, string>();
+    for (const [number, name] of [["№123/768", "Лабораторный стенд"], ["050-0002224", "Принтер"], ["55500099", "Принтер дополнительный"]]) {
+      const itemId = randomUUID();
+      itemIds.set(number, itemId);
+      await runtimePool.query(`insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+        values($1,$2,1,100,$3,'official',$4,$5,$6,$6)`, [itemId, name, roomId, number, inventoryNumberComparisonKey(number), userId]);
+    }
+    const descriptions = [
+      "Сканер 123768 от 26.03.20",
+      "Лабораторный стенд 123768 от 26.03.20",
+      "Принтер 050-0002224; инв. №555/00099 от 26.03.20",
+      "Лабораторный стенд №123768; инв. №555/00098",
+      "Неучтенный предмет №777/00001",
+    ];
+    const header: unknown[] = Array(12).fill(""); header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
+    const lines = descriptions.map((description, index) => {
+      const row: unknown[] = Array(12).fill(""); row[0] = index + 1; row[1] = description; row[11] = 0;
+      return row;
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, ...lines]), "Лист_1");
+    const bytes = Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" }));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    // The old immutable search index contains only one marked reference per row.
+    await runtimePool.query(`insert into "yu_inventory"."material_snapshots"(id,filename,sha256,byte_size,source_file,accepted_count,skipped_count)
+      values($1,'old-broad-search.xls',$2,$3,$4,3,2)`, [snapshotId, sha256, bytes.length, bytes]);
+    await runtimePool.query(`insert into "yu_inventory"."material_snapshot_rows"(snapshot_id,row_number,nomenclature,inventory_number,number_key,ending_balance)
+      values($1,4,$2,'555/00099','555/00099','0'),($1,5,$3,'123768','123768','0'),($1,6,$4,'777/00001','777/00001','0')`, [snapshotId, descriptions[2], descriptions[3], descriptions[4]]);
+    await runtimePool.query(`insert into "yu_inventory"."material_snapshot_selection"(id,snapshot_id,selected_by) values(1,$1,$2)
+      on conflict(id) do update set snapshot_id=excluded.snapshot_id,selected_by=excluded.selected_by,selected_at=now()`, [snapshotId, userId]);
+    const beforeItems = await runtimePool.query(`select id,name,inventory_number,version from "yu_inventory"."items" where id=any($1::uuid[]) order by id`, [[...itemIds.values()]]);
+    const closestExternalId = randomUUID(), otherExternalId = randomUUID(), printerExternalId = randomUUID(), descriptionExternalId = randomUUID();
+    const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([
+      { ...asset, externalId: otherExternalId, code: null, inventoryNumber: "123768", barcode: null, name: "Сканер" },
+      { ...asset, externalId: closestExternalId, code: null, inventoryNumber: "123768", barcode: null, name: "Лабораторный стенд" },
+      { ...asset, externalId: printerExternalId, code: null, inventoryNumber: "№050-0002224", barcode: null, name: "Принтер" },
+      { ...asset, externalId: descriptionExternalId, code: null, inventoryNumber: null, barcode: null, name: "Принтер дополнительный инв. №555/00099" },
+    ], { sourceSha256, sourceFilename: "broad-search.xml" });
+    const batch = (await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_sha256=$1`, [sourceSha256])).rows[0]!;
+    const reconciliation = new OneCReconciliationService(runtimePool);
+    const plan = await reconciliation.analyzeBatch(batch.id, { version: batch.version });
+    const audit = await reconciliation.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
+    const byId = new Map(audit.data.map((row) => [row.itemId, row]));
+    const stand = byId.get(itemIds.get("№123/768")!)!;
+    expect(stand.source).toBe("1c+excel");
+    expect(stand.oneC.map((row) => row.externalId)).toEqual([closestExternalId, otherExternalId]);
+    expect(stand.oneC[0]?.matchedBy).toContain("number_without_slash");
+    expect(stand.excel.map((row) => row.rowNumber)).toEqual([3, 5, 2]);
+    expect(stand.excel[0]).toMatchObject({ matchedInventoryNumber: "123768", matchedReference: { inventoryNumber: "123768", numberIsUnmarked: true } });
+    const printer = byId.get(itemIds.get("050-0002224")!)!;
+    expect(printer.source).toBe("1c+excel");
+    expect(printer.oneC[0]).toMatchObject({ externalId: printerExternalId, inventoryNumber: "№050-0002224" });
+    expect(printer.oneC[0]?.matchedBy).toContain("number_format");
+    expect(printer.excel[0]).toMatchObject({ rowNumber: 4, matchedInventoryNumber: "050-0002224", matchedReference: { inventoryNumber: "050-0002224", numberIsUnmarked: true } });
+    expect(printer.excel[0]?.matchedBy).toContain("number_in_description");
+    const additionalPrinter = byId.get(itemIds.get("55500099")!)!;
+    expect(additionalPrinter.source).toBe("1c+excel");
+    expect(additionalPrinter.excel[0]).toMatchObject({ rowNumber: 4, matchedInventoryNumber: "555/00099", matchedReference: { inventoryNumber: "555/00099" } });
+    expect(additionalPrinter.oneC[0]?.matchedBy).toContain("number_in_description");
+    expect(await reconciliation.getInventoryAuditExcelRow(batch.id, 4)).toMatchObject({ row_number: 4, nomenclature: descriptions[2], inventory_number: "555/00099" });
+    expect(await getSelectedMaterialSnapshot(runtimePool)).toMatchObject({ id: snapshotId, acceptedCount: 5, skippedCount: 0, importedAcceptedCount: 3, importedSkippedCount: 2 });
+    expect(plan.create).toBe(0);
+    const planRows = await runtimePool.query<{ matched_item_id: string | null; review_state: string }>(`select matched_item_id,review_state from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [batch.id]);
+    expect(planRows.rows).toHaveLength(4);
+    expect(planRows.rows.every((row) => row.matched_item_id === null && row.review_state === "blocked")).toBe(true);
+    expect((await runtimePool.query(`select id,name,inventory_number,version from "yu_inventory"."items" where id=any($1::uuid[]) order by id`, [[...itemIds.values()]])).rows).toEqual(beforeItems.rows);
+    expect((await runtimePool.query<{ count: number }>(`select count(*)::int count from "yu_inventory"."item_one_c_links" where item_id=any($1::uuid[])`, [[...itemIds.values()]])).rows[0]?.count).toBe(0);
+    expect((await runtimePool.query<{ accepted_count: number; skipped_count: number }>(`select accepted_count,skipped_count from "yu_inventory"."material_snapshots" where id=$1`, [snapshotId])).rows[0]).toEqual({ accepted_count: 3, skipped_count: 2 });
   });
 
   it("searches published 1C identifiers for created and linked items while ignoring later unpublished imports", async () => {
