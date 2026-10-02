@@ -137,6 +137,14 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(planRow.rows[0]?.matched_item_id).toBeNull();
     const links = await runtimePool.query<{ count: number }>(`select count(*)::int as count from "yu_inventory"."item_one_c_links" where item_id=$1`, [itemId]);
     expect(links.rows[0]?.count).toBe(0);
+    // Reopening must use the new optimistic version. A stale retry must preserve the completed audit.
+    await expect(reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version })).rejects.toMatchObject({ publicCode: "batch_version_conflict" });
+    expect((await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 })).run.id).toBe(audit.run.id);
+    const refreshed = await reconciliation.getBatch(batch.rows[0]!.id);
+    await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: Number(refreshed.version) });
+    const repeated = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    expect(repeated.run.id).not.toBe(audit.run.id);
+    expect(repeated.data.find((entry) => entry.itemId === itemId)).toEqual(found);
   });
 
   it("reports a slashless 1C number as a possible match while keeping publication blocked", async () => {

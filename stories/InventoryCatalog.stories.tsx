@@ -175,5 +175,5 @@ export const OriginalBarcodeDistributionViewStory: Story = { name: "OriginalBarc
 export const ProblemReportButtonStory: Story = { name: "ProblemReportButton", render: () => <ProblemReportButton items={roomItems} initialItemId={STORY_ITEM_DTO.id} /> };
 export const QrScanPageStory: Story = { name: "QrScanPage", render: () => <QrScanPage actorRole="employee" /> };
 export const ReportMetricStory: Story = { name: "ReportMetric", render: () => <ReportMetric label="Проверено" value={24} /> };
-export const RoomQrBatchPrintViewStory: Story = { name: "RoomQrBatchPrintView", render: () => <RoomQrBatchPrintView rooms={[STORY_ROOM]} /> };
+export const RoomQrBatchPrintViewStory: Story = { name: "RoomQrBatchPrintView", render: () => <RoomQrBatchPrintView rooms={[STORY_ROOM]} qrImages={{ [STORY_ROOM.id]: `/api/inventory/rooms/${STORY_ROOM.id}/qr?format=svg` }} /> };
 export const ScannedItemDetailsCardStory: Story = { name: "ScannedItemDetailsCard", render: () => <ScannedItemDetailsCard item={scannedItem} /> };

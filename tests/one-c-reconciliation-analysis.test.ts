@@ -5,6 +5,7 @@ import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
 import {
   analyzeOneCFixedAsset,
   classifyOneCFixedAsset,
+  createOneCIdentifierIndex,
   matchOneCFixedAssetIdentifiers,
   softInventoryNumberComparisonKey,
 } from "../lib/one-c-reconciliation";
@@ -31,6 +32,43 @@ const items = [
   { id: "item-a", inventoryNumber: "inv/001-2", officialBarcodes: ["INV/001-2"] },
   { id: "item-b", inventoryNumber: "OTHER-2", officialBarcodes: ["*OTHER-2*"] },
 ];
+
+test("indexed matching preserves conflicts, official aliases, fallback barcodes and weak suggestions", () => {
+  const candidates = [
+    ...items,
+    { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", inventoryNumber: "INV/001-2", oneCCode: " 0001 ", sourceCodes: ["OLD-1", "OLD-1"], officialBarcodes: ["*OTHER-2*", "INVALID_日本"] },
+    { id: "item-empty", inventoryNumber: "", oneCCode: null },
+  ];
+  const index = createOneCIdentifierIndex(candidates);
+  for (const inventoryNumber of [null, "", "INV/001-2", "INV0012", "OTHER-2", "---", "NEW-123"]) {
+    for (const barcode of [null, "*YUB-INV/001-2*", "*OTHER-2*", "YUI-AAAAAAAABBBB4CCC", "INVALID_日本"]) {
+      for (const code of [null, "0001", "old-1", "UNKNOWN"]) {
+        for (const linkedItemId of [null, "item-a", "absent-item"]) {
+          const row = asset({ inventoryNumber, barcode, code });
+          assert.deepEqual(
+            matchOneCFixedAssetIdentifiers(row, { items: candidates, index, linkedItemId }),
+            matchOneCFixedAssetIdentifiers(row, { items: candidates, linkedItemId }),
+          );
+        }
+      }
+    }
+  }
+});
+
+test("a full 6552-row import reuses normalized identifiers rather than rescanning site items", () => {
+  let reads = 0;
+  const candidates = Array.from({ length: 1430 }, (_, number) => ({
+    id: `item-${number}`, get inventoryNumber() { reads++; return `1350/${number}`; },
+    oneCCode: String(number).padStart(9, "0"), officialBarcodes: [`1350/${number}`],
+  }));
+  const index = createOneCIdentifierIndex(candidates);
+  const initialReads = reads;
+  for (let number = 0; number < 6552; number++) {
+    const match = matchOneCFixedAssetIdentifiers(asset({ inventoryNumber: `1350/${number}`, code: String(number).padStart(9, "0"), barcode: `1350/${number}` }), { items: candidates, index });
+    assert.equal(match.itemId, number < 1430 ? `item-${number}` : null);
+  }
+  assert.equal(reads, initialReads);
+});
 
 test("classifies movable assets and excludes real estate, software, documentation and adjustments", () => {
   assert.deepEqual(classifyOneCFixedAsset(asset()), { kind: "physical_movable", reason: null });

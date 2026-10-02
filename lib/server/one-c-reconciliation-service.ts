@@ -6,7 +6,7 @@ import { getDatabasePool } from "@/lib/db/client";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
-import { analyzeOneCFixedAsset, buildOneCPublicationPlan, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
+import { analyzeOneCFixedAsset, buildOneCPublicationPlan, createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { createInventorySourceAudit, getInventorySourceAuditPage, exportInventorySourceAudit, getInventorySourceExcelRow } from "@/lib/server/inventory-source-audit-service";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
@@ -199,6 +199,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         if (key) sourceCodesByItem.set(String(link.item_id), [...(sourceCodesByItem.get(String(link.item_id)) ?? []), key]);
       }
       const itemCandidates = candidates.rows.map((r) => ({ id: String(r.id), inventoryNumber: String(r.inventory_number), oneCCode: stringOrNull(r.one_c_code), sourceCodes: sourceCodesByItem.get(String(r.id)) ?? [], officialBarcodes: r.official_barcodes as string[] }));
+      const identifierIndex = createOneCIdentifierIndex(itemCandidates);
       const itemStatus = new Map(candidates.rows.map((r) => [String(r.id), String(r.status)]));
       const candidateById = new Map(candidates.rows.map((r) => [String(r.id), r]));
       const planRows = [];
@@ -222,7 +223,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         const linkOccupancyMatches = (!actualLinkedItemId || actualLinkedItemId === selectedItemId)
           && (!selectedItemExternalId || selectedItemExternalId === asset.externalId);
         const manualSelectionValid = Boolean(selectedCandidate && selectedReasons.length && versionMatches && linkOccupancyMatches);
-        const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, linkedItemId: manualSelectionValid ? selectedItemId : linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
+        const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, index: identifierIndex, linkedItemId: manualSelectionValid ? selectedItemId : linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
         let mapped = workflowFor(analysis.result, analysis.identifiers.itemId);
         if (decision.exclude === true) {
           mapped = { state: "excluded", action: "exclude", planAction: "exclude", bucket: "excluded" };

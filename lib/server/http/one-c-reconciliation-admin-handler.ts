@@ -4,6 +4,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import type { AuthorizationActor } from "@/lib/security/permissions";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import { readLimitedJson } from "@/lib/server/http/request-body";
+import { emitStructuredEvent, requestIdFor } from "@/lib/server/observability";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
@@ -115,7 +116,7 @@ export function createOneCReconciliationAdminHandlers(
       const { id } = await validId(context);
       const input = parsePlanInput(await readLimitedJson(request, MUTATION_BODY_LIMIT), false);
       return json({ analysis: await dependencies.service().analyzeBatch(id, input, actor) });
-    }),
+    }, request),
 
     decideRow: (request: Request, context: RowContext) => execute(async () => {
       const actor = await dependencies.authenticate(request);
@@ -304,10 +305,36 @@ function invalid(code = "invalid_request") {
   return new ApplicationError("validation", code);
 }
 
-async function execute(work: () => Promise<Response>) {
+async function execute(work: () => Promise<Response>, analysisRequest?: Request) {
+  const startedAt = Date.now();
   try {
     return await work();
   } catch (error) {
+    if (analysisRequest) {
+      const requestId = requestIdFor(analysisRequest);
+      const sqlState = typeof error === "object" && error !== null && "code" in error
+        ? String(error.code) : "";
+      const publicCode = error instanceof ApplicationError ? error.publicCode
+        : ["57014", "25P03"].includes(sqlState)
+          ? "one_c_analysis_timeout"
+          : ["42P01", "42703"].includes(sqlState) ? "one_c_analysis_schema_outdated"
+            : "one_c_reconciliation_unavailable";
+      const response = error instanceof ApplicationError
+        ? applicationErrorResponse(error, PRIVATE)
+        : Response.json({ error: publicCode }, { status: 503, headers: PRIVATE });
+      // SQLSTATE and invariant codes are sufficient for diagnosis without logging inventory or credentials.
+      const invariant = error instanceof Error && ["one_c_analysis_row_count_mismatch", "inventory_audit_count_mismatch", "inventory_audit_batch_match_missing"].includes(error.message)
+        ? error.message : null;
+      emitStructuredEvent({
+        level: response.status >= 500 ? "error" : "warn", event: "one_c.analysis.failed", requestId,
+        route: "/api/integrations/1c/batches/[id]/analyze", status: response.status,
+        duration: Date.now() - startedAt,
+        errorCode: invariant ?? (/^[0-9A-Z]{5}$/.test(sqlState) ? `postgres_${sqlState.toLowerCase()}`
+          : error instanceof Error && error.message === "Query read timeout" ? "postgres_query_read_timeout" : publicCode),
+      });
+      response.headers.set("x-request-id", requestId);
+      return response;
+    }
     return error instanceof ApplicationError
       ? applicationErrorResponse(error, PRIVATE)
       : Response.json({ error: "one_c_reconciliation_unavailable" }, { status: 503, headers: PRIVATE });
