@@ -351,6 +351,13 @@
       "when": 1790854013778,
       "tag": "20261001112653_sparkling_nightmare",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790919289096,
+      "tag": "20261002053449_whatsapp-delivery-cooldown",
+      "breakpoints": true
     }
   ]
 }

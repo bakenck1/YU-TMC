@@ -152,9 +152,9 @@ test("administrators and warehouse users assigned to inventory are found by the 
   );
 });
 
-test("TZ 3.1: every role has /items as its ordinary post-login destination", () => {
+test("every role opens its personal profile after an ordinary login", () => {
   for (const role of ["admin", "warehouse", "employee"] as const) {
-    assert.equal(defaultPathForRole(role), "/items", role);
+    assert.equal(defaultPathForRole(role), "/profile", role);
   }
 });
 

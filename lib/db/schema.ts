@@ -3104,3 +3104,16 @@ export const whatsappNotificationAttemptsTable = inventorySchema.table(
   },
   (table) => [primaryKey({ columns: [table.requestId, table.template] })],
 );
+
+export const whatsappDeliveryAttemptsTable = inventorySchema.table(
+  "whatsapp_delivery_attempts",
+  {
+    session: varchar({ length: 80 }).notNull(),
+    ticket: text().notNull(),
+    kind: varchar({ length: 80 }).notNull(),
+    recipientId: uuid().notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+    attemptedAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+    sentAt: timestamp({ withTimezone: true, mode: "date" }),
+  },
+  (table) => [primaryKey({ columns: [table.session, table.ticket, table.kind, table.recipientId] })],
+);

@@ -49,6 +49,7 @@ export interface AuthenticatedAccount {
 export interface CurrentAccount extends AuthenticatedAccount {
   userId: string;
   sessionVersion: number;
+  whatsappPhoneRequired: boolean;
 }
 
 type AuthenticatedRecipientSearchActor = AuthorizationActor & {
@@ -78,6 +79,10 @@ export class UserService {
       YessenovDirectoryClient,
       "listEmployees"
     >,
+    private readonly verifyImportedPhone?: (
+      phone: string | null | undefined,
+      existingPhone?: string | null,
+    ) => Promise<string | null | undefined>,
   ) {}
 
   async isConfigured(): Promise<boolean> {
@@ -221,13 +226,23 @@ export class UserService {
     }
     const subject = input.subject.trim();
     const claimedIin = normalizeYessenovIin(input.iin);
-    const phone = normalizeYessenovPhone(input.phoneNumber);
+    const claimedPhone = normalizeYessenovPhone(input.phoneNumber);
     const tutorId = normalizeYessenovText(input.tutorId, 64);
     const orgUnit = normalizeYessenovText(input.orgUnit, 255);
     const position = normalizeYessenovText(input.position, 255);
     if (!isWorkspaceEmail(email) || !subject || subject.length > 255) {
       return { status: "invalid" };
     }
+    const existingPhone = this.verifyImportedPhone
+      ? await this.unitOfWork.read(async ({ users, externalIdentities }) => {
+          const existing = await externalIdentities.findUserBySubject("yessenov", subject)
+            ?? await users.findByNormalizedEmail(email);
+          return existing?.phone;
+        })
+      : undefined;
+    const phone = this.verifyImportedPhone
+      ? await this.verifyImportedPhone(claimedPhone, existingPhone)
+      : claimedPhone;
 
     return this.unitOfWork.transaction(
       async ({ users, externalIdentities }) => {
@@ -258,7 +273,7 @@ export class UserService {
               position,
               tutorId,
               role: "employee",
-              phone,
+              phone: phone ?? null,
               emailVerified: true,
               active: true,
               createdAt,
@@ -588,6 +603,25 @@ export class UserService {
     actor: AuthenticatedUserManagementActor,
     actorUserId: string,
   ): Promise<UserDto[]> {
+    // Perform gateway calls outside the database transaction so unavailable
+    // WhatsApp sessions cannot hold personnel/user row locks.
+    const existingUsers = this.verifyImportedPhone
+      ? await this.unitOfWork.read(({ users }) => users.list())
+      : [];
+    const existingByEmail = new Map(existingUsers.map((user) => [user.email, user]));
+    const existingByIin = new Map(existingUsers.filter((user) => user.iin && !user.deletedAt).map((user) => [user.iin, user]));
+    const verifiedPhones = new Map<YessenovDirectoryEmployee, string | null | undefined>();
+    for (const employee of directoryEmployees) {
+      verifiedPhones.set(
+        employee,
+        this.verifyImportedPhone
+          ? await this.verifyImportedPhone(
+              employee.phone || null,
+              (existingByEmail.get(employee.email) ?? existingByIin.get(employee.iin))?.phone,
+            )
+          : employee.phone || null,
+      );
+    }
     return this.unitOfWork.transaction(async ({ users }) => {
       const currentActor = await requireCurrentActor(
         users,
@@ -612,7 +646,7 @@ export class UserService {
           orgUnit: directoryOrgUnitName(employee),
           position: employee.position?.name ?? null,
           personnelId: String(employee.personnelId),
-          phone: employee.phone || null,
+          phone: verifiedPhones.get(employee),
           synchronizedAt: this.clock.now(),
         });
         if (synchronized) {
@@ -688,6 +722,32 @@ export class UserService {
       throw new ApplicationError("not_found", "user_not_found");
     }
     return toUserDto(user);
+  }
+
+  /** The caller must check WhatsApp registration before passing this number. */
+  async saveOwnWhatsAppPhone(actor: CurrentAccount, verifiedPhone: string): Promise<CurrentAccount> {
+    if (!/^7\d{10}$/.test(verifiedPhone)) {
+      throw new ApplicationError("validation", "invalid_phone");
+    }
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const current = await requireCurrentActor(users, actor.userId, actor.sessionVersion);
+      if (!currentAccount(current).whatsappPhoneRequired) {
+        throw new ApplicationError("conflict", "whatsapp_phone_already_set");
+      }
+      const updated = await users.update({
+        id: current.id,
+        fullName: current.fullName,
+        role: current.role,
+        phone: verifiedPhone,
+        defaultRoomId: current.defaultRoomId,
+        emailVerified: current.emailVerified,
+        active: current.active,
+        expectedVersion: current.version,
+        updatedAt: this.clock.now(),
+      });
+      if (!updated) throw new ApplicationError("conflict", "user_version_conflict");
+      return currentAccount(updated);
+    });
   }
 
   async createUser(
@@ -904,8 +964,14 @@ function currentAccount(user: UserRecord): CurrentAccount {
   return {
     userId: user.id,
     sessionVersion: user.version,
+    whatsappPhoneRequired: user.role !== "warehouse" && !hasPhone(user.phone),
     ...authenticatedAccount(user),
   };
+}
+
+function hasPhone(phone: string | null): boolean {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return /^\d{10}$/.test(digits) || /^[78]\d{10}$/.test(digits);
 }
 
 function toUserDto(
@@ -930,7 +996,7 @@ function toUserDto(
     directoryRoles: directoryEmployee?.roles,
     directoryManaged: Boolean(directoryEmployee),
     email: directoryEmployee?.email ?? user.email,
-    phone: directoryEmployee?.phone || user.phone,
+    phone: user.phone,
     defaultRoomId: user.defaultRoomId ?? null,
     role: user.role,
     emailVerified: user.emailVerified,

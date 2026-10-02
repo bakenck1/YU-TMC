@@ -3,6 +3,7 @@ import type {
   UpdateInventoryItemProtectedInput,
 } from "@/lib/contracts/inventory-items";
 import { after } from "next/server";
+import { notifyCurrentResponsibilityByWhatsApp } from "@/lib/server/whatsapp-tmc";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import {
@@ -58,6 +59,10 @@ export async function PATCH(
     const body = await readPhotoJsonRequest(request);
     const actor = authorizationActor(user);
     const services = getApplicationServices();
+    const assignment = isProtectedPatch(body) && typeof body.responsibleUserId === "string";
+    const previousResponsibleId = assignment
+      ? (await services.items.findItem(id, actor)).responsible?.id
+      : undefined;
     const serviceRequest = isServicePatch(body);
     const item =
       serviceRequest
@@ -92,6 +97,10 @@ export async function PATCH(
             parseContent(body),
             actor,
           );
+    if (assignment && item.responsible && item.responsible.id !== previousResponsibleId) {
+      const responsibleId = item.responsible.id;
+      try { after(() => notifyCurrentResponsibilityByWhatsApp(item.id, responsibleId)); } catch { /* Best-effort notification scheduling. */ }
+    }
     if (serviceRequest && user.role === "employee") {
       after(async () => {
         const admins = (await services.users.listUsers())

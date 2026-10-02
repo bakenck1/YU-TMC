@@ -17,6 +17,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     "/register",
     "/forgot-password",
     "/reset-password",
+    "/whatsapp-phone",
   ].includes(pathname);
   const isPublicRoomQr = pathname.startsWith("/rooms/qr/");
   const isPublicApiDocumentation = pathname === "/api";

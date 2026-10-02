@@ -13,6 +13,7 @@ import { InventoryInspectionService } from "@/lib/application/services/inventory
 import { WebPushService } from "@/lib/application/services/web-push-service";
 import { SettingsService } from "@/lib/application/services/settings-service";
 import { UserService } from "@/lib/application/services/user-service";
+import { verifyImportedWhatsAppPhone } from "@/lib/server/whatsapp-user-phone";
 import { TmcTransferRequestService } from "@/lib/application/services/tmc-transfer-request-service";
 import { LocalBarcodeService } from "@/lib/application/services/local-barcode-service";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
@@ -161,6 +162,7 @@ function createApplicationServices(): ApplicationServices {
       process.env.NODE_ENV === "test"
         ? undefined
         : createYessenovDirectoryClient(),
+      verifyImportedWhatsAppPhone,
     ),
     assetLosses: new AssetLossService(
       createPostgresUnitOfWork(createPostgresAssetLossRepositories),

@@ -68,6 +68,7 @@ async function readSession(request: NextRequest) {
   return Response.json(
     {
       authenticated: true,
+      whatsappPhoneRequired: user.whatsappPhoneRequired,
       user: {
         email: user.email,
         name: user.name,

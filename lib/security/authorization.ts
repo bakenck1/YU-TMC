@@ -80,7 +80,7 @@ export function canAccessPath(role: unknown, pathname: string) {
 
 export function defaultPathForRole(role: AuthRole) {
   void role;
-  return "/items";
+  return "/profile";
 }
 
 export function isSafeReturnPath(value: string | null | undefined) {

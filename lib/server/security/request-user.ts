@@ -14,6 +14,15 @@ import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import { emitLegacyUsage } from "@/lib/server/observability";
 
 export async function requireCurrentUser(request: Request) {
+  const user = await requirePhoneSetupUser(request);
+  if (user.whatsappPhoneRequired) {
+    throw new ApplicationError("forbidden", "whatsapp_phone_required");
+  }
+  return user;
+}
+
+/** Authentication-only entry point for completing the mandatory phone setup. */
+export async function requirePhoneSetupUser(request: Request) {
   requireSameOriginMutation(request);
   const limit = await consumeApiRateLimit(request);
   if (!limit.allowed) {

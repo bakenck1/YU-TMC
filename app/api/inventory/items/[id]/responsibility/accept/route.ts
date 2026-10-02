@@ -1,4 +1,6 @@
 import { ApplicationError } from "@/lib/domain/application-error";
+import { after } from "next/server";
+import { notifyCurrentResponsibilityByWhatsApp } from "@/lib/server/whatsapp-tmc";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -23,6 +25,10 @@ export async function POST(
         id,
         authorizationActor(user),
       );
+    if (responsibility.responsibleUserId) {
+      const responsibleId = responsibility.responsibleUserId;
+      try { after(() => notifyCurrentResponsibilityByWhatsApp(id, responsibleId)); } catch { /* Best-effort notification scheduling. */ }
+    }
     return Response.json({ responsibility }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

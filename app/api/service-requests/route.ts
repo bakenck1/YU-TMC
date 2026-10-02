@@ -2,6 +2,7 @@ import type {
   CreateServiceRequestInput,
   ServiceRequestFilters,
 } from "@/lib/contracts/service-requests";
+import { after } from "next/server";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { notifyServiceRequestByWhatsApp } from "@/lib/server/whatsapp-service-requests";
@@ -17,6 +18,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const PRIVATE_RESPONSE_HEADERS = {
   "cache-control": "private, no-store, max-age=0, must-revalidate",
@@ -44,7 +46,11 @@ export async function POST(request: Request) {
       parseCreate(await readPhotoJsonRequest(request)),
       authorizationActor(user),
     );
-    await notifyServiceRequestByWhatsApp(serviceRequest);
+    try {
+      after(() => notifyServiceRequestByWhatsApp(serviceRequest));
+    } catch {
+      console.warn("WhatsApp service request notification scheduling failed", { code: "WA_ERROR" });
+    }
     return Response.json(
       { request: serviceRequest },
       { status: 201, headers: PRIVATE_RESPONSE_HEADERS },

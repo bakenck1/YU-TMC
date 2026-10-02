@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import PublicRoomWorkspaceScreen from "@/components/PublicRoomWorkspaceScreen";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
@@ -31,6 +31,7 @@ export default async function PublicRoomQrPage({
     user = sessionToken
       ? await resolveCurrentUserToken(sessionToken).catch(() => null)
       : null;
+    if (user?.whatsappPhoneRequired) redirect("/whatsapp-phone");
     room = user
       ? await getApplicationServices().rooms.findByQr(token, authorizationActor(user))
       : await getApplicationServices().rooms.findPublicByQr(token);

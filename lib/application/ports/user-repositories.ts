@@ -75,7 +75,9 @@ export interface SynchronizeDirectoryUserRecord {
   orgUnit: string | null;
   position: string | null;
   personnelId: string;
-  phone: string | null;
+  // undefined means an imported phone could not be verified; preserve the
+  // existing number, or use null when creating a new account.
+  phone: string | null | undefined;
   synchronizedAt: Date;
 }
 

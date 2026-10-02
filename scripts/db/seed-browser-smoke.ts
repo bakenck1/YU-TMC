@@ -40,9 +40,11 @@ async function main() {
     for (const [id, code, email, name, role] of users) {
       await client.query(
         `insert into "yu_inventory"."users"
-           (id, code, email, full_name, role, email_verified, is_active, version, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, true, true, 1, now(), now())`,
-        [id, code, email, name, role],
+           (id, code, email, full_name, role, phone, email_verified, is_active, version, created_at, updated_at)
+         values ($1, $2, $3, $4, $5, $6, true, true, 1, now(), now())`,
+        // Synthetic numbers satisfy onboarding; external gateways are disabled
+        // by createBrowserSmokeEnvironment for this isolated test database.
+        [id, code, email, name, role, `7${id.slice(-10)}`],
       );
       const credential = await passwordCredential(PASSWORD);
       await client.query(
