@@ -6,19 +6,44 @@ import { USER_ROLES } from "../lib/contracts/users";
 import { translate } from "../lib/i18n";
 import {
   canAccessPath,
+  defaultPathForRole,
   isAuthRole,
 } from "../lib/security/authorization";
 import {
   canManageUser,
   hasPermission,
+  APP_PERMISSIONS,
 } from "../lib/security/permissions";
 
-test("exposes exactly the three product roles", () => {
-  assert.deepEqual(USER_ROLES, ["admin", "warehouse", "employee"]);
+test("exposes the four product roles", () => {
+  assert.deepEqual(USER_ROLES, ["admin", "warehouse", "employee", "typography"]);
   assert.equal(isAuthRole("owner"), false);
   assert.equal(translate("ru", "auth.roleWarehouse"), "Кладовщик");
   assert.equal(translate("kk", "auth.roleWarehouse"), "Қоймашы");
   assert.equal(translate("en", "auth.roleWarehouse"), "Warehouse keeper");
+});
+
+test("printing staff only have room viewing, room scanning, and room QR printing permissions", () => {
+  assert.equal(isAuthRole("typography"), true);
+  assert.equal(translate("ru", "users.typography"), "Типография");
+  assert.equal(translate("ru", "auth.roleTypography"), "Типография");
+  assert.deepEqual(APP_PERMISSIONS.filter((permission) => hasPermission("typography", permission)), [
+    "legacy.locations.read",
+    "inventory.workspace.read",
+    "inventory.room.read_all",
+    "inventory.qr.resolve_room",
+    "inventory.qr.print_room",
+    "inventory.photo.item_preview",
+  ]);
+  for (const path of ["/inventory", "/inventory/rooms/qr-print", "/scan", "/rooms/room-id", "/rooms/qr/token"]) {
+    assert.equal(canAccessPath("typography", path), true, path);
+  }
+  for (const path of ["/", "/items", "/items/item-id", "/local-barcodes", "/it-items", "/inventory/inspections", "/analytics", "/users", "/settings", "/profile", "/tmc", "/requests"]) {
+    assert.equal(canAccessPath("typography", path), false, path);
+  }
+  assert.equal(defaultPathForRole("typography"), "/inventory");
+  assert.equal(canManageUser("typography", { nextRole: "employee" }), false);
+  assert.equal(canManageUser("admin", { nextRole: "typography" }), true);
 });
 
 test("warehouse can create and edit basic inventory content without privileged mutation rights", () => {

@@ -26,6 +26,16 @@ const ROOM: RoomWorkspaceDto = {
 };
 
 describe("room workspace navigation and denial", () => {
+  it("printing staff see room contents without item links or problem reporting", () => {
+    render(<RoomWorkspaceView room={{
+      ...ROOM,
+      items: [{ id: "item-1", name: "Monitor", inventoryNumber: "INV-1", description: "Room equipment", status: "active", condition: "good", connectionStatus: "connected", responsibleName: "Employee", photoUrl: null, createdAt: "2026-10-02T00:00:00Z", href: "/items/item-1" }],
+    }} authenticated returnTo="/rooms/room-1" backTo="/inventory" readOnly />);
+    expect(screen.getByText("Monitor")).toBeTruthy();
+    expect(screen.getByText("Room equipment")).toBeTruthy();
+    expect(screen.queryByText("problem-report")).toBeNull();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/inventory"]);
+  });
   it("returns a room scan result to the scan screen", () => {
     render(
       <RoomWorkspaceView

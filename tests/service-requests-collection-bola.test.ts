@@ -42,6 +42,16 @@ test("service request collection forwards the complete actor to the SQL scope", 
   }]);
 });
 
+test("printing staff cannot read requests or request photos after a role change", async () => {
+  const actor = { ...ACTOR, role: "typography" } as const;
+  const service = createService({
+    list: async () => { throw new Error("request collection must not be queried"); },
+    findAuthorizationUserForUpdate: async () => { throw new Error("request photo authorization must not be queried"); },
+  });
+  await assert.rejects(() => service.list({}, actor), { kind: "forbidden" });
+  await assert.rejects(() => service.getPhoto(ITEM_ID, actor), { kind: "forbidden" });
+});
+
 test("malformed collection actors fail closed before repository access", async () => {
   let calls = 0;
   const service = createService({

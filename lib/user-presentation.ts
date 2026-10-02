@@ -5,6 +5,7 @@ export const USER_ROLE_LABEL_KEYS: Record<UserRole, TranslationKey> = {
   admin: "users.admin",
   warehouse: "users.warehouse",
   employee: "users.employee",
+  typography: "users.typography",
 };
 
 export function formatUserDate(iso: string, locale: string) {

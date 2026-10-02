@@ -14,6 +14,7 @@ export const APP_PERMISSIONS = [
   "inventory.building.manage",
   "inventory.room.create",
   "inventory.room.manage",
+  "inventory.room.read_all",
   "inventory.item.read_all",
   "inventory.item.read_assigned",
   "inventory.it.read",
@@ -32,6 +33,7 @@ export const APP_PERMISSIONS = [
   "inventory.qr.resolve_item",
   "inventory.qr.resolve_room",
   "inventory.qr.manage",
+  "inventory.qr.print_room",
   "inventory.responsibility.accept_free",
   "inventory.transfer.request_self",
   "inventory.transfer.decide_as_current_responsible",
@@ -69,6 +71,8 @@ export const APP_PERMISSIONS = [
 export type AppPermission = (typeof APP_PERMISSIONS)[number];
 
 const ALL_ROLES: readonly UserRole[] = USER_ROLES;
+// Printing staff only receive the explicit room and QR permissions below.
+const STANDARD_ROLES: readonly UserRole[] = ["admin", "warehouse", "employee"];
 const ADMIN_WAREHOUSE: readonly UserRole[] = ["admin", "warehouse"];
 const ADMIN_ONLY: readonly UserRole[] = ["admin"];
 const ADMIN_EMPLOYEE: readonly UserRole[] = ["admin", "employee"];
@@ -80,8 +84,8 @@ const ASSIGNABLE_TECHNICIANS: readonly UserRole[] = ["employee"];
 const EMPLOYEE_ONLY: readonly UserRole[] = ["employee"];
 
 export const PERMISSION_ROLES = {
-  "legacy.dashboard.read": ALL_ROLES,
-  "legacy.items.read": ALL_ROLES,
+  "legacy.dashboard.read": STANDARD_ROLES,
+  "legacy.items.read": STANDARD_ROLES,
   "legacy.locations.read": ALL_ROLES,
   "legacy.analytics.read": ADMIN_WAREHOUSE,
   "legacy.users.read": ADMIN_ONLY,
@@ -93,6 +97,7 @@ export const PERMISSION_ROLES = {
   "inventory.building.manage": ADMIN_ONLY,
   "inventory.room.create": ADMIN_ONLY,
   "inventory.room.manage": ADMIN_ONLY,
+  "inventory.room.read_all": ["admin", "warehouse", "typography"],
   "inventory.item.read_all": ADMIN_WAREHOUSE,
   "inventory.item.read_assigned": EMPLOYEE_ONLY,
   "inventory.it.read": ADMIN_ONLY,
@@ -103,7 +108,7 @@ export const PERMISSION_ROLES = {
   "inventory.item.resolve_maintenance": ADMIN_ONLY,
   "inventory.item.manage_protected_fields": ADMIN_ONLY,
   "inventory.item.manage_components": ADMIN_ONLY,
-  "inventory.item.comment.read": ALL_ROLES,
+  "inventory.item.comment.read": STANDARD_ROLES,
   "inventory.item.comment": ["admin", "employee"],
   "inventory.item.bulk_manage": ADMIN_ONLY,
   "inventory.item.delete": ADMIN_ONLY,
@@ -111,16 +116,17 @@ export const PERMISSION_ROLES = {
   "inventory.qr.resolve_item": EMPLOYEE_ONLY,
   "inventory.qr.resolve_room": ALL_ROLES,
   "inventory.qr.manage": ADMIN_ONLY,
-  "inventory.responsibility.accept_free": ALL_ROLES,
+  "inventory.qr.print_room": ["admin", "typography"],
+  "inventory.responsibility.accept_free": STANDARD_ROLES,
   "inventory.transfer.request_self": EMPLOYEE_ONLY,
   "inventory.transfer.decide_as_current_responsible": EMPLOYEE_ONLY,
   "inventory.transfer.cancel_as_requester": EMPLOYEE_ONLY,
   "inventory.transfer.override": ADMIN_ONLY,
-  "inventory.local_barcode.transfer": ALL_ROLES,
+  "inventory.local_barcode.transfer": STANDARD_ROLES,
   "inventory.local_barcode.read_all": ADMIN_WAREHOUSE,
-  "inventory.local_barcode.read_assigned": ALL_ROLES,
+  "inventory.local_barcode.read_assigned": STANDARD_ROLES,
   "inventory.local_barcode.cancel": ADMIN_ONLY,
-  "inventory.tmc.transfer_request.create": ALL_ROLES,
+  "inventory.tmc.transfer_request.create": STANDARD_ROLES,
   "inventory.inspection.create_self": TECHNICIAN_ONLY,
   "inventory.inspection.create_for_technician": ADMIN_ONLY,
   "inventory.inspection.read_own": ASSIGNABLE_TECHNICIANS,
@@ -134,12 +140,12 @@ export const PERMISSION_ROLES = {
   "inventory.result.record_all": ADMIN_ONLY,
   "inventory.decision.respond_as_recipient": EMPLOYEE_ONLY,
   "inventory.decision.resolve": ADMIN_ONLY,
-  "inventory.notification.read": ALL_ROLES,
+  "inventory.notification.read": STANDARD_ROLES,
   "inventory.photo.item_preview": ALL_ROLES,
   "inventory.photo.item_original": ADMIN_WAREHOUSE,
-  "inventory.photo.inspection_preview": ALL_ROLES,
+  "inventory.photo.inspection_preview": STANDARD_ROLES,
   "inventory.photo.inspection_original": ADMIN_WAREHOUSE,
-  "inventory.photo.dispute_preview": ALL_ROLES,
+  "inventory.photo.dispute_preview": STANDARD_ROLES,
   "inventory.photo.dispute_original": ["admin", "employee"],
   "inventory.report.export": ADMIN_WAREHOUSE,
   "inventory.integration.one_c.manage": ADMIN_ONLY,
@@ -403,6 +409,9 @@ export function canPerformInventoryOperation(
           hasPermission(actor.role, "inventory.photo.item_preview")) ||
         (actor.role === "warehouse" &&
           request.technicianHasParentAccess &&
+          hasPermission(actor.role, "inventory.photo.item_preview")) ||
+        (actor.role === "typography" &&
+          hasPermission(actor.role, "inventory.room.read_all") &&
           hasPermission(actor.role, "inventory.photo.item_preview")) ||
         (actor.role === "employee" &&
           (actor.userId === request.currentResponsibleId ||

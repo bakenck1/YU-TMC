@@ -964,7 +964,10 @@ function currentAccount(user: UserRecord): CurrentAccount {
   return {
     userId: user.id,
     sessionVersion: user.version,
-    whatsappPhoneRequired: user.role !== "warehouse" && !hasPhone(user.phone),
+    whatsappPhoneRequired:
+      user.role !== "warehouse" &&
+      user.role !== "typography" &&
+      !hasPhone(user.phone),
     ...authenticatedAccount(user),
   };
 }

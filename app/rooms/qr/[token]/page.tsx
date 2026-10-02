@@ -40,6 +40,6 @@ export default async function PublicRoomQrPage({
     throw error;
   }
   return (
-    <PublicRoomWorkspaceScreen room={room} authenticated={Boolean(user)} returnTo={returnTo} />
+    <PublicRoomWorkspaceScreen room={room} authenticated={Boolean(user)} returnTo={returnTo} readOnly={user?.role === "typography"} />
   );
 }

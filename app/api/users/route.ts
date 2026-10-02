@@ -33,7 +33,9 @@ export async function POST(request: Request) {
     const actor = await requirePermission(request, "legacy.users.manage");
     const body = await readLimitedJson(request);
     const input = parseCreateUser(body);
-    const checkedPhone = await verifyWhatsAppPhoneForSave(input.phone);
+    const checkedPhone = input.role === "typography"
+      ? { phone: null, warning: false }
+      : await verifyWhatsAppPhoneForSave(input.phone);
     const user = await getApplicationServices().users.createUser(
       { ...input, phone: checkedPhone.phone ?? null },
       actor.userId,

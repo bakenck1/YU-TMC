@@ -3,6 +3,7 @@ import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type { AssetLossCaseDto, AssetLossPageDto } from "@/lib/contracts/asset-loss";
 import type { UserRole } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
+import { hasPermission } from "@/lib/security/permissions";
 
 export interface AssetLossActor {
   userId: string;
@@ -119,6 +120,8 @@ export class AssetLossService {
 }
 
 async function requireActor(repository: AssetLossRepository, actor: AssetLossActor, lock: boolean) {
+  if (!hasPermission(actor.role, "inventory.item.read_all") &&
+    !hasPermission(actor.role, "inventory.item.read_assigned")) throw forbidden();
   const current = await repository.findActor(actor.userId, lock);
   if (!current || !current.active || current.role !== actor.role || current.version !== actor.sessionVersion) throw forbidden();
   return current;

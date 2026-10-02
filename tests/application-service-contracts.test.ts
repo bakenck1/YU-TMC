@@ -273,6 +273,19 @@ test("QR resolution hides revoked or out-of-scope records and rejects malformed 
   );
 });
 
+test("printing staff resolve cabinet QR codes but cannot resolve an item or building", async () => {
+  const actor = { userId: "printing-1", role: "typography" } as const;
+  const room = await qrService(qrRecord({ targetKind: "room", targetId: "room-1", roomAccessMode: "closed", currentUserHasRoomItem: false })).service.resolve(QR_KEY, actor, "qr", "room");
+  assert.equal(room.status, "resolved");
+  assert.equal(room.target?.kind, "room");
+  for (const targetKind of ["item", "building"] as const) {
+    const result = await qrService(qrRecord({ targetKind })).service.resolve(QR_KEY, actor, "qr");
+    assert.equal(result.target, null);
+    assert.doesNotMatch(JSON.stringify(result), /Projector|Alice Employee|Lecture projector/);
+  }
+  await assert.rejects(() => qrService(qrRecord()).service.resolveItemBarcodeCandidates("INV-1", actor), rejectsWithCode("forbidden"));
+});
+
 function roomWorkspaceRecord(overrides: Partial<RoomWorkspaceRecord> = {}): RoomWorkspaceRecord {
   return {
     id: "room-1",

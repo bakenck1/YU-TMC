@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Boxes, ClipboardList, Home, ScanLine, UserRound } from "lucide-react";
+import { Boxes, Building2, ClipboardList, Home, ScanLine, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -15,14 +15,20 @@ const ITEMS = [
   { href: "/profile", key: "nav.profile" as const, icon: UserRound },
 ];
 
+const TYPOGRAPHY_ITEMS = [
+  { href: "/inventory", key: "nav.objects" as const, icon: Building2, prominent: false },
+  ITEMS[2],
+];
+
 export default function MobileBottomNavigation() {
   const pathname = usePathname();
   const { t } = useAppSettings();
   const { user } = useAuth();
-  const visibleItems = ITEMS.filter(({ href }) => user && canAccessPath(user.role, href));
+  const items = user?.role === "typography" ? TYPOGRAPHY_ITEMS : ITEMS;
+  const visibleItems = items.filter(({ href }) => user && canAccessPath(user.role, href));
   return (
-    <nav aria-label={t(user?.role === "employee" ? "nav.items" : "nav.home")} className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur md:hidden">
-      <div className={`mx-auto grid h-[68px] max-w-xl px-1 ${user?.role === "employee" ? "grid-cols-4" : "grid-cols-5"}`}>
+    <nav aria-label={t(user?.role === "typography" ? "nav.objects" : user?.role === "employee" ? "nav.items" : "nav.home")} className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] backdrop-blur md:hidden">
+      <div className={`mx-auto grid h-[68px] max-w-xl px-1 ${user?.role === "typography" ? "grid-cols-2" : user?.role === "employee" ? "grid-cols-4" : "grid-cols-5"}`}>
         {visibleItems.map(({ href, key, icon: Icon, prominent }) => {
           const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
           return (

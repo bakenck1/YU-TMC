@@ -90,6 +90,17 @@ Configure `YESSENOV_OIDC_CLIENT_ID`, `YESSENOV_OIDC_CLIENT_SECRET` and
 remain local administrator decisions. See [docs/yessenov-sso.md](docs/yessenov-sso.md)
 for provider claims and the guarded personnel JSON import.
 
+## Printing staff role
+
+Administrators can select **Типография** (`typography`) when creating or editing a user.
+This role opens **Объекты**, lists all cabinets, prints selected or all cabinet QR codes,
+and scans cabinet QR codes to view their contents. It has no item management,
+transfer, inspection, analytics, or user management access.
+The user form hides the phone field for this role. Creation and role assignment
+skip WhatsApp verification, and sign-in does not require phone setup.
+Apply the role migration with `npm run db:migrate -- --target=development`
+(use `production` on the production server). `npm run dev` also applies local migrations.
+
 ## WhatsApp notifications
 
 Set these variables in the server's private `.env.local` or deployment secret
@@ -119,7 +130,7 @@ Yessenov ID and the personnel directory are also checked before persistence;
 unavailable checks do not prevent sign-in or erase an existing number.
 
 Users without a usable saved phone must complete `/whatsapp-phone` after login
-before accessing work pages or authenticated work APIs. Warehouse users are
+before accessing work pages or authenticated work APIs. Warehouse and printing staff users are
 exempt. The server checks registration through `/v1/check` before saving the
 number to the logged-in account; unavailable checks leave the form open for a
 later attempt. Successful completion renews the session after the account version

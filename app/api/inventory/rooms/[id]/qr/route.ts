@@ -17,7 +17,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requirePermission(request, "inventory.qr.manage");
+    const user = await requirePermission(request, "inventory.qr.print_room");
     const { id } = await params;
     if (!isUuid(id)) throw invalidRequest();
     const url = new URL(request.url);

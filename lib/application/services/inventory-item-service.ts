@@ -1114,6 +1114,8 @@ export class InventoryItemService {
       const hasParentAccess = Boolean(
         item &&
           (hasPermission(actor.role, "inventory.item.read_all") ||
+            (purpose === "item" && !item.archivedAt &&
+              hasPermission(actor.role, "inventory.room.read_all")) ||
             (hasPermission(actor.role, "inventory.item.read_assigned") &&
               (item.responsibleId === actor.userId ||
                 item.roomAccessMode === "open"))),

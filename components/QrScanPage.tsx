@@ -21,6 +21,9 @@ export default function QrScanPage({
   actorRole: UserRole;
 }) {
   const { t } = useAppSettings();
+  const canScanItems = hasPermission(actorRole, "inventory.qr.resolve_full") ||
+    hasPermission(actorRole, "inventory.qr.resolve_item");
+  const canScanRooms = hasPermission(actorRole, "inventory.qr.resolve_room");
   const router = useRouter();
   const [mode, setMode] = useState<"item" | "room" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,7 +158,7 @@ export default function QrScanPage({
     setMessage("");
     setAction({ status: "idle" });
     transferKey.current = null;
-    setMode("item");
+    setMode(canScanItems ? "item" : "room");
   }
 
   if (mode === "room") {
@@ -182,7 +185,7 @@ export default function QrScanPage({
           <div>
             <h1 className="text-xl font-bold">{t("nav.scanQr")}</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              {t("scanner.itemHint")}
+              {t(canScanItems ? "scanner.itemHint" : "scanner.openRoomHint")}
             </p>
           </div>
         </div>
@@ -194,8 +197,8 @@ export default function QrScanPage({
         ) : null}
 
         {!item ? (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button
+          <div className={`mt-6 grid gap-3 ${canScanItems && canScanRooms ? "sm:grid-cols-2" : ""}`}>
+            {canScanItems ? <button
               type="button"
               disabled={busy}
               onClick={() => setMode("item")}
@@ -203,8 +206,8 @@ export default function QrScanPage({
             >
               <Barcode className="h-8 w-8" />
               {t("scanner.itemTitle")}
-            </button>
-            <button
+            </button> : null}
+            {canScanRooms ? <button
               type="button"
               disabled={busy}
               onClick={() => setMode("room")}
@@ -212,7 +215,7 @@ export default function QrScanPage({
             >
               <MapPinned className="h-8 w-8" />
               {t("scanner.roomTitle")}
-            </button>
+            </button> : null}
           </div>
         ) : null}
 
