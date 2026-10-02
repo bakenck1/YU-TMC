@@ -35,13 +35,13 @@ test("the production build uses patched framework binaries and an application-on
     exclude?: string[];
   };
 
-  assert.equal(packageJson.dependencies?.next, "16.3.4");
+  assert.equal(packageJson.dependencies?.next, "16.3.8");
   assert.equal(packageJson.dependencies?.sharp, "0.35.4");
-  assert.equal(packageJson.devDependencies?.["eslint-config-next"], "16.3.4");
+  assert.equal(packageJson.devDependencies?.["eslint-config-next"], "16.3.8");
   assert.equal(packageJson.overrides?.next?.sharp, "0.35.4");
-  assert.equal(packageLock.packages?.["node_modules/next"]?.version, "16.3.4");
+  assert.equal(packageLock.packages?.["node_modules/next"]?.version, "16.3.8");
   assert.equal(packageLock.packages?.["node_modules/sharp"]?.version, "0.35.4");
-  assert.equal(packageLock.packages?.["node_modules/eslint-config-next"]?.version, "16.3.4");
+  assert.equal(packageLock.packages?.["node_modules/eslint-config-next"]?.version, "16.3.8");
   assert.match(nextConfig, /tsconfigPath:\s*"tsconfig\.build\.json"/);
   assert.equal(buildConfig.extends, "./tsconfig.json");
   assert.deepEqual(buildConfig.include, [
