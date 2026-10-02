@@ -9,7 +9,7 @@ describe("1C reconciliation manager", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("uploads the administrator's XLS and shows the selected snapshot hash", async () => {
-    const snapshot = { id: "11111111-1111-4111-8111-111111111111", filename: "материалы 2026.xls", sha256: "A".repeat(64), byteSize: 4, receivedAt: "2026-10-01T08:00:00.000Z", acceptedCount: 1, skippedCount: 2, selectedAt: "2026-10-01T08:00:00.000Z" };
+    const snapshot = { id: "11111111-1111-4111-8111-111111111111", filename: "материалы 2026.xls", sha256: "A".repeat(64), byteSize: 4, receivedAt: "2026-10-01T08:00:00.000Z", acceptedCount: 1, skippedCount: 2, importedAcceptedCount: 1, importedSkippedCount: 2, selectedAt: "2026-10-01T08:00:00.000Z" };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ snapshot }), { status: 201, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     render(<OneCReconciliationManager initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} />);

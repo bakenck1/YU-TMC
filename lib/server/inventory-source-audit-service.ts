@@ -3,23 +3,22 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "@/lib/domain/application-error";
-import { buildInventorySourceAudit, type AuditItem, type AuditOneCRow, type AuditMatch, type ExcelSourceRow } from "@/lib/inventory-source-audit";
+import { buildInventorySourceAudit, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, type AuditItem, type AuditOneCRow, type AuditMatch } from "@/lib/inventory-source-audit";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
+import { parseStoredMaterialSnapshot } from "@/lib/server/material-snapshot";
 
 type Db = Pick<Pool, "query"> | PoolClient;
 type Raw = Record<string, unknown>;
 const SCHEMA = '"yu_inventory"';
-const AUDIT_ALGORITHM_VERSION = 3;
 
 export async function createInventorySourceAudit(client: PoolClient, batchId: string, batchVersion: number, candidateRows: Raw[], linkRows: Raw[]) {
-  const snapshot = await client.query(`select s.id,s.sha256,s.accepted_count from ${SCHEMA}."material_snapshot_selection" chosen join ${SCHEMA}."material_snapshots" s on s.id=chosen.snapshot_id where chosen.id=1`);
+  const snapshot = await client.query(`select s.id,s.sha256,s.byte_size,s.source_file from ${SCHEMA}."material_snapshot_selection" chosen join ${SCHEMA}."material_snapshots" s on s.id=chosen.snapshot_id where chosen.id=1`);
   if (!snapshot.rows[0]) throw new ApplicationError("unavailable", "material_snapshot_not_imported");
-  const xls = await client.query(`select row_number,nomenclature,inventory_number,ending_balance from ${SCHEMA}."material_snapshot_rows" where snapshot_id=$1 order by row_number`, [snapshot.rows[0].id]);
+  const parsedSnapshot = parseStoredMaterialSnapshot(snapshot.rows[0]);
   const registry = await client.query(`select external_id,payload_hash,payload from ${SCHEMA}."one_c_fixed_asset_inbox" order by external_id`);
   const batchRows = await client.query(`select external_id,payload_hash,payload,matched_item_id,review_state from ${SCHEMA}."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]);
   if (!registry.rows.length && !batchRows.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
   const oneCRegistrySha256 = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
-  if (xls.rows.length !== Number(snapshot.rows[0].accepted_count)) throw new Error("material_snapshot_row_count_mismatch");
   const items: AuditItem[] = candidateRows.filter((row) => row.archived_at == null).map((row) => ({ id: String(row.id), name: String(row.name), inventoryNumber: String(row.inventory_number), inventoryNumberKind: String(row.inventory_number_kind), oneCCode: nullable(row.one_c_code), version: Number(row.version), officialBarcodes: strings(row.official_barcodes), localBarcodes: strings(row.local_barcodes), sourceCodes: linkRows.filter((link) => link.item_id === row.id).map((link) => String(link.source_code ?? "")).filter(Boolean) }));
   const assets: AuditOneCRow[] = registry.rows.map((row) => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry"] }));
   const registryById = new Map(registry.rows.map((row, index) => [String(row.external_id), { row, index }]));
@@ -36,9 +35,8 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
       assets.push({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["selected_batch"], batchMatchedItemId, reviewState: nullable(row.review_state) });
     }
   }
-  const excel: ExcelSourceRow[] = xls.rows.map((row) => ({ rowNumber: Number(row.row_number), nomenclature: String(row.nomenclature), inventoryNumber: String(row.inventory_number), endingBalance: nullable(row.ending_balance) }));
   const links = linkRows.map((row) => ({ externalId: String(row.external_id), itemId: String(row.item_id) }));
-  const { rows, counts } = buildInventorySourceAudit(items, assets, excel, links);
+  const { rows, counts } = buildInventorySourceAudit(items, assets, parsedSnapshot.accepted, links);
   if (counts.total !== counts.oneCOnly + counts.excelOnly + counts.both + counts.missing) throw new Error("inventory_audit_count_mismatch");
   const byItemId = new Map(rows.map((row) => [row.itemId, row]));
   for (const batchRow of batchRows.rows) {
@@ -56,7 +54,7 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
       select $1,x.item_id,x.item_name,x.site_number,x.site_barcodes,x.number_kind,x.item_version,x.result,x.source,x.one_c_matches,x.excel_matches
       from jsonb_to_recordset($2::jsonb) as x(item_id uuid,item_name text,site_number text,site_barcodes jsonb,number_kind text,item_version integer,result text,source text,one_c_matches jsonb,excel_matches jsonb)`, [id, JSON.stringify(chunk)]);
   }
-  return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, batchVersion, snapshotId: String(snapshot.rows[0].id), algorithmVersion: AUDIT_ALGORITHM_VERSION };
+  return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, batchVersion, snapshotId: String(snapshot.rows[0].id), algorithmVersion: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, excelAcceptedCount: parsedSnapshot.accepted.length, excelSkippedCount: parsedSnapshot.skipped };
 }
 
 export async function getInventorySourceAuditPage(db: Db, batchId: string, query: { page: number; pageSize: number; search?: string; result?: string; source?: string }) {
@@ -83,14 +81,20 @@ export async function exportInventorySourceAudit(db: Db, batchId: string) {
 
 export async function getInventorySourceExcelRow(db: Db, batchId: string, rowNumber: number) {
   const run = await latestRun(db, batchId);
-  const result = await db.query(`select row_number,nomenclature,inventory_number,ending_balance from ${SCHEMA}."material_snapshot_rows" where snapshot_id=$1 and row_number=$2`, [run.snapshot_id, rowNumber]);
+  // Read the exact evidence saved by this run, including rows omitted by an older parser.
+  const result = await db.query(`select (match->>'rowNumber')::int as row_number,match->>'nomenclature' as nomenclature,
+    match->>'inventoryNumber' as inventory_number,match->>'sourceInventoryNumber' as source_inventory_number,match->>'endingBalance' as ending_balance
+    from ${SCHEMA}."inventory_source_audit_rows" r cross join lateral jsonb_array_elements(r.excel_matches) match
+    where r.run_id=$1 and match->>'rowNumber'=$2 order by r.item_id limit 1`, [run.id, String(rowNumber)]);
   if (!result.rows[0]) throw new ApplicationError("not_found", "material_snapshot_row_not_found");
   return { file: run.filename, sha256: run.sha256, ...result.rows[0] };
 }
 
 async function latestRun(db: Db, batchId: string) {
   const run = await db.query(`select a.*,s.filename,s.sha256,s.accepted_count,s.skipped_count,b.source_sha256 as batch_sha256,
-    case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'algorithmVersion' else null end as algorithm_version
+    case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'algorithmVersion' else null end as algorithm_version,
+    case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelAcceptedCount')::int else null end as excel_accepted_count,
+    case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelSkippedCount')::int else null end as excel_skipped_count
     from ${SCHEMA}."inventory_source_audit_runs" a join ${SCHEMA}."material_snapshots" s on s.id=a.snapshot_id
     join ${SCHEMA}."one_c_import_batches" b on b.id=a.batch_id
     where a.batch_id=$1 order by a.run_at desc,a.id desc limit 1`, [batchId]);

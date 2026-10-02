@@ -5,7 +5,7 @@ import type { Pool } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
-import { MAX_MATERIAL_SNAPSHOT_BYTES, parseMaterialSnapshot } from "@/lib/server/material-snapshot";
+import { MAX_MATERIAL_SNAPSHOT_BYTES, parseMaterialSnapshot, parseStoredMaterialSnapshot } from "@/lib/server/material-snapshot";
 
 const SCHEMA = '"yu_inventory"';
 
@@ -17,15 +17,18 @@ export type MaterialSnapshotMetadata = {
   receivedAt: string;
   acceptedCount: number;
   skippedCount: number;
+  importedAcceptedCount: number;
+  importedSkippedCount: number;
   selectedAt: string;
 };
 
 type Database = Pick<Pool, "query" | "connect">;
 
 export async function getSelectedMaterialSnapshot(db: Database = getDatabasePool()): Promise<MaterialSnapshotMetadata | null> {
-  const result = await db.query(`select s.id,s.filename,s.sha256,s.byte_size,s.received_at,s.accepted_count,s.skipped_count,ch.selected_at
+  const result = await db.query(`select s.id,s.filename,s.sha256,s.byte_size,s.source_file,s.received_at,s.accepted_count,s.skipped_count,ch.selected_at
     from ${SCHEMA}."material_snapshot_selection" ch join ${SCHEMA}."material_snapshots" s on s.id=ch.snapshot_id where ch.id=1`);
-  return result.rows[0] ? metadata(result.rows[0]) : null;
+  if (!result.rows[0]) return null;
+  return metadata(result.rows[0], parseStoredMaterialSnapshot(result.rows[0]));
 }
 
 export async function uploadMaterialSnapshot(filename: string, bytes: Buffer, userId: string, db: Database = getDatabasePool()): Promise<MaterialSnapshotMetadata> {
@@ -38,11 +41,12 @@ export async function uploadMaterialSnapshot(filename: string, bytes: Buffer, us
   try {
     await client.query("begin");
     await client.query("select pg_advisory_xact_lock(726329014)");
-    const existing = await client.query(`select id,byte_size,accepted_count,skipped_count from ${SCHEMA}."material_snapshots" where sha256=$1`, [parsed.sha256.toLowerCase()]);
+    const existing = await client.query(`select id,byte_size,source_file from ${SCHEMA}."material_snapshots" where sha256=$1`, [parsed.sha256.toLowerCase()]);
     let snapshotId: string;
     if (existing.rows[0]) {
       const row = existing.rows[0];
-      if (Number(row.byte_size) !== bytes.length || Number(row.accepted_count) !== parsed.accepted.length || Number(row.skipped_count) !== parsed.skipped) {
+      // Derived search counts can change with the parser; source identity cannot.
+      if (Number(row.byte_size) !== bytes.length || !Buffer.isBuffer(row.source_file) || !row.source_file.equals(bytes)) {
         throw new Error("material_snapshot_existing_metadata_mismatch");
       }
       snapshotId = String(row.id);
@@ -60,7 +64,7 @@ export async function uploadMaterialSnapshot(filename: string, bytes: Buffer, us
       on conflict (id) do update set snapshot_id=excluded.snapshot_id,selected_by=excluded.selected_by,selected_at=now()`, [snapshotId, userId]);
     const result = await client.query(`select s.id,s.filename,s.sha256,s.byte_size,s.received_at,s.accepted_count,s.skipped_count,ch.selected_at
       from ${SCHEMA}."material_snapshot_selection" ch join ${SCHEMA}."material_snapshots" s on s.id=ch.snapshot_id where ch.id=1`);
-    selected = metadata(result.rows[0]);
+    selected = metadata(result.rows[0], parsed);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -71,11 +75,12 @@ export async function uploadMaterialSnapshot(filename: string, bytes: Buffer, us
   return selected;
 }
 
-function metadata(row: Record<string, unknown>): MaterialSnapshotMetadata {
+function metadata(row: Record<string, unknown>, parsed: ReturnType<typeof parseMaterialSnapshot>): MaterialSnapshotMetadata {
   return {
     id: String(row.id), filename: String(row.filename), sha256: String(row.sha256).toUpperCase(),
     byteSize: Number(row.byte_size), receivedAt: new Date(String(row.received_at)).toISOString(),
-    acceptedCount: Number(row.accepted_count), skippedCount: Number(row.skipped_count),
+    acceptedCount: parsed.accepted.length, skippedCount: parsed.skipped,
+    importedAcceptedCount: Number(row.accepted_count), importedSkippedCount: Number(row.skipped_count),
     selectedAt: new Date(String(row.selected_at)).toISOString(),
   };
 }

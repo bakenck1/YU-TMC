@@ -48,3 +48,16 @@ test("audit workbook flags a slashless candidate and keeps the 1C review state s
   assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("T2").value, "conflict");
   assert.equal(workbook.getWorksheet("Все совпадения 1С")!.getCell("K2").value, "conflict");
 });
+
+test("audit workbook retains unmarked and literal range evidence with effective parser counts", async () => {
+  const bytes = await exportInventorySourceAuditExcel({
+    run: { batch_id: "batch", batch_version: 4, algorithm_version: "4", excel_accepted_count: 3, excel_skipped_count: 1, counts: { total: 1, excelOnly: 1, oneCOnly: 0, both: 0, missing: 0, temporary: 0, possible: 1 } },
+    rows: [{ itemId: "tablet", itemName: "Планшет", siteNumber: "1350/14464", siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: "excel", oneC: [], excel: [{ rowNumber: 3831, inventoryNumber: "1350/14464", nomenclature: "Планшет Samsung Galaxy Tab 1350/14464 от 26.03.20", endingBalance: "0", numberIsUnmarked: true, matchedBy: ["number_in_description"] }, { rowNumber: 3832, inventoryNumber: "206/486", sourceInventoryNumber: "206/486-487", nomenclature: "Плита №206/486-487 15 этаж", endingBalance: "0" }] }],
+  });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("A2").value, "Возможное совпадение — проверьте номер");
+  assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("J2").value, "Да — проверить");
+  assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("I3").value, "206/486-487");
+  assert.equal(workbook.getWorksheet("Сводка")!.getCell("B10").value, 3);
+});

@@ -1,13 +1,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { auditNeedsReview, buildInventorySourceAudit, extractExcelInventoryNumber, type AuditItem, type ExcelSourceRow } from "../lib/inventory-source-audit";
+import { auditNeedsReview, buildInventorySourceAudit, extractExcelInventoryNumber, extractExcelInventoryReference, type AuditItem, type ExcelSourceRow } from "../lib/inventory-source-audit";
 import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
 
 test("extracts marked XLS numbers without range expansion or dates", () => {
   assert.equal(extractExcelInventoryNumber("холодильник №1350/16812 от 06.11.2025"), "1350/16812");
   assert.equal(extractExcelInventoryNumber("инв. №206/1832-1837 15.10.11"), "206/1832");
   assert.equal(extractExcelInventoryNumber("ноутбук №1350-00065"), "1350-00065");
-  assert.equal(extractExcelInventoryNumber("без номера 1350/16812"), null);
+  assert.equal(extractExcelInventoryNumber("без номера 1350/16812"), "1350/16812");
+});
+
+test("recognizes description numbers and marker variants while preserving exact digits and separators", () => {
+  assert.deepEqual(extractExcelInventoryReference("Планшет Samsung Galaxy Tab 1350/14464 от 26.03.20"), { inventoryNumber: "1350/14464", numberIsUnmarked: true });
+  assert.deepEqual(extractExcelInventoryReference("Плита Gefest 1140 ком. инв.№206/486-487 15 этаж"), { inventoryNumber: "206/486", sourceInventoryNumber: "206/486-487" });
+  for (const marker of ["№", "инв.", "инв. №", "N", "No.", "Инвентарный номер"]) {
+    assert.equal(extractExcelInventoryNumber(`Принтер ${marker}050-0002223 от 15.02.13`), "050-0002223");
+  }
+  assert.equal(extractExcelInventoryNumber("№1350/ 00065 15 этаж"), "1350/ 00065");
+  assert.equal(extractExcelInventoryNumber("№1350/00065 от 15.02.13"), "1350/00065");
+  assert.equal(extractExcelInventoryNumber("№123 456"), "123 456");
+  assert.equal(extractExcelInventoryNumber("№1350/14 464"), "1350/14 464");
+  assert.equal(extractExcelInventoryNumber("№1350/14464.5"), null);
+  assert.equal(extractExcelInventoryNumber("№1350-00065.4"), null);
+  for (const description of ["скотч 48/300", "профиль ПП 60/27", "CF-200/500", "гитара 25/09/14", "картридж 435/436/285", "картридж 123 / 456 / 789", "123/456 -789x", "123/456 - 789 - 000", "Galaxy1350/14464", "1350/14464GB", "без номера 14464"]) {
+    assert.equal(extractExcelInventoryReference(description), null, description);
+  }
+});
+
+test("finds literal ranges and first members, keeps unmarked evidence tentative and never finds a substring", () => {
+  const item = (id: string, inventoryNumber: string): AuditItem => ({ id, name: "Предмет", inventoryNumber, inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: [], version: 1 });
+  const excel = (rowNumber: number, nomenclature: string): ExcelSourceRow => ({ rowNumber, nomenclature, ...extractExcelInventoryReference(nomenclature)!, endingBalance: "0" });
+  const audit = buildInventorySourceAudit([item("a", "1350/14464"), item("b", "206/486-487"), item("c", "206/486"), item("d", "206/487"), item("e", "1350/1446")], [], [excel(3831, "Планшет Samsung Galaxy Tab 1350/14464 от 26.03.20"), excel(3832, "Плита инв.№206/486-487 15 этаж")], []);
+  assert.deepEqual(audit.rows.map((row) => row.source), ["excel", "excel", "excel", null, null]);
+  assert.equal(auditNeedsReview(audit.rows[0]), true);
+  assert.equal(auditNeedsReview(audit.rows[1]), false);
+  assert.equal(audit.counts.possible, 1);
+});
+
+test("an exact Excel match retains its evidence when another barcode matches the same row without slash", () => {
+  const item: AuditItem = { id: "item", name: "Стенд", inventoryNumber: "123/759", inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: ["123759"], version: 1 };
+  const audit = buildInventorySourceAudit([item], [], [{ rowNumber: 2, inventoryNumber: "123/759", nomenclature: "Стенд №123/759", endingBalance: "0" }], []);
+  assert.equal(audit.rows[0].excel.length, 1);
+  assert.equal(auditNeedsReview(audit.rows[0]), false);
+  assert.ok(audit.rows[0].excel[0].matchedBy?.includes("site_number"));
+  assert.deepEqual(audit.rows[0].excel[0].matchedBarcodes, ["123759"]);
 });
 
 test("audits every item once and preserves repeated Excel rows and both sources", () => {
