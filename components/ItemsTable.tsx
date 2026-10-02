@@ -13,6 +13,7 @@ import {
   visibleItemStatus,
 } from "@/lib/inventory-list";
 import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
+import { normalizeInventorySearchText } from "@/lib/inventory-search";
 import { normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
 import {
   DEFAULT_INVENTORY_COLUMNS,
@@ -162,7 +163,7 @@ interface InventoryFilterRoomOption {
 }
 
 function normalizedLocationValue(value: string) {
-  return value.normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+  return normalizeInventorySearchText(value);
 }
 
 function compareLocationValues(first: string, second: string) {
@@ -441,9 +442,11 @@ export default function ItemsTable({
   const searchSuggestions = useMemo(() => {
     const names = new Map<string, string>();
     searchItems.forEach((item) => {
-      const name = item.name.trim();
-      const key = normalizedLocationValue(name);
-      if (key && !names.has(key)) names.set(key, name);
+      [item.name, ...(item.searchNames ?? [])].forEach((value) => {
+        const name = value.trim().replace(/\s+/g, " ");
+        const key = normalizedLocationValue(name);
+        if (key && !names.has(key)) names.set(key, name);
+      });
     });
     return [...names.values()].sort(compareLocationValues);
   }, [searchItems]);

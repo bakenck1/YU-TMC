@@ -13,6 +13,12 @@ import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postg
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
 import { getSelectedMaterialSnapshot, uploadMaterialSnapshot } from "@/lib/server/material-snapshot-service";
 import { OneCReconciliationService } from "@/lib/server/one-c-reconciliation-service";
+import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
+import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
+import type { InventoryItemRepositories } from "@/lib/application/ports/inventory-item-repositories";
+import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
+import { toInventoryItemView } from "@/lib/inventory-item-view";
+import { filterInventoryItems } from "@/lib/inventory-list";
 
 let migrationConfig: DatabaseConfig;
 let runtimeConfig: DatabaseConfig;
@@ -128,6 +134,75 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(planRow.rows[0]?.matched_item_id).toBeNull();
     const links = await runtimePool.query<{ count: number }>(`select count(*)::int as count from "yu_inventory"."item_one_c_links" where item_id=$1`, [itemId]);
     expect(links.rows[0]?.count).toBe(0);
+  });
+
+  it("searches published 1C identifiers for created and linked items while ignoring later unpublished imports", async () => {
+    const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Search admin','admin',now(),now())`, [userId, `search-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    await runtimePool.query(`insert into "yu_inventory"."buildings"(id,name,name_key,address,address_key,created_by,updated_by)
+      values($1,'Search building',$2,'Search address',$2,$3,$3)`, [buildingId, `search-${buildingId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."rooms"(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+      values($1,$2,'101',$3,1,$4,$4)`, [roomId, buildingId, `search-${roomId}`, userId]);
+    const importer = new PostgresOneCFixedAssetRepository(runtimePool);
+    const reconciliation = new OneCReconciliationService(runtimePool);
+    async function upload(value: OneCFixedAsset) {
+      const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
+      await importer.saveBatch([value], { sourceSha256, sourceFilename: "search.xml", requestId: randomUUID() });
+      const batch = await runtimePool.query<{ id: string }>(`select id from "yu_inventory"."one_c_import_batches" where source_sha256=$1`, [sourceSha256]);
+      return batch.rows[0]!.id;
+    }
+    for (const action of ["create", "link"] as const) {
+      const externalId = randomUUID();
+      const inventoryNumber = `SEARCH-${action}-${externalId.slice(0, 8)}`;
+      const importedAsset: OneCFixedAsset = {
+        ...asset, externalId, inventoryNumber, name: `Accounting monoblock ${action}`,
+        code: `SOURCE-${action}-000001`, barcode: `BARCODE-${action}-000002`, quantity: 1,
+      };
+      let expectedItemId: string | undefined;
+      if (action === "link") {
+        expectedItemId = randomUUID();
+        await runtimePool.query(`insert into "yu_inventory"."items"(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+          values($1,'Existing monoblock','electronics',1,0,$2,'official',$3,$4,$5,$5)`,
+        [expectedItemId, roomId, inventoryNumber, inventoryNumber.toLowerCase(), userId]);
+      }
+      const batchId = await upload(importedAsset);
+      const decision = action === "create"
+        ? { roomId, itemType: "electronics", confirmCreate: true, confirmConditionDefault: true }
+        : { itemId: expectedItemId, confirmLink: true };
+      await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state='approved',proposed_action=$3,matched_item_id=$4,decision=$5::jsonb,decided_by=$6,decided_at=now() where batch_id=$1 and external_id=$2`,
+        [batchId, externalId, action, expectedItemId ?? null, JSON.stringify(decision), userId]);
+      await runtimePool.query(`insert into "yu_inventory"."one_c_publication_runs"(id,batch_id,idempotency_key,state,requested_by)
+        values($1,$2,$3,'pending',$4)`, [randomUUID(), batchId, randomUUID(), userId]);
+      expect(await reconciliation.processNextPublication()).toBe(true);
+      const published = await runtimePool.query<{ review_state: string; published_item_id: string }>(
+        `select review_state,published_item_id from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and external_id=$2`, [batchId, externalId]);
+      expect(published.rows[0]?.review_state).toBe("published");
+      const itemId = published.rows[0]!.published_item_id;
+      if (expectedItemId) expect(itemId).toBe(expectedItemId);
+      // A fresh XML upload updates the inbox, but remains outside the published catalogue.
+      await upload({ ...importedAsset, barcode: `UNPUBLISHED-${action}`, code: `UNPUBLISHED-CODE-${action}`, name: `Unpublished accounting name ${action}` });
+      const repositories = createPostgresInventoryItemRepositories(runtimePool);
+      const unitOfWork = {
+        transaction: async (work: (repos: InventoryItemRepositories) => unknown) => work(repositories),
+      } as UnitOfWork<InventoryItemRepositories>;
+      const service = new InventoryItemService(unitOfWork, { now: () => new Date() },
+        { create: () => "unused" }, { create: () => new Uint8Array(16) }, { next: () => "unused" });
+      const dto = (await service.listItems({ userId, role: "admin" })).find((item) => item.id === itemId)!;
+      const view = toInventoryItemView(dto);
+      expect(view.inventoryNumber).toBe(inventoryNumber);
+      expect(view.oneCCode).toBeUndefined();
+      expect(view.searchIdentifiers).toEqual(expect.arrayContaining([importedAsset.code, importedAsset.barcode, inventoryNumber]));
+      expect(view.name).toBe(action === "link" ? "Existing monoblock" : importedAsset.name);
+      expect(view.searchNames).toEqual([importedAsset.name]);
+      const filters = { category: "all", location: "all", statusKey: "all" };
+      for (const query of [importedAsset.code!, importedAsset.barcode!, importedAsset.name]) {
+        expect(filterInventoryItems([view], { ...filters, query }).map((item) => item.id)).toEqual([itemId]);
+      }
+      expect(filterInventoryItems([view], { ...filters, query: `UNPUBLISHED-${action}` })).toEqual([]);
+      expect(filterInventoryItems([view], { ...filters, query: `UNPUBLISHED-CODE-${action}` })).toEqual([]);
+      expect(filterInventoryItems([view], { ...filters, query: `Unpublished accounting name ${action}` })).toEqual([]);
+    }
   });
 
   it("creates an immutable, idempotent import snapshot alongside the inbox projection", async () => {

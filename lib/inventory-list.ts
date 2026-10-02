@@ -1,6 +1,8 @@
 import type { InventoryItem, ItemStatus } from "./types";
 import { ITEM_STATUSES } from "./contracts/inventory-domain";
 import { normalizeInventoryRoomSearch } from "./inventory-room-floors";
+import { normalizeInventorySearchText } from "./inventory-search";
+import { parseCode39ScanInput } from "./domain/code39";
 
 export type VisibleItemStatus =
   | { key: `display:${string}`; kind: "display"; value: string }
@@ -43,6 +45,7 @@ export function inventoryStatusOptions(
 
 export function filterInventoryItems(items: InventoryItem[], filters: InventoryListFilters) {
   const query = normalizeFilterText(filters.query);
+  const scannedCode = query ? parseCode39ScanInput(query) : null;
   const location = filters.location === "all" ? "" : normalizeFilterText(filters.location);
   const floorRange = parseFloorRange(location);
   const room = normalizeInventoryRoomSearch(filters.room ?? "");
@@ -61,11 +64,18 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
     normalizeFilterText(item.responsible) === responsible,
   );
   return items.filter((item) => {
+    const identifiers = [item.inventoryNumber, item.oneCCode, item.qrCode, ...(item.searchIdentifiers ?? [])];
+    const matchesScannedCode = scannedCode?.ok && (
+      scannedCode.fallbackKey
+        ? !item.localGroupId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) &&
+          item.id.replaceAll("-", "").slice(0, 16).toUpperCase() === scannedCode.fallbackKey
+        : identifiers.some((value) => normalizeFilterText(value) === normalizeFilterText(scannedCode.inventoryNumber))
+    );
     const matchesQuery =
       !query ||
-      normalizeFilterText(item.name).includes(query) ||
-      normalizeFilterText(item.inventoryNumber).includes(query) ||
-      normalizeFilterText(item.qrCode).includes(query);
+      [item.name, ...(item.searchNames ?? [])].some((name) => normalizeFilterText(name).includes(query)) ||
+      identifiers.some((value) => normalizeFilterText(value).includes(query)) ||
+      matchesScannedCode;
     const itemBrand = normalizeFilterText(item.brand ?? item.brandModel);
     const itemModel = normalizeFilterText(item.model ?? item.brandModel);
     const itemBuilding = normalizeFilterText(item.building ?? item.location.split("/")[0]);
@@ -98,11 +108,7 @@ export function filterInventoryItems(items: InventoryItem[], filters: InventoryL
 }
 
 function normalizeFilterText(value: string | undefined): string {
-  return (value ?? "")
-    .normalize("NFKC")
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/\s+/g, " ");
+  return normalizeInventorySearchText(value);
 }
 
 function parseFloorRange(value: string): { from: number; to: number } | null {

@@ -1,3 +1,5 @@
+import { normalizeInventorySearchText } from "./inventory-search";
+
 export const SEARCH_HISTORY_LIMIT = 20;
 
 export function addSearchHistoryEntry(
@@ -6,10 +8,10 @@ export function addSearchHistoryEntry(
 ): string[] {
   const value = query.trim();
   if (!value) return [...history];
-  const comparison = value.toLocaleLowerCase();
+  const comparison = normalizeInventorySearchText(value);
   return [
     value,
-    ...history.filter((entry) => entry.toLocaleLowerCase() !== comparison),
+    ...history.filter((entry) => normalizeInventorySearchText(entry) !== comparison),
   ].slice(0, SEARCH_HISTORY_LIMIT);
 }
 
@@ -23,7 +25,7 @@ export function parseSearchHistory(value: string | null): string[] {
       const value = typeof entry === "string" ? entry.trim() : "";
       if (
         value &&
-        !history.some((saved) => saved.toLocaleLowerCase() === value.toLocaleLowerCase())
+        !history.some((saved) => normalizeInventorySearchText(saved) === normalizeInventorySearchText(value))
       ) {
         history.push(value);
       }

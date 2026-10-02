@@ -271,6 +271,64 @@ describe("ItemsTable inventory search suggestions", () => {
     expect(screen.getAllByRole("link").every((link) => link.textContent === "Equipment 12")).toBe(true);
   });
 
+  it("offers one name and keeps all matching items across pages after selection", () => {
+    const monoblocks = Array.from({ length: 23 }, (_, index) => ({
+      ...ITEMS[0], id: `monoblock-${index}`, inventoryNumber: `INV-${index}`,
+      name: index % 2 === 0 ? "Моноблок" : "  МОНОБЛОК  ",
+    }));
+    renderTable([...monoblocks, { ...ITEMS[0], id: "printer", name: "Принтер" }]);
+    fireEvent.click(screen.getByRole("button", { name: "common.next" }));
+    fireEvent.focus(searchInput());
+    expect(screen.getAllByRole("option", { name: /^Моноблок$/i })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("option", { name: "Моноблок" }));
+    expect(screen.getByText('items.range:{"from":1,"to":10,"total":23}')).not.toBeNull();
+    expectHidden("Принтер");
+    fireEvent.click(screen.getByRole("button", { name: "common.next" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.next" }));
+    expect(screen.getByText('items.range:{"from":21,"to":23,"total":23}')).not.toBeNull();
+    expect(new Set(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).size).toBe(3);
+  });
+
+  it("finds both Excel inventory numbers and published 1C barcodes through the same search input", () => {
+    renderTable([
+      { ...ITEMS[0], id: "excel", name: "Excel equipment", inventoryNumber: "0000123456" },
+      { ...ITEMS[1], id: "one-c", name: "1C equipment", inventoryNumber: "OS-987", searchIdentifiers: ["0000654321", "1C-000987"] },
+    ]);
+    for (const query of ["0000654321", "*0000654321*", "1C-000987"]) {
+      fireEvent.change(searchInput(), { target: { value: query } });
+      expectVisible("1C equipment");
+      expectHidden("Excel equipment");
+    }
+    fireEvent.change(searchInput(), { target: { value: "0000123456" } });
+    expectVisible("Excel equipment");
+    expectHidden("1C equipment");
+  });
+
+  it("does not repeat history entries differing only in Unicode or whitespace", async () => {
+    window.localStorage.setItem("yu-inventory:item-search-history:v1:test",
+      JSON.stringify([" INV-main-101 ", "ＩＮＶ-main-101", "Main 101", "MAIN  101"]));
+    render(<ItemsTable items={ITEMS} searchHistoryScope="test" />);
+    fireEvent.focus(searchInput());
+    await waitFor(() => expect(screen.getByRole("option", { name: "INV-main-101" })).not.toBeNull());
+    expect(screen.getAllByRole("option", { name: "Main 101" })).toHaveLength(1);
+    expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(6);
+  });
+
+  it("offers a published 1C name once and finds every linked item using that name", () => {
+    renderTable([
+      { ...ITEMS[0], id: "excel-linked", name: "Excel equipment", searchNames: ["Моноблок Lenovo", " МОНОБЛОК  Lenovo "] },
+      { ...ITEMS[1], id: "one-c-linked", name: "1C equipment", searchNames: ["Моноблок\u00a0Lenovo"] },
+      { ...ITEMS[2], id: "printer", name: "Принтер" },
+    ]);
+    fireEvent.focus(searchInput());
+    expect(screen.getAllByRole("option", { name: "Моноблок Lenovo" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("option", { name: "Моноблок Lenovo" }));
+    expectVisible("Excel equipment");
+    expectVisible("1C equipment");
+    expectHidden("Принтер");
+    expect(screen.getByText('items.range:{"from":1,"to":2,"total":2}')).not.toBeNull();
+  });
+
   it("narrows suggestions as the user types and selects with arrows and Enter", () => {
     renderTable([
       { ...ITEMS[0], name: "Моноблок" },

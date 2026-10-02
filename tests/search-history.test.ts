@@ -35,6 +35,17 @@ test("search history preserves the newest-to-oldest stored order", () => {
   );
 });
 
+test("search history deduplicates Unicode and repeated whitespace without losing code zeros", () => {
+  assert.deepEqual(
+    parseSearchHistory(JSON.stringify(["  МОНОБЛОК  Lenovo ", "моноблок\u00a0Lenovo", "００１２３", "00123", "123"])),
+    ["МОНОБЛОК  Lenovo", "００１２３", "123"],
+  );
+  assert.deepEqual(
+    addSearchHistoryEntry(["Моноблок  Lenovo", "MONOBLOCK", "00123"], " моноблок Lenovo "),
+    ["моноблок Lenovo", "MONOBLOCK", "00123"],
+  );
+});
+
 test("search history menu retains keyboard focus and supports Escape", async () => {
   const source = await Promise.all([
     "../components/ItemsTable.tsx",

@@ -60,6 +60,8 @@ interface ItemRow extends QueryResultRow {
   brand: string | null;
   model: string | null;
   one_c_code: string | null;
+  search_identifiers?: string[] | null;
+  search_names?: string[] | null;
   quantity: number;
   unit_price: string | number;
   room_id: string;
@@ -125,6 +127,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.listItemCollection(
       "i.item_section = 'general' and (rp.responsible_user_id = $1 or r.primary_responsible_id = $1)",
       [userId],
+      true,
     );
   }
 
@@ -141,12 +144,14 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.listItemCollection(
       "i.item_section = 'general' and (rp.responsible_user_id = $1 or r.primary_responsible_id = $1) and i.status in ('decommissioned', 'decommissioned_in_use')",
       [userId],
+      true,
     );
   }
 
   private async listItemCollection(
     predicate: string,
     baseValues: readonly unknown[],
+    includeSelectionResponsibility = false,
   ): Promise<InventoryItemRecord[]> {
     const records: InventoryItemRecord[] = [];
     let cursor: { updatedAt: string; id: string } | null = null;
@@ -165,7 +170,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         COLLECTION_LIMITS.inventoryItems - records.length + 1,
       );
       const result = await this.source.query<ItemRow>(
-        itemSelect(where ? `where ${where}` : "", `limit ${queryLimit}`),
+        itemSelect(where ? `where ${where}` : "", `limit ${queryLimit}`, false, includeSelectionResponsibility),
         values,
       );
       records.push(...result.rows.map(mapItem));
@@ -1127,19 +1132,19 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
   }
 }
 
-function itemSelect(where: string, limit = "", includeRoomAccess = false) {
+function itemSelect(where: string, limit = "", includeRoomAccess = false, includeSelectionResponsibility = false) {
   return `
     with selected as materialized (
       select i.id
         from ${ITEMS} i
         join ${ROOMS} r on r.id = i.room_id
-        left join lateral (
+        ${includeSelectionResponsibility ? `left join lateral (
           select responsible_user_id
             from "yu_inventory"."responsibility_periods"
            where item_id = i.id and ended_at is null
            order by started_at desc
            limit 1
-        ) rp on true
+        ) rp on true` : ""}
         ${where}
        order by i.updated_at desc, i.id
        ${limit}
@@ -1147,6 +1152,8 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false) {
     select i.id, i.name, i.description, i.item_type, i.item_section, i.it_type,
            coalesce(addresses.entries, '[]'::jsonb) as network_addresses,
            i.brand, i.model, i.one_c_code,
+           coalesce(one_c_search.identifiers, '{}'::text[]) as search_identifiers,
+           coalesce(one_c_search.names, '{}'::text[]) as search_names,
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
            b.id as building_id, b.name as building_name,
@@ -1169,6 +1176,29 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false) {
       join ${ITEMS} i on i.id = selected.id
       join ${ROOMS} r on r.id = i.room_id
       join ${BUILDINGS} b on b.id = r.building_id
+      left join lateral (
+        select array_agg(distinct identifier.value order by identifier.value)
+                 filter (where nullif(btrim(identifier.value), '') is not null) as identifiers,
+               array_agg(distinct latest_published.name order by latest_published.name)
+                 filter (where nullif(btrim(latest_published.name), '') is not null) as names
+          from "yu_inventory"."item_one_c_links" l
+          left join lateral (
+            select published.payload->>'barcode' as barcode,
+                   published.payload->>'name' as name
+              from "yu_inventory"."one_c_import_batch_rows" published
+             where published.external_id = l.external_id
+               and published.published_item_id = i.id
+               and published.review_state = 'published'
+             order by published.published_at desc nulls last, published.batch_id desc
+             limit 1
+          ) latest_published on true
+          cross join lateral (values
+            (l.source_code),
+            (l.source_inventory_number),
+            (latest_published.barcode)
+          ) identifier(value)
+         where l.item_id = i.id
+      ) one_c_search on true
       left join lateral (
         select jsonb_agg(
                  jsonb_build_object(
@@ -1244,6 +1274,8 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     brand: row.brand,
     model: row.model,
     oneCCode: row.one_c_code,
+    searchIdentifiers: row.search_identifiers ?? [],
+    searchNames: row.search_names ?? [],
     quantity: Number(row.quantity),
     unitPrice: Number(row.unit_price),
     roomId: row.room_id,
