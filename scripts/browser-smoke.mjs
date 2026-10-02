@@ -90,6 +90,7 @@ try {
   console.log("Browser smoke passed: 2 Chromium journeys.");
 } catch (error) {
   failure = error;
+  await persistDatabaseFailureEvidence();
 } finally {
   const cleanupFailure = await cleanupResources();
   failure ??= cleanupFailure;
@@ -341,6 +342,35 @@ async function persistFailureEvidence() {
     sanitizeLog(serverLog.join("")),
     { encoding: "utf8", mode: 0o600 },
   );
+}
+
+async function persistDatabaseFailureEvidence() {
+  if (!database) return;
+  // This runner only provisions or accepts an explicitly disposable test DB.
+  // Capture activity before cleanup so blocked test transactions remain visible.
+  const client = new pg.Client({
+    connectionString: database.environment.TEST_DATABASE_URL,
+    connectionTimeoutMillis: 2000,
+    query_timeout: 2000,
+  });
+  try {
+    await client.connect();
+    const activity = await client.query(`
+      select pid, state, wait_event_type, wait_event,
+             pg_blocking_pids(pid) as blocking_pids,
+             extract(epoch from (clock_timestamp() - query_start)) as query_age_seconds,
+             left(query, 4000) as query
+        from pg_stat_activity
+       where datname = current_database() and usename = current_user
+         and pid <> pg_backend_pid()
+       order by pid`);
+    await writeFile(path.join(artifactRoot, "test-database-activity.json"),
+      sanitizeLog(JSON.stringify(activity.rows, null, 2)), { encoding: "utf8", mode: 0o600 });
+  } catch {
+    // Diagnostics must preserve the original test failure and resource cleanup.
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
 
 async function handleSignal(signal, exitCode) {

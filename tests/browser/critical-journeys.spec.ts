@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 
 const password = requiredEnvironment("BROWSER_SMOKE_PASSWORD");
 const adminEmail = requiredEnvironment("BROWSER_SMOKE_ADMIN_EMAIL");
@@ -148,6 +149,9 @@ async function attachSafeEvidence(
   testInfo: TestInfo,
   evidence: ReturnType<typeof captureSafeEvidence>,
 ) {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await writeFile(testInfo.outputPath("safe-browser-trace.json"), JSON.stringify(evidence.trace, null, 2), { mode: 0o600 });
+  }
   await testInfo.attach("request-ids", {
     body: Buffer.from(JSON.stringify([...evidence.requestIds].sort(), null, 2)),
     contentType: "application/json",
