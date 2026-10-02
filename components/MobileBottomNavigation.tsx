@@ -26,7 +26,7 @@ export default function MobileBottomNavigation() {
         {visibleItems.map(({ href, key, icon: Icon, prominent }) => {
           const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <Link key={href} href={href} aria-current={active ? "page" : undefined} className={`relative flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium ${active ? "text-[#002060]" : "text-zinc-600"}`}>
+            <Link key={href} href={href} prefetch={false} aria-current={active ? "page" : undefined} className={`relative flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium ${active ? "text-[#002060]" : "text-zinc-600"}`}>
               <span className={prominent ? "-mt-7 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-emerald-500 text-white shadow-lg" : "flex h-6 items-center"}>
                 <Icon className={prominent ? "h-7 w-7" : "h-5 w-5"} />
               </span>
