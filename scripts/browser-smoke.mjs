@@ -24,6 +24,7 @@ const fixtureEnvironment = {
 
 let database;
 let server;
+let browser;
 let failure;
 let cleanupPromise;
 const serverLog = [];
@@ -86,7 +87,9 @@ try {
   collectLog(server.stderr, serverLog);
   await waitForServer(`${baseURL}/login?manual=1`, server);
 
-  runNode(["node_modules/@playwright/test/cli.js", "test"], productionEnvironment);
+  // Keep this process responsive so collectLog drains the server's pipes.
+  // spawnSync would stop reading them, eventually blocking the server on Linux.
+  await runBrowserTests(productionEnvironment);
   console.log("Browser smoke passed: 2 Chromium journeys.");
 } catch (error) {
   failure = error;
@@ -218,6 +221,23 @@ function runNode(arguments_, environment) {
   run(process.execPath, arguments_, environment, root);
 }
 
+function runBrowserTests(environment) {
+  return new Promise((resolve, reject) => {
+    browser = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test"], {
+      cwd: root,
+      env: environment,
+      stdio: "inherit",
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
+    browser.once("error", reject);
+    browser.once("close", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Browser tests ${signal ? `terminated by ${signal}` : `exited with code ${code ?? 1}`}.`));
+    });
+  });
+}
+
 function run(command, arguments_, environment, cwd, fail = true) {
   const result = spawnSync(command, arguments_, { cwd, env: environment, stdio: "inherit", windowsHide: true });
   if (result.error) throw result.error;
@@ -314,6 +334,14 @@ function errorMessage(error) {
 function cleanupResources() {
   cleanupPromise ??= (async () => {
     let cleanupFailure;
+    if (browser) {
+      try {
+        await stopProcess(browser);
+      } catch (error) {
+        cleanupFailure ??= error;
+        serverLog.push(`\n[cleanup] ${errorMessage(error)}\n`);
+      }
+    }
     if (server) {
       try {
         await stopProcess(server);

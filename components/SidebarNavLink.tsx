@@ -29,7 +29,6 @@ export default function SidebarNavLink({
   return (
     <Link
       href={href}
-      prefetch={false}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-accent-light hover:text-accent-dark"
