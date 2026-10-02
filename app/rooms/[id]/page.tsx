@@ -26,6 +26,6 @@ export default async function RoomPage({
     throw error;
   }
   const requestedReturnTo = (await searchParams).returnTo;
-  const backTo = requestedReturnTo === "/scan" ? "/scan" : undefined;
-  return <RoomWorkspaceView room={room} authenticated returnTo={`/rooms/${id}`} backTo={backTo} />;
+  const backTo = requestedReturnTo === "/scan" ? "/scan" : user.role === "typography" ? "/inventory" : undefined;
+  return <RoomWorkspaceView room={room} authenticated returnTo={`/rooms/${id}`} backTo={backTo} readOnly={user.role === "typography"} />;
 }

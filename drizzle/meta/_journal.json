@@ -358,6 +358,13 @@
       "when": 1790919289096,
       "tag": "20261002053449_whatsapp-delivery-cooldown",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790937626299,
+      "tag": "20261002104026_typography-role",
+      "breakpoints": true
     }
   ]
 }

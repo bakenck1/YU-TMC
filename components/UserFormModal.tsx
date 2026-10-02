@@ -29,6 +29,7 @@ export interface UserFormModalProps {
   user: AppUser | null;
   roleOptions: readonly UserRole[];
   suggestedCode: string;
+  error?: string | null;
   onClose: () => void;
   onSave: (values: UserFormValues) => Promise<void>;
 }
@@ -37,11 +38,13 @@ export default function UserFormModal({
   user,
   roleOptions,
   suggestedCode,
+  error,
   onClose,
   onSave,
 }: UserFormModalProps) {
   const { t } = useAppSettings();
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [values, setValues] = useState<UserFormValues>({
     code: user?.code ?? suggestedCode,
     fullName: user?.fullName ?? "",
@@ -56,6 +59,7 @@ export default function UserFormModal({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitError(null);
     setSaving(true);
     try {
       await onSave({
@@ -64,8 +68,10 @@ export default function UserFormModal({
         fullName: values.fullName.trim(),
         iin: values.iin.trim(),
         email: values.email.trim(),
-        phone: values.phone.trim() || "—",
+        phone: values.role === "typography" ? "" : values.phone.trim() || "—",
       });
+    } catch {
+      setSubmitError(t("users.saveError"));
     } finally {
       setSaving(false);
     }
@@ -91,7 +97,9 @@ export default function UserFormModal({
           <TextField required readOnly label={t("users.code")} value={values.code} placeholder={t("users.codePlaceholder")} />
           <TextField required inputMode="numeric" pattern="[0-9]{12}" minLength={12} maxLength={12} label="ИИН" value={values.iin} onChange={(event) => setValues((current) => ({ ...current, iin: event.target.value.replace(/\D/g, "").slice(0, 12) }))} placeholder="000000000000" />
           <TextField required type="email" readOnly={user !== null} label="Email" value={values.email} onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))} placeholder="name@example.com" />
-          <TextField type="tel" label={t("users.phone")} value={values.phone} onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))} placeholder={t("users.phonePlaceholder")} />
+          {values.role !== "typography" && (
+            <TextField type="tel" label={t("users.phone")} value={values.phone} onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))} placeholder={t("users.phonePlaceholder")} />
+          )}
         </Wrapper>
 
         <Wrapper display="block" margin={{ top: "md" }}>
@@ -122,6 +130,12 @@ export default function UserFormModal({
           <CheckboxField label={t("users.emailVerified")} hint={t("users.emailVerifiedHint")} checked={values.emailVerified} onChange={(event) => setValues((current) => ({ ...current, emailVerified: event.target.checked }))} />
           {!user ? <p className="text-xs leading-5 text-zinc-500 sm:col-span-2">{t("users.ssoProvisioningHint")}</p> : null}
         </div>
+
+        {(error || submitError) && (
+          <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error || submitError}
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col-reverse gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
           <Button onClick={onClose}>{t("common.cancel")}</Button>

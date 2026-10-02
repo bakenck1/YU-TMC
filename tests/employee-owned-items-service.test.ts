@@ -95,6 +95,31 @@ test("an employee receives only their assigned items and derived summary", async
   });
 });
 
+test("printing staff cannot enumerate items or open an item even if previously responsible", async () => {
+  const actor = { userId: "printing-1", role: "typography" } as const;
+  const service = createService({
+    listItems: async () => { throw new Error("global collection must not be queried"); },
+    listItemsAssignedTo: async () => { throw new Error("assigned collection must not be queried"); },
+    findItemById: async () => item("mine", actor.userId),
+  });
+  await assert.rejects(() => service.listItems(actor), { kind: "forbidden" });
+  await assert.rejects(() => service.findItem("mine", actor), { kind: "not_found" });
+});
+
+test("printing staff can see a room item's photo but cannot view service or decommissioning photos", async () => {
+  const actor = { userId: "printing-1", role: "typography" } as const;
+  const photo = { bytes: new Uint8Array([1]), mimeType: "image/jpeg" as const, width: 1, height: 1 };
+  const service = createService({
+    findItemById: async () => item("room-item", "employee-1"),
+    findItemPhoto: async () => photo,
+    findServiceItemPhoto: async () => { throw new Error("service photo must not be queried"); },
+    findDecommissionedUsagePhoto: async () => { throw new Error("usage photo must not be queried"); },
+  });
+  assert.deepEqual(await service.getItemPhoto("room-item", actor), photo);
+  await assert.rejects(() => service.getServiceItemPhoto("room-item", actor), { kind: "not_found" });
+  await assert.rejects(() => service.getDecommissionedUsagePhoto("room-item", actor), { kind: "not_found" });
+});
+
 test("employee collection drops legacy room-primary items without personal assignment", async () => {
   const mine = item("mine", "employee-1");
   const foreign = item("foreign", "employee-2");

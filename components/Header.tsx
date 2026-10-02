@@ -9,6 +9,8 @@ import type { TranslationKey } from "@/lib/i18n";
 import type { AuthRole } from "@/lib/security/authorization";
 import type { AppLanguage } from "@/lib/app-settings";
 import TmcNotifications from "@/components/TmcNotifications";
+import { canAccessPath } from "@/lib/security/authorization";
+import { hasPermission } from "@/lib/security/permissions";
 
 const SECTION_TITLES: Record<string, TranslationKey> = {
   "/": "nav.home",
@@ -32,6 +34,7 @@ const ROLE_LABELS: Record<AuthRole, TranslationKey> = {
   admin: "auth.roleAdmin",
   warehouse: "auth.roleWarehouse",
   employee: "auth.roleEmployee",
+  typography: "auth.roleTypography",
 };
 
 function initials(name: string, email: string) {
@@ -73,7 +76,7 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
       </div>
 
       <div className="flex items-center gap-3">
-        {user ? <TmcNotifications compact /> : null}
+        {user && hasPermission(user.role, "inventory.notification.read") ? <TmcNotifications compact /> : null}
         <label className="relative flex items-center">
           <span className="sr-only">{t("auth.language")}</span>
           <Languages className="pointer-events-none absolute left-2.5 h-4 w-4 text-zinc-400" />
@@ -98,9 +101,13 @@ export default function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
             {user ? t(ROLE_LABELS[user.role]) : "—"}
           </p>
         </div>
-        <Link href="/profile" aria-label={t("nav.profile")} className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+        {user && !canAccessPath(user.role, "/profile") ? (
+          <span aria-label={user.name} className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+            {initials(user.name, user.email)}
+          </span>
+        ) : <Link href="/profile" aria-label={t("nav.profile")} className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
           {user ? initials(user.name, user.email) : "YU"}
-        </Link>
+        </Link>}
       </div>
     </header>
   );

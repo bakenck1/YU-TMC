@@ -5,6 +5,7 @@ import type {
   ItemStatus,
 } from "@/lib/contracts/inventory-domain";
 import type { InventoryItemCategory } from "@/lib/inventory-categories";
+import type { UserRole } from "@/lib/contracts/users";
 import type {
   InventorySection,
   ItEquipmentType,
@@ -74,7 +75,7 @@ export interface InventoryItemAuditDto {
   actorId: string | null;
   actorName: string | null;
   actorEmail: string | null;
-  actorRole: "admin" | "warehouse" | "employee" | null;
+  actorRole: UserRole | null;
   subjectRevision: number | null;
   action: string;
   beforeValues: Record<string, unknown> | null;

@@ -13,11 +13,13 @@ export default function RoomWorkspaceView({
   authenticated,
   returnTo,
   backTo,
+  readOnly = false,
 }: {
   room: RoomWorkspaceDto | PublicRoomDto;
   authenticated: boolean;
   returnTo: string;
-  backTo?: "/scan";
+  backTo?: "/scan" | "/inventory";
+  readOnly?: boolean;
 }) {
   const { t } = useAppSettings();
   if (!("items" in room)) {
@@ -38,7 +40,7 @@ export default function RoomWorkspaceView({
         {backTo ? (
           <Link href={backTo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            {t("scanner.backToScan")}
+            {t(backTo === "/scan" ? "scanner.backToScan" : "common.previous")}
           </Link>
         ) : null}
         <section className="w-full rounded-3xl border border-amber-200 bg-amber-50 p-7 text-center shadow-sm">
@@ -53,7 +55,7 @@ export default function RoomWorkspaceView({
       {backTo ? (
         <Link href={backTo} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          {t("scanner.backToScan")}
+          {t(backTo === "/scan" ? "scanner.backToScan" : "common.previous")}
         </Link>
       ) : null}
       <section className="rounded-3xl bg-gradient-to-br from-[#002060] to-[#064b8e] p-5 text-white shadow-sm sm:p-7">
@@ -76,15 +78,15 @@ export default function RoomWorkspaceView({
           </section>
           {room.items.length ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              {room.items.map((item) => (
-                <article key={item.id} className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
-                  <Link href={item.href} className="block">
+              {room.items.map((item) => {
+                const content = <>
                     <div className="relative flex aspect-[16/9] items-center justify-center bg-zinc-100">
                       {item.photoUrl ? <Image src={item.photoUrl} alt={item.name} fill sizes="(max-width: 640px) 100vw, 50vw" unoptimized className="object-cover" /> : <ImageIcon className="h-10 w-10 text-zinc-400" />}
                     </div>
                     <div className="p-4">
                       <h2 className="text-lg font-semibold text-zinc-900">{item.name}</h2>
                       <p className="mt-1 text-sm text-zinc-500">{item.inventoryNumber}</p>
+                      {readOnly && item.description ? <p className="mt-2 text-sm text-zinc-600">{item.description}</p> : null}
                       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                         <dt className="text-zinc-500">{t("room.responsible")}</dt><dd className="text-right text-zinc-800">{item.responsibleName ?? room.responsibleName ?? t("common.notAssigned")}</dd>
                         <dt className="text-zinc-500">{t("items.status")}</dt><dd className="text-right text-zinc-800">{t(`status.${item.status}`)}</dd>
@@ -92,12 +94,16 @@ export default function RoomWorkspaceView({
                         <dt className="text-zinc-500">{t("room.connected")}</dt><dd className="text-right text-zinc-800">{t(`connection.${item.connectionStatus}`)}</dd>
                       </dl>
                     </div>
-                  </Link>
-                </article>
-              ))}
+                </>;
+                return (
+                  <article key={item.id} className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
+                    {readOnly ? content : <Link href={item.href} className="block">{content}</Link>}
+                  </article>
+                );
+              })}
             </div>
           ) : <p className="rounded-2xl bg-white p-6 text-center text-zinc-500">{t("room.empty")}</p>}
-          <ProblemReportButton items={room.items.filter((item) => item.href.startsWith("/items/"))} fullWidth />
+          {!readOnly ? <ProblemReportButton items={room.items.filter((item) => item.href.startsWith("/items/"))} fullWidth /> : null}
         </>
     </main>
   );

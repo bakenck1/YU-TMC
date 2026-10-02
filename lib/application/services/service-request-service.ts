@@ -8,7 +8,7 @@ import type {
 import type { ServiceRequestStatus } from "@/lib/contracts/inventory-domain";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
-import type { AuthorizationActor } from "@/lib/security/permissions";
+import { hasPermission, type AuthorizationActor } from "@/lib/security/permissions";
 
 type AuthenticatedServiceRequestActor = AuthorizationActor & {
   sessionVersion: number;
@@ -196,6 +196,7 @@ export class ServiceRequestService {
 
   async getPhoto(id: string, actor: AuthenticatedServiceRequestActor) {
     assertAuthenticatedActor(actor);
+    if (!hasPermission(actor.role, "inventory.notification.read")) throw forbidden();
     if (!isUuid(id)) throw validation();
     const normalizedId = id.toLowerCase();
     const normalizedActorId = actor.userId.toLowerCase();

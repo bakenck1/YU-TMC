@@ -21,10 +21,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
   ].includes(pathname);
   const isPublicRoomQr = pathname.startsWith("/rooms/qr/");
   const isPublicApiDocumentation = pathname === "/api";
+  const isRoomQrPrintPage = pathname === "/inventory/rooms/qr-print";
 
   if (
     isAuthPage ||
     isPublicApiDocumentation ||
+    isRoomQrPrintPage ||
     (isPublicRoomQr && (loading || !user))
   ) {
     return <div className="min-h-screen bg-background">{children}</div>;

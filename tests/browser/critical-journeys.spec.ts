@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 
 const password = requiredEnvironment("BROWSER_SMOKE_PASSWORD");
 const adminEmail = requiredEnvironment("BROWSER_SMOKE_ADMIN_EMAIL");
@@ -36,6 +37,7 @@ test.describe.serial("critical production journeys", () => {
     const evidence = captureSafeEvidence(page);
     try {
       await login(page, ownerEmail);
+      await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole("button", { name: /Общая стоимость/ }).click();
       const valueList = page.getByRole("region", { name: "Общая стоимость", exact: true });
@@ -84,7 +86,18 @@ test.describe.serial("critical production journeys", () => {
       await login(page, recipientEmail);
       await page.goto(requestPath!);
       await expect(page.getByRole("heading", { name: "Групповая заявка" })).toBeVisible();
+      const decisionPath = `/api/inventory/${requestPath!.slice("/tmc/".length)}/decision`;
+      const decisionResponsePromise = page.waitForResponse((response) =>
+        response.request().method() === "POST" && new URL(response.url()).pathname === decisionPath,
+      );
       await page.getByRole("button", { name: "Принять все" }).click();
+      const decisionResponse = await decisionResponsePromise;
+      expect(decisionResponse.status()).toBe(200);
+      const decisionBody = await decisionResponse.json();
+      expect(decisionBody.request).toMatchObject({
+        status: "accepted",
+        summary: { total: 1, pending: 0, accepted: 1 },
+      });
       await expect(page.getByRole("status").filter({ hasText: "Принято 1 из 1" })).toBeVisible();
       await expect(page.getByText("Принята", { exact: true })).toBeVisible();
       await page.goto("/profile");
@@ -116,16 +129,40 @@ async function logout(page: Page) {
 
 function captureSafeEvidence(page: Page) {
   const requestIds = new Set<string>();
-  const trace: Array<{ method: string; path: string; status: number; requestId?: string }> = [];
+  const startedAt = Date.now();
+  const trace: Array<{ method: string; path: string; status: number; elapsedMs: number; phase: string; error?: string; requestId?: string }> = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "started" });
+    }
+  });
+  page.on("requestfinished", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "finished" });
+    }
+  });
+  page.on("requestfailed", (request) => {
+    const path = new URL(request.url()).pathname;
+    const error = request.failure()?.errorText;
+    if (trace.length < 400 && !path.startsWith("/_next/static/")) {
+      trace.push({ method: request.method(), path, status: 0, elapsedMs: Date.now() - startedAt, phase: "failed",
+        ...(error && /^net::[A-Z_]+$/.test(error) ? { error } : {}),
+      });
+    }
+  });
   page.on("response", (response) => {
     const requestId = response.headers()["x-request-id"];
     if (requestId && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId)) requestIds.add(requestId);
-    if (trace.length < 200) {
+    if (trace.length < 400 && !new URL(response.url()).pathname.startsWith("/_next/static/")) {
       const url = new URL(response.url());
       trace.push({
         method: response.request().method(),
         path: url.pathname,
         status: response.status(),
+        elapsedMs: Date.now() - startedAt,
+        phase: "response",
         ...(requestId && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId) ? { requestId } : {}),
       });
     }
@@ -137,6 +174,9 @@ async function attachSafeEvidence(
   testInfo: TestInfo,
   evidence: ReturnType<typeof captureSafeEvidence>,
 ) {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await writeFile(testInfo.outputPath("safe-browser-trace.json"), JSON.stringify(evidence.trace, null, 2), { mode: 0o600 });
+  }
   await testInfo.attach("request-ids", {
     body: Buffer.from(JSON.stringify([...evidence.requestIds].sort(), null, 2)),
     contentType: "application/json",

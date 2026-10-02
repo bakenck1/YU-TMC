@@ -120,6 +120,22 @@ test("admin and warehouse retain full access to a closed cabinet", async () => {
   }
 });
 
+test("printing staff can view every item in both open and closed cabinets by ID and QR", async () => {
+  const actor = { userId: OUTSIDER_ID, role: "typography" } as const;
+  for (const accessMode of ["open", "closed"] as const) {
+    const service = workspaceService(room(accessMode), [
+      item(),
+      item({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", inventoryNumber: "LOCAL-1", photoItemId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }),
+    ]);
+    const direct = await service.findById(ROOM_ID, actor);
+    const scanned = await service.findByQr(QR_KEY, actor);
+    assert.deepEqual(direct, scanned);
+    assert.equal(direct.access, "full");
+    assert.equal(direct.items.length, 2);
+    assert.equal(direct.items[1]?.photoUrl, "/api/inventory/items/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/photo");
+  }
+});
+
 function room(accessMode: "open" | "closed"): RoomWorkspaceRecord {
   return {
     id: ROOM_ID,

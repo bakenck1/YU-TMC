@@ -26,6 +26,8 @@ export interface RoomWorkspaceItemRecord {
   responsibleName: string | null;
   responsibleUserId: string | null;
   hasPhoto: boolean;
+  /** The original inventory item owns photos for a local barcode group. */
+  photoItemId?: string;
   createdAt: Date;
   href?: string;
 }

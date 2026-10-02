@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import type { AppUser, UserRole } from "@/lib/types";
-import type { UserDto } from "@/lib/contracts/users";
+import { USER_ROLES, type UserDto } from "@/lib/contracts/users";
 import type { TranslationKey } from "@/lib/i18n";
 import { canManageUser } from "@/lib/security/permissions";
 import { formatUserDate, getUserInitials, USER_ROLE_LABEL_KEYS } from "@/lib/user-presentation";
@@ -27,7 +27,7 @@ type SortKey = "fullName" | "email" | "role" | "addedAt";
 type SortDirection = "asc" | "desc";
 type EmailFilter = "all" | "verified" | "unverified";
 
-const ROLE_OPTIONS: UserRole[] = ["admin", "warehouse", "employee"];
+const ROLE_OPTIONS = USER_ROLES;
 
 export default function UsersManager({
   initialUsers,
@@ -172,7 +172,7 @@ export default function UsersManager({
             ? {
                 fullName: values.fullName,
                 iin: values.iin,
-                phone: values.phone,
+                phone: values.role === "typography" ? undefined : values.phone,
                 role: values.role,
                 emailVerified: values.emailVerified,
                 active: values.active,
@@ -183,7 +183,7 @@ export default function UsersManager({
                 fullName: values.fullName,
                 iin: values.iin,
                 email: values.email,
-                phone: values.phone,
+                phone: values.role === "typography" ? undefined : values.phone,
                 role: values.role,
                 emailVerified: values.emailVerified,
                 active: values.active,
@@ -221,7 +221,7 @@ export default function UsersManager({
       body: JSON.stringify({
         fullName: user.fullName,
         iin: user.iin,
-        phone: user.phone,
+        phone: user.role === "typography" ? undefined : user.phone,
         role: user.role,
         emailVerified: user.emailVerified,
         active: !user.active,
@@ -267,7 +267,7 @@ export default function UsersManager({
 
   return (
     <div className="space-y-4">
-      {mutationError && (
+      {mutationError && formUserId === undefined && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {mutationError}
         </div>
@@ -317,7 +317,10 @@ export default function UsersManager({
             </button>
             <button
               type="button"
-              onClick={() => setFormUserId(null)}
+              onClick={() => {
+                setMutationError(null);
+                setFormUserId(null);
+              }}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <Plus className="h-4 w-4" />
@@ -535,7 +538,10 @@ export default function UsersManager({
           user={selectedUser}
           canMutate={canMutateSelectedUser}
           onClose={() => setSelectedId(null)}
-          onEdit={() => setFormUserId(selectedUser.id)}
+          onEdit={() => {
+            setMutationError(null);
+            setFormUserId(selectedUser.id);
+          }}
           onToggleActive={() => toggleActive(selectedUser.id)}
           onDelete={() => setDeleteId(selectedUser.id)}
         />
@@ -547,7 +553,11 @@ export default function UsersManager({
           user={formUser}
           roleOptions={roleOptions}
           suggestedCode={suggestedCode}
-          onClose={() => setFormUserId(undefined)}
+          error={mutationError}
+          onClose={() => {
+            setMutationError(null);
+            setFormUserId(undefined);
+          }}
           onSave={saveUser}
         />
       )}
@@ -578,6 +588,12 @@ async function userMutationError(
   }
   if (payload?.error === "email_already_exists") {
     return t("users.duplicateEmailError");
+  }
+  if (payload?.error === "iin_already_exists") {
+    return t("users.duplicateIinError");
+  }
+  if (payload?.error === "invalid_iin") {
+    return t("users.invalidIinError");
   }
   if (payload?.error === "user_login_not_configured") {
     return t("users.loginMethodError");

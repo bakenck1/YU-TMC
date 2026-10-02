@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Building2,
   ChevronDown,
@@ -65,6 +66,7 @@ export default function InventoryBuildingsManager({
   const savedRoomRef = useRef<HTMLDivElement>(null);
   const canCreate = hasPermission(actorRole, "inventory.building.create");
   const canEdit = hasPermission(actorRole, "inventory.building.manage");
+  const canPrintRoomQr = hasPermission(actorRole, "inventory.qr.print_room");
   const canCreateItem = hasPermission(actorRole, "inventory.item.create");
 
   useEffect(() => {
@@ -300,7 +302,7 @@ export default function InventoryBuildingsManager({
         className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 shadow-sm"
       >
         <div className="flex min-w-0 items-center gap-2.5">
-          {canEdit ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
+          {canPrintRoomQr ? <input type="checkbox" checked={selectedRoomIds.has(room.id)} onChange={() => setSelectedRoomIds((current) => { const next = new Set(current); if (next.has(room.id)) next.delete(room.id); else next.add(room.id); return next; })} aria-label={`${t("room.selectForPrint")}: ${room.designation}`} className="h-5 w-5 shrink-0 accent-emerald-500" /> : null}
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-500 shadow-sm ring-1 ring-zinc-200">
             <DoorOpen className="h-4 w-4" />
           </span>
@@ -316,15 +318,21 @@ export default function InventoryBuildingsManager({
             {t(room.accessMode === "closed" ? "room.accessClosedOption" : "room.accessOpen")}
           </span>
         </div>
-        {canEdit ? (
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-200 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-            <a
+        {canEdit || canPrintRoomQr ? (
+          <div className={`mt-3 grid grid-cols-2 gap-2 border-t border-zinc-200 pt-3 ${canEdit ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]" : ""}`}>
+            {canPrintRoomQr ? <a
               href={`/api/inventory/rooms/${room.id}/qr?download=1`}
               className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
               <Download className="h-3.5 w-3.5" />
               {t("room.qrDownload")}
-            </a>
+            </a> : null}
+            {!canEdit ? (
+              <Link href={`/rooms/${room.id}?returnTo=%2Finventory`} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-100">
+                {t("common.open")}
+              </Link>
+            ) : null}
+            {canEdit ? <>
             <button
               type="button"
               onClick={() => void changeRoomAccess(room, room.accessMode === "closed" ? "open" : "closed")}
@@ -349,6 +357,7 @@ export default function InventoryBuildingsManager({
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
+            </> : null}
           </div>
         ) : null}
       </div>
@@ -421,6 +430,10 @@ export default function InventoryBuildingsManager({
           <button type="button" onClick={() => void bulkChangeRoomAccess("closed")} disabled={accessSaving || !selectedRoomIds.size} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-300 px-4 text-sm font-semibold text-amber-900 disabled:opacity-50">
             {t("room.closeAccessAction")}{selectedRoomIds.size ? ` (${selectedRoomIds.size})` : ""}
           </button>
+          </>
+        ) : null}
+        {canPrintRoomQr ? (
+          <>
           <button
             type="button"
             onClick={() => {
@@ -439,6 +452,10 @@ export default function InventoryBuildingsManager({
             <QrCode className="h-4 w-4" />
             {t("room.qrPrint")}
             {selectedRoomIds.size ? ` (${selectedRoomIds.size})` : null}
+          </button>
+          <button type="button" onClick={() => window.open("/inventory/rooms/qr-print?all=1", "_blank", "noopener,noreferrer")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#002060] px-4 text-sm font-semibold text-[#002060] hover:bg-blue-50">
+            <QrCode className="h-4 w-4" />
+            {t("room.qrPrintAll")}
           </button>
           </>
         ) : null}

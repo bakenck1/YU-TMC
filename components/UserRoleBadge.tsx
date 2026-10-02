@@ -7,6 +7,7 @@ const ROLE_TONES = {
   admin: "success",
   warehouse: "info",
   employee: "neutral",
+  typography: "info",
 } as const;
 
 export default function UserRoleBadge({ role }: { role: UserRole }) {

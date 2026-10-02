@@ -47,6 +47,14 @@ vi.mock("@/lib/contracts/tmc-operations", () => ({
 }));
 
 describe("QrScanPage", () => {
+  it("printing staff can scan a cabinet without an item scanner or item actions", () => {
+    render(<QrScanPage actorRole="typography" />);
+    expect(screen.queryByRole("button", { name: "scanner.itemTitle" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "scanner.roomTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "resolve room" }));
+    expect(push).toHaveBeenCalledWith("/rooms/11111111-1111-4111-8111-111111111111?returnTo=%2Fscan");
+    expect(fetch).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     push.mockReset();
     vi.stubGlobal("crypto", {

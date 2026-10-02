@@ -44,6 +44,7 @@ interface ItemRow extends QueryResultRow {
   responsible_name: string | null;
   responsible_user_id: string | null;
   has_photo: boolean;
+  photo_item_id?: string;
   created_at: Date;
 }
 
@@ -102,7 +103,7 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
         ${sqlCollectionLimit(COLLECTION_LIMITS.roomWorkspaceItems)}`,
       [roomId],
       ),
-      this.source.query<ItemRow>(`select g.id, i.name, g.barcode_value as inventory_number,
+      this.source.query<ItemRow>(`select g.id, i.id as photo_item_id, i.name, g.barcode_value as inventory_number,
               i.description, i.status, i.condition, i.connection_status,
               responsible.full_name as responsible_name, g.responsible_user_id,
               exists(
@@ -146,6 +147,7 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
       responsibleName: row.responsible_name,
       responsibleUserId: row.responsible_user_id,
       hasPhoto: row.has_photo,
+      photoItemId: row.photo_item_id,
       createdAt: new Date(row.created_at),
       href: `/local-barcodes/${row.id}`,
     }));

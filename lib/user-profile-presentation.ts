@@ -14,6 +14,10 @@ export const USER_PROFILE_ROLE_COPY: Record<UserRole, { labelKey: TranslationKey
     labelKey: "users.employee",
     descriptionKey: "profile.roleEmployeeDescription",
   },
+  typography: {
+    labelKey: "users.typography",
+    descriptionKey: "profile.roleTypographyDescription",
+  },
 };
 
 export function getProfileInitials(fullName: string, email: string) {

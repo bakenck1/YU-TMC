@@ -24,6 +24,7 @@ const fixtureEnvironment = {
 
 let database;
 let server;
+let browser;
 let failure;
 let cleanupPromise;
 const serverLog = [];
@@ -86,10 +87,13 @@ try {
   collectLog(server.stderr, serverLog);
   await waitForServer(`${baseURL}/login?manual=1`, server);
 
-  runNode(["node_modules/@playwright/test/cli.js", "test"], productionEnvironment);
+  // Keep this process responsive so collectLog drains the server's pipes.
+  // spawnSync would stop reading them, eventually blocking the server on Linux.
+  await runBrowserTests(productionEnvironment);
   console.log("Browser smoke passed: 2 Chromium journeys.");
 } catch (error) {
   failure = error;
+  await persistDatabaseFailureEvidence();
 } finally {
   const cleanupFailure = await cleanupResources();
   failure ??= cleanupFailure;
@@ -217,6 +221,23 @@ function runNode(arguments_, environment) {
   run(process.execPath, arguments_, environment, root);
 }
 
+function runBrowserTests(environment) {
+  return new Promise((resolve, reject) => {
+    browser = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test"], {
+      cwd: root,
+      env: environment,
+      stdio: "inherit",
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
+    browser.once("error", reject);
+    browser.once("close", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Browser tests ${signal ? `terminated by ${signal}` : `exited with code ${code ?? 1}`}.`));
+    });
+  });
+}
+
 function run(command, arguments_, environment, cwd, fail = true) {
   const result = spawnSync(command, arguments_, { cwd, env: environment, stdio: "inherit", windowsHide: true });
   if (result.error) throw result.error;
@@ -313,6 +334,14 @@ function errorMessage(error) {
 function cleanupResources() {
   cleanupPromise ??= (async () => {
     let cleanupFailure;
+    if (browser) {
+      try {
+        await stopProcess(browser);
+      } catch (error) {
+        cleanupFailure ??= error;
+        serverLog.push(`\n[cleanup] ${errorMessage(error)}\n`);
+      }
+    }
     if (server) {
       try {
         await stopProcess(server);
@@ -341,6 +370,35 @@ async function persistFailureEvidence() {
     sanitizeLog(serverLog.join("")),
     { encoding: "utf8", mode: 0o600 },
   );
+}
+
+async function persistDatabaseFailureEvidence() {
+  if (!database) return;
+  // This runner only provisions or accepts an explicitly disposable test DB.
+  // Capture activity before cleanup so blocked test transactions remain visible.
+  const client = new pg.Client({
+    connectionString: database.environment.TEST_DATABASE_URL,
+    connectionTimeoutMillis: 2000,
+    query_timeout: 2000,
+  });
+  try {
+    await client.connect();
+    const activity = await client.query(`
+      select pid, state, wait_event_type, wait_event,
+             pg_blocking_pids(pid) as blocking_pids,
+             extract(epoch from (clock_timestamp() - query_start)) as query_age_seconds,
+             left(query, 4000) as query
+        from pg_stat_activity
+       where datname = current_database() and usename = current_user
+         and pid <> pg_backend_pid()
+       order by pid`);
+    await writeFile(path.join(artifactRoot, "test-database-activity.json"),
+      sanitizeLog(JSON.stringify(activity.rows, null, 2)), { encoding: "utf8", mode: 0o600 });
+  } catch {
+    // Diagnostics must preserve the original test failure and resource cleanup.
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
 
 async function handleSignal(signal, exitCode) {

@@ -26,6 +26,7 @@ const ROUTE_PERMISSIONS = [
   ["/it-items", "inventory.it.read"],
   ["/requests", "inventory.notification.read"],
   ["/scan", "inventory.workspace.read"],
+  ["/rooms", "inventory.qr.resolve_room"],
   ["/inventory", "inventory.workspace.read"],
   ["/analytics", "legacy.analytics.read"],
   ["/locations", "legacy.locations.read"],
@@ -79,8 +80,7 @@ export function canAccessPath(role: unknown, pathname: string) {
 }
 
 export function defaultPathForRole(role: AuthRole) {
-  void role;
-  return "/profile";
+  return role === "typography" ? "/inventory" : "/profile";
 }
 
 export function isSafeReturnPath(value: string | null | undefined) {

@@ -22,7 +22,9 @@ export async function PATCH(
     requireUserId(id);
     const body = await readLimitedJson(request);
     const input = parseUpdateUser(body);
-    const checkedPhone = await verifyWhatsAppPhoneForSave(input.phone);
+    const checkedPhone = input.role === "typography"
+      ? { phone: undefined, warning: false }
+      : await verifyWhatsAppPhoneForSave(input.phone);
     const user = await getApplicationServices().users.updateUser(
       id,
       { ...input, phone: checkedPhone.phone },

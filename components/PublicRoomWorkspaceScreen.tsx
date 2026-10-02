@@ -5,12 +5,13 @@ export interface PublicRoomWorkspaceScreenProps {
   room: RoomWorkspaceDto | PublicRoomDto;
   authenticated: boolean;
   returnTo: string;
+  readOnly?: boolean;
 }
 
-export default function PublicRoomWorkspaceScreen({ room, authenticated, returnTo }: PublicRoomWorkspaceScreenProps) {
+export default function PublicRoomWorkspaceScreen({ room, authenticated, returnTo, readOnly = false }: PublicRoomWorkspaceScreenProps) {
   return (
     <main className="min-h-screen bg-background p-4 sm:p-6">
-      <RoomWorkspaceView room={room} authenticated={authenticated} returnTo={returnTo} />
+      <RoomWorkspaceView room={room} authenticated={authenticated} returnTo={returnTo} readOnly={readOnly} backTo={readOnly ? "/inventory" : undefined} />
     </main>
   );
 }

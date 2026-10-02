@@ -7,7 +7,7 @@ import type {
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { parseQrIdentifierInput } from "@/lib/domain/qr-identifier";
-import type { AuthorizationActor } from "@/lib/security/permissions";
+import { hasPermission, type AuthorizationActor } from "@/lib/security/permissions";
 
 export class RoomWorkspaceService {
   constructor(private readonly unitOfWork: UnitOfWork<RoomWorkspaceRepositories>) {}
@@ -45,7 +45,7 @@ function buildWorkspace(
   actor: AuthorizationActor,
   items: Awaited<ReturnType<RoomWorkspaceRepositories["rooms"]["listRoomItems"]>>,
 ): RoomWorkspaceDto {
-  const privileged = actor.role === "admin" || actor.role === "warehouse";
+  const privileged = hasPermission(actor.role, "inventory.room.read_all");
   const ownItems = items.filter((item) => item.responsibleUserId === actor.userId);
   const fullAccess = privileged || room.accessMode === "open";
   if (!fullAccess && ownItems.length === 0) {
@@ -75,7 +75,7 @@ function buildWorkspace(
       condition: item.condition,
       connectionStatus: item.connectionStatus,
       responsibleName: item.responsibleName,
-      photoUrl: item.hasPhoto ? `/api/inventory/items/${item.id}/photo` : null,
+      photoUrl: item.hasPhoto ? `/api/inventory/items/${item.photoItemId ?? item.id}/photo` : null,
       createdAt: item.createdAt.toISOString(),
       href: item.href ?? `/items/${item.id}`,
     })),
