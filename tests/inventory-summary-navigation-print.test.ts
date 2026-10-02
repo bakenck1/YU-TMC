@@ -5,9 +5,9 @@ import test from "node:test";
 import { USER_ROLES } from "../lib/contracts/users";
 import { canAccessPath } from "../lib/security/authorization";
 
-test("every user role can open an item card from the summary", () => {
+test("inventory roles can open item cards while printing staff remain restricted", () => {
   for (const role of USER_ROLES) {
-    assert.equal(canAccessPath(role, "/items/item-1"), true, role);
+    assert.equal(canAccessPath(role, "/items/item-1"), role !== "typography", role);
   }
 
   const source = readFileSync(
