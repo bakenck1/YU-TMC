@@ -78,6 +78,8 @@ function addSummarySheet(workbook: Workbook, data: OneCReconciliationExport) {
       label: REVIEW_LABELS[state] ?? state,
       value: count,
     })),
+    { label: "ID партии 1С", value: text(batch.id) },
+    { label: "Версия партии 1С", value: typeof batch.version === "number" ? batch.version : text(batch.version) },
   ]);
   styleSheet(sheet, 2);
 }

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Workbook } from "exceljs";
-import type { AuditMatch } from "@/lib/inventory-source-audit";
+import { auditNeedsReview, type AuditMatch } from "@/lib/inventory-source-audit";
 
 type AuditExport = { run: Record<string, unknown>; rows: AuditMatch[] };
 const label = (result: AuditMatch["result"]) => result === "matched" ? "Найдено совпадение" : result === "temporary" ? "Временный номер — требуется проверка" : "Не найдено";
@@ -19,6 +19,7 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
     ["Параметр", "Значение"],
     ["Партия 1С", safeText(data.run.batch_id)],
     ["Версия партии 1С", Number(data.run.batch_version)],
+    ["Версия поиска", safeText(data.run.algorithm_version ?? "прежняя — повторите dry-run")],
     ["SHA-256 партии 1С", safeText(data.run.batch_sha256)],
     ["SHA-256 текущего реестра 1С", safeText(data.run.one_c_registry_sha256)],
     ["Файл Excel", safeText(data.run.filename)],
@@ -28,17 +29,17 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
   ]);
   summary.getColumn(1).width = 32; summary.getColumn(2).width = 80;
   const sheet = workbook.addWorksheet("Все ТМЦ", { views: [{ state: "frozen", ySplit: 1 }] });
-  sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по", "Запись 1С из"]);
+  sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по", "Запись 1С из", "Статус проверки партии 1С"]);
   for (const row of data.rows) {
     const excel = row.excel[0], oneC = row.oneC[0];
-    sheet.addRow([label(row.result), source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", "))]);
+    sheet.addRow([auditNeedsReview(row) ? "Возможное совпадение — проверьте номер" : label(row.result), source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(oneC?.reviewState)]);
   }
   const details = workbook.addWorksheet("Все совпадения Excel", { views: [{ state: "frozen", ySplit: 1 }] });
-  details.addRow(["ID ТМЦ", "Наименование сайта", "Основная строка", "Строка Excel", "Инв. номер Excel", "Номенклатура Excel", "Конечный остаток Excel"]);
-  for (const row of data.rows) row.excel.forEach((excel, index) => details.addRow([safeText(row.itemId), safeText(row.itemName), index === 0 ? "Да" : "Нет", excel.rowNumber, safeText(excel.inventoryNumber), safeText(excel.nomenclature), safeText(excel.endingBalance)]));
+  details.addRow(["ID ТМЦ", "Наименование сайта", "Основная строка", "Строка Excel", "Инв. номер Excel", "Номенклатура Excel", "Конечный остаток Excel", "Найдено по"]);
+  for (const row of data.rows) row.excel.forEach((excel, index) => details.addRow([safeText(row.itemId), safeText(row.itemName), index === 0 ? "Да" : "Нет", excel.rowNumber, safeText(excel.inventoryNumber), safeText(excel.nomenclature), safeText(excel.endingBalance), safeText(excel.matchedBy?.join(", "))]));
   const oneCDetails = workbook.addWorksheet("Все совпадения 1С", { views: [{ state: "frozen", ySplit: 1 }] });
-  oneCDetails.addRow(["ID ТМЦ", "Номер сайта", "GUID 1С", "Источник записи", "Код 1С", "Инв. номер 1С", "Штрихкод 1С", "Наименование 1С", "Статус 1С", "Найдено по"]);
-  for (const row of data.rows) for (const entry of row.oneC) oneCDetails.addRow([safeText(row.itemId), safeText(row.siteNumber), safeText(entry.externalId), safeText(entry.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(entry.code), safeText(entry.inventoryNumber), safeText(entry.barcode), safeText(entry.name), safeText(entry.status), safeText(entry.matchedBy?.join(", "))]);
+  oneCDetails.addRow(["ID ТМЦ", "Номер сайта", "GUID 1С", "Источник записи", "Код 1С", "Инв. номер 1С", "Штрихкод 1С", "Наименование 1С", "Статус 1С", "Найдено по", "Статус проверки партии 1С"]);
+  for (const row of data.rows) for (const entry of row.oneC) oneCDetails.addRow([safeText(row.itemId), safeText(row.siteNumber), safeText(entry.externalId), safeText(entry.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(entry.code), safeText(entry.inventoryNumber), safeText(entry.barcode), safeText(entry.name), safeText(entry.status), safeText(entry.matchedBy?.join(", ")), safeText(entry.reviewState)]);
   sheet.columns.forEach((column) => { column.width = 24; });
   sheet.getColumn(4).width = 42; sheet.getColumn(7).width = 60; details.columns.forEach((column) => { column.width = 30; }); details.getColumn(6).width = 65; oneCDetails.columns.forEach((column) => { column.width = 30; }); oneCDetails.getColumn(8).width = 60;
   for (const worksheet of [summary, sheet, details, oneCDetails]) {

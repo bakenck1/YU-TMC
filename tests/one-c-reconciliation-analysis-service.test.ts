@@ -62,6 +62,7 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
   assert.equal(rowUpdate?.review_state, "matched");
   assert.equal(savedSummary?.identifierMatched, 1);
   assert.equal(savedSummary?.activeMatched, 1);
-  assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: 1, excelOnly: 0, both: 0, missing: 0, temporary: 0 });
+  assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: 1, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 0 });
+  assert.equal((savedSummary?.inventoryAudit as Record<string, unknown>)?.algorithmVersion, 3);
   assert.equal(plan.link, 1);
 });

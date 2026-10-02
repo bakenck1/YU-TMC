@@ -10,7 +10,7 @@ test("audit workbook mirrors item rows, retains duplicate details and writes unt
   });
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
-  assert.equal(workbook.getWorksheet("Сводка")!.getCell("B7").value, "b".repeat(64));
+  assert.equal(workbook.getWorksheet("Сводка")!.getCell("B8").value, "b".repeat(64));
   assert.equal(workbook.getWorksheet("Все ТМЦ")!.rowCount, 2);
   assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("A2").value, "Найдено совпадение");
   assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("G2").value, "'=HYPERLINK(\"bad\")");
@@ -33,4 +33,18 @@ test("audit workbook preserves every 1C match and the origin of each record", as
   assert.equal(details.getCell("D2").value, "выбранная партия");
   assert.equal(details.getCell("D3").value, "текущий реестр");
   assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("S2").value, "выбранная партия");
+});
+
+test("audit workbook flags a slashless candidate and keeps the 1C review state separate", async () => {
+  const bytes = await exportInventorySourceAuditExcel({
+    run: { batch_id: "batch-1", batch_version: 3, algorithm_version: "3", counts: { total: 1, oneCOnly: 1, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 1 } },
+    rows: [{ itemId: "item-1", itemName: "Лабораторный стенд", siteNumber: "123/759", siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: "1c", excel: [], oneC: [
+      { externalId: "asset-1", code: null, inventoryNumber: "123759", barcode: null, name: "Стенд", status: "Не в учёте", reviewState: "conflict", origins: ["selected_batch"], matchedBy: ["number_without_slash"], matchedBarcodes: [] },
+    ] }],
+  });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("A2").value, "Возможное совпадение — проверьте номер");
+  assert.equal(workbook.getWorksheet("Все ТМЦ")!.getCell("T2").value, "conflict");
+  assert.equal(workbook.getWorksheet("Все совпадения 1С")!.getCell("K2").value, "conflict");
 });

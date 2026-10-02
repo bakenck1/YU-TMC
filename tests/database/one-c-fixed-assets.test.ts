@@ -138,6 +138,38 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(links.rows[0]?.count).toBe(0);
   });
 
+  it("reports a slashless 1C number as a possible match while keeping publication blocked", async () => {
+    const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID(), externalId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Slash audit admin','admin',now(),now())`, [userId, `slash-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    await runtimePool.query(`insert into "yu_inventory"."buildings"(id,name,name_key,address,address_key,created_by,updated_by)
+      values($1,'Slash audit building',$2,'Slash audit address',$2,$3,$3)`, [buildingId, `slash-${buildingId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."rooms"(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+      values($1,$2,'101',$3,1,$4,$4)`, [roomId, buildingId, `slash-${roomId}`, userId]);
+    await runtimePool.query(`insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      values($1,'Лабораторный стенд',1,100,$2,'official','123/759','123/759',$3,$3)`, [itemId, roomId, userId]);
+
+    const header: unknown[] = Array(12).fill(""); header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
+    const row: unknown[] = Array(12).fill(""); row[0] = 1; row[1] = "другой предмет №999/888"; row[11] = 0;
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, row]), "Лист_1");
+    await uploadMaterialSnapshot("slash-audit.xls", Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" })), userId, runtimePool);
+
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, externalId, code: null, inventoryNumber: "123759", barcode: null, name: "Лабораторный стенд" }], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "slash-audit.xml" });
+    const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_filename='slash-audit.xml'`);
+    const reconciliation = new OneCReconciliationService(runtimePool);
+    const plan = await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
+    const audit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50, search: "123/759" });
+    const found = audit.data.find((entry) => entry.itemId === itemId);
+    expect(found?.source).toBe("1c");
+    expect(found?.oneC[0]?.inventoryNumber).toBe("123759");
+    expect(found?.oneC[0]?.matchedBy).toContain("number_without_slash");
+    expect(audit.run.counts.possible).toBeGreaterThanOrEqual(1);
+    expect(plan.create).toBe(0);
+    const batchRow = await runtimePool.query<{ review_state: string }>(`select review_state from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and external_id=$2`, [batch.rows[0]!.id, externalId]);
+    expect(batchRow.rows[0]?.review_state).toBe("blocked");
+  });
+
   it("searches published 1C identifiers for created and linked items while ignoring later unpublished imports", async () => {
     const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID();
     await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
