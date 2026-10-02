@@ -114,7 +114,8 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
 
     const oneCAsset: OneCFixedAsset = { ...asset, externalId, code: null, inventoryNumber: null, barcode: localBarcode, name: "Ноутбук" };
     await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([oneCAsset], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "audit.xml" });
-    const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" order by received_at desc limit 1`);
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...oneCAsset, barcode: "DIFFERENT", inventoryNumber: "OTHER-NUMBER" }], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "newer.xml" });
+    const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_filename='audit.xml'`);
     const reconciliation = new OneCReconciliationService(runtimePool);
     await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
     const audit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
@@ -122,6 +123,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(found?.source).toBe("1c+excel");
     expect(found?.oneC[0]?.matchedBy).toContain("barcode");
     expect(found?.oneC[0]?.matchedBarcodes).toContain(localBarcode);
+    expect(found?.oneC[0]?.origins).toEqual(["selected_batch"]);
     expect(found?.excel[0]?.inventoryNumber).toBe("1350-00065");
     expect(audit.run.counts.total).toBe(audit.data.length);
     const searched = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50, search: localBarcode });

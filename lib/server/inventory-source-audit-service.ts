@@ -15,11 +15,23 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
   if (!snapshot.rows[0]) throw new ApplicationError("unavailable", "material_snapshot_not_imported");
   const xls = await client.query(`select row_number,nomenclature,inventory_number,ending_balance from ${SCHEMA}."material_snapshot_rows" where snapshot_id=$1 order by row_number`, [snapshot.rows[0].id]);
   const registry = await client.query(`select external_id,payload_hash,payload from ${SCHEMA}."one_c_fixed_asset_inbox" order by external_id`);
-  if (!registry.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
+  const batchRows = await client.query(`select external_id,payload_hash,payload,matched_item_id,review_state from ${SCHEMA}."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]);
+  if (!registry.rows.length && !batchRows.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
   const oneCRegistrySha256 = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
   if (xls.rows.length !== Number(snapshot.rows[0].accepted_count)) throw new Error("material_snapshot_row_count_mismatch");
   const items: AuditItem[] = candidateRows.filter((row) => row.archived_at == null).map((row) => ({ id: String(row.id), name: String(row.name), inventoryNumber: String(row.inventory_number), inventoryNumberKind: String(row.inventory_number_kind), oneCCode: nullable(row.one_c_code), version: Number(row.version), officialBarcodes: strings(row.official_barcodes), localBarcodes: strings(row.local_barcodes), sourceCodes: linkRows.filter((link) => link.item_id === row.id).map((link) => String(link.source_code ?? "")).filter(Boolean) }));
-  const assets: AuditOneCRow[] = registry.rows.map((row) => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset }));
+  const assets: AuditOneCRow[] = registry.rows.map((row) => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry"] }));
+  const registryById = new Map(registry.rows.map((row, index) => [String(row.external_id), { row, index }]));
+  for (const row of batchRows.rows) {
+    const current = registryById.get(String(row.external_id));
+    const acceptedBatchMatch = ["matched", "approved", "published"].includes(String(row.review_state)) ? nullable(row.matched_item_id) : null;
+    if (current && current.row.payload_hash === row.payload_hash) {
+      assets[current.index].origins = ["selected_batch", "current_registry"];
+      assets[current.index].batchMatchedItemId = acceptedBatchMatch;
+    } else {
+      assets.push({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["selected_batch"], batchMatchedItemId: acceptedBatchMatch });
+    }
+  }
   const excel: ExcelSourceRow[] = xls.rows.map((row) => ({ rowNumber: Number(row.row_number), nomenclature: String(row.nomenclature), inventoryNumber: String(row.inventory_number), endingBalance: nullable(row.ending_balance) }));
   const links = linkRows.map((row) => ({ externalId: String(row.external_id), itemId: String(row.item_id) }));
   const { rows, counts } = buildInventorySourceAudit(items, assets, excel, links);

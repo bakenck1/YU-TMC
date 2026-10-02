@@ -59,3 +59,23 @@ test("YUI item ID barcode finds an exact 1C barcode without inventing an Excel m
   assert.deepEqual(row.oneC[0].matchedBy, ["barcode"]);
   assert.equal(row.oneC[0].barcode, barcode);
 });
+
+test("labels a match from the selected batch when the current 1C record changed", () => {
+  const item: AuditItem = { id: "item-1", name: "Моноблок", inventoryNumber: "2413/0528", inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: ["2413/0528"], version: 1 };
+  const batchAsset = { externalId: "asset-1", asset: { externalId: "asset-1", code: null, inventoryNumber: "2413/0528", barcode: null, name: "Моноблок", status: "Принято к учёту" } as OneCFixedAsset, origins: ["selected_batch" as const] };
+  const currentAsset = { externalId: "asset-1", asset: { ...batchAsset.asset, inventoryNumber: "DIFFERENT" }, origins: ["current_registry" as const] };
+  const row = buildInventorySourceAudit([item], [currentAsset, batchAsset], [], []).rows[0];
+  assert.equal(row.source, "1c");
+  assert.equal(row.oneC.length, 1);
+  assert.deepEqual(row.oneC[0].origins, ["selected_batch"]);
+  assert.equal(row.oneC[0].inventoryNumber, "2413/0528");
+});
+
+test("preserves the selected batch analysis result when its identifiers no longer agree", () => {
+  const item: AuditItem = { id: "item-1", name: "Моноблок", inventoryNumber: "2413/0528", inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: [], version: 1 };
+  const asset = { externalId: "asset-1", asset: { externalId: "asset-1", code: "OLD", inventoryNumber: "2413/0999", barcode: null, name: "Моноблок", status: "Снято с учёта" } as OneCFixedAsset, origins: ["selected_batch" as const], batchMatchedItemId: "item-1" };
+  const row = buildInventorySourceAudit([item], [asset], [], []).rows[0];
+  assert.equal(row.source, "1c");
+  assert.deepEqual(row.oneC[0].matchedBy, ["batch_analysis"]);
+  assert.deepEqual(row.oneC[0].origins, ["selected_batch"]);
+});
