@@ -20,6 +20,7 @@
 /storybook-static/
 /.artifacts/browser-smoke/
 /.artifacts/local-preview-credentials.json
+/.artifacts/whatsapp-*-qr.png
 /.artifacts/postgres-development/
 /.artifacts/previous-postgres-preview/
 
@@ -64,6 +65,11 @@ yarn-error.log*
 # local agent/editor state and deployment bundles
 /.claude/
 /.tmp-dockflow-deploy/
+/.artifacts/
+/.private-transfer/
+/.data/postgres-development-restored-*/
+/.data/postgres-development-workspace/
+/maintenance-*/
 *.bundle
 
 # vercel

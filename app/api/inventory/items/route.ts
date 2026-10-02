@@ -1,4 +1,6 @@
 import type { CreateInventoryItemInput } from "@/lib/contracts/inventory-items";
+import { after } from "next/server";
+import { notifyCurrentResponsibilityByWhatsApp } from "@/lib/server/whatsapp-tmc";
 import {
   isInventoryItemCategory,
   type InventoryItemCategory,
@@ -43,6 +45,10 @@ export async function POST(request: Request) {
       input,
       actor,
     );
+    if (item.responsible) {
+      const responsibleId = item.responsible.id;
+      try { after(() => notifyCurrentResponsibilityByWhatsApp(item.id, responsibleId)); } catch { /* Best-effort notification scheduling. */ }
+    }
     return Response.json({ item }, { status: 201 });
   } catch (error) {
     return itemErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);

@@ -338,7 +338,7 @@ class PostgresUserRepository implements UserRepository {
         position: input.position,
         tutorId: input.personnelId,
         role: "employee",
-        phone: input.phone,
+        phone: input.phone ?? null,
         emailVerified: true,
         active: true,
         createdAt: input.synchronizedAt,
@@ -354,7 +354,7 @@ class PostgresUserRepository implements UserRepository {
       (current.orgUnit ?? null) === input.orgUnit &&
       (current.position ?? null) === input.position &&
       (current.tutorId ?? null) === input.personnelId &&
-      current.phone === input.phone &&
+      (input.phone === undefined || current.phone === input.phone) &&
       current.emailVerified
     ) {
       return current;
@@ -379,7 +379,7 @@ class PostgresUserRepository implements UserRepository {
         input.orgUnit,
         input.position,
         input.personnelId,
-        input.phone,
+        input.phone === undefined ? current.phone : input.phone,
         input.synchronizedAt,
       ],
     );

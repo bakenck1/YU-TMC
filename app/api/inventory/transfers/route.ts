@@ -1,4 +1,6 @@
 import type { CreateTransferInput } from "@/lib/contracts/inventory-responsibility";
+import { after } from "next/server";
+import { notifyLegacyTransferByWhatsApp } from "@/lib/server/whatsapp-tmc";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -12,6 +14,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const get = createInventoryTransferListGetHandler({
   authenticate: requireCurrentUser,
@@ -35,6 +38,7 @@ async function post(request: Request) {
       input,
       authorizationActor(user),
     );
+    try { after(() => notifyLegacyTransferByWhatsApp(transfer.id)); } catch { /* Best-effort notification scheduling. */ }
     return Response.json({ transfer }, { status: 201 });
   } catch (error) {
     return errorResponse(error instanceof SyntaxError ? invalidRequest() : error);

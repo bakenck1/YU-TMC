@@ -115,7 +115,10 @@ test("durable TMC push worker is kicked after mutations and is available to ever
   for (const mutationRoute of [route, decisionRoute, cancelRoute]) {
     assert.match(mutationRoute, /after\(\(\) => (?:services|getApplicationServices\(\))\.push\.processTmcPushOutbox\(\)\)/);
   }
-  assert.match(route, /export const maxDuration = 30/);
+  // WhatsApp checks/sends for both participants share the post-response window.
+  for (const whatsappRoute of [route, decisionRoute]) {
+    assert.match(whatsappRoute, /export const maxDuration = 60/);
+  }
   assert.match(landing, /PushNotificationControl/);
   assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee'\)/);
   assert.match(worker, /processTmcPushOutbox/);

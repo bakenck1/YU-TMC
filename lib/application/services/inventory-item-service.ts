@@ -127,6 +127,26 @@ export class InventoryItemService {
       .map(toItemDto);
   }
 
+  /** Personal inventory stays scoped to the actor even for administrators. */
+  async listOwnItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
+    if (
+      !hasPermission(actor.role, "inventory.item.read_all") &&
+      !hasPermission(actor.role, "inventory.item.read_assigned")
+    ) {
+      throw forbidden();
+    }
+    const records = await this.unitOfWork.transaction(
+      ({ items }) => items.listItemsAssignedTo(actor.userId),
+      { isolation: "repeatable-read", readOnly: true },
+    );
+    return records
+      .filter((item) =>
+        (item.itemSection ?? "general") === "general" &&
+        item.responsibleId === actor.userId,
+      )
+      .map(toItemDto);
+  }
+
   async listItItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
     requirePermission(actor, "inventory.it.read");
     const records = await this.unitOfWork.transaction(

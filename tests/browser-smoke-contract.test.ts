@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -45,6 +46,9 @@ test("browser smoke blanks dotenv integrations and drops unrelated inherited sec
     GOOGLE_CLIENT_SECRET: "google-secret",
     DORMITORY_API_KEY: "dormitory-secret",
     ONE_C_FIXED_ASSETS_API_KEY: "one-c-secret",
+    WA_API_TOKEN: "must-not-be-inherited",
+    WA_GATEWAY_URL: "https://must-not-be-contacted.example.invalid",
+    WA_SESSION: "must-not-be-inherited",
     UNRELATED_SECRET: "must-not-be-inherited",
   });
 
@@ -53,7 +57,26 @@ test("browser smoke blanks dotenv integrations and drops unrelated inherited sec
   assert.equal(environment.GOOGLE_CLIENT_SECRET, "");
   assert.equal(environment.DORMITORY_API_KEY, "");
   assert.equal(environment.ONE_C_FIXED_ASSETS_API_KEY, "");
+  assert.equal(environment.WA_API_TOKEN, "");
+  assert.equal(environment.WA_GATEWAY_URL, "");
+  assert.equal(environment.WA_SESSION, "");
   assert.equal(environment.UNRELATED_SECRET, undefined);
+});
+
+test("production dotenv loading cannot enable WhatsApp in the browser smoke environment", () => {
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+    import nextEnv from '@next/env';
+    import assert from 'node:assert/strict';
+    nextEnv.loadEnvConfig(process.cwd(), false);
+    for (const key of ['WA_API_TOKEN', 'WA_GATEWAY_URL', 'WA_SESSION']) {
+      assert.equal(process.env[key], '', key + ' must remain disabled');
+    }
+  `], {
+    env: { ...createBrowserSmokeEnvironment(process.env), NODE_ENV: "production" },
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("browser smoke accepts only an explicitly acknowledged disposable database pair", () => {

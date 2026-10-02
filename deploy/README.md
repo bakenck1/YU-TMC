@@ -159,6 +159,70 @@ Nginx должен быть единственным публичным вход
 
 ## Обновление
 
+Для версии с WhatsApp сначала добавьте в существующий закрытый файл
+`/etc/yu-inventory/yu-inventory.env` (остальные переменные сохраните):
+
+```dotenv
+WA_GATEWAY_URL=http://wa.yu.edu.kz
+WA_API_TOKEN=<выданный токен шлюза>
+WA_SESSION=otinish
+DATABASE_TARGET=production
+```
+
+Редактируйте через `sudoedit /etc/yu-inventory/yu-inventory.env`, затем
+выполните `sudo chmod 600 /etc/yu-inventory/yu-inventory.env`.
+Чтобы команды сборки и миграций получили ту же конфигурацию, что и systemd,
+скопируйте файл в игнорируемый Git файл приложения:
+
+```bash
+sudo install -o yu-inventory -g yu-inventory -m 600 \
+  /etc/yu-inventory/yu-inventory.env \
+  /opt/yu-inventory/current/.env.production.local
+```
+
+Не используйте production-значения из примера development-базы; сохраните
+настоящие `DATABASE_URL`, `DATABASE_MIGRATOR_URL`, `DATABASE_DEPLOYMENT_ID`
+и остальные существующие настройки. При production-запуске
+`.env.production.local` имеет приоритет над `.env.local`; если оба файла уже
+есть на сервере, держите их согласованными с systemd-конфигурацией.
+Не коммитьте файлы с секретами.
+
+Изменения публикуются в `origin/codex/components-material-statement-code`.
+Для обновления непосредственно из этой ветки после резервной копии:
+
+```bash
+sudo systemctl stop yu-inventory yu-inventory-push-worker
+sudo -u yu-inventory bash <<'UPDATE'
+set -e
+cd /opt/yu-inventory/current
+git fetch origin
+git switch codex/components-material-statement-code
+git pull --ff-only origin codex/components-material-statement-code
+npm ci --include=dev
+npm run db:migrate -- --target=production
+npm run db:smoke -- --target=production
+npm run build
+UPDATE
+```
+
+Продолжайте только если все команды завершились успешно:
+
+```bash
+sudo systemctl restart yu-inventory yu-inventory-push-worker
+sudo systemctl --no-pager status yu-inventory yu-inventory-push-worker
+curl --fail --max-time 15 http://wa.yu.edu.kz/health
+```
+
+Если эта ветка уже объединена в `master`, используйте `master` в командах
+`git switch` и `git pull`. `git push` сам по себе сайт не обновляет.
+Проверка `/health` показывает доступность шлюза, но готовность `otinish`
+проверяйте отдельно в его консоли: нужен статус READY. После обновления
+создайте одну настоящую тестовую заявку между сотрудниками с WhatsApp-номерами
+и проверьте получение. Новые события отправляются после сохранения операции,
+повтор одного вида по одной заявке одному получателю ограничен 24 часами.
+Старые события и пропущенные уведомления автоматически не рассылаются.
+Отдельный WhatsApp-процесс или WhatsApp-worker поднимать не нужно.
+
 1. Сделайте и проверьте резервную копию PostgreSQL.
 2. Остановите web и worker: `sudo systemctl stop yu-inventory yu-inventory-push-worker`.
 3. Обновите код в `/opt/yu-inventory/current`, затем от имени `yu-inventory`

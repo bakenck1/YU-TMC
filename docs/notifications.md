@@ -14,7 +14,10 @@ Web Push уже реализован для одного события: наз�
 аккаунту, а сообщение содержит безопасную ссылку на назначенную проверку.
 Доставка запускается после ответа через Next.js `after()`, повторяет временные
 ошибки и является наблюдаемой best-effort доставкой, а не частью атомарного
-внутреннего outbox. Email, SMS, мессенджеры и Platonus в этот этап не входят.
+внутреннего outbox. WhatsApp подключён через общий YU WA Gateway для заявок на
+ТМЦ, назначения ответственного и внутренних сервисных заявок; события и
+настройки описаны в [README](../README.md#whatsapp-notifications).
+Email, SMS и Platonus в этот этап не входят.
 
 Внутреннее уведомление — это запись в базе данных, а не toast. Toast и inline-ошибка дают обратную связь о текущем действии, но не заменяют постоянное уведомление. Отключить обязательные внутренние уведомления рабочего процесса нельзя.
 
@@ -229,7 +232,7 @@ privacy-safe payload. Delivery работает at-least-once:
 
 - Durable Web Push outbox, гарантированная доставка, quiet hours и напоминания.
 - Email provider, шаблоны писем, bounce/complaint handling, unsubscribe и проверка адресов.
-- SMS, мессенджеры, Platonus, native mobile notifications.
+- SMS, другие мессенджеры, Platonus, native mobile notifications.
 - Digests, напоминания, escalation timers, SLA и quiet hours.
 - WebSocket/SSE и cross-device real-time read synchronization.
 - Возможность отключать обязательные внутренние workflow-уведомления.

@@ -92,25 +92,58 @@ for provider claims and the guarded personnel JSON import.
 
 ## WhatsApp notifications
 
-Set `WA_GATEWAY_URL`, `WA_API_TOKEN` and `WA_SESSION` in the server's private
-`.env.local` or deployment secret store. Obtain the Bearer token and session
-name from the YU WA Gateway administrator. Never use a `NEXT_PUBLIC_` prefix
-or put the token in a browser request. Apply database migrations before enabling
-the token. Without `WA_API_TOKEN`, this integration stays disabled.
+Set these variables in the server's private `.env.local` or deployment secret
+store (the actual token must never be committed):
+
+```dotenv
+WA_GATEWAY_URL=http://wa.yu.edu.kz
+WA_API_TOKEN=<token from the gateway administrator>
+WA_SESSION=otinish
+```
+
+All WhatsApp notifications use the shared gateway session `otinish`, connected
+to sender number `77064255133`. Recipient numbers come from the users involved
+in each request; the sender number is not a fixed notification recipient.
+The service's display title stays “YU Inventory”. Never use a `NEXT_PUBLIC_`
+prefix or put the token in a browser request or URL. Apply migrations with
+`npm run db:migrate -- --target=development` (use `production` on the production
+server), then restart the application. Local `npm run dev` applies migrations
+automatically when using the embedded development database. Without a token,
+notifications remain disabled and new phone numbers cannot be verified or saved.
 
 When an administrator saves a user's phone number, the server normalizes it to
 `7XXXXXXXXXX` and calls `/v1/check`. Unregistered numbers are rejected. If the
 gateway is temporarily unavailable, other user changes are saved while the new
-phone number is left unsaved and the UI shows a warning. Numbers imported from
-Yessenov ID are not checked during sign-in; they are checked before a send.
+phone number is left unsaved and the UI shows a warning. Numbers received from
+Yessenov ID and the personnel directory are also checked before persistence;
+unavailable checks do not prevent sign-in or erase an existing number.
 
-For internal service requests, the author receives `generic_status` on creation
-and on status changes to “in progress” or “completed”. Chat messages and
-dormitory-origin requests do not send WhatsApp. The server records a 45-minute
-cooldown per request and template in PostgreSQL. On HTTP 429 it stores the
-gateway's `Retry-After` pause for the session; failed notifications do not
-roll back the request or status change. Delivery is best effort; skipped or
-failed sends are not replayed automatically.
+Users without a usable saved phone must complete `/whatsapp-phone` after login
+before accessing work pages or authenticated work APIs. Warehouse users are
+exempt. The server checks registration through `/v1/check` before saving the
+number to the logged-in account; unavailable checks leave the form open for a
+later attempt. Successful completion renews the session after the account version
+changes. The form cannot be skipped, but users can sign out. Administrator user
+tables keep their phone and IIN columns under the existing server permissions.
+
+WhatsApp events for TMC transfers and responsibility:
+
+- A new request notifies the person who must accept or reject it, including the
+  requester's name and the goods; the requester receives confirmation of submission.
+- Acceptance or rejection notifies the requester of the result.
+- Assignment of responsibility notifies the new responsible person.
+
+Internal service-request authors also receive `generic_status` on creation and
+changes to “in progress” or “completed”. Chat messages, comments, and
+dormitory-origin service requests do not send WhatsApp. PostgreSQL records an
+atomic 24-hour cooldown per session, ticket, notification kind, and recipient.
+Submission, acceptance, rejection, and assignment have separate message kinds,
+so submission does not suppress the result. HTTP 429 stores the gateway's
+`Retry-After` pause for the whole session; subsequent checks and sends respect
+it without automatic retry bursts. HTTP 503 / “not ready” is logged with a safe
+error code; the gateway administrator must start the session and scan QR if
+needed. Failed notifications do not roll back domain actions. Delivery is best
+effort; skipped or failed sends are not replayed automatically.
 
 Gateway checks from an administrator's shell (replace `TOKEN` locally):
 

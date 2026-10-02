@@ -93,6 +93,26 @@ test("IT inventory route and permissions are administrator-only", () => {
   }
 });
 
+test("personal inventory uses the current item responsibility for every role", async () => {
+  for (const role of ["admin", "warehouse", "employee"] as const) {
+    const actor = { userId: "owner-1", role };
+    const ownItem = { ...GENERAL_ITEM, responsibleId: actor.userId };
+    const service = createService({
+      listItems: async () => assert.fail("personal inventory must not read the entire catalogue"),
+      listItemsAssignedTo: async (userId) => {
+        assert.equal(userId, actor.userId);
+        return [
+          ownItem,
+          { ...GENERAL_ITEM, id: "other-owner", responsibleId: "other-user" },
+          { ...GENERAL_ITEM, id: "room-only", responsibleId: null },
+          { ...IT_ITEM, responsibleId: actor.userId },
+        ];
+      },
+    });
+    assert.deepEqual((await service.listOwnItems(actor)).map((item) => item.id), [ownItem.id]);
+  }
+});
+
 test("IT inventory detail links preserve only canonical IT list state", () => {
   assert.equal(
     canonicalInventoryDetailsReturnHref("/it-items?q=camera&page=3&pageSize=20"),

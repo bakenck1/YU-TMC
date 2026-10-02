@@ -14,6 +14,11 @@ test.describe.serial("critical production journeys", () => {
       await page.goto("/profile");
       await expect(page).toHaveURL(/\/profile$/);
       await expect(page.getByRole("heading", { name: "Browser Smoke Administrator" })).toBeVisible();
+      const inventoryCard = page.getByRole("button", { name: /Всего ТМЦ/ });
+      await expect(inventoryCard).toContainText("0 ед.");
+      await inventoryCard.click();
+      await expect(page.getByText("Ничего не найдено", { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Browser Smoke Laptop" })).toHaveCount(0);
 
       await page.reload();
       await expect(page).toHaveURL(/\/profile$/);
@@ -31,6 +36,32 @@ test.describe.serial("critical production journeys", () => {
     const evidence = captureSafeEvidence(page);
     try {
       await login(page, ownerEmail);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByRole("button", { name: /Общая стоимость/ }).click();
+      const valueList = page.getByRole("region", { name: "Общая стоимость", exact: true });
+      await expect(valueList).toBeVisible();
+      await expect.poll(async () => {
+        return valueList.evaluate((panel) => {
+          const rect = panel.getBoundingClientRect();
+          const mainTop = panel.closest("main")!.getBoundingClientRect().top;
+          const navigationTop = document.querySelector("nav.fixed")!.getBoundingClientRect().top;
+          const list = panel.querySelector("table")!.parentElement!;
+          return rect.top >= mainTop && rect.bottom <= navigationTop && list.scrollWidth <= list.clientWidth;
+        });
+      }).toBe(true);
+      const nextMetric = await page.getByRole("button", { name: /Всего ТМЦ/ }).boundingBox();
+      const valueListBox = await valueList.boundingBox();
+      expect(valueListBox!.y + valueListBox!.height).toBeLessThanOrEqual(nextMetric!.y);
+      await page.screenshot({ path: ".artifacts/profile-mobile-expanded.png" });
+      await valueList.getByRole("button", { name: "Закрыть", exact: true }).click();
+      await page.getByRole("button", { name: /Всего ТМЦ/ }).click();
+      const itemLink = page.getByRole("link", { name: "Browser Smoke Laptop", exact: true });
+      await expect(itemLink).toHaveAttribute("href", /returnTo=%2Fprofile$/);
+      await itemLink.click();
+      await expect(page).toHaveURL(/\/items\/[0-9a-f-]{36}\?returnTo=%2Fprofile$/);
+      await page.getByRole("link", { name: "Назад к списку" }).click();
+      await expect(page).toHaveURL(/\/profile$/);
+      await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto("/tmc/issue");
       await page.getByRole("button", { name: "Сканировать штрих-код", exact: true }).click();
 
@@ -56,6 +87,14 @@ test.describe.serial("critical production journeys", () => {
       await page.getByRole("button", { name: "Принять все" }).click();
       await expect(page.getByRole("status").filter({ hasText: "Принято 1 из 1" })).toBeVisible();
       await expect(page.getByText("Принята", { exact: true })).toBeVisible();
+      await page.goto("/profile");
+      await page.getByRole("button", { name: /Всего ТМЦ/ }).click();
+      const receivedLink = page.getByRole("link", { name: "Browser Smoke Laptop", exact: true });
+      await expect(receivedLink).toHaveAttribute("href", /returnTo=%2Fprofile$/);
+      await receivedLink.click();
+      await expect(page).toHaveURL(/\/(?:items|local-barcodes)\/[0-9a-f-]{36}\?returnTo=%2Fprofile$/);
+      await page.getByRole("link", { name: "Назад к списку" }).click();
+      await expect(page).toHaveURL(/\/profile$/);
     } finally {
       await attachSafeEvidence(testInfo, evidence);
     }
@@ -67,7 +106,7 @@ async function login(page: Page, email: string) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Пароль", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Войти", exact: true }).click();
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await expect(page).toHaveURL(/\/profile$/);
 }
 
 async function logout(page: Page) {

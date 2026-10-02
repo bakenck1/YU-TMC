@@ -4,7 +4,7 @@ import {
   normalizeTmcIdempotencyKey,
   type IdempotentTmcTransferRequestDecision,
 } from "@/lib/application/services/tmc-transfer-request-service";
-import type { DecideTmcTransferRequestInput } from "@/lib/contracts/tmc-operations";
+import type { DecideTmcTransferRequestInput, TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -26,7 +26,7 @@ export function createTmcTransferRequestDecisionPostHandler(dependencies: {
     actor: { userId: string; role: UserRole; sessionVersion: number },
     idempotencyKey: string,
   ): Promise<Pick<IdempotentTmcTransferRequestDecision, "body" | "kind" | "status">>;
-  onCompleted?(): void;
+  onCompleted?(request: TmcTransferRequestDto, decidedItemIds: string[]): void;
 }) {
   return async function post(request: Request, requestId: string): Promise<Response> {
     try {
@@ -36,7 +36,7 @@ export function createTmcTransferRequestDecisionPostHandler(dependencies: {
       const key = normalizeTmcIdempotencyKey(request.headers.get("idempotency-key"));
       const execution = await dependencies.decideIdempotent(requestId, body, actor, key);
       if (execution.kind === "completed") {
-        try { dependencies.onCompleted?.(); } catch { /* Durable outbox remains available for the worker. */ }
+        try { dependencies.onCompleted?.(execution.body.request, body.decisions.map((decision) => decision.itemId)); } catch { /* Notifications cannot change the committed response. */ }
       }
       return Response.json(execution.body, {
         status: execution.status,

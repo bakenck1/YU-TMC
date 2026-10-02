@@ -4,7 +4,7 @@ import {
   normalizeTmcIdempotencyKey,
   type IdempotentTmcTransferRequestCreation,
 } from "@/lib/application/services/tmc-transfer-request-service";
-import type { CreateTmcTransferRequestInput } from "@/lib/contracts/tmc-operations";
+import type { CreateTmcTransferRequestInput, TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
 import type { UserRole } from "@/lib/contracts/users";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
@@ -33,6 +33,7 @@ export interface TmcTransferRequestPostDependencies {
     recipientId: string;
     itemCount: number;
   }): void;
+  onCommitted?(request: TmcTransferRequestDto): void;
   onCreationNotificationSchedulingError?(
     event: { requestId: string; recipientId: string; itemCount: number },
     error: unknown,
@@ -56,6 +57,9 @@ export function createTmcTransferRequestPostHandler(
         idempotencyKey,
       );
       if (execution.kind === "completed" && execution.body.result.request) {
+        try { dependencies.onCommitted?.(execution.body.result.request); } catch {
+          // WhatsApp scheduling must not change an already committed command.
+        }
         const event = {
           requestId: execution.body.result.request.id,
           recipientId: execution.body.result.request.recipient.id,

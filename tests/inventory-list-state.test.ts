@@ -111,11 +111,21 @@ test("inventory return URLs reject external and unrelated destinations", () => {
     "/items/../api/auth/google",
     "/items/item-1",
     "/tmc/issue/extra",
+    "/profile/extra",
   ];
 
   rejected.forEach((value) => {
     assert.equal(canonicalInventoryDetailsReturnHref(value), null);
   });
+});
+
+test("item and local-group details can return to the personal profile", () => {
+  assert.equal(canonicalInventoryDetailsReturnHref("/profile?junk=value#fragment"), "/profile");
+  for (const itemPath of ["/items/item-1", "/local-barcodes/group-1"]) {
+    const href = inventoryDetailsHref(itemPath, "/profile");
+    const returnTo = new URL(href, "https://inventory.test").searchParams.get("returnTo");
+    assert.equal(canonicalInventoryDetailsReturnHref(returnTo), "/profile");
+  }
 });
 
 test("inventory return URLs drop unknown data and normalize known values", () => {

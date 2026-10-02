@@ -208,7 +208,7 @@ class MemoryUserRepository implements UserRepository {
         position: input.position,
         tutorId: input.personnelId,
         role: "employee",
-        phone: input.phone,
+        phone: input.phone ?? null,
         emailVerified: true,
         active: true,
         createdAt: input.synchronizedAt,
@@ -222,7 +222,7 @@ class MemoryUserRepository implements UserRepository {
       (current.orgUnit ?? null) === input.orgUnit &&
       (current.position ?? null) === input.position &&
       (current.tutorId ?? null) === input.personnelId &&
-      current.phone === input.phone &&
+      (input.phone === undefined || current.phone === input.phone) &&
       current.emailVerified
     ) {
       return cloneUser(current);
@@ -234,7 +234,7 @@ class MemoryUserRepository implements UserRepository {
       orgUnit: input.orgUnit,
       position: input.position,
       tutorId: input.personnelId,
-      phone: input.phone,
+      phone: input.phone === undefined ? current.phone : input.phone,
       emailVerified: true,
       updatedAt: input.synchronizedAt,
     };
