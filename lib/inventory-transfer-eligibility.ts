@@ -2,7 +2,7 @@ import type { ItemStatus } from "@/lib/contracts/inventory-domain";
 
 /** Lifecycle states that may change responsible person. */
 export function isInventoryTransferAllowed(status: ItemStatus): boolean {
-  return status === "active" ||
+  return status === "active" || status === "broken" ||
     status === "maintenance" ||
     status === "decommissioned_in_use";
 }

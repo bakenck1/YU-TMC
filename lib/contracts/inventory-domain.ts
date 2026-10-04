@@ -4,6 +4,7 @@ export type RecordStatus = (typeof RECORD_STATUSES)[number];
 export const ITEM_STATUSES = [
   "active",
   "maintenance",
+  "broken",
   "decommissioned",
   "decommissioned_in_use",
 ] as const;

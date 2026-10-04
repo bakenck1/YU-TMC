@@ -1,4 +1,4 @@
-export type DormitoryAssetStatus = "active" | "maintenance" | "written_off";
+export type DormitoryAssetStatus = "active" | "broken" | "maintenance" | "written_off";
 
 export type DormitoryAssetCondition = "good" | "needs_attention" | "damaged";
 

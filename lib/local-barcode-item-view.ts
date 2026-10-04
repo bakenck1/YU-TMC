@@ -1,5 +1,4 @@
 import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
-import { categoryFromLegacyType } from "@/lib/inventory-categories";
 import type { InventoryItem } from "@/lib/types";
 
 /** Presents an allocated local group as a regular active inventory row. */
@@ -12,7 +11,7 @@ export function toLocalBarcodeInventoryItem(
     sourceItemId: group.itemId,
     name: group.itemName,
     inventoryNumber: group.localBarcode,
-    category: categoryFromLegacyType(group.itemType),
+    category: group.itemType,
     brand: group.brand ?? undefined,
     model: group.model ?? undefined,
     buildingId: group.location.buildingId,

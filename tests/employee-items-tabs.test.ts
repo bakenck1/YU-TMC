@@ -20,11 +20,11 @@ test("employee inventory renders a roving, fully associated tab list", () => {
   );
 
   assert.match(markup, /role="tablist" aria-label="Inventory"/);
-  assert.equal((markup.match(/role="tab"/g) ?? []).length, 4);
+  assert.equal((markup.match(/role="tab"/g) ?? []).length, 5);
   assert.equal((markup.match(/tabindex="0"/g) ?? []).length, 1);
-  assert.equal((markup.match(/tabindex="-1"/g) ?? []).length, 3);
+  assert.equal((markup.match(/tabindex="-1"/g) ?? []).length, 4);
   assert.match(markup, /id="employee-items-tab-maintenance"[^>]*aria-selected="true"/);
-  for (const status of ["active", "maintenance", "decommissioned", "decommissioned_in_use"]) {
+  for (const status of ["active", "maintenance", "broken", "decommissioned", "decommissioned_in_use"]) {
     assert.match(markup, new RegExp(`aria-controls="employee-items-panel-${status}"`));
   }
 

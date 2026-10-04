@@ -1,5 +1,4 @@
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
-import { categoryFromLegacyType } from "@/lib/inventory-categories";
 import type { InventoryItem } from "@/lib/types";
 
 export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
@@ -12,7 +11,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     searchNames: item.searchNames ?? [],
     category: item.itemSection === "it" && item.itType
       ? item.itType
-      : item.category ?? categoryFromLegacyType(item.itemType),
+      : item.category ?? item.itemType,
     brand: item.brand ?? undefined,
     model: item.model ?? undefined,
     buildingId: item.room.buildingId,
@@ -35,7 +34,7 @@ export function toInventoryItemView(item: InventoryItemDto): InventoryItem {
     additionalInfo: item.description ?? undefined,
     itemType: item.itemSection === "it" && item.itType
       ? item.itType
-      : item.category ?? categoryFromLegacyType(item.itemType),
+      : item.category ?? item.itemType,
     brandModel: [item.brand, item.model].filter(Boolean).join(" / ") || undefined,
     quantity: item.quantity,
     price: item.unitPrice,

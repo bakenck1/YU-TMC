@@ -378,7 +378,7 @@ describe("inventory setup actions", () => {
     )).toBe(true);
   });
 
-  it("creates components without a barcode", async () => {
+  it("creates components with a supplied barcode", async () => {
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit,
@@ -394,12 +394,12 @@ describe("inventory setup actions", () => {
       target: { value: "Кабель питания" },
     });
     fireEvent.change(screen.getByLabelText(/createItem\.barcode/), {
-      target: { value: "MUST-NOT-BE-SENT" },
+      target: { value: "COMPONENT-123" },
     });
     fireEvent.change(screen.getByLabelText(/items\.type/), {
       target: { value: "components" },
     });
-    expect(screen.queryByLabelText(/createItem\.barcode/)).toBeNull();
+    expect((screen.getByLabelText(/createItem\.barcode/) as HTMLInputElement).value).toBe("COMPONENT-123");
     expect(screen.getByText("createItem.componentsNoBarcode")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
     fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
@@ -412,7 +412,7 @@ describe("inventory setup actions", () => {
       expect(createCall).toBeDefined();
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
         category: "components",
-        barcode: null,
+        barcode: "COMPONENT-123",
       });
     });
   });

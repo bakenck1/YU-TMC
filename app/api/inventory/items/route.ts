@@ -1,3 +1,4 @@
+import type { ItemStatus } from "@/lib/types";
 import type { CreateInventoryItemInput } from "@/lib/contracts/inventory-items";
 import { after } from "next/server";
 import { notifyCurrentResponsibilityByWhatsApp } from "@/lib/server/whatsapp-tmc";
@@ -64,6 +65,7 @@ function parseCreate(
   if (
     typeof body.name !== "string" ||
     !isInventoryItemCategory(body.category) ||
+    (body.status !== undefined && !["active", "broken", "maintenance", "decommissioned", "decommissioned_in_use"].includes(body.status as string)) ||
     typeof body.roomId !== "string" ||
     (!restricted && !body.photo && !body.photos) ||
     (body.description !== undefined &&
@@ -126,6 +128,7 @@ function parseCreate(
   return {
     name: body.name,
     category: body.category as InventoryItemCategory,
+    status: body.status as ItemStatus | undefined,
     roomId: body.roomId,
     description: body.description as string | null | undefined,
     brand: body.brand as string | null | undefined,

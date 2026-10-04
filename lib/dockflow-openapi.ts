@@ -568,7 +568,7 @@ export const dockflowOpenApiDocument = {
           initialCost: { type: "number", minimum: 0 },
           residualCost: { type: ["number", "null"] },
           currency: { type: "string", const: "KZT" },
-          status: { type: "string", enum: ["active", "maintenance", "written_off"] },
+          status: { type: "string", enum: ["active", "broken", "maintenance", "written_off"] },
           condition: { type: "string", enum: ["good", "needs_attention", "damaged"] },
           accountingStatus: { type: ["string", "null"] },
           updatedAt: { type: "string", format: "date-time" },

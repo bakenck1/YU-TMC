@@ -2,6 +2,7 @@ export const INVENTORY_ITEM_CATEGORIES = [
   "electronics",
   "electrical_equipment",
   "furniture",
+  "household_inventory",
   "components",
 ] as const;
 
@@ -11,6 +12,7 @@ export type InventoryItemCategoryTranslationKey =
   | "common.electronics"
   | "data.electricalEquipment"
   | "data.furniture"
+  | "data.householdInventory"
   | "data.components";
 
 export function isInventoryItemCategory(
@@ -26,6 +28,7 @@ export function inventoryItemCategoryTranslationKey(
   category: InventoryItemCategory,
 ): InventoryItemCategoryTranslationKey {
   if (category === "electrical_equipment") return "data.electricalEquipment";
+  if (category === "household_inventory") return "data.householdInventory";
   if (category === "furniture") return "data.furniture";
   return category === "components" ? "data.components" : "common.electronics";
 }
@@ -43,6 +46,7 @@ export function supportsMaterialStatementOneCCode(
  */
 export function categoryFromLegacyType(value: string): InventoryItemCategory {
   const normalized = value.trim().toLocaleLowerCase("ru-RU");
+  if (normalized === "household_inventory" || normalized === "household inventory" || normalized === "хозяйственный инвентарь") return "household_inventory";
   if (normalized === "furniture" || normalized === "\u043c\u0435\u0431\u0435\u043b\u044c") {
     return "furniture";
   }

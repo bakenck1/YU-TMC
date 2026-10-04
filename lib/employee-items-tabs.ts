@@ -3,6 +3,7 @@ import type { ItemStatus } from "@/lib/contracts/inventory-domain";
 export const EMPLOYEE_ITEM_STATUSES = [
   "active",
   "maintenance",
+  "broken",
   "decommissioned",
   "decommissioned_in_use",
 ] as const satisfies readonly ItemStatus[];

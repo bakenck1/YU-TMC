@@ -18,7 +18,7 @@ export interface InventoryItemDto {
   name: string;
   description: string | null;
   /** Category shown in the “Тип ТМЦ” column. */
-  category?: InventoryItemCategory;
+  category?: string;
   /** @deprecated Kept during the data-model transition; it equals category. */
   itemType: string;
   itemSection?: InventorySection;
@@ -125,6 +125,7 @@ export interface InventoryItemCommentDto {
 }
 
 export interface CreateInventoryItemInput {
+  status?: ItemStatus;
   name: string;
   isProject?: boolean;
   category?: InventoryItemCategory | null;

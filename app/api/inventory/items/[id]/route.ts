@@ -65,7 +65,9 @@ export async function PATCH(
       : undefined;
     const serviceRequest = isServicePatch(body);
     const item =
-      serviceRequest
+      isStatusPatch(body)
+        ? await services.items.changeStatus(id, body, actor)
+        : serviceRequest
         ? await services.items.sendToService(
             id,
             body.version,
@@ -119,6 +121,14 @@ export async function PATCH(
   } catch (error) {
     return itemErrorResponse(error instanceof SyntaxError ? invalidRequest() : error);
   }
+}
+
+function isStatusPatch(value: unknown): value is { operation: "change_status"; version: number; status: "active" | "broken" | "maintenance" } {
+  if (!value || typeof value !== "object") return false;
+  const body = value as Record<string, unknown>;
+  if (body.operation !== "change_status") return false;
+  if (Object.keys(body).some((key) => !["operation", "version", "status"].includes(key)) || !Number.isSafeInteger(body.version) || Number(body.version) < 1 || Number(body.version) > 2_147_483_647 || !["active", "broken", "maintenance"].includes(String(body.status))) throw invalidRequest();
+  return true;
 }
 
 function isMarkDecommissionedInUsePatch(value: unknown): value is {
@@ -294,6 +304,7 @@ function parseProtected(value: Record<string, unknown>): UpdateInventoryItemProt
     typeof value.inventoryNumber !== "string" ||
     (value.status !== "active" &&
       value.status !== "maintenance" &&
+      value.status !== "broken" &&
       value.status !== "decommissioned" &&
       value.status !== "decommissioned_in_use") ||
     (value.condition !== undefined &&

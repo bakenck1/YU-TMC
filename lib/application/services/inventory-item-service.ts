@@ -480,7 +480,9 @@ export class InventoryItemService {
     const auditId = this.ids.create();
     const inventoryNumber = values.inventoryNumber
       ? values.inventoryNumber
-      : this.temporaryNumbers.next(occurredAt.getUTCFullYear());
+      : values.itemType === "components"
+        ? ""
+        : this.temporaryNumbers.next(occurredAt.getUTCFullYear());
     const inventoryNumberKind = values.inventoryNumber ? "official" : "temporary";
     const qrCode = qrIdentifierFromEntropy(this.qrEntropy.create());
 
@@ -489,6 +491,7 @@ export class InventoryItemService {
         throw new ApplicationError("not_found", "room_not_found");
       }
       const created = await items.insertItem({
+        status: values.status,
         id: itemId,
         name: values.name,
         description: values.description,
@@ -522,6 +525,7 @@ export class InventoryItemService {
           subjectRevision: created.version,
           action: "item.created",
           afterValues: {
+            status: created.status,
             name: created.name,
             description: created.description,
             itemType: created.itemType,
@@ -791,7 +795,7 @@ export class InventoryItemService {
           outcomes.push(problemOutcome(reference.itemId, "item_not_found"));
           continue;
         }
-        if (current.status !== "active" || current.archivedAt) {
+        if ((current.status !== "active" && current.status !== "broken") || current.archivedAt) {
           outcomes.push(problemOutcome(reference.itemId, "item_inactive"));
           continue;
         }
@@ -858,6 +862,7 @@ export class InventoryItemService {
       for (const id of ids) {
         const current = await items.findItemById(id);
         if (!current || (current.itemSection ?? "general") !== "general") continue;
+        if (normalizedCategory !== "components" && !current.inventoryNumber.trim()) throw new ApplicationError("validation", "invalid_inventory_number");
         const updated = await items.updateItemCategory({
           id,
           category: normalizedCategory,
@@ -928,7 +933,8 @@ export class InventoryItemService {
           ? current.networkAddresses ?? []
           : normalizeItNetworkAddresses(input.networkAddresses)
         : [];
-      const nextGeneralCategory = patch.category ?? categoryFromLegacyType(current.itemType);
+      const nextGeneralCategory = patch.category ?? current.itemType;
+      if (patch.category && patch.category !== "components" && !current.inventoryNumber.trim()) throw new ApplicationError("validation", "invalid_inventory_number");
       const values = {
         name: patch.name,
         description: patch.description,
@@ -938,6 +944,7 @@ export class InventoryItemService {
         model: patch.model === undefined ? current.model : patch.model,
         oneCCode: isItItem
           ? null
+          : !isInventoryItemCategory(nextGeneralCategory) ? current.oneCCode ?? null
           : !supportsMaterialStatementOneCCode(nextGeneralCategory)
             ? null
             : patch.oneCCode === undefined
@@ -1265,6 +1272,26 @@ export class InventoryItemService {
     });
   }
 
+  /** A status-only mutation never changes responsibility, location, identifiers or content. */
+  async changeStatus(id: string, input: { version: number; status: ItemStatus }, actor: AuthorizationActor): Promise<InventoryItemDto> {
+    requirePermission(actor, "inventory.item.edit_content");
+    if (!Number.isSafeInteger(input.version) || input.version < 1 || input.version > 2_147_483_647) throw new ApplicationError("validation", "invalid_version");
+    const status = normalizeStatus(input.status);
+    return this.unitOfWork.transaction(async ({ items }) => {
+      const current = await items.findItemById(id);
+      if (!current) throw itemNotFound();
+      if (current.itemSection === "it") requirePermission(actor, "inventory.it.manage");
+      if (current.version !== input.version) throw versionConflict();
+      if (actor.role !== "admin" && !(actor.role === "warehouse" && current.status === "broken" && status === "active")) throw forbidden();
+      if (current.archivedAt || !["active", "maintenance", "broken"].includes(current.status) || !["active", "maintenance", "broken"].includes(status)) throw new ApplicationError("conflict", "decommissioned_workflow_required");
+      const occurredAt = this.clock.now();
+      const updated = await items.updateItemStatus({ id, status, actorId: actor.userId, expectedVersion: input.version, occurredAt });
+      if (!updated) throw versionConflict();
+      await items.appendAudit(createAudit({ id: this.ids.create(), actor, subjectId: id, subjectRevision: updated.version, action: "item.protected_fields_updated", beforeValues: { status: current.status }, afterValues: { status }, occurredAt }));
+      return toItemDto({ ...updated, qrCode: current.qrCode });
+    });
+  }
+
   async updateProtected(
     id: string,
     input: UpdateInventoryItemProtectedInput,
@@ -1274,7 +1301,8 @@ export class InventoryItemService {
     if (!Number.isInteger(input.version) || input.version < 1) {
       throw new ApplicationError("validation", "invalid_version");
     }
-    const values = normalizeProtectedInput(input);
+    // Number optionality depends on the persisted category, checked in the transaction.
+
     const replaceQr = input.replaceQr === true;
     const qrReplaceReason = replaceQr
       ? normalizeText(input.qrReplaceReason, 1_000, "qr_replace_reason_required")
@@ -1283,6 +1311,10 @@ export class InventoryItemService {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
       if (current.version !== input.version) throw versionConflict();
+      const values = normalizeProtectedInput(input, current.itemType === "components");
+      if (current.status === "broken" && values.status === "active" && actor.role !== "admin" && actor.role !== "warehouse") {
+        throw forbidden();
+      }
       if (
         (current.status === "decommissioned_in_use" && values.status !== current.status) ||
         (values.status === "decommissioned_in_use" && current.status !== values.status) ||
@@ -1529,13 +1561,16 @@ export class InventoryItemService {
 }
 
 function normalizeCreateInput(input: CreateInventoryItemInput) {
+  const status = input.status === undefined ? "active" : normalizeStatus(input.status);
   const content = normalizeContentInput({ version: 1, ...input });
   const itemType = content.category ?? categoryFromLegacyType(input.itemType ?? "");
   const roomId = normalizeId(input.roomId, "invalid_room_id");
   const suppliedInventoryNumber =
     input.inventoryNumber === undefined || input.inventoryNumber === null
       ? null
-      : normalizeText(input.inventoryNumber, 64, "invalid_inventory_number");
+      : itemType === "components"
+        ? normalizeOptionalBlankText(input.inventoryNumber, 64, "invalid_inventory_number")
+        : normalizeText(input.inventoryNumber, 64, "invalid_inventory_number");
   const barcode =
     input.barcode === undefined || input.barcode === null
       ? null
@@ -1555,6 +1590,7 @@ function normalizeCreateInput(input: CreateInventoryItemInput) {
     : suppliedInventoryNumber;
   return {
     ...content,
+    status,
     itemType,
     brand: content.brand ?? null,
     model: content.model ?? null,
@@ -1619,6 +1655,7 @@ function normalizeWarehouseCreateInput(
   if (hasProtectedValues) throw forbidden();
   return {
     name: input.name,
+    status: input.status,
     category: input.category,
     description: input.description,
     roomId: input.roomId,
@@ -1746,14 +1783,12 @@ function normalizeOptionalPrice(value: unknown) {
   return Math.round(value * 100) / 100;
 }
 
-function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput) {
+function normalizeProtectedInput(input: UpdateInventoryItemProtectedInput, optionalNumber = false) {
   return {
     roomId: normalizeId(input.roomId, "invalid_room_id"),
-    inventoryNumber: normalizeText(
-      input.inventoryNumber,
-      64,
-      "invalid_inventory_number",
-    ),
+    inventoryNumber: optionalNumber
+      ? normalizeOptionalBlankText(input.inventoryNumber, 64, "invalid_inventory_number") ?? ""
+      : normalizeText(input.inventoryNumber, 64, "invalid_inventory_number"),
     inventoryNumberKey: inventoryNumberComparisonKey(input.inventoryNumber),
     status: normalizeStatus(input.status),
     isProject: input.isProject === undefined ? undefined : normalizeProjectFlag(input.isProject),
@@ -1914,6 +1949,7 @@ function normalizeStatus(value: unknown): ItemStatus {
   if (
     value === "active" ||
     value === "maintenance" ||
+    value === "broken" ||
     value === "decommissioned" ||
     value === "decommissioned_in_use"
   ) {
@@ -2091,9 +2127,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     id: record.id,
     name: record.name,
     description: record.description,
-    category: isInventoryItemCategory(record.itemType)
-      ? record.itemType
-      : categoryFromLegacyType(record.itemType),
+    category: record.itemType,
     itemType: record.itemType,
     itemSection: record.itemSection ?? "general",
     itType: record.itType ?? null,

@@ -62,6 +62,7 @@ export function createPostgresDormitoryAssetRepository(
                link.accounting_residual_value as residual_cost,
                case
                  when i.status::text in ('decommissioned', 'decommissioned_in_use') then 'written_off'
+                 when i.status::text = 'broken' then 'broken'
                  when i.status::text = 'maintenance' then 'maintenance'
                  else 'active'
                end as status,

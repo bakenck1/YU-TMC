@@ -24,6 +24,7 @@ const TONE_COLORS: Record<AnalyticsChartTone, string> = {
 const STATUS_TONES: Record<string, AnalyticsChartTone> = {
   active: "sky",
   maintenance: "amber",
+  broken: "rose",
   decommissioned: "rose",
   decommissioned_in_use: "ochre",
   Работник: "violet",
@@ -31,6 +32,7 @@ const STATUS_TONES: Record<string, AnalyticsChartTone> = {
   "Не распределено": "neutral",
   Активен: "sky",
   "На обслуживании": "amber",
+  Сломан: "rose",
   Списано: "rose",
   "Списан, но используется": "ochre",
 };

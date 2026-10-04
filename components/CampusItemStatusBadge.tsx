@@ -12,6 +12,7 @@ interface CampusItemStatusBadgeProps {
 }
 
 const STATUS_KEYS: Record<CampusStatus, { compact: TranslationKey; card: TranslationKey }> = {
+  broken: { compact: "status.broken", card: "status.broken" },
   ok: { compact: "map.status.ok", card: "map.statusCard.ok" },
   check: { compact: "map.status.check", card: "map.statusCard.check" },
   service: { compact: "map.status.service", card: "map.statusCard.service" },

@@ -62,6 +62,7 @@ export interface InventoryItemRecord {
 }
 
 export interface InsertInventoryItemRecord {
+  status?: ItemStatus;
   id: string;
   isProject?: boolean;
   name: string;

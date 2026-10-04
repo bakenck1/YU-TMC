@@ -555,7 +555,7 @@ class PostgresTmcTransferRequestRepository
              from locked_item item
              left join locked_period period on true
             where item.version = $4
-              and item.status in ('active', 'maintenance', 'decommissioned_in_use')
+              and item.status in ('active', 'broken', 'maintenance', 'decommissioned_in_use')
               and (item.status = 'decommissioned_in_use' or item.archived_at is null)
               and (
                 ($5::uuid is null and $6::uuid is null and period.id is null)

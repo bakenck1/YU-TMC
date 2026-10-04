@@ -15,6 +15,7 @@ import {
   supportsMaterialStatementOneCCode,
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
+import type { ItemStatus } from "@/lib/types";
 import type { ItEquipmentType, ItNetworkAddressInput } from "@/lib/it-inventory";
 import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 
@@ -61,6 +62,7 @@ export default function InventoryItemCreateForm({
   const [responsible, setResponsible] = useState<TmcOperationUserDto | null>(null);
   const [isProject, setIsProject] = useState(false);
   const [barcode, setBarcode] = useState("");
+  const [initialStatus, setInitialStatus] = useState<ItemStatus>("active");
   const [codeScannerOpen, setCodeScannerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [photos, setPhotos] = useState<Array<{ imageDataUrl: string; width: number; height: number }>>([]);
@@ -120,7 +122,8 @@ export default function InventoryItemCreateForm({
           ...(inventorySection !== "it" && !restricted ? { isProject } : {}),
           ...(inventorySection !== "it" ? {
             responsibleUserId: restricted ? null : responsible?.id ?? null,
-            barcode: restricted || category === "components" ? null : (barcode.trim() || null),
+            barcode: restricted ? null : (barcode.trim() || null),
+            status: initialStatus,
           } : {}),
           photos,
           ...(inventorySection === "it" ? { networkAddresses } : {}),
@@ -138,6 +141,7 @@ export default function InventoryItemCreateForm({
       setQuantity("1");
       setUnitPrice("");
       setBarcode("");
+      setInitialStatus("active");
       setResponsible(null);
       setIsProject(false);
       setPhotos([]);
@@ -189,12 +193,13 @@ export default function InventoryItemCreateForm({
             </div>
             {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
             <div className="mt-5 space-y-4">
-              {!restricted && inventorySection !== "it" && category !== "components" && (
+              {!restricted && inventorySection !== "it" && (
                 <button type="button" onClick={() => setCodeScannerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"><ScanLine className="h-4 w-4" />{t("createItem.scan")}</button>
               )}
               <label className="block text-sm"><span className="text-zinc-500">{t("items.name")} <span className="text-red-600">({t("createItem.required")})</span></span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
               <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="mt-1 w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => { const nextCategory = event.target.value as typeof category; setCategory(nextCategory); if (!supportsMaterialStatementOneCCode(nextCategory)) setOneCCode(""); }} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select></label>
+              <label className="block text-sm"><span className="text-zinc-500">{t("items.type")} <span className="text-red-600">({t("createItem.required")})</span></span><select required value={category} onChange={(event) => { const nextCategory = event.target.value as typeof category; setCategory(nextCategory); if (!supportsMaterialStatementOneCCode(nextCategory)) setOneCCode(""); }} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500"><option value="">{t("common.notSpecified")}</option>{inventorySection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="household_inventory">{t("data.householdInventory")}</option><option value="components">{t("data.components")}</option></>}</select></label>
+              {inventorySection !== "it" ? <label className="block text-sm"><span className="text-zinc-500">{t("items.status")}</span><select value={initialStatus} onChange={(event) => setInitialStatus(event.target.value as ItemStatus)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"><option value="active">{t("status.active")}</option><option value="broken">{t("status.broken")}</option><option value="maintenance">{t("status.maintenance")}</option><option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option><option value="decommissioned_in_use">{t("status.decommissioned_in_use")}</option></select></label> : null}
               {inventorySection !== "it" && category === "components" ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{t("createItem.componentsNoBarcode")}</p> : null}
               {!restricted && (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -242,7 +247,7 @@ export default function InventoryItemCreateForm({
                   {t("status.project")}
                 </label>
               ) : null}
-              {!restricted && inventorySection !== "it" && category !== "components" && (
+              {!restricted && inventorySection !== "it" && (
                 <label className="block text-sm"><span className="text-zinc-500">{t("createItem.barcode")} <span>({t("createItem.optional")})</span></span><input value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder={t("createItem.barcodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.barcodeHint")} {t("createItem.barcodeOptionalHint")}</span></label>
               )}
               {inventorySection === "it" ? (

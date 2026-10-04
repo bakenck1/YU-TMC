@@ -2,7 +2,7 @@ import type {
   InventoryItemDto,
   UpdateInventoryItemContentInput,
 } from "@/lib/contracts/inventory-items";
-import { categoryFromLegacyType } from "@/lib/inventory-categories";
+import { isInventoryItemCategory } from "@/lib/inventory-categories";
 
 export type InventoryItemContentDraft = Omit<
   UpdateInventoryItemContentInput,
@@ -52,7 +52,7 @@ function contentFromItem(item: InventoryItemDto): InventoryItemContentDraft {
     : {
         ...common,
         oneCCode: item.oneCCode ?? null,
-        category: item.category ?? categoryFromLegacyType(item.itemType),
+        ...(isInventoryItemCategory(item.category ?? item.itemType) ? { category: (item.category ?? item.itemType) as NonNullable<UpdateInventoryItemContentInput["category"]> } : {}),
       };
 }
 

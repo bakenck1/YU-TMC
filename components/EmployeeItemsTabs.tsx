@@ -28,6 +28,7 @@ import {
 const EMPLOYEE_TAB_LABELS = {
   active: "status.active",
   maintenance: "status.maintenance",
+  broken: "status.broken",
   decommissioned: "status.decommissioned",
   decommissioned_in_use: "status.decommissioned_in_use",
 } as const;

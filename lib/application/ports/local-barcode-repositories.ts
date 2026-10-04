@@ -19,7 +19,7 @@ export interface LocalBarcodeItemRecord {
   inventoryNumber: string;
   quantity: number;
   version: number;
-  status: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
+  status: "active" | "broken" | "maintenance" | "decommissioned" | "decommissioned_in_use";
   responsibleUserId: string | null;
   responsibleName: string | null;
   roomId: string;
@@ -33,7 +33,7 @@ export interface LocalBarcodeGroupRecord {
   id: string;
   itemId: string;
   itemName: string;
-  itemStatus?: "active" | "maintenance" | "decommissioned" | "decommissioned_in_use";
+  itemStatus?: "active" | "broken" | "maintenance" | "decommissioned" | "decommissioned_in_use";
   originalBarcode: string;
   itemType: string;
   itemBrand: string | null;

@@ -55,7 +55,7 @@ export class InventoryResponsibilityService {
       const item = await responsibility.findItemState(itemId);
       if (!item) throw notFound("item_not_found");
       assertItItemAccess(item, actor);
-      if (item.itemStatus !== "active") throw conflict("item_not_available");
+      if ((item.itemStatus !== "active" && item.itemStatus !== "broken")) throw conflict("item_not_available");
       if (item.responsibleUserId) throw conflict("item_already_assigned");
       const startedAt = this.clock.now();
       try {
@@ -105,7 +105,7 @@ export class InventoryResponsibilityService {
       if (item.responsibleUserId === actor.userId) {
         throw conflict("already_responsible");
       }
-      if (item.itemStatus !== "active") throw conflict("item_not_available");
+      if ((item.itemStatus !== "active" && item.itemStatus !== "broken")) throw conflict("item_not_available");
       if (await responsibility.findPendingTransfer(input.itemId)) {
         throw conflict("transfer_already_pending");
       }
@@ -187,7 +187,7 @@ export class InventoryResponsibilityService {
       if (item) assertItItemAccess(item, actor);
       if (
         !item ||
-        item.itemStatus !== "active" ||
+        (item.itemStatus !== "active" && item.itemStatus !== "broken") ||
         !item.responsibilityPeriodId ||
         item.responsibleUserId !== actor.userId
       ) {
@@ -460,7 +460,7 @@ export class InventoryResponsibilityService {
       if (
         !item ||
         item.itemId !== current.itemId ||
-        item.itemStatus !== "active" ||
+        (item.itemStatus !== "active" && item.itemStatus !== "broken") ||
         !item.responsibilityPeriodId ||
         item.responsibleUserId !== current.currentResponsibleIdAtRequest
       ) {

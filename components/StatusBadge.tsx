@@ -9,6 +9,7 @@ const STATUS_CONFIG: Record<ItemStatus, { labelKey: TranslationKey; className: s
     labelKey: "status.active",
     className: "bg-green-100 text-green-700 ring-1 ring-inset ring-green-600/20",
   },
+  broken: { labelKey: "status.broken", className: "bg-red-100 text-red-700 ring-1 ring-inset ring-red-600/20" },
   maintenance: {
     labelKey: "status.maintenance",
     className: "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-600/20",

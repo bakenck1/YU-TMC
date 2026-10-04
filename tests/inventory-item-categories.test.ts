@@ -14,6 +14,7 @@ test("supports all first-class inventory categories", () => {
     "electronics",
     "electrical_equipment",
     "furniture",
+    "household_inventory",
     "components",
   ]);
   assert.equal(isInventoryItemCategory("electrical_equipment"), true);
@@ -49,7 +50,9 @@ test("database migration allows the components category", async () => {
 
   const allowedValues = /'electronics', 'electrical_equipment', 'furniture', 'components'/;
   assert.match(migration, allowedValues);
-  assert.match(schema, allowedValues);
+  assert.ok(schema.includes("btrim(${table.itemType}) <> ''"));
+  assert.equal(isInventoryItemCategory("household_inventory"), true);
+  assert.equal(isInventoryItemCategory("old_category"), false);
   assert.ok(
     JSON.parse(journal).entries.some(
       (entry: { tag?: string }) => entry.tag === "20260917075020_open_firebird",

@@ -143,6 +143,7 @@ function toCampusItem(item: InventoryItemDto, buildingId: string): CampusItem {
 
 function campusStatus(status: InventoryItemDto["status"]): CampusStatus {
   switch (status) {
+    case "broken": return "broken";
     case "maintenance":
       return "service";
     case "decommissioned":

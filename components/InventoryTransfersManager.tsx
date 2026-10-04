@@ -173,7 +173,7 @@ export default function InventoryTransfersManager() {
   );
   const scanAction = scanResult
     ? employeeScanAction({
-        status: scanResult.status as "active" | "maintenance" | "decommissioned",
+        status: scanResult.status as "active" | "broken" | "maintenance" | "decommissioned",
         isAssigned: scanResult.isAssigned,
         isCurrentUserResponsible: scanResult.isCurrentUserResponsible,
       })

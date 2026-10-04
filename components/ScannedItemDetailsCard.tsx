@@ -181,6 +181,7 @@ function formatDate(value: string, locale: string, fallback: string): string {
 
 function statusStyle(status: ScannedItem["status"]): string {
   if (status === "active") return "bg-emerald-50 text-emerald-800 ring-emerald-200";
+  if (status === "broken") return "bg-red-50 text-red-900 ring-red-200";
   if (status === "maintenance") return "bg-amber-50 text-amber-900 ring-amber-200";
   if (status === "decommissioned") return "bg-red-50 text-red-800 ring-red-200";
   if (status === "decommissioned_in_use") return "bg-orange-100 text-orange-900 ring-orange-300";

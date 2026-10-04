@@ -132,6 +132,7 @@ function localizeOperationValue(
     overridden: "itemDetails.transferOverridden",
     active: "itemDetails.statusActive",
     maintenance: "itemDetails.statusMaintenance",
+    broken: "status.broken",
     decommissioned: "itemDetails.statusDecommissioned",
     decommissioned_in_use: "itemDetails.statusDecommissionedInUse",
   };

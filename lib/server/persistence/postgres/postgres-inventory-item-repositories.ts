@@ -571,8 +571,8 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
            (id, name, description, item_type, item_section, it_type,
             brand, model, one_c_code, quantity, unit_price,
             room_id, inventory_number_kind, inventory_number, inventory_number_key,
-            created_by, updated_by, created_at, updated_at, is_project)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $17, $18)
+            created_by, updated_by, created_at, updated_at, is_project, status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $17, $18, $19)
          returning id`,
         [
           input.id,
@@ -593,12 +593,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
           input.actorId,
           input.occurredAt,
           input.isProject ?? false,
+          input.status ?? "active",
         ],
       );
       if (!result.rows[0]) throw new Error("item_insert_failed");
       const item = await this.findItemById(input.id);
       if (!item) throw new Error("item_insert_failed");
-      if (input.inventoryNumberKind === "temporary") {
+      if (input.inventoryNumberKind === "temporary" && input.inventoryNumber) {
         await this.source.query(
           `insert into ${HISTORY}
              (id, item_id, kind, value, comparison_key, assigned_by)
@@ -854,7 +855,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
             input.inventoryNumberChangeReason,
           ],
         );
-        await this.source.query(
+        if (input.inventoryNumber) await this.source.query(
           `insert into ${HISTORY}
              (id, item_id, kind, value, comparison_key, assigned_at, assigned_by)
            values ($1, $2, $3, $4, $5, $6, $7)`,

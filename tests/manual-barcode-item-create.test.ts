@@ -14,7 +14,7 @@ import { parseCode39ScanInput } from "../lib/domain/code39";
 
 const ROOT = new URL("../", import.meta.url);
 
-test("barcode input is optional, except components are always stored without one", async () => {
+test("barcode input is optional and components may retain a supplied number", async () => {
   const form = await readFile(
     new URL("components/InventoryItemCreateForm.tsx", ROOT),
     "utf8",
@@ -23,7 +23,7 @@ test("barcode input is optional, except components are always stored without one
     new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
 
   assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: restricted \|\| category === "components" \? null : \(barcode\.trim\(\) \|\| null\)/);
+  assert.match(form, /barcode: restricted \? null : \(barcode\.trim\(\) \|\| null\)/);
   assert.match(route, /actor\.role === "warehouse"/);
   assert.match(form, /t\("createItem\.barcodeHint"\)/);
   assert.match(route, /typeof body\.barcode !== "string"/);

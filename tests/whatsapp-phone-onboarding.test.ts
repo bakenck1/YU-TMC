@@ -13,10 +13,11 @@ import { MemoryUserUnitOfWork } from "../lib/server/persistence/memory/memory-us
 import type { ApplicationServices } from "../lib/server/application";
 
 const originalFetch = globalThis.fetch;
-const envKeys = ["YU_INVENTORY_TEST_USER_STORE", "WA_API_TOKEN", "WA_SESSION", "SESSION_SECRET"] as const;
+const envKeys = ["NODE_ENV", "YU_INVENTORY_TEST_USER_STORE", "WA_API_TOKEN", "WA_SESSION", "SESSION_SECRET"] as const;
 const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 let calls: Record<string, unknown>[];
 beforeEach(() => {
+  process.env["NODE_ENV"] = "test";
   process.env.YU_INVENTORY_TEST_USER_STORE = "memory";
   process.env.WA_API_TOKEN = "test-only-whatsapp-token";
   process.env.WA_SESSION = "onboarding-test";
@@ -38,6 +39,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  process.env["NODE_ENV"] = "test";
   globalThis.fetch = originalFetch;
   resetApplicationServicesForTests();
   for (const key of envKeys) {
@@ -157,6 +159,40 @@ test("authorized administrators retain the phone and IIN data in the management 
   assert.equal(entry.iin, "950101450123");
   assert.equal(entry.phone, "87022223344");
 });
+
+test("development skips mandatory WhatsApp onboarding without changing stored phones", async () => {
+  const { employee } = await fixture();
+  const service = getApplicationServices().users;
+  process.env["NODE_ENV"] = "development";
+  const admin = (await service.resolveCurrentAccount("admin@example.test"))!;
+  for (const actor of [employee, admin]) {
+    assert.equal((await service.resolveCurrentAccount(actor.email))?.whatsappPhoneRequired, false);
+    assert.equal((await service.getProfile(actor.userId)).phone, null);
+  }
+  assert.equal(calls.length, 0);
+});
+
+for (const environment of ["production", "test", undefined]) {
+  test(`WhatsApp onboarding stays mandatory outside development (${environment ?? "unset"}), including localhost requests`, async () => {
+    const { employee } = await fixture();
+    const service = getApplicationServices().users;
+    const admin = (await service.resolveCurrentAccount("admin@example.test"))!;
+    for (const actor of [employee, admin]) {
+      if (environment === undefined) delete process.env["NODE_ENV"];
+      else process.env["NODE_ENV"] = environment;
+      assert.equal((await service.resolveCurrentAccount(actor.email))?.whatsappPhoneRequired, true);
+      process.env["NODE_ENV"] = "test";
+      const localRequest = new Request("http://localhost:3000/api/items", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${createSessionToken(actor, 3600, actor.sessionVersion)}`,
+          "x-forwarded-host": "localhost:3000",
+        },
+      });
+      await assert.rejects(requireCurrentUser(localRequest), (error: unknown) =>
+        error instanceof ApplicationError && error.publicCode === "whatsapp_phone_required");
+    }
+  });
+}
 
 async function fixture() {
   const service = getApplicationServices().users;

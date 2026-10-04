@@ -11,7 +11,7 @@ export function employeeScanAction(input: {
   isAssigned: boolean;
   isCurrentUserResponsible?: boolean;
 }): EmployeeScanAction {
-  if (input.status !== "active") return { kind: "unavailable" };
+  if (input.status !== "active" && input.status !== "broken") return { kind: "unavailable" };
   if (input.isCurrentUserResponsible) return { kind: "already_owned" };
   if (!input.isAssigned) return { kind: "claim_free" };
   return { kind: "request_transfer" };

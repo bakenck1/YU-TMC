@@ -833,12 +833,12 @@ export const itemsTable = inventorySchema.table(
       sql`btrim(${table.name}) <> ''
           AND (${table.description} IS NULL OR btrim(${table.description}) <> '')
           AND (
-            (${table.itemSection} = 'general' AND ${table.itemType} in ('electronics', 'electrical_equipment', 'furniture', 'components') AND ${table.itType} IS NULL)
+            (${table.itemSection} = 'general' AND btrim(${table.itemType}) <> '' AND ${table.itType} IS NULL)
             OR
             (${table.itemSection} = 'it' AND ${table.itType} in ('wifi_access_point', 'camera') AND ${table.itemType} = ${table.itType}::text)
           )
-          AND btrim(${table.inventoryNumber}) <> ''
-          AND btrim(${table.inventoryNumberKey}) <> ''
+          AND ((btrim(${table.inventoryNumber}) <> '' AND btrim(${table.inventoryNumberKey}) <> '')
+            OR (${table.itemSection} = 'general' AND ${table.itemType} = 'components' AND ${table.inventoryNumber} = '' AND ${table.inventoryNumberKey} = ''))
           AND ${table.quantity} > 0
           AND ${table.unitPrice} >= 0`,
     ),

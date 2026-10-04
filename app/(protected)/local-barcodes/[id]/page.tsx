@@ -4,7 +4,6 @@ import Wrapper from "@/components/Wrapper";
 import type { InventoryItemDto, InventoryItemOperationDto } from "@/lib/contracts/inventory-items";
 import type { LocalBarcodeGroupDto, LocalBarcodeHistoryEventDto } from "@/lib/contracts/local-barcodes";
 import { isUuid } from "@/lib/domain/identifiers";
-import { categoryFromLegacyType } from "@/lib/inventory-categories";
 import { getApplicationServices } from "@/lib/server/application";
 import { readHiddenPageResource } from "@/lib/server/security/hidden-page-resource";
 import { requireAuthorizedPage } from "@/lib/server/security/page-access";
@@ -76,7 +75,7 @@ function toLocalInventoryItem(group: LocalBarcodeGroupDto): InventoryItemDto {
     id: group.id,
     name: group.itemName,
     description: group.description,
-    category: categoryFromLegacyType(group.itemType),
+    category: group.itemType,
     itemType: group.itemType,
     brand: group.brand,
     model: group.model,

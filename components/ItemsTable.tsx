@@ -128,6 +128,7 @@ function categoryLabel(
     category === "electronics" ||
     category === "electrical_equipment" ||
     category === "furniture" ||
+    category === "household_inventory" ||
     category === "components"
   ) {
     return t(inventoryItemCategoryTranslationKey(category));

@@ -965,6 +965,7 @@ function currentAccount(user: UserRecord): CurrentAccount {
     userId: user.id,
     sessionVersion: user.version,
     whatsappPhoneRequired:
+      process.env.NODE_ENV !== "development" &&
       user.role !== "warehouse" &&
       user.role !== "typography" &&
       !hasPhone(user.phone),

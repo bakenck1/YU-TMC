@@ -54,7 +54,7 @@ import type { LocalBarcodeGroupDto } from "@/lib/contracts/local-barcodes";
 import TmcUserPicker from "@/components/TmcUserPicker";
 import type { TmcOperationUserDto } from "@/lib/contracts/tmc-operations";
 import {
-  categoryFromLegacyType,
+  isInventoryItemCategory,
   inventoryItemCategoryTranslationKey,
   supportsMaterialStatementOneCCode,
   type InventoryItemCategory,
@@ -130,10 +130,10 @@ export default function InventoryItemDetails({
   const [editing, setEditing] = useState(canEditContent && initialEditing);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
-  const [category, setCategory] = useState<InventoryItemCategory | ItEquipmentType>(
+  const [category, setCategory] = useState<string>(
     item.itemSection === "it" && item.itType
       ? item.itType
-      : item.category ?? categoryFromLegacyType(item.itemType),
+      : item.category ?? item.itemType,
   );
   const [networkAddresses, setNetworkAddresses] = useState<ItNetworkAddressInput[]>(item.networkAddresses ?? []);
   const [brand, setBrand] = useState(item.brand ?? "");
@@ -270,7 +270,7 @@ export default function InventoryItemDetails({
   function openContentEditor() {
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? categoryFromLegacyType(item.itemType));
+    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? item.itemType);
     setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
@@ -287,7 +287,7 @@ export default function InventoryItemDetails({
     setEditing(false);
     setName(item.name);
     setDescription(item.description ?? "");
-    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? categoryFromLegacyType(item.itemType));
+    setCategory(item.itemSection === "it" && item.itType ? item.itType : item.category ?? item.itemType);
     setNetworkAddresses(item.networkAddresses ?? []);
     setBrand(item.brand ?? "");
     setModel(item.model ?? "");
@@ -331,14 +331,12 @@ export default function InventoryItemDetails({
         description: description || null,
         ...(item.itemSection === "it"
           ? { itType: category as ItEquipmentType, networkAddresses }
-          : { category: category as InventoryItemCategory }),
+          : isInventoryItemCategory(category) && category !== (item.category ?? item.itemType) ? { category } : {}),
         brand: brand || null,
         model: model || null,
         ...(item.itemSection !== "it"
           ? {
-              oneCCode: supportsMaterialStatementOneCCode(category)
-                ? oneCCode.trim() || null
-                : null,
+              ...(supportsMaterialStatementOneCCode(category) || isInventoryItemCategory(category) ? { oneCCode: supportsMaterialStatementOneCCode(category) ? oneCCode.trim() || null : null } : {}),
             }
           : {}),
         quantity: Number(quantity),
@@ -347,7 +345,7 @@ export default function InventoryItemDetails({
       setItem(updatedItem);
       setName(updatedItem.name);
       setDescription(updatedItem.description ?? "");
-      setCategory(updatedItem.itemSection === "it" && updatedItem.itType ? updatedItem.itType : updatedItem.category ?? categoryFromLegacyType(updatedItem.itemType));
+      setCategory(updatedItem.itemSection === "it" && updatedItem.itType ? updatedItem.itType : updatedItem.category ?? updatedItem.itemType);
       setNetworkAddresses(updatedItem.networkAddresses ?? []);
       setBrand(updatedItem.brand ?? "");
       setModel(updatedItem.model ?? "");
@@ -438,11 +436,8 @@ export default function InventoryItemDetails({
         const response = await fetch(`/api/inventory/items/${item.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            version,
-            ...values,
-            replaceQr,
-            qrReplaceReason: replaceQr ? qrReplaceReason : null,
+          body: JSON.stringify(statusChanged && !roomChanged && !inventoryNumberChanged && !projectChanged && !responsibleChanged && !replaceQr && condition === (item.condition ?? "good") && connectionStatus === (item.connectionStatus ?? "not_applicable") && ["active", "maintenance", "broken"].includes(values.status) ? { operation: "change_status", version, status: values.status } : {
+            version, ...values, replaceQr, qrReplaceReason: replaceQr ? qrReplaceReason : null,
           }),
         });
         const body = (await response.json().catch(() => ({}))) as {
@@ -673,8 +668,18 @@ export default function InventoryItemDetails({
     }
   }
 
+  async function repairBrokenItem() {
+    setSaving(true); setError("");
+    try {
+      const response = await fetch(`/api/inventory/items/${item.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "change_status", version: item.version, status: "active" }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? responseErrorCode(response.status));
+      setItem(body.item); setStatus(body.item.status); setSaved(true); router.refresh();
+    } catch (cause) { setError(localizeItemError(cause, t)); } finally { setSaving(false); }
+  }
+
   const statusLabel =
-    item.status === "maintenance"
+    item.status === "broken" ? t("status.broken") : item.status === "maintenance"
       ? t("itemDetails.statusMaintenance")
       : item.status === "decommissioned"
         ? t("itemDetails.statusDecommissioned")
@@ -708,6 +713,7 @@ export default function InventoryItemDetails({
           >
             <FileText className="h-4 w-4" /> {t("items.information")}
           </span>
+          {canEditContent && item.status === "broken" && (actorRole === "admin" || actorRole === "warehouse") ? <button type="button" disabled={saving} onClick={() => void repairBrokenItem()} className="inline-flex min-h-11 items-center rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">{t("itemDetails.statusActive")}</button> : null}
           {canEditContent ? <button ref={editTriggerRef} type="button" onClick={openContentEditor} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><Pencil className="h-4 w-4" />{t("items.edit")}</button> : null}
           {canManageCode && item.itemSection === "it" ? (
             <button type="button" onClick={() => printCodeLabel("qr")} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><QrCode className="h-4 w-4" />{t("inventory.qrCode")}</button>
@@ -861,6 +867,7 @@ export default function InventoryItemDetails({
                 ) : (
                   <>
                     <option value="active">{t("itemDetails.statusActive")}</option>
+                    <option value="broken">{t("status.broken")}</option>
                     <option value="maintenance">{t("itemDetails.statusMaintenance")}</option>
                     <option value="decommissioned">{t("itemDetails.statusDecommissioned")}</option>
                     <option value="decommissioned_in_use">{t("itemDetails.statusDecommissionedInUse")}</option>
@@ -934,7 +941,7 @@ export default function InventoryItemDetails({
                 disabled={
                   saving ||
                   !protectedRoomId ||
-                  !inventoryNumber.trim() ||
+                  ((item.category ?? item.itemType) !== "components" && !inventoryNumber.trim()) ||
                   ((item.status === "decommissioned" || item.status === "decommissioned_in_use") && status === "active" && !restoreReason.trim()) ||
                   (replaceQr && !qrReplaceReason.trim())
                 }
@@ -1042,7 +1049,7 @@ export default function InventoryItemDetails({
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("items.type")}</span>
-                  <select value={category} onChange={(event) => { const nextCategory = event.target.value as typeof category; setCategory(nextCategory); if (!supportsMaterialStatementOneCCode(nextCategory)) setOneCCode(""); }} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{item.itemSection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <><option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="components">{t("data.components")}</option></>}</select>
+                  <select value={isInventoryItemCategory(category) || item.itemSection === "it" ? category : ""} onChange={(event) => { const nextCategory = event.target.value as typeof category; setCategory(nextCategory); if (!supportsMaterialStatementOneCCode(nextCategory)) setOneCCode(""); }} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 outline-none focus:border-emerald-500">{item.itemSection === "it" ? <><option value="wifi_access_point">{t("it.typeWifi")}</option><option value="camera">{t("it.typeCamera")}</option></> : <>{!isInventoryItemCategory(category) ? <option value="" disabled>{category}</option> : null}<option value="electronics">{t("common.electronics")}</option><option value="electrical_equipment">{t("data.electricalEquipment")}</option><option value="furniture">{t("data.furniture")}</option><option value="household_inventory">{t("data.householdInventory")}</option><option value="components">{t("data.components")}</option></>}</select>
                 </label>
                 <label className="block text-sm">
                   <span className="text-zinc-500">{t("itemDetails.brand")}</span>
@@ -1205,11 +1212,11 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
-            <InventoryOverviewRow label={t("items.type")} value={item.itemSection === "it" ? t(item.itType === "camera" ? "it.typeCamera" : "it.typeWifi") : t(inventoryItemCategoryTranslationKey(item.category ?? categoryFromLegacyType(item.itemType)))} />
+            <InventoryOverviewRow label={t("items.type")} value={item.itemSection === "it" ? t(item.itType === "camera" ? "it.typeCamera" : "it.typeWifi") : isInventoryItemCategory(item.category ?? item.itemType) ? t(inventoryItemCategoryTranslationKey((item.category ?? item.itemType) as InventoryItemCategory)) : item.category ?? item.itemType} />
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             {item.itemSection !== "it" ? <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} /> : null}
-            {item.itemSection !== "it" && supportsMaterialStatementOneCCode(item.category ?? categoryFromLegacyType(item.itemType)) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
+            {item.itemSection !== "it" && supportsMaterialStatementOneCCode(item.category ?? item.itemType) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}
