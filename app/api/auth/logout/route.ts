@@ -27,7 +27,10 @@ async function handlePost(request: Request) {
   const session = sessionFromRequest(request);
   if (session) {
     try {
-      await getApplicationServices().users.revokeSessions(session.sub);
+      await getApplicationServices().users.revokeSessionsForCurrentSession(
+        session.sub,
+        session.ver,
+      );
     } catch {
       // Cookie removal must still succeed if the identity store is unavailable.
     }

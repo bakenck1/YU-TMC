@@ -338,6 +338,18 @@ class MemoryPasswordCredentialRepository
     this.state.credentials.set(input.userId, cloneCredential(input));
     return true;
   }
+
+  async replaceIfCurrent(
+    input: InsertPasswordCredential,
+    expected: Pick<PasswordCredentialRecord, "salt" | "hash">,
+  ): Promise<boolean> {
+    const current = this.state.credentials.get(input.userId);
+    if (!current || current.salt !== expected.salt || !sameBytes(current.hash, expected.hash)) {
+      return false;
+    }
+    this.state.credentials.set(input.userId, cloneCredential(input));
+    return true;
+  }
 }
 
 class MemoryAuthBootstrapRepository implements AuthBootstrapRepository {
@@ -429,4 +441,13 @@ function cloneCredential(
     hash: new Uint8Array(credential.hash),
     updatedAt: new Date(credential.updatedAt),
   };
+}
+
+function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+  let difference = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    difference |= first[index]! ^ second[index]!;
+  }
+  return difference === 0;
 }

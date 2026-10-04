@@ -5,7 +5,12 @@ import type { OneCFixedAssetImportService } from "@/lib/application/services/one
 import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { readLimitedBody } from "@/lib/server/http/request-body";
-import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
+import {
+  consumeExternalApiRateLimit,
+  externalJson,
+  externalRateLimitedResponse,
+  verifyExternalBearer,
+} from "@/lib/server/http/external-api";
 import { currentRequestId } from "@/lib/server/observability";
 import { MAX_ONE_C_RECORDS, MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 
@@ -28,6 +33,8 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
     const expected = dependencies.apiKey?.()?.trim() ?? process.env.ONE_C_FIXED_ASSETS_API_KEY?.trim();
     if (!expected) return json({ error: "integration_not_configured" }, 503);
     if (verifyExternalBearer(request, { current: expected }) === "unauthorized") return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+    const rateLimit = await consumeExternalApiRateLimit(request, "one-c-fixed-assets", 60);
+    if (!rateLimit.allowed) return externalRateLimitedResponse(rateLimit);
     const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
     if (!mediaType || !ACCEPTED_MEDIA_TYPES.includes(mediaType)) return json({ error: "unsupported_media_type", expected: ACCEPTED_MEDIA_TYPES }, 415);
 

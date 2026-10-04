@@ -539,6 +539,35 @@ class PostgresPasswordCredentialRepository
     );
     return (result.rowCount ?? 0) === 1;
   }
+
+  async replaceIfCurrent(
+    input: InsertPasswordCredential,
+    expected: Pick<PasswordCredentialRecord, "salt" | "hash">,
+  ): Promise<boolean> {
+    const result = await this.source.query(
+      `update ${CREDENTIALS}
+       set salt = $2,
+           hash = $3,
+           algorithm = 'scrypt',
+           scrypt_n = 16384,
+           scrypt_r = 8,
+           scrypt_p = 5,
+           key_length = 64,
+           updated_at = $4
+       where user_id = $1
+         and salt = $5
+         and hash = $6`,
+      [
+        input.userId,
+        input.salt,
+        Buffer.from(input.hash).toString("hex"),
+        input.updatedAt,
+        expected.salt,
+        Buffer.from(expected.hash).toString("hex"),
+      ],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
 }
 
 class PostgresAuthBootstrapRepository implements AuthBootstrapRepository {

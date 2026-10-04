@@ -2,6 +2,13 @@ import "server-only";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { currentRequestId, requestIdFor } from "@/lib/server/observability";
+import {
+  consumeDurableRateLimit,
+  getClientIp,
+  InMemoryRateLimiter,
+  rateLimitHeaders,
+  type RateLimitResult,
+} from "@/lib/security/rate-limiter";
 
 export interface ExternalRequestContext {
   requestId: string;
@@ -59,6 +66,58 @@ export function safeRetryAfter(value: unknown): string | null {
   if (typeof value !== "string" || !/^\d{1,5}$/.test(value)) return null;
   const seconds = Number(value);
   return Number.isInteger(seconds) && seconds >= 1 && seconds <= 86_400 ? String(seconds) : null;
+}
+
+const externalRateLimiters = new Map<string, InMemoryRateLimiter>();
+
+/**
+ * External integrations are bearer-key protected, but a leaked integration
+ * key must not turn into an unlimited PII/data scraping channel.  Use a
+ * durable bucket in production and an in-memory bucket for isolated tests or
+ * a local process without a database.
+ */
+export async function consumeExternalApiRateLimit(
+  request: Request,
+  namespace: string,
+  limit = 600,
+): Promise<RateLimitResult> {
+  const authorization = request.headers.get("authorization") ?? "";
+  const credentialDigest = createHash("sha256")
+    .update(authorization)
+    .digest("hex");
+  const key = `${getClientIp(request)}:${credentialDigest}`;
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      return await consumeDurableRateLimit({
+        namespace: `external-${namespace}`,
+        key,
+        limit,
+        windowMs: 60_000,
+      });
+    } catch {
+      // Keep a local safety net when a standalone development process has no
+      // database. Production still has the durable bucket whenever the API is
+      // able to reach its configured database.
+    }
+  }
+  let limiter = externalRateLimiters.get(namespace);
+  if (!limiter) {
+    limiter = new InMemoryRateLimiter({
+      namespace: `external-${namespace}-local`,
+      limit,
+      windowMs: 60_000,
+    });
+    externalRateLimiters.set(namespace, limiter);
+  }
+  return limiter.consume(key);
+}
+
+export function externalRateLimitedResponse(result: RateLimitResult) {
+  return externalJson(
+    { error: "TOO_MANY_REQUESTS", retryAfterSeconds: result.retryAfterSeconds },
+    429,
+    Object.fromEntries(rateLimitHeaders(result)),
+  );
 }
 
 function digest(value: string) { return createHash("sha256").update(value).digest(); }

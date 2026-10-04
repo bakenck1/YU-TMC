@@ -149,14 +149,10 @@ test("rejects unsupported, malformed, oversized and pixel-bomb service photos", 
     "data:image/png;",
     "data:image/jpeg;",
   );
-  const mismatchedMimeResult = await normalizeUploadedPhoto(pngWithJpegLabel);
-  assert.equal(mismatchedMimeResult.mediaType, "image/jpeg");
-  const mismatchedMimeMetadata = await sharp(
-    Buffer.from(mismatchedMimeResult.bytes),
-  ).metadata();
-  assert.equal(mismatchedMimeMetadata.format, "jpeg");
-  assert.equal(mismatchedMimeMetadata.width, 20);
-  assert.equal(mismatchedMimeMetadata.height, 20);
+  await assert.rejects(
+    normalizeUploadedPhoto(pngWithJpegLabel),
+    expectPublicCode("invalid_camera_photo"),
+  );
   await assert.rejects(
     normalizeUploadedPhoto("data:image/jpeg;base64,QUI=="),
     expectPublicCode("invalid_camera_photo"),

@@ -122,11 +122,16 @@ export class UserService {
     ) {
       const upgraded = await this.passwordHasher.hash(password);
       await this.unitOfWork.transaction(({ credentials }) =>
-        credentials.replace({
-          userId: account.user!.id,
-          ...upgraded,
-          updatedAt: this.clock.now(),
-        }),
+        credentials.replaceIfCurrent
+          ? credentials.replaceIfCurrent(
+              {
+                userId: account.user!.id,
+                ...upgraded,
+                updatedAt: this.clock.now(),
+              },
+              account.credential!,
+            )
+          : Promise.resolve(false),
       );
     }
     return {
@@ -521,6 +526,49 @@ export class UserService {
           fullName: user.fullName,
           role: user.role,
           phone: user.phone,
+          emailVerified: user.emailVerified,
+          active: user.active,
+          expectedVersion: user.version,
+          updatedAt: this.clock.now(),
+        })) !== null
+      );
+    });
+  }
+
+  /**
+   * Revoke sessions only when the caller still holds the current session
+   * version.  This prevents an old but correctly signed cookie from being
+   * abused as a logout-all-sessions denial-of-service primitive.
+   */
+  async revokeSessionsForCurrentSession(
+    emailInput: string,
+    expectedSessionVersion: number,
+  ): Promise<boolean> {
+    const email = normalizeUserEmail(emailInput);
+    if (!email || !Number.isSafeInteger(expectedSessionVersion) || expectedSessionVersion < 1) {
+      return false;
+    }
+    return this.unitOfWork.transaction(async ({ users }) => {
+      const user = await users.findByNormalizedEmailForUpdate(email);
+      if (
+        !user ||
+        !user.active ||
+        user.deletedAt ||
+        user.version !== expectedSessionVersion
+      ) {
+        return false;
+      }
+      return (
+        (await users.update({
+          id: user.id,
+          fullName: user.fullName,
+          iin: user.iin,
+          orgUnit: user.orgUnit,
+          position: user.position,
+          tutorId: user.tutorId,
+          role: user.role,
+          phone: user.phone,
+          defaultRoomId: user.defaultRoomId,
           emailVerified: user.emailVerified,
           active: user.active,
           expectedVersion: user.version,

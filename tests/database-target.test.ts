@@ -10,13 +10,22 @@ test("application database target defaults to NODE_ENV", () => {
   assert.equal(applicationDatabaseTarget({ NODE_ENV: "production" }), "production");
 });
 
-test("standalone local runtime can explicitly select the development database", () => {
+test("production cannot downgrade its database target", () => {
+  assert.throws(
+    () => applicationDatabaseTarget({ NODE_ENV: "production", DATABASE_TARGET: "development" }),
+    DatabaseConfigurationError,
+  );
+});
+
+test("browser smoke has an explicit isolated test exception", () => {
   assert.equal(
     applicationDatabaseTarget({
       NODE_ENV: "production",
-      DATABASE_TARGET: "development",
+      NEXT_DIST_DIR: ".next-e2e",
+      YU_INVENTORY_E2E_DATABASE_TARGET: "test",
+      DATABASE_TARGET: "test",
     }),
-    "development",
+    "test",
   );
 });
 

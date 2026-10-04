@@ -8,7 +8,7 @@ Type=simple
 User=yu-inventory
 Group=yu-inventory
 WorkingDirectory=/opt/yu-inventory/current
-EnvironmentFile=/etc/yu-inventory/yu-inventory.env
+EnvironmentFile=/etc/yu-inventory/yu-inventory-runtime.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/npm run worker:tmc-push -- --loop
 Restart=on-failure

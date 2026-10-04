@@ -1,7 +1,12 @@
 import "server-only";
 
 import type { FacilitiesRepository } from "@/lib/contracts/facilities-api";
-import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
+import {
+  consumeExternalApiRateLimit,
+  externalJson,
+  externalRateLimitedResponse,
+  verifyExternalBearer,
+} from "@/lib/server/http/external-api";
 import { createPostgresFacilitiesRepository } from "@/lib/server/persistence/postgres/postgres-facilities-repository";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -31,12 +36,19 @@ export function facilitiesAuthCheck(request: Request) {
   return authorizeFacilitiesRequest(request) ?? externalJson({ valid: true, scope: "facilities:read" });
 }
 
+async function facilitiesRateLimit(request: Request): Promise<Response | null> {
+  const result = await consumeExternalApiRateLimit(request, "facilities");
+  return result.allowed ? null : externalRateLimitedResponse(result);
+}
+
 export async function listFacilitiesBuildings(
   request: Request,
   repository?: FacilitiesRepository,
 ) {
   const unauthorized = authorizeFacilitiesRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await facilitiesRateLimit(request);
+  if (rateLimited) return rateLimited;
   if (new URL(request.url).search) return invalidQuery();
 
   try {
@@ -53,6 +65,8 @@ export async function listFacilitiesRooms(
 ) {
   const unauthorized = authorizeFacilitiesRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await facilitiesRateLimit(request);
+  if (rateLimited) return rateLimited;
 
   const query = new URL(request.url).searchParams;
   if ([...query.keys()].some((key) => key !== "buildingId") || query.getAll("buildingId").length > 1) {

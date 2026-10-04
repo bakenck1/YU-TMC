@@ -8,7 +8,12 @@ import type {
   DormitoryRequestResult,
 } from "@/lib/contracts/dormitory-requests";
 import { ApplicationError } from "@/lib/domain/application-error";
-import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
+import {
+  consumeExternalApiRateLimit,
+  externalJson,
+  externalRateLimitedResponse,
+  verifyExternalBearer,
+} from "@/lib/server/http/external-api";
 import { readLimitedJson } from "@/lib/server/http/request-body";
 import { createPostgresDormitoryRequestRepository } from "@/lib/server/persistence/postgres/postgres-dormitory-request-repository";
 
@@ -32,6 +37,8 @@ export async function createDormitoryRequest(
   if (authorization === "unauthorized") {
     return externalJson({ error: "UNAUTHORIZED", message: "Missing or invalid API key." }, 401, { "WWW-Authenticate": "Bearer" });
   }
+  const rateLimit = await consumeExternalApiRateLimit(request, "dormitory-write", 120);
+  if (!rateLimit.allowed) return externalRateLimitedResponse(rateLimit);
 
   try {
     const input = parseInput(await readLimitedJson(request, 16 * 1024));

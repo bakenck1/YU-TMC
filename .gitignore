@@ -48,6 +48,9 @@ yarn-error.log*
 !.env.example
 
 # runtime authentication state
+*.zip
+*.tar
+*.tar.gz
 /.data/auth-credentials.json
 /.data/session-secret
 /.data/postgres-development/

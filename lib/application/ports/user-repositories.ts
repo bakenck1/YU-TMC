@@ -147,6 +147,11 @@ export interface PasswordCredentialRepository {
   findByUserId(userId: string): Promise<PasswordCredentialRecord | null>;
   insert(input: InsertPasswordCredential): Promise<void>;
   replace(input: InsertPasswordCredential): Promise<boolean>;
+  /** Replace only if the credential read during authentication is unchanged. */
+  replaceIfCurrent?(
+    input: InsertPasswordCredential,
+    expected: Pick<PasswordCredentialRecord, "salt" | "hash">,
+  ): Promise<boolean>;
 }
 
 export interface AuthBootstrapRepository {

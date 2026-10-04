@@ -996,11 +996,20 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.edit_content");
-    const photo = await normalizeCameraPhoto(input);
     const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      // IT records contain protected network and ownership data.  The broad
+      // content permission is intentionally insufficient for this mutation;
+      // check the section before decoding attacker-controlled bytes as well.
+      if (
+        current.itemSection === "it" &&
+        !hasPermission(actor.role, "inventory.it.manage")
+      ) {
+        throw itemNotFound();
+      }
+      const photo = await normalizeCameraPhoto(input);
       if (current.version !== input.version) throw versionConflict();
       if ((current.photoIds?.length ?? (current.photoUrl ? 1 : 0)) >= 4) {
         throw new ApplicationError("conflict", "photo_limit_reached");
@@ -1050,6 +1059,12 @@ export class InventoryItemService {
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
       if (!current) throw new ApplicationError("not_found", "item_not_found");
+      if (
+        current.itemSection === "it" &&
+        !hasPermission(actor.role, "inventory.it.manage")
+      ) {
+        throw itemNotFound();
+      }
       if (current.version !== version) throw versionConflict();
       const currentPhotoCount = current.photoIds?.length ?? (current.photoUrl ? 1 : 0);
       if (

@@ -4,7 +4,12 @@ import type {
   DormitoryAssetPageRequest,
   DormitoryAssetRepository,
 } from "@/lib/contracts/dormitory-api";
-import { externalJson, verifyExternalBearer } from "@/lib/server/http/external-api";
+import {
+  consumeExternalApiRateLimit,
+  externalJson,
+  externalRateLimitedResponse,
+  verifyExternalBearer,
+} from "@/lib/server/http/external-api";
 import { createPostgresDormitoryAssetRepository } from "@/lib/server/persistence/postgres/postgres-dormitory-asset-repository";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -38,12 +43,19 @@ export function dormitoryAuthCheck(request: Request) {
   });
 }
 
+async function dormitoryRateLimit(request: Request): Promise<Response | null> {
+  const result = await consumeExternalApiRateLimit(request, "dormitory");
+  return result.allowed ? null : externalRateLimitedResponse(result);
+}
+
 export async function listDormitoryAssets(
   request: Request,
   repository?: DormitoryAssetRepository,
 ) {
   const unauthorized = authorizeDormitoryRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dormitoryRateLimit(request);
+  if (rateLimited) return rateLimited;
 
   const page = parsePage(request);
   if (page instanceof Response) return page;

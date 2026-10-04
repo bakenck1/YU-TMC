@@ -249,10 +249,7 @@ function attachmentContentMatches(
   switch (mediaType) {
     case "application/pdf": {
       if (extension !== "pdf" || asciiPrefix(5) !== "%PDF-") return false;
-      const content = asciiPrefix(bytes.length).toLowerCase();
-      return !["/javascript", "/js", "/launch", "/embeddedfile"].some((marker) =>
-        content.includes(marker),
-      );
+      return !pdfContainsActiveContent(bytes);
     }
     case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
     case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
@@ -285,6 +282,42 @@ function attachmentContentMatches(
     default:
       return false;
   }
+}
+
+// PDF names may encode characters as #xx (for example /Java#53cript), so a
+// plain substring blacklist is bypassable. Decode every PDF name token and
+// reject actions, forms, attachments, and embedded media before storing it.
+const PDF_ACTIVE_NAME_MARKERS = new Set([
+  "javascript",
+  "js",
+  "launch",
+  "embeddedfile",
+  "embeddedfiles",
+  "richmedia",
+  "acroform",
+  "xfa",
+  "openaction",
+  "aa",
+  "submitform",
+  "gotor",
+  "gotoremote",
+  "importdata",
+  "fileattachment",
+  "3d",
+  "movie",
+  "sound",
+]);
+
+function pdfContainsActiveContent(bytes: Uint8Array): boolean {
+  const content = new TextDecoder("latin1").decode(bytes);
+  const namePattern = /\/([^\s<>\[\]()\/%]+)/g;
+  for (const match of content.matchAll(namePattern)) {
+    const name = match[1]!.replace(/#([0-9a-f]{2})/gi, (_, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    ).toLowerCase();
+    if (PDF_ACTIVE_NAME_MARKERS.has(name)) return true;
+  }
+  return false;
 }
 
 function toCommentDto(

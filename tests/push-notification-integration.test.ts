@@ -124,7 +124,8 @@ test("durable TMC push worker is kicked after mutations and is available to ever
   assert.match(worker, /processTmcPushOutbox/);
   assert.match(worker, /process\.argv\.includes\("--loop"\)/);
   assert.match(service, /ExecStart=\/usr\/bin\/npm run worker:tmc-push -- --loop/);
-  assert.match(service, /EnvironmentFile=\/etc\/yu-inventory\/yu-inventory\.env/);
+  assert.match(service, /EnvironmentFile=\/etc\/yu-inventory\/yu-inventory-runtime\.env/);
+  assert.doesNotMatch(service, /DATABASE_MIGRATOR_URL/);
   assert.match(service, /TimeoutStopSec=35s/);
 });
 

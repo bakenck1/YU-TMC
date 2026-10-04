@@ -15,7 +15,10 @@ import type {
 const SCRYPT_OPTIONS = { N: 16_384, r: 8, p: 5, maxmem: 64 * 1024 * 1024 };
 const LEGACY_SCRYPT_OPTIONS = { N: 16_384, r: 8, p: 1, maxmem: 32 * 1024 * 1024 };
 const KEY_LENGTH = 64;
-const DUMMY_SALT = "yu-inventory-dummy-credential-v2";
+// Keep the dummy salt in the encoded-salt format so a missing account uses
+// the same scrypt cost as a real credential.  A non-conforming salt silently
+// fell back to the legacy p=1 path and exposed a username timing oracle.
+const DUMMY_SALT = "8f4a2c6d9e1b3f50718294a6c8e0d2f416385a7b9c0d1e2f";
 const DUMMY_HASH = scryptSync(
   "invalid-password",
   DUMMY_SALT,

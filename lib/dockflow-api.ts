@@ -2,7 +2,13 @@ import "server-only";
 
 import { createDockflowService } from "@/lib/application/services/dockflow-service";
 import type { DockflowDataRepository, DockflowEmployee, DockflowEmployeeItem, DockflowInventoryRepository, DockflowPageRequest } from "@/lib/contracts/dockflow";
-import { externalJson, externalResponseHeaders, verifyExternalBearer } from "@/lib/server/http/external-api";
+import {
+  externalJson,
+  externalRateLimitedResponse,
+  externalResponseHeaders,
+  consumeExternalApiRateLimit,
+  verifyExternalBearer,
+} from "@/lib/server/http/external-api";
 import { createPostgresDockflowInventoryRepository } from "@/lib/server/persistence/postgres/postgres-dockflow-inventory-repository";
 import {
   createYessenovDirectoryClient,
@@ -28,9 +34,16 @@ export function dockflowAuthCheck(request: Request) {
   return authorizeDockflowRequest(request) ?? json({ valid: true });
 }
 
+async function dockflowRateLimit(request: Request): Promise<Response | null> {
+  const result = await consumeExternalApiRateLimit(request, "dockflow");
+  return result.allowed ? null : externalRateLimitedResponse(result);
+}
+
 export async function listDockflowEmployees(request: Request, repository?: DockflowDataRepository) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dockflowRateLimit(request);
+  if (rateLimited) return rateLimited;
   try {
     const page = parsePage(request, "employees");
     if (page instanceof Response) return page;
@@ -55,6 +68,8 @@ export async function listDockflowEmployees(request: Request, repository?: Dockf
 export async function listDockflowItems(request: Request, repository?: DockflowDataRepository) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dockflowRateLimit(request);
+  if (rateLimited) return rateLimited;
   const page = parsePage(request, "items");
   if (page instanceof Response) return page;
   try {
@@ -78,10 +93,12 @@ export async function findDockflowItemPhoto(
 ) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dockflowRateLimit(request);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     return errorResponse(404, "ITEM_NOT_FOUND", "ТМЦ не найдено.");
   }
 
+  if (rateLimited) return rateLimited;
   if (request.headers.has("range")) {
     return errorResponse(416, "RANGE_NOT_SUPPORTED", "Byte ranges are not supported.", { "Accept-Ranges": "none" });
   }
@@ -103,6 +120,8 @@ export async function findDockflowItemPhoto(
 export async function findDockflowEmployee(request: Request, iin: string, repository?: DockflowDataRepository) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dockflowRateLimit(request);
+  if (rateLimited) return rateLimited;
   const validationError = validateIin(iin);
   if (validationError) return validationError;
   const page = parsePage(request, "employee_items", iin);
@@ -130,6 +149,8 @@ export async function findDockflowEmployee(request: Request, iin: string, reposi
 export async function findDockflowEmployeeItems(request: Request, iin: string, repository?: DockflowDataRepository) {
   const unauthorized = authorizeDockflowRequest(request);
   if (unauthorized) return unauthorized;
+  const rateLimited = await dockflowRateLimit(request);
+  if (rateLimited) return rateLimited;
   const validationError = validateIin(iin);
   if (validationError) return validationError;
   const page = parsePage(request, "employee_items", iin);

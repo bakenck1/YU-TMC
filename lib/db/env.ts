@@ -87,18 +87,22 @@ export function databaseTargetFromNodeEnv(
 export function applicationDatabaseTarget(
   env: Environment = process.env,
 ): DatabaseTarget {
-  const configuredTarget = env.DATABASE_TARGET?.trim();
-  if (configuredTarget) return parseDatabaseTarget(configuredTarget);
-
   const nodeTarget = databaseTargetFromNodeEnv(env.NODE_ENV);
-  if (
+  const configuredTarget = env.DATABASE_TARGET?.trim();
+  const isBrowserSmokeE2e =
     nodeTarget === "production" &&
     env.NEXT_DIST_DIR === ".next-e2e" &&
-    env.YU_INVENTORY_E2E_DATABASE_TARGET === "test"
-  ) {
-    return "test";
+    env.YU_INVENTORY_E2E_DATABASE_TARGET === "test";
+  if (!configuredTarget) return isBrowserSmokeE2e ? "test" : nodeTarget;
+
+  const parsedTarget = parseDatabaseTarget(configuredTarget);
+  if (isBrowserSmokeE2e && parsedTarget === "test") return "test";
+  if (parsedTarget !== nodeTarget) {
+    throw new DatabaseConfigurationError(
+      `DATABASE_TARGET=${parsedTarget} is incompatible with NODE_ENV=${nodeTarget}.`,
+    );
   }
-  return nodeTarget;
+  return parsedTarget;
 }
 
 export function parseDatabaseTarget(value: string): DatabaseTarget {
