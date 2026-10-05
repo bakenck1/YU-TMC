@@ -5,7 +5,25 @@ import { auditNeedsReview, type AuditMatch } from "@/lib/inventory-source-audit"
 
 type AuditExport = { run: Record<string, unknown>; rows: AuditMatch[] };
 const label = (result: AuditMatch["result"]) => result === "matched" ? "Найдено совпадение" : result === "temporary" ? "Временный номер — требуется проверка" : "Не найдено";
-const source = (value: AuditMatch["source"]) => value === "1c+excel" ? "1С + Excel" : value === "1c" ? "1С" : value === "excel" ? "Excel" : "";
+const source = (value: AuditMatch["source"]) => value === "1c+excel" ? "ОС + Материальный предмет" : value === "1c" ? "ОС" : value === "excel" ? "Материальный предмет" : "";
+const countLabels: Record<string, string> = {
+  total: "Сохранённая сверка: записей ТМЦ",
+  oneCOnly: "Сохранённая сверка: ОС",
+  excelOnly: "Сохранённая сверка: Материальный предмет",
+  both: "Сохранённая сверка: ОС + Материальный предмет",
+  missing: "Сохранённая сверка: не найдено",
+  temporary: "Сохранённая сверка: из них временные",
+  possible: "Сохранённая сверка: из найденных возможные",
+};
+const inventoryLabels: Record<string, string> = {
+  currentTotal: "Сейчас: всего записей ТМЦ",
+  currentActive: "Сейчас: активных записей ТМЦ",
+  currentQuantity: "Сейчас: всего единиц ТМЦ",
+  currentActiveQuantity: "Сейчас: активных единиц ТМЦ",
+  added: "После dry-run: добавлено записей",
+  removed: "После dry-run: удалено записей",
+  changed: "После dry-run: изменено записей",
+};
 function safeText(value: unknown): string {
   const text = value == null ? "" : String(value);
   return /^[\s\uFEFF]*[=+@-]/u.test(text) ? `'${text}` : text;
@@ -27,9 +45,22 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
     ["Время dry-run", data.run.run_at instanceof Date ? data.run.run_at.toISOString() : safeText(data.run.run_at)],
     ["Строк Excel с номерами при dry-run", data.run.excel_accepted_count ?? ""],
     ["Строк Excel без номера при dry-run", data.run.excel_skipped_count ?? ""],
-    ...Object.entries(data.run.counts as Record<string, number>).map(([key, value]) => [key, value]),
+    ...Object.entries(data.run.counts as Record<string, number>).map(([key, value]) => [safeText(countLabels[key] ?? key), value]),
+    ["Что означают категории", "ОС — совпадение только в 1С; Материальный предмет — только в Excel; ОС + Материальный предмет — в обоих источниках. Это источники поиска, они не определяют учётную категорию ТМЦ."],
+    ["Записи и единицы ТМЦ", "Сохранённая сверка считает записи на момент dry-run. Одна запись ТМЦ может содержать несколько единиц в поле «Количество». Текущие показатели сайта приведены отдельно."],
   ]);
-  summary.getColumn(1).width = 32; summary.getColumn(2).width = 80;
+  summary.getRow(summary.rowCount - 1).height = 60;
+  summary.getRow(summary.rowCount).height = 45;
+  if (data.run.inventory && typeof data.run.inventory === "object") {
+    const inventory = data.run.inventory as Record<string, unknown>;
+    for (const [key, text] of Object.entries(inventoryLabels)) {
+      if (typeof inventory[key] === "number" && Number.isFinite(inventory[key])) summary.addRow([text, inventory[key]]);
+    }
+    if (typeof inventory.linksChanged === "boolean") summary.addRow(["После dry-run: изменились связи с 1С", inventory.linksChanged ? "Да" : "Нет"]);
+    if (typeof inventory.stale === "boolean") summary.addRow(["Состояние сохранённой сверки", inventory.stale ? "Устарела — повторите dry-run" : "Соответствует текущим записям ТМЦ"]);
+  }
+  summary.getColumn(1).width = 60; summary.getColumn(2).width = 80;
+  summary.getColumn(2).alignment = { vertical: "top", wrapText: true };
   const sheet = workbook.addWorksheet("Все ТМЦ", { views: [{ state: "frozen", ySplit: 1 }] });
   sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по", "Запись 1С из", "Статус проверки партии 1С"]);
   for (const row of data.rows) {

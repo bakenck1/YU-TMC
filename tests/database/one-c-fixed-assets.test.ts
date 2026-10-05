@@ -145,6 +145,31 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const repeated = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
     expect(repeated.run.id).not.toBe(audit.run.id);
     expect(repeated.data.find((entry) => entry.itemId === itemId)).toEqual(found);
+    expect(repeated.run.inventory).toMatchObject({ currentTotal: repeated.run.counts.total, added: 0, removed: 0, changed: 0, stale: false });
+    const savedCounts = repeated.run.counts;
+    const nextItemId = randomUUID();
+    const number = `NEW-${nextItemId.slice(0, 8)}`;
+    await runtimePool.query(`insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      values($1,'Added after audit',3,100,$2,'official',$3::text,lower($3::text),$4,$4)`, [nextItemId, roomId, number, userId]);
+    const afterAdd = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    expect(afterAdd.run.counts).toEqual(savedCounts);
+    expect(afterAdd.run.inventory).toMatchObject({ currentTotal: Number(savedCounts.total) + 1, added: 1, removed: 0, stale: true });
+    expect(afterAdd.run.inventory.currentActive).toBe(repeated.run.inventory.currentActive + 1);
+    expect(afterAdd.run.inventory.currentActiveQuantity).toBe(repeated.run.inventory.currentActiveQuantity + 3);
+    // Barcode changes also invalidate the saved evidence without relying on an item version bump.
+    await runtimePool.query(`update "yu_inventory"."local_item_groups" set status='cancelled',cancelled_at=now(),cancelled_by=$2,cancellation_reason='Audit fixture cancellation' where id=$1`, [groupId, userId]);
+    const afterBarcodeChange = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    expect(afterBarcodeChange.run.inventory.changed).toBe(1);
+    await runtimePool.query(`update "yu_inventory"."items" set archived_at=now(),archived_by=$2,version=version+1 where id=$1`, [itemId, userId]);
+    const afterReplacement = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    expect(afterReplacement.run.counts).toEqual(savedCounts);
+    expect(afterReplacement.run.inventory).toMatchObject({ currentTotal: Number(savedCounts.total), added: 1, removed: 1, changed: 0, stale: true });
+    const beforeRefresh = await reconciliation.getBatch(batch.rows[0]!.id);
+    await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: Number(beforeRefresh.version) });
+    const currentAudit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
+    expect(currentAudit.run.inventory).toMatchObject({ currentTotal: currentAudit.run.counts.total, added: 0, removed: 0, changed: 0, stale: false });
+    expect(currentAudit.data.map((entry) => entry.itemId)).toContain(nextItemId);
+    expect(currentAudit.data.map((entry) => entry.itemId)).not.toContain(itemId);
   });
 
   it("reports a slashless 1C number as a possible match while keeping publication blocked", async () => {
