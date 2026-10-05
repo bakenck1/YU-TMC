@@ -33,11 +33,13 @@ export default function InventoryItemComposition({
   const [candidates, setCandidates] = useState<InventoryItemDto[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState("");
+  const [selected, setSelected] = useState(new Map<string, InventoryItemDto>());
   const [saving, setSaving] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [error, setError] = useState("");
   const [modalError, setModalError] = useState("");
+  const [candidateError, setCandidateError] = useState("");
+  const savingRef = useRef(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const linkedIds = useMemo(
@@ -52,11 +54,15 @@ export default function InventoryItemComposition({
   const hasAnyRelatedItems = components.length > 0 || hasLinkedParts;
 
   useEffect(() => {
+    if (modalOpen && saving) dialogRef.current?.focus();
+  }, [modalOpen, saving]);
+
+  useEffect(() => {
     if (!modalOpen) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
       setLoadingCandidates(true);
-      setModalError("");
+      setCandidateError("");
       try {
         const params = new URLSearchParams({ q: query.trim() });
         const response = await fetch(
@@ -70,10 +76,10 @@ export default function InventoryItemComposition({
         if (!response.ok || !body.candidates) {
           throw new Error(body.error ?? "item_components_unavailable");
         }
-        setCandidates(body.candidates);
-      } catch (candidateError) {
-        if (!(candidateError instanceof DOMException && candidateError.name === "AbortError")) {
-          setModalError(t("itemComposition.error"));
+        if (!controller.signal.aborted) setCandidates(body.candidates);
+      } catch {
+        if (!controller.signal.aborted) {
+          setCandidateError(t("itemComposition.error"));
         }
       } finally {
         if (!controller.signal.aborted) setLoadingCandidates(false);
@@ -87,10 +93,11 @@ export default function InventoryItemComposition({
 
   function openModal() {
     setQuery("");
-    setSelectedId("");
+    setSelected(new Map());
     setCandidates([]);
     setError("");
     setModalError("");
+    setCandidateError("");
     setLoadingCandidates(true);
     setModalOpen(true);
   }
@@ -98,6 +105,16 @@ export default function InventoryItemComposition({
   function closeModal() {
     setModalOpen(false);
     window.requestAnimationFrame(() => openButtonRef.current?.focus());
+  }
+
+  function toggleSelection(candidate: InventoryItemDto) {
+    if (savingRef.current) return;
+    setSelected((previous) => {
+      const next = new Map(previous);
+      if (next.has(candidate.id)) next.delete(candidate.id);
+      else next.set(candidate.id, candidate);
+      return next;
+    });
   }
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -114,8 +131,15 @@ export default function InventoryItemComposition({
     );
     const first = focusable[0];
     const last = focusable.at(-1);
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
+    if (!first || !last) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
+    if (document.activeElement === dialogRef.current) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -124,7 +148,9 @@ export default function InventoryItemComposition({
     }
   }
 
-  async function mutate(componentId: string, method: "POST" | "DELETE") {
+  async function mutate(componentIds: string[], method: "POST" | "DELETE") {
+    if (savingRef.current || componentIds.length === 0) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     setModalError("");
@@ -132,7 +158,9 @@ export default function InventoryItemComposition({
       const response = await fetch(`/api/inventory/items/${itemId}/components`, {
         method,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ componentId }),
+        body: JSON.stringify(
+          method === "POST" ? { componentIds } : { componentId: componentIds[0] },
+        ),
       });
       const body = (await response.json()) as {
         components?: InventoryItemDto[];
@@ -149,6 +177,7 @@ export default function InventoryItemComposition({
       if (modalOpen) setModalError(message);
       else setError(message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -158,6 +187,7 @@ export default function InventoryItemComposition({
       <button
         ref={openButtonRef}
         type="button"
+        disabled={saving}
         onClick={openModal}
         className={
           insideEmptyState
@@ -270,7 +300,7 @@ export default function InventoryItemComposition({
                     aria-label={t("itemComposition.remove", { name: component.name })}
                     title={t("itemComposition.remove", { name: component.name })}
                     disabled={saving}
-                    onClick={() => void mutate(component.id, "DELETE")}
+                    onClick={() => void mutate([component.id], "DELETE")}
                     className="absolute right-3 top-3 rounded-lg p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -304,11 +334,13 @@ export default function InventoryItemComposition({
           <div
             ref={dialogRef}
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
+            aria-busy={saving}
             aria-labelledby="item-composition-dialog-title"
             aria-describedby="item-composition-dialog-description"
             onKeyDown={handleDialogKeyDown}
-            className="flex max-h-[80vh] w-full max-w-xl flex-col rounded-2xl bg-white p-5 shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-xl flex-col rounded-2xl bg-white p-5 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -334,22 +366,43 @@ export default function InventoryItemComposition({
               <Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-zinc-400" />
               <input
                 autoFocus
+                disabled={saving}
                 value={query}
                 maxLength={100}
                 onChange={(event) => {
                   setQuery(event.target.value);
-                  setSelectedId("");
+                  setLoadingCandidates(true);
                 }}
                 placeholder={t("itemComposition.searchPlaceholder")}
                 className="w-full rounded-xl border border-black/10 py-2.5 pl-10 pr-3 outline-none focus:border-emerald-500"
               />
             </label>
-            {modalError ? (
+            <p role="status" className="mt-3 text-sm font-medium text-zinc-600">
+              {t("itemComposition.selectedCount", { count: selected.size })}
+            </p>
+            {selected.size > 0 ? (
+              <div className="mt-2 flex max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto">
+                {Array.from(selected.values()).map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    disabled={saving}
+                    aria-label={t("itemComposition.deselect", { name: candidate.name })}
+                    onClick={() => toggleSelection(candidate)}
+                    className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-sm text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
+                  >
+                    <span className="truncate">{candidate.name}</span>
+                    <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {modalError || candidateError ? (
               <p role="alert" className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-                {modalError}
+                {modalError || candidateError}
               </p>
             ) : null}
-            <div className="mt-4 min-h-40 flex-1 overflow-y-auto">
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
               {loadingCandidates ? (
                 <p className="py-12 text-center text-sm text-zinc-500">
                   {t("common.loading")}…
@@ -358,14 +411,15 @@ export default function InventoryItemComposition({
                 <fieldset className="space-y-2">
                   <legend className="sr-only">{t("itemComposition.selectTitle")}</legend>
                   {available.map((candidate) => (
-                    <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/5 p-3 hover:bg-slate-50">
+                    <label key={candidate.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${selected.has(candidate.id) ? "border-emerald-300 bg-emerald-50" : "border-black/5 hover:bg-slate-50"}`}>
                       <input
-                        type="radio"
+                        type="checkbox"
                         name="component"
                         value={candidate.id}
-                        checked={selectedId === candidate.id}
-                        onChange={() => setSelectedId(candidate.id)}
-                        className="mt-1 accent-emerald-600"
+                        checked={selected.has(candidate.id)}
+                        disabled={saving}
+                        onChange={() => toggleSelection(candidate)}
+                        className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
                       />
                       <span className="min-w-0">
                         <span className="block font-medium text-zinc-800">{candidate.name}</span>
@@ -391,9 +445,9 @@ export default function InventoryItemComposition({
               <button type="button" disabled={saving} onClick={closeModal} className="rounded-lg border border-black/10 px-4 py-2 text-sm text-zinc-600 disabled:opacity-50">
                 {t("common.cancel")}
               </button>
-              <button type="button" disabled={!selectedId || saving} onClick={() => void mutate(selectedId, "POST")} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              <button type="button" disabled={selected.size === 0 || saving} onClick={() => void mutate(Array.from(selected.keys()), "POST")} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 <Plus className="h-4 w-4" />
-                {saving ? t("itemDetails.saving") : t("itemComposition.confirm")}
+                {saving ? t("itemDetails.saving") : <>{t("itemComposition.confirm")}{selected.size > 0 ? ` (${selected.size})` : ""}</>}
               </button>
             </div>
           </div>

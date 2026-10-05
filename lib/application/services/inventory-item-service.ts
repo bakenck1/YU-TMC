@@ -229,51 +229,81 @@ export class InventoryItemService {
     componentId: string,
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto[]> {
+    return this.addComponents(id, [componentId], actor);
+  }
+
+  async addComponents(
+    id: string,
+    componentIds: string[],
+    actor: AuthorizationActor,
+  ): Promise<InventoryItemDto[]> {
     requirePermission(actor, "inventory.item.manage_components");
-    const [leftItemId, rightItemId] = canonicalComponentPair(id, componentId);
+    const itemId = normalizeItemId(id);
+    if (
+      !Array.isArray(componentIds) ||
+      componentIds.length === 0 ||
+      componentIds.some((componentId) => typeof componentId !== "string")
+    ) {
+      throw new ApplicationError("validation", "invalid_request");
+    }
+    const pairs = [...new Set(componentIds.map(normalizeItemId))]
+      .sort()
+      .map((componentId) => canonicalComponentPair(itemId, componentId));
     const occurredAt = this.clock.now();
     const records = await this.unitOfWork.transaction(async ({ items }) => {
-      const [leftItem, rightItem] = await Promise.all([
-        items.findItemById(leftItemId),
-        items.findItemById(rightItemId),
-      ]);
-      if (!leftItem || !rightItem) {
+      const parent = await items.findItemById(itemId);
+      if (!parent) {
         throw new ApplicationError("not_found", "item_not_found");
       }
-      if (
-        (leftItem.itemSection ?? "general") !==
-        (rightItem.itemSection ?? "general")
-      ) {
-        throw new ApplicationError("validation", "item_component_section_mismatch");
+      // Validate every selected item before writing any relation or audit.
+      const relations = [];
+      for (const [leftItemId, rightItemId] of pairs) {
+        const component = await items.findItemById(
+          leftItemId === itemId ? rightItemId : leftItemId,
+        );
+        if (!component) {
+          throw new ApplicationError("not_found", "item_not_found");
+        }
+        if (
+          (parent.itemSection ?? "general") !==
+          (component.itemSection ?? "general")
+        ) {
+          throw new ApplicationError("validation", "item_component_section_mismatch");
+        }
+        if (
+          parent.status === "decommissioned" ||
+          parent.status === "decommissioned_in_use" ||
+          component.status === "decommissioned" ||
+          component.status === "decommissioned_in_use"
+        ) {
+          throw new ApplicationError("validation", "item_component_decommissioned");
+        }
+        relations.push({
+          leftItemId,
+          rightItemId,
+          leftItem: leftItemId === itemId ? parent : component,
+          rightItem: rightItemId === itemId ? parent : component,
+        });
       }
-      if (
-        leftItem.status === "decommissioned" ||
-        leftItem.status === "decommissioned_in_use" ||
-        rightItem.status === "decommissioned" ||
-        rightItem.status === "decommissioned_in_use"
-      ) {
-        throw new ApplicationError(
-          "validation",
-          "item_component_decommissioned",
+      for (const { leftItemId, rightItemId, leftItem, rightItem } of relations) {
+        await items.insertComponent({
+          leftItemId,
+          rightItemId,
+          actorId: actor.userId,
+          occurredAt,
+        });
+        await appendComponentAudits(
+          items,
+          this.ids,
+          actor,
+          leftItem,
+          rightItem,
+          "item.component_added",
+          "afterValues",
+          occurredAt,
         );
       }
-      await items.insertComponent({
-        leftItemId,
-        rightItemId,
-        actorId: actor.userId,
-        occurredAt,
-      });
-      await appendComponentAudits(
-        items,
-        this.ids,
-        actor,
-        leftItem,
-        rightItem,
-        "item.component_added",
-        "afterValues",
-        occurredAt,
-      );
-      return items.listComponents(normalizeItemId(id));
+      return items.listComponents(itemId);
     });
     return records.map((item) => toItemDto(item, actor.role));
   }

@@ -2,7 +2,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { isUuid } from "@/lib/domain/identifiers";
 import { getApplicationServices } from "@/lib/server/application";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
-import { readLimitedJson } from "@/lib/server/http/request-body";
+import { createInventoryItemComponentsMutationHandler } from "@/lib/server/http/inventory-item-components-handler";
 import {
   authorizationActor,
   requireCurrentUser,
@@ -49,37 +49,14 @@ async function mutateComponents(
   context: { params: Promise<{ id: string }> },
   operation: "add" | "remove",
 ) {
-  try {
-    const user = await requireCurrentUser(request);
-    const { id } = await context.params;
-    // SECURITY: validate UUID format before passing to domain layer.
-    if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
-    const body = await readLimitedJson(request);
-    if (
-      !body ||
-      typeof body !== "object" ||
-      typeof (body as Record<string, unknown>).componentId !== "string"
-    ) {
-      throw new ApplicationError("validation", "invalid_request");
-    }
-    const actor = authorizationActor(user);
-    const componentId = (body as { componentId: string }).componentId;
-    const components =
-      operation === "add"
-        ? await getApplicationServices().items.addComponent(id, componentId, actor)
-        : await getApplicationServices().items.removeComponent(
-            id,
-            componentId,
-            actor,
-          );
-    return Response.json({ components });
-  } catch (error) {
-    return componentErrorResponse(
-      error instanceof SyntaxError
-        ? new ApplicationError("validation", "invalid_request")
-        : error,
-    );
-  }
+  const { id } = await context.params;
+  return createInventoryItemComponentsMutationHandler({
+    authenticate: async (input) => authorizationActor(await requireCurrentUser(input)),
+    addComponents: (itemId, componentIds, actor) =>
+      getApplicationServices().items.addComponents(itemId, componentIds, actor),
+    removeComponent: (itemId, componentId, actor) =>
+      getApplicationServices().items.removeComponent(itemId, componentId, actor),
+  }, operation)(request, id);
 }
 
 function componentErrorResponse(error: unknown): Response {

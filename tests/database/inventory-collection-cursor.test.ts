@@ -8,6 +8,8 @@ import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import { createPostgresQrResolutionRepositories } from "@/lib/server/persistence/postgres/postgres-qr-resolution-repositories";
+import { PostgresUnitOfWork } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
+import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
 
 let config: DatabaseConfig;
 let database: Pool;
@@ -327,6 +329,63 @@ describe("PostgreSQL inventory collection cursor", () => {
       roomAccessMode: "closed",
       currentUserHasRoomItem: false,
     });
+  });
+  it("commits a batch composition atomically and rolls back relations and audits on a later conflict", async () => {
+    const actorId = randomUUID();
+    const buildingId = randomUUID();
+    const roomId = randomUUID();
+    const parentId = randomUUID();
+    const [freshId, firstId, conflictId] = [randomUUID(), randomUUID(), randomUUID()].sort();
+    await database.query(
+      `insert into yu_inventory.users (id,code,email,full_name,role,created_at,updated_at)
+       values ($1,$2,$3,'Composition Admin','admin',now(),now())`,
+      [actorId, `BA-${actorId.slice(0, 8)}`, `${actorId}@example.com`],
+    );
+    await database.query(
+      `insert into yu_inventory.buildings (id,name,name_key,address,address_key,created_by,updated_by)
+       values ($1,'Batch Building',$2,'Batch Address',$2,$3,$3)`,
+      [buildingId, `batch-${buildingId}`, actorId],
+    );
+    await database.query(
+      `insert into yu_inventory.rooms (id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+       values ($1,$2,'BATCH',$3,1,$4,$4)`,
+      [roomId, buildingId, `batch-${roomId}`, actorId],
+    );
+    for (const id of [parentId, freshId, firstId, conflictId]) {
+      await database.query(
+        `insert into yu_inventory.items (id,name,quantity,unit_price,room_id,inventory_number_kind,
+          inventory_number,inventory_number_key,created_by,updated_by)
+         values ($1,'Batch item',1,1,$2,'official',$3,$4,$5,$5)`,
+        [id, roomId, `BATCH-${id}`, `batch-${id}`, actorId],
+      );
+    }
+    const service = new InventoryItemService(
+      new PostgresUnitOfWork(() => database, createPostgresInventoryItemRepositories),
+      { now: () => new Date() },
+      { create: randomUUID },
+      { create: () => new Uint8Array(16) },
+      { next: () => "unused" },
+    );
+    const actor = { userId: actorId, role: "admin" } as const;
+    const result = await service.addComponents(parentId, [firstId, conflictId], actor);
+    expect(result.map((record) => record.id).sort()).toEqual([firstId, conflictId].sort());
+    const auditCount = async () => {
+      const count = await database.query<{ count: string }>(
+        `select count(*) from yu_inventory.audit_records
+         where actor_id = $1 and action = 'item.component_added'`, [actorId],
+      );
+      return Number(count.rows[0].count);
+    };
+    expect(await auditCount()).toBe(4);
+
+    // IDs are sorted by the service: the fresh link and its audits are written
+    // before the existing link conflicts, exercising an actual database rollback.
+    await expect(service.addComponents(parentId, [freshId, conflictId], actor))
+      .rejects.toMatchObject({ publicCode: "item_component_already_exists" });
+    expect((await service.listComponents(parentId, actor)).map((record) => record.id).sort())
+      .toEqual([firstId, conflictId].sort());
+    expect(await auditCount()).toBe(4);
+    expect(await service.listComponents(freshId, actor)).toEqual([]);
   });
 });
 
