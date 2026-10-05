@@ -26,6 +26,7 @@ export default function InventoryItemCreateForm({
   openInitially = false,
   hideTrigger = false,
   restricted = false,
+  canViewOneCCode = false,
   inventorySection = "general",
   onCreated,
   onDismiss,
@@ -37,6 +38,7 @@ export default function InventoryItemCreateForm({
   hideTrigger?: boolean;
   /** When true (warehouse role) — only name, description, room and photo are shown. */
   restricted?: boolean;
+  canViewOneCCode?: boolean;
   inventorySection?: "general" | "it";
   onCreated?: () => void;
   onDismiss?: () => void;
@@ -110,12 +112,12 @@ export default function InventoryItemCreateForm({
           ...(inventorySection === "it" ? { itType: category } : { category }),
           brand: restricted ? null : (brand || null),
           model: restricted ? null : (model || null),
-          oneCCode:
+          ...(canViewOneCCode ? { oneCCode:
             restricted ||
             inventorySection === "it" ||
             !supportsMaterialStatementOneCCode(category)
               ? null
-              : (oneCCode.trim() || null),
+              : (oneCCode.trim() || null) } : {}),
           quantity: restricted ? 1 : Number(quantity),
           unitPrice: restricted ? 0 : (unitPrice === "" ? 0 : Number(unitPrice)),
           roomId,
@@ -205,7 +207,7 @@ export default function InventoryItemCreateForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.brand")}</span><input value={brand} onChange={(event) => setBrand(event.target.value)} placeholder={t("createItem.brandPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm"><span className="text-zinc-500">{t("itemDetails.model")}</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("createItem.modelPlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
-                  {inventorySection !== "it" && supportsMaterialStatementOneCCode(category) ? <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.oneCCode")} <span>({t("createItem.optional")})</span></span><input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" placeholder={t("createItem.oneCCodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span></label> : null}
+                  {canViewOneCCode && inventorySection !== "it" && supportsMaterialStatementOneCCode(category) ? <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.oneCCode")} <span>({t("createItem.optional")})</span></span><input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" placeholder={t("createItem.oneCCodePlaceholder")} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" /><span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span></label> : null}
                   <label className="block text-sm"><span className="text-zinc-500">{t("items.quantity")}</span><input type="number" min="1" max="1000000" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                   <label className="block text-sm sm:col-span-2"><span className="text-zinc-500">{t("itemDetails.unitPriceCurrency")}</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" /></label>
                 </div>

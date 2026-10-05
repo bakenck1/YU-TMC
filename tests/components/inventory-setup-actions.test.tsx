@@ -160,7 +160,7 @@ describe("inventory setup actions", () => {
     );
   });
 
-  it("shows the material statement 1C code only for electrical equipment and components", async () => {
+  it("shows the 1C code for all general categories to administrators and preserves it when the category changes", async () => {
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit,
@@ -170,7 +170,7 @@ describe("inventory setup actions", () => {
       return { ok: true, json: async () => ({ item: {} }) } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially canViewOneCCode />);
 
     const typeInput = screen.getByLabelText(/items\.type/);
     expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
@@ -180,14 +180,10 @@ describe("inventory setup actions", () => {
       target: { value: "00000001491" },
     });
 
-    fireEvent.change(typeInput, { target: { value: "components" } });
-    expect(screen.getByLabelText(/itemDetails\.oneCCode/)).toBeDefined();
-    expect((screen.getByLabelText(/itemDetails\.oneCCode/) as HTMLInputElement).value).toBe("00000001491");
-
-    fireEvent.change(typeInput, { target: { value: "electronics" } });
-    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
-    fireEvent.change(typeInput, { target: { value: "furniture" } });
-    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    for (const category of ["components", "electronics", "household_inventory", "electrical_equipment", "furniture"]) {
+      fireEvent.change(typeInput, { target: { value: category } });
+      expect((screen.getByLabelText(/itemDetails\.oneCCode/) as HTMLInputElement).value).toBe("00000001491");
+    }
 
     fireEvent.change(screen.getByLabelText(/items\.name/), {
       target: { value: "Office chair" },
@@ -203,8 +199,68 @@ describe("inventory setup actions", () => {
       expect(createCall).toBeDefined();
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({
         category: "furniture",
-        oneCCode: null,
+        oneCCode: "00000001491",
       });
+    });
+  });
+
+  it("hides the 1C code by default for every general category and omits it from the creation request", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input;
+      void _init;
+      return { ok: true, json: async () => ({ item: {} }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+
+    const typeInput = screen.getByLabelText(/items\.type/);
+    for (const category of ["electronics", "electrical_equipment", "components", "household_inventory", "furniture"]) {
+      fireEvent.change(typeInput, { target: { value: category } });
+      expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    }
+    fireEvent.change(screen.getByLabelText(/items\.name/), { target: { value: "Office chair" } });
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "createItem.create" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/inventory/items");
+      expect(createCall).toBeDefined();
+      const body = JSON.parse(String((createCall?.[1] as RequestInit).body));
+      expect(body.category).toBe("furniture");
+      expect("oneCCode" in body).toBe(false);
+    });
+  });
+
+  it("keeps the 1C code absent for IT equipment even with administrator permission", () => {
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially inventorySection="it" canViewOneCCode />);
+    const typeInput = screen.getByLabelText(/items\.type/);
+    for (const category of ["wifi_access_point", "camera"]) {
+      fireEvent.change(typeInput, { target: { value: category } });
+      expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    }
+  });
+
+  it("omits a previously typed 1C code after administrator permission is revoked before submission", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input;
+      void _init;
+      return { ok: true, json: async () => ({ item: {} }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<InventoryItemCreateForm rooms={[ROOM]} openInitially canViewOneCCode />);
+    fireEvent.change(screen.getByLabelText(/items\.type/), { target: { value: "electronics" } });
+    fireEvent.change(screen.getByLabelText(/items\.name/), { target: { value: "Ноутбук" } });
+    fireEvent.change(screen.getByLabelText(/itemDetails\.oneCCode/), { target: { value: "00003254" } });
+    view.rerender(<InventoryItemCreateForm rooms={[ROOM]} openInitially canViewOneCCode={false} />);
+    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "createItem.create" }));
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/inventory/items");
+      expect(createCall).toBeDefined();
+      expect("oneCCode" in JSON.parse(String((createCall?.[1] as RequestInit).body))).toBe(false);
     });
   });
 
@@ -331,7 +387,7 @@ describe("inventory setup actions", () => {
       return { ok: true, json: async () => ({ item: {} }) } as Response;
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
+    render(<InventoryItemCreateForm rooms={[ROOM]} openInitially canViewOneCCode />);
 
     fireEvent.change(screen.getByLabelText(/items\.name/), {
       target: { value: "Монитор" },

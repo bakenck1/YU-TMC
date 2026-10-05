@@ -334,7 +334,7 @@ export default function InventoryItemDetails({
           : isInventoryItemCategory(category) && category !== (item.category ?? item.itemType) ? { category } : {}),
         brand: brand || null,
         model: model || null,
-        ...(item.itemSection !== "it"
+        ...(actorRole === "admin" && item.itemSection !== "it"
           ? {
               ...(supportsMaterialStatementOneCCode(category) || isInventoryItemCategory(category) ? { oneCCode: supportsMaterialStatementOneCCode(category) ? oneCCode.trim() || null : null } : {}),
             }
@@ -1059,7 +1059,7 @@ export default function InventoryItemDetails({
                   <span className="text-zinc-500">{t("itemDetails.model")}</span>
                   <input value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-500" />
                 </label>
-                {item.itemSection !== "it" && supportsMaterialStatementOneCCode(category) ? <label className="block text-sm sm:col-span-2">
+                {actorRole === "admin" && item.itemSection !== "it" && supportsMaterialStatementOneCCode(category) ? <label className="block text-sm sm:col-span-2">
                   <span className="text-zinc-500">{t("itemDetails.oneCCode")}</span>
                   <input value={oneCCode} onChange={(event) => setOneCCode(event.target.value)} maxLength={64} inputMode="numeric" className="mt-1 w-full rounded-xl border border-black/10 px-3 py-2.5 font-mono outline-none focus:border-emerald-500" />
                   <span className="mt-1 block text-xs text-zinc-500">{t("createItem.oneCCodeHint")}</span>
@@ -1216,7 +1216,7 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             {item.itemSection !== "it" ? <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} /> : null}
-            {item.itemSection !== "it" && supportsMaterialStatementOneCCode(item.category ?? item.itemType) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
+            {actorRole === "admin" && item.itemSection !== "it" && supportsMaterialStatementOneCCode(item.category ?? item.itemType) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}

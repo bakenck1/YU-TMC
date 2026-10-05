@@ -36,7 +36,7 @@ test("barcode input is optional and components may retain a supplied number", as
   assert.match(form, /t\("createItem\.noRooms"\)/);
 });
 
-test("item creation keeps the material statement code only for supported categories", async () => {
+test("item creation keeps the 1C code for electrical equipment and furniture", async () => {
   let inserted: InventoryItemRecord | undefined;
   const repositories = {
     items: {
@@ -93,9 +93,9 @@ test("item creation keeps the material statement code only for supported categor
     ...input,
     name: "Office chair",
     category: "furniture",
-    oneCCode: "MUST-NOT-BE-STORED",
+    oneCCode: "00000001492",
   }, actor);
-  assert.equal(inserted?.oneCCode, null);
+  assert.equal(inserted?.oneCCode, "00000001492");
 });
 
 test("a manually entered barcode is normalized before database persistence", async () => {

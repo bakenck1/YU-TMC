@@ -46,6 +46,7 @@ import {
   type InventoryItemCategory,
 } from "@/lib/inventory-categories";
 import sharp from "sharp";
+import { inventoryOneCFields } from "@/lib/inventory-one-c-visibility";
 import {
   InventoryItemCommentService,
   type InventoryItemCommentAttachmentInput,
@@ -124,7 +125,7 @@ export class InventoryItemService {
         (item.itemSection ?? "general") === "general" &&
         (actor.role !== "employee" || item.responsibleId === actor.userId),
       )
-      .map(toItemDto);
+      .map((item) => toItemDto(item, actor.role));
   }
 
   /** Personal inventory stays scoped to the actor even for administrators. */
@@ -144,7 +145,7 @@ export class InventoryItemService {
         (item.itemSection ?? "general") === "general" &&
         item.responsibleId === actor.userId,
       )
-      .map(toItemDto);
+      .map((item) => toItemDto(item, actor.role));
   }
 
   async listItItems(actor: AuthorizationActor): Promise<InventoryItemDto[]> {
@@ -155,7 +156,7 @@ export class InventoryItemService {
     );
     return records
       .filter((item) => item.itemSection === "it")
-      .map(toItemDto);
+      .map((item) => toItemDto(item, actor.role));
   }
 
   async listDecommissionedItems(
@@ -172,7 +173,7 @@ export class InventoryItemService {
     }, { isolation: "repeatable-read", readOnly: true });
     return records
       .filter((item) => actor.role !== "employee" || item.responsibleId === actor.userId)
-      .map(toItemDto);
+      .map((item) => toItemDto(item, actor.role));
   }
 
   async findItem(
@@ -200,7 +201,7 @@ export class InventoryItemService {
       }
       return value;
     });
-    return toItemDto(item);
+    return toItemDto(item, actor.role);
   }
 
   async listComponents(
@@ -220,7 +221,7 @@ export class InventoryItemService {
           isItemReadable(component, actor),
       );
     });
-    return records.map(toItemDto);
+    return records.map((item) => toItemDto(item, actor.role));
   }
 
   async addComponent(
@@ -274,7 +275,7 @@ export class InventoryItemService {
       );
       return items.listComponents(normalizeItemId(id));
     });
-    return records.map(toItemDto);
+    return records.map((item) => toItemDto(item, actor.role));
   }
 
   async searchComponentCandidates(
@@ -304,7 +305,7 @@ export class InventoryItemService {
         (candidate) => (candidate.itemSection ?? "general") === section,
       );
     });
-    return records.map(toItemDto);
+    return records.map((item) => toItemDto(item, actor.role));
   }
 
   async removeComponent(
@@ -344,7 +345,7 @@ export class InventoryItemService {
       );
       return items.listComponents(normalizeItemId(id));
     });
-    return records.map(toItemDto);
+    return records.map((item) => toItemDto(item, actor.role));
   }
 
   async listAudit(
@@ -602,7 +603,7 @@ export class InventoryItemService {
         ...photographed,
         qrCode,
         ...(itemSection === "it" ? { networkAddresses: savedNetworkAddresses } : {}),
-      });
+      }, actor.role);
     });
   }
 
@@ -764,7 +765,7 @@ export class InventoryItemService {
             occurredAt,
           }),
         );
-        createdItems.push(toItemDto({ ...created, qrCode }));
+        createdItems.push(toItemDto({ ...created, qrCode }, actor.role));
       }
       return createdItems;
     });
@@ -915,6 +916,7 @@ export class InventoryItemService {
     actor: AuthorizationActor,
   ): Promise<InventoryItemDto> {
     requirePermission(actor, "inventory.item.edit_content");
+    if (actor.role !== "admin" && input.oneCCode !== undefined) throw forbidden();
     const patch = normalizeContentInput(input);
     return this.unitOfWork.transaction(async ({ items }) => {
       const current = await items.findItemById(id);
@@ -942,7 +944,9 @@ export class InventoryItemService {
         itType: isItItem ? input.itType! : null,
         brand: patch.brand === undefined ? current.brand : patch.brand,
         model: patch.model === undefined ? current.model : patch.model,
-        oneCCode: isItItem
+        oneCCode: actor.role !== "admin"
+          ? current.oneCCode ?? null
+          : isItItem
           ? null
           : !isInventoryItemCategory(nextGeneralCategory) ? current.oneCCode ?? null
           : !supportsMaterialStatementOneCCode(nextGeneralCategory)
@@ -986,7 +990,7 @@ export class InventoryItemService {
         ...updated,
         qrCode: current.qrCode,
         ...(isItItem ? { itType: input.itType!, networkAddresses: savedNetworkAddresses } : {}),
-      });
+      }, actor.role);
     });
   }
 
@@ -1041,7 +1045,7 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      return toItemDto({ ...updated, qrCode: current.qrCode });
+      return toItemDto({ ...updated, qrCode: current.qrCode }, actor.role);
     });
   }
 
@@ -1096,7 +1100,7 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      return toItemDto(updated);
+      return toItemDto(updated, actor.role);
     });
   }
 
@@ -1247,7 +1251,7 @@ export class InventoryItemService {
       }));
       const refreshed = await items.findItemById(id);
       if (!refreshed) throw new Error("item_refresh_failed");
-      return toItemDto(refreshed);
+      return toItemDto(refreshed, actor.role);
     });
   }
 
@@ -1283,7 +1287,7 @@ export class InventoryItemService {
         afterValues: { status: "active", isProject: updated.isProject ?? false, reason },
         occurredAt,
       }));
-      return toItemDto(updated);
+      return toItemDto(updated, actor.role);
     });
   }
 
@@ -1303,7 +1307,7 @@ export class InventoryItemService {
       const updated = await items.updateItemStatus({ id, status, actorId: actor.userId, expectedVersion: input.version, occurredAt });
       if (!updated) throw versionConflict();
       await items.appendAudit(createAudit({ id: this.ids.create(), actor, subjectId: id, subjectRevision: updated.version, action: "item.protected_fields_updated", beforeValues: { status: current.status }, afterValues: { status }, occurredAt }));
-      return toItemDto({ ...updated, qrCode: current.qrCode });
+      return toItemDto({ ...updated, qrCode: current.qrCode }, actor.role);
     });
   }
 
@@ -1429,7 +1433,7 @@ export class InventoryItemService {
         ? await items.findItemById(id)
         : updated;
       if (!refreshed) throw new Error("item_refresh_failed");
-      return toItemDto({ ...refreshed, qrCode });
+      return toItemDto({ ...refreshed, qrCode }, actor.role);
     });
   }
 
@@ -1529,7 +1533,7 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      return toItemDto({ ...updated, qrCode: current.qrCode });
+      return toItemDto({ ...updated, qrCode: current.qrCode }, actor.role);
     });
   }
 
@@ -1570,7 +1574,7 @@ export class InventoryItemService {
           occurredAt,
         }),
       );
-      return toItemDto({ ...updated, qrCode: current.qrCode });
+      return toItemDto({ ...updated, qrCode: current.qrCode }, actor.role);
     });
   }
 }
@@ -2137,7 +2141,7 @@ function createAudit(input: {
   };
 }
 
-function toItemDto(record: InventoryItemRecord): InventoryItemDto {
+function toItemDto(record: InventoryItemRecord, role: AuthorizationActor["role"]): InventoryItemDto {
   return {
     id: record.id,
     name: record.name,
@@ -2149,8 +2153,7 @@ function toItemDto(record: InventoryItemRecord): InventoryItemDto {
     networkAddresses: record.networkAddresses ?? [],
     brand: record.brand,
     model: record.model,
-    oneCCode: record.oneCCode ?? null,
-    searchIdentifiers: record.searchIdentifiers ?? [],
+    ...inventoryOneCFields(record, role),
     searchNames: record.searchNames ?? [],
     quantity: record.quantity,
     unitPrice: record.unitPrice,

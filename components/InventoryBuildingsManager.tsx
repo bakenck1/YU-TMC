@@ -683,6 +683,7 @@ export default function InventoryBuildingsManager({
         <InventoryItemCreateForm
           key={scannedRoom.id}
           rooms={[scannedRoom]}
+          canViewOneCCode={actorRole === "admin"}
           initialRoomId={scannedRoom.id}
           openInitially
           hideTrigger

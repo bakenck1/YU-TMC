@@ -43,6 +43,7 @@ export default async function DecommissionedItemsPage({ searchParams }: { search
       <DecommissionedItemsView
         items={items.map(toDecommissionedInventoryItemView)}
         canExport={hasPermission(user.role, "inventory.report.export")}
+        canViewOneCCode={user.role === "admin"}
       />
     </Wrapper>
   );

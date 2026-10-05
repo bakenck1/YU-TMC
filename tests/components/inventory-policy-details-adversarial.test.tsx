@@ -38,4 +38,27 @@ describe("adversarial legacy category and role repair UI", () => {
   for (const role of ["employee", "typography"] as const) it(role + " never sees broken repair button", () => {
     view(role, false, { ...ITEM, status: "broken" }); expect(screen.queryByRole("button", { name: "itemDetails.statusActive" })).toBeNull();
   });
+  it("the administrator can view and edit the 1C code for electronics", () => {
+    view("admin", true, { ...ITEM, itemType: "electronics", category: "electronics", oneCCode: "00003254" });
+    expect(screen.getByLabelText(/itemDetails\.oneCCode/)).not.toBeNull();
+    expect(screen.getByDisplayValue("00003254")).not.toBeNull();
+  });
+  for (const role of ["employee", "warehouse", "typography"] as const) it(role + " cannot view a code even if a supplied item mistakenly contains it", () => {
+    view(role, role === "warehouse", { ...ITEM, itemType: "electronics", category: "electronics", oneCCode: "00003254" });
+    expect(screen.queryByText("itemDetails.oneCCode")).toBeNull();
+    expect(screen.queryByLabelText(/itemDetails\.oneCCode/)).toBeNull();
+    expect(screen.queryByText("00003254")).toBeNull();
+    expect(screen.queryByDisplayValue("00003254")).toBeNull();
+  });
+  it("warehouse content edits omit the invisible code and do not clear it", async () => {
+    const item = { ...ITEM, itemType: "electronics", category: "electronics", oneCCode: "00003254" };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ item: { ...item, name: "Edited", version: 2 } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    view("warehouse", true, item);
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("items.name"), { target: { value: "Edited" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).not.toHaveProperty("oneCCode");
+  });
 });

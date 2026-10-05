@@ -26,7 +26,7 @@ export interface InventoryItemDto {
   networkAddresses?: ItNetworkAddress[];
   brand: string | null;
   model: string | null;
-  /** Separate 1C nomenclature code used in the material statement. */
+  /** Separate 1C nomenclature code; exposed only to an administrator. */
   oneCCode?: string | null;
   /** Supplemental identifiers from confirmed, published 1C links; search only. */
   searchIdentifiers?: string[];

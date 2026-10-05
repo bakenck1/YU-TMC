@@ -61,6 +61,7 @@ interface ItemRow extends QueryResultRow {
   model: string | null;
   one_c_code: string | null;
   search_identifiers?: string[] | null;
+  search_identifiers_without_codes?: string[] | null;
   search_names?: string[] | null;
   quantity: number;
   unit_price: string | number;
@@ -1154,6 +1155,7 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false, includ
            coalesce(addresses.entries, '[]'::jsonb) as network_addresses,
            i.brand, i.model, i.one_c_code,
            coalesce(one_c_search.identifiers, '{}'::text[]) as search_identifiers,
+           coalesce(one_c_search.public_identifiers, '{}'::text[]) as search_identifiers_without_codes,
            coalesce(one_c_search.names, '{}'::text[]) as search_names,
            i.quantity, i.unit_price, i.room_id,
            r.designation as room_designation, r.floor_number,
@@ -1180,6 +1182,8 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false, includ
       left join lateral (
         select array_agg(distinct identifier.value order by identifier.value)
                  filter (where nullif(btrim(identifier.value), '') is not null) as identifiers,
+               array_agg(distinct identifier.value order by identifier.value)
+                 filter (where not identifier.is_code and nullif(btrim(identifier.value), '') is not null) as public_identifiers,
                array_agg(distinct latest_published.name order by latest_published.name)
                  filter (where nullif(btrim(latest_published.name), '') is not null) as names
           from "yu_inventory"."item_one_c_links" l
@@ -1194,10 +1198,10 @@ function itemSelect(where: string, limit = "", includeRoomAccess = false, includ
              limit 1
           ) latest_published on true
           cross join lateral (values
-            (l.source_code),
-            (l.source_inventory_number),
-            (latest_published.barcode)
-          ) identifier(value)
+            (l.source_code, true),
+            (l.source_inventory_number, false),
+            (latest_published.barcode, false)
+          ) identifier(value, is_code)
          where l.item_id = i.id
       ) one_c_search on true
       left join lateral (
@@ -1276,6 +1280,7 @@ function mapItem(row: ItemRow): InventoryItemRecord {
     model: row.model,
     oneCCode: row.one_c_code,
     searchIdentifiers: row.search_identifiers ?? [],
+    searchIdentifiersWithoutCodes: row.search_identifiers_without_codes ?? [],
     searchNames: row.search_names ?? [],
     quantity: Number(row.quantity),
     unitPrice: Number(row.unit_price),

@@ -35,8 +35,8 @@ export function inventoryItemCategoryTranslationKey(
 
 export function supportsMaterialStatementOneCCode(
   category: unknown,
-): category is "electrical_equipment" | "components" {
-  return category === "electrical_equipment" || category === "components";
+): category is InventoryItemCategory {
+  return isInventoryItemCategory(category);
 }
 
 /**
