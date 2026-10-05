@@ -72,15 +72,37 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
     });
   });
 
-  it("skips a code disagreement and leaves the original item intact", async () => {
+  it("persists the 1C name independently while leaving a disagreeing code unset", async () => {
     const fixture = await createFixture({ excelCode: "00003255" });
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
-    expect(plan.counts.ready).toBe(0);
-    expect(plan.counts.skipped).toBe(1);
+    expect(plan.counts.ready).toBe(1);
+    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "code_conflict", nextCode: null });
     const result = await service.apply(fixture.batchId, plan, fixture.actor);
-    expect(result.updated).toBe(0);
-    expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
+    expect(result.updated).toBe(1);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
+  });
+
+  it("applies an Excel-only name without assigning its unconfirmed code, audits its source, and replays once", async () => {
+    const fixture = await createFixture({ excelOnly: true });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.rows[0]).toMatchObject({ nameSource: "excel", codeStatus: "sources_missing", nextName: SOURCE_NAME, nextCode: null });
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
+    const audit = await runtimePool.query(`select metadata from "yu_inventory"."audit_records" where action='item.audit_enrichment'`);
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].metadata).toMatchObject({ nameSource: "excel", codeStatus: "sources_missing", excelRowNumber: 2 });
+  });
+
+  it("applies a 1C-only name without depending on Excel confirmation", async () => {
+    const fixture = await createFixture({ oneCOnly: true });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "sources_missing", nextName: SOURCE_NAME, nextCode: null });
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
   });
 
   it("persists the agreed name and code from the selected 1C batch and Excel when there is no current-registry copy", async () => {
@@ -293,7 +315,7 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
   });
 });
 
-async function createFixture(options: { excelCode?: string; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean } = {}) {
+async function createFixture(options: { excelCode?: string; excelOnly?: boolean; oneCOnly?: boolean; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean } = {}) {
   const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID(), externalId = randomUUID();
   await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
     values($1,$2,$3,'Enrichment admin','admin',now(),now())`, [userId, `enrich-${userId.slice(0, 8)}`, `${userId}@example.test`]);
@@ -304,13 +326,13 @@ async function createFixture(options: { excelCode?: string; duplicateOneC?: bool
   await runtimePool.query(`insert into "yu_inventory"."items"
     (id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
     values($1,$2,'electronics',1,100,$3,'official','2411/00388','2411/00388',$4,$4)`, [itemId, ORIGINAL_NAME, roomId, userId]);
-  await uploadMaterialSnapshot("материалы 2026.xls", materialFile(options.excelCode ?? "00003254"), userId, runtimePool);
+  await uploadMaterialSnapshot("материалы 2026.xls", materialFile(options.excelCode ?? "00003254", options.oneCOnly ? "Другая запись №9999/00388" : SOURCE_NAME), userId, runtimePool);
   const asset: OneCFixedAsset = {
     externalId, code: "00003254", inventoryNumber: "241100388", barcode: null, name: SOURCE_NAME, category: null,
     location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null,
     quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null,
   };
-  const selectedAsset = options.divergentSelectedIdentity
+  const selectedAsset = options.excelOnly ? { ...asset, inventoryNumber: "999900388", name: "Другая запись №9999/00388" } : options.divergentSelectedIdentity
     ? { ...asset, code: "00009999", inventoryNumber: "241100389", name: "Ноутбук Lenovo другая запись №2411/00389" } : asset;
   const assets = options.duplicateOneC ? [selectedAsset, { ...selectedAsset, externalId: randomUUID() }] : [selectedAsset];
   const batchId = await saveAssets(assets);
@@ -322,8 +344,8 @@ async function createFixture(options: { excelCode?: string; duplicateOneC?: bool
   const service = new OneCReconciliationService(runtimePool);
   await service.analyzeBatch(batchId, { version: batch.rows[0]!.version });
   const audit = await service.getInventoryAuditPage(batchId, { page: 1, pageSize: 50 });
-  expect(audit.data.find((row) => row.itemId === itemId)?.source).toBe("1c+excel");
-  expect(audit.data.find((row) => row.itemId === itemId)?.excel[0]?.oneCCode).toBe(options.excelCode ?? "00003254");
+  expect(audit.data.find((row) => row.itemId === itemId)?.source).toBe(options.excelOnly ? "excel" : options.oneCOnly ? "1c" : "1c+excel");
+  if (!options.oneCOnly) expect(audit.data.find((row) => row.itemId === itemId)?.excel[0]?.oneCCode).toBe(options.excelCode ?? "00003254");
   return { userId, itemId, externalId, batchId, asset, actor: { userId, role: "admin" as const, sessionVersion: 1 } };
 }
 

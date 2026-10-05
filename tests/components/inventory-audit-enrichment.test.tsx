@@ -16,6 +16,22 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("shows the chosen name source and the retained code when only a name is confirmed", async () => {
+    const nameOnlyPlan = { ...plan, counts: { ready: 2, unchanged: 0, skipped: 0 }, rows: [
+      { ...plan.rows[0], nameSource: "1c", codeStatus: "code_conflict", nextCode: "00009999" },
+      { ...plan.rows[0], itemId: "excel-only", currentName: "Стул", nameSource: "excel", codeStatus: "sources_missing", nextName: "Стул из Excel", nextCode: null },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: nameOnlyPlan })));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    await screen.findByRole("button", { name: "Применить 2 обновлений" });
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    expect(within(rows[0]).getAllByRole("cell")[2].textContent).toBe("1С");
+    expect(within(rows[1]).getAllByRole("cell")[2].textContent).toBe("Excel");
+    expect(within(rows[0]).getByText("00009999")).not.toBeNull();
+    expect(within(rows[1]).getByText("Стул из Excel")).not.toBeNull();
+    expect(screen.getAllByText(/Код сохранён без изменения:/)).toHaveLength(2);
+  });
   it("does not change inventory during preview and applies only the reviewed run and hash", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
     vi.stubGlobal("fetch", fetcher);

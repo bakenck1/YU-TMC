@@ -84,7 +84,7 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
 
   return <section className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4" aria-label="Обновление названий и кодов 1С">
     <h3 className="font-semibold">Названия и коды 1С в карточках ТМЦ</h3>
-    <p className="text-sm text-zinc-600">Обновление доступно, когда полный номер или официальный штрихкод совпадает в карточке, загруженной партии или текущем реестре 1С и Excel, а коды 1С совпадают в обоих источниках. Название берётся из 1С. Проверьте предложенные изменения перед применением. Несовпадения и неоднозначные записи пропускаются.</p>
+    <p className="text-sm text-zinc-600">Название берётся из однозначного совпадения 1С. Если совпадения в 1С нет, используется наименование Excel. Полный номер или официальный штрихкод должен подтверждать карточку; неоднозначные записи пропускаются. Код 1С обновляется отдельно, только при совпадении кодов и полных идентификаторов в обоих источниках. Проверьте предложенные изменения перед применением.</p>
     {blocked ? <p className="text-sm text-amber-800">Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите dry-run заново.</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
@@ -102,9 +102,9 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
           <option value="all">Все карточки ({plan.rows.length})</option>
           {reasonCounts.length ? <optgroup label="Причины пропуска">{reasonCounts.map(([key, reason]) => <option key={key} value={`reason:${key}`}>{reason.label} ({reason.count})</option>)}</optgroup> : null}
         </select>
-        <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название из 1С", "Код 1С после обновления", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.eligible ? row.nextName : "—"}</td><td className="p-2 font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row)}</td></tr>)}
-            {!visibleRows.length ? <tr><td colSpan={4} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
+        <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название", "Источник названия", "Код 1С после обновления", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.eligible ? row.nextName : "—"}</td><td className="p-2">{row.eligible ? row.nameSource === "excel" ? "Excel" : "1С" : "—"}</td><td className="p-2"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">Код сохранён без изменения: {reasonLabel({ ...row, reason: row.codeStatus })}</p> : null}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row)}</td></tr>)}
+            {!visibleRows.length ? <tr><td colSpan={5} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
           </tbody></table></div>
       </details></> : null}
   </section>;

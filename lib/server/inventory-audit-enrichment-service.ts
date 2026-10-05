@@ -44,7 +44,8 @@ export class InventoryAuditEnrichmentService {
           JSON.stringify({ name: row.currentName, oneCCode: row.currentCode, version: row.itemVersion }),
           JSON.stringify({ name: row.nextName, oneCCode: row.nextCode, version: row.itemVersion + 1 }),
           JSON.stringify({ source: "inventory_audit_enrichment", batchId, runId: plan.runId, planHash: plan.planHash,
-            externalId: row.externalId, excelRowNumber: row.excelRowNumber, result })]);
+            externalId: row.externalId, excelRowNumber: row.excelRowNumber,
+            nameSource: row.nameSource, codeStatus: row.codeStatus, result })]);
       }
       return result;
     });

@@ -26,6 +26,8 @@ export type InventoryAuditEnrichmentRow = {
   eligible: boolean;
   changed: boolean;
   reason: InventoryAuditEnrichmentReason;
+  nameSource?: "1c" | "excel";
+  codeStatus?: "confirmed" | "sources_missing" | "source_ambiguous" | "source_reused" | "code_missing" | "code_conflict" | "identity_conflict" | "identity_missing";
   missingSources?: Array<"1c" | "excel">;
   externalId?: string;
   excelRowNumber?: number;
@@ -104,6 +106,23 @@ function own(map: Map<string, Set<string>>, key: string, itemId: string): void {
   map.set(key, owners);
 }
 
+function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[], description: string,
+  sourceBarcode?: string | null): "identity_missing" | "identity_conflict" | null {
+  const anchor = identities[0];
+  if (!anchor) return "identity_missing";
+  const claims = [...identities, ...descriptionNumbers(description)];
+  const siteNumber = number(item.inventoryNumber);
+  const officialBarcodes = item.officialBarcodes.map(barcode).filter((value): value is string => Boolean(value));
+  const siteIdentities = [siteNumber, ...officialBarcodes].filter((value): value is string => Boolean(value));
+  if (!allAgree(claims, anchor) || !siteIdentities.some((identity) => allAgree([...claims, identity], anchor))
+    || (siteNumber && !allAgree([...claims, siteNumber], anchor))) return "identity_conflict";
+  if (sourceBarcode) {
+    const normalized = barcode(sourceBarcode);
+    if (!normalized || !officialBarcodes.some((value) => agrees(value, normalized))) return "identity_conflict";
+  }
+  return null;
+}
+
 /** Plans existing-card updates without mutating either live data or saved evidence. */
 export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[]): InventoryAuditEnrichmentPlan {
   const itemsById = new Map(items.map((item) => [item.id, item]));
@@ -137,8 +156,8 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     if (auditRowCount.get(item.id) !== 1) return skip("source_ambiguous");
     const oneC = row.oneC.filter((entry) => Array.isArray(entry.origins)
       && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
-    if (!oneC.length || !row.excel.length) {
-      result.missingSources = [...(!oneC.length ? ["1c" as const] : []), ...(!row.excel.length ? ["excel" as const] : [])];
+    if (!oneC.length && !row.excel.length) {
+      result.missingSources = ["1c", "excel"];
       return skip("sources_missing");
     }
     // Multiple selected/current copies are safe only if their entire identity
@@ -149,34 +168,57 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       if (existing && oneCSourceSnapshot(existing) !== oneCSourceSnapshot(entry)) return skip("source_ambiguous");
       distinct.set(entry.externalId, entry);
     }
-    if (distinct.size !== 1 || row.excel.length !== 1) return skip("source_ambiguous");
-    const source = [...distinct.values()][0], excel = row.excel[0];
-    if (!source.externalId || !Number.isSafeInteger(excel.rowNumber) || excel.rowNumber < 1) return skip("source_ambiguous");
-    if ((oneCOwners.get(source.externalId)?.size ?? 0) > 1 || (excelOwners.get(String(excel.rowNumber))?.size ?? 0) > 1) return skip("source_reused");
-    const oneCCode = code(source.code), excelCode = code(excel.oneCCode);
-    if (!oneCCode || !excelCode) return skip("code_missing");
-    if (oneCCode.length > 64 || excelCode.length > 64 || oneCCode !== excelCode
-      || (code(item.oneCCode) !== null && code(item.oneCCode) !== oneCCode)) return skip("code_conflict");
-    const sourceNumber = number(source.inventoryNumber), sourceBarcode = barcode(source.barcode);
-    const sourceIdentity = sourceNumber ?? sourceBarcode;
-    const excelIdentities = excelNumbers(excel);
-    if (!sourceIdentity || !excelIdentities.length) return skip("identity_missing");
-    const officialBarcodes = item.officialBarcodes.map(barcode).filter((value): value is string => Boolean(value));
-    const siteNumber = number(item.inventoryNumber);
-    const siteIdentities = [siteNumber, ...officialBarcodes].filter((value): value is string => Boolean(value));
-    const descriptionClaims = [...descriptionNumbers(source.name), ...descriptionNumbers(excel.nomenclature)];
-    if (!allAgree([...excelIdentities, ...descriptionClaims], sourceIdentity)
-      || !siteIdentities.some((identity) => allAgree([...excelIdentities, ...descriptionClaims, identity], sourceIdentity))
-      || (siteNumber && !allAgree([siteNumber, ...excelIdentities], sourceIdentity))) return skip("identity_conflict");
-    if (source.barcode && (!sourceBarcode || !officialBarcodes.some((value) => agrees(value, sourceBarcode)))) return skip("identity_conflict");
-    const name = source.name.trim();
+    if (distinct.size > 1) return skip("source_ambiguous");
+    const source = [...distinct.values()][0];
+    let excel: ExcelSourceRow | undefined;
+    let codeStatus: NonNullable<InventoryAuditEnrichmentRow["codeStatus"]> = "sources_missing";
+    let nextCode = item.oneCCode;
+    let name: string;
+    if (source) {
+      if (!source.externalId) return skip("source_ambiguous");
+      if ((oneCOwners.get(source.externalId)?.size ?? 0) > 1) return skip("source_reused");
+      const identities = [number(source.inventoryNumber), barcode(source.barcode)].filter((value): value is string => Boolean(value));
+      const issue = identityIssue(item, identities, source.name, source.barcode);
+      if (issue) return skip(issue);
+      name = source.name.trim();
+      // Excel can confirm the code, but cannot block a safely identified 1C name.
+      if (row.excel.length > 1) codeStatus = "source_ambiguous";
+      else if (row.excel.length === 1) {
+        const candidate = row.excel[0];
+        if (!Number.isSafeInteger(candidate.rowNumber) || candidate.rowNumber < 1) codeStatus = "source_ambiguous";
+        else if ((excelOwners.get(String(candidate.rowNumber))?.size ?? 0) > 1) codeStatus = "source_reused";
+        else {
+          const excelIdentities = excelNumbers(candidate);
+          const excelIssue = identityIssue(item, excelIdentities, candidate.nomenclature);
+          const oneCCode = code(source.code), excelCode = code(candidate.oneCCode);
+          if (excelIssue) codeStatus = excelIssue;
+          else if (!allAgree([...identities, ...descriptionNumbers(source.name), ...excelIdentities,
+            ...descriptionNumbers(candidate.nomenclature)], identities[0])) codeStatus = "identity_conflict";
+          else if (!oneCCode || !excelCode) codeStatus = "code_missing";
+          else if (oneCCode.length > 64 || excelCode.length > 64 || oneCCode !== excelCode
+            || (code(item.oneCCode) !== null && code(item.oneCCode) !== oneCCode)) codeStatus = "code_conflict";
+          else { codeStatus = "confirmed"; nextCode = oneCCode; excel = candidate; }
+        }
+      }
+    } else {
+      // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
+      if (row.excel.length !== 1) return skip("source_ambiguous");
+      excel = row.excel[0];
+      if (!Number.isSafeInteger(excel.rowNumber) || excel.rowNumber < 1) return skip("source_ambiguous");
+      if ((excelOwners.get(String(excel.rowNumber))?.size ?? 0) > 1) return skip("source_reused");
+      const issue = identityIssue(item, excelNumbers(excel), excel.nomenclature);
+      if (issue) return skip(issue);
+      name = excel.nomenclature.trim();
+    }
     if (!name || [...name].length > 160 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(name)) return skip("name_invalid");
-    result.externalId = source.externalId;
-    result.excelRowNumber = excel.rowNumber;
+    result.nameSource = source ? "1c" : "excel";
+    result.codeStatus = codeStatus;
+    result.externalId = source?.externalId;
+    result.excelRowNumber = excel?.rowNumber;
     result.nextName = name;
-    result.nextCode = oneCCode;
+    result.nextCode = nextCode;
     result.eligible = true;
-    result.changed = item.name !== name || item.oneCCode !== oneCCode;
+    result.changed = item.name !== name || item.oneCCode !== nextCode;
     result.reason = result.changed ? "confirmed" : "unchanged";
     if (result.changed) counts.ready++; else counts.unchanged++;
     return result;
