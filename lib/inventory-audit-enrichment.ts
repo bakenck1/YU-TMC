@@ -26,6 +26,7 @@ export type InventoryAuditEnrichmentRow = {
   eligible: boolean;
   changed: boolean;
   reason: InventoryAuditEnrichmentReason;
+  missingSources?: Array<"1c" | "excel">;
   externalId?: string;
   excelRowNumber?: number;
 };
@@ -51,6 +52,13 @@ function barcode(value: string | null | undefined): string | null {
   if (!value) return null;
   const parsed = parseCode39ScanInput(value);
   return parsed.ok ? parsed.fallbackKey ? null : number(parsed.inventoryNumber) : number(value);
+}
+
+function oneCSourceSnapshot(source: AuditMatch["oneC"][number]): string {
+  // A rejected claim must not disappear beside an absent field in another copy.
+  const claim = (value: string | null, normalized: string | null) => value == null ? null : normalized ?? value.normalize("NFKC").trim();
+  return JSON.stringify([code(source.code), claim(source.inventoryNumber, number(source.inventoryNumber)),
+    claim(source.barcode, barcode(source.barcode)), source.name.trim()]);
 }
 
 /** Removing one slash is allowed only when its boundary is not contradicted elsewhere. */
@@ -127,15 +135,18 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       || inventoryAuditNumberKey(item.inventoryNumber) !== inventoryAuditNumberKey(row.siteNumber)
       || !sameOfficialSnapshot(item.officialBarcodes, row.siteBarcodes.filter((entry) => entry.kind === "official").map((entry) => entry.value))) return skip("item_changed");
     if (auditRowCount.get(item.id) !== 1) return skip("source_ambiguous");
-    const currentOneC = row.oneC.filter((entry) => entry.origins.includes("current_registry"));
-    if (!currentOneC.length || !row.excel.length) return skip("sources_missing");
+    const oneC = row.oneC.filter((entry) => Array.isArray(entry.origins)
+      && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
+    if (!oneC.length || !row.excel.length) {
+      result.missingSources = [...(!oneC.length ? ["1c" as const] : []), ...(!row.excel.length ? ["excel" as const] : [])];
+      return skip("sources_missing");
+    }
     // Multiple selected/current copies are safe only if their entire identity
     // and proposed values agree. Different source identities are never ranked.
     const distinct = new Map<string, AuditMatch["oneC"][number]>();
-    for (const entry of currentOneC) {
+    for (const entry of oneC) {
       const existing = distinct.get(entry.externalId);
-      if (existing && JSON.stringify([code(existing.code), number(existing.inventoryNumber), barcode(existing.barcode), existing.name.trim()])
-        !== JSON.stringify([code(entry.code), number(entry.inventoryNumber), barcode(entry.barcode), entry.name.trim()])) return skip("source_ambiguous");
+      if (existing && oneCSourceSnapshot(existing) !== oneCSourceSnapshot(entry)) return skip("source_ambiguous");
       distinct.set(entry.externalId, entry);
     }
     if (distinct.size !== 1 || row.excel.length !== 1) return skip("source_ambiguous");

@@ -27,6 +27,90 @@ test("confirmed screenshot identifiers use the 1C name and preserve every code z
   assert.equal(JSON.stringify({ item, row }), before, "Planning must never mutate saved evidence or live items");
 });
 
+test("selected-batch 1C evidence and Excel can confirm the existing card", () => {
+  const { item, row } = fixture();
+  row.oneC[0].origins = ["selected_batch"];
+  const before = JSON.stringify({ item, row });
+  const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+  assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
+  assert.equal(plan.rows[0].reason, "confirmed");
+  assert.equal(plan.rows[0].nextName, row.oneC[0].name);
+  assert.equal(plan.rows[0].nextCode, "00003254");
+  assert.equal(plan.rows[0].missingSources, undefined);
+  assert.equal(JSON.stringify({ item, row }), before);
+});
+
+test("identical selected and current copies of one 1C identity confirm one update", () => {
+  const { item, row } = fixture();
+  row.oneC.push({ ...row.oneC[0], origins: ["selected_batch"] });
+  const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+  assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
+  assert.equal(plan.rows[0].externalId, "asset-1");
+});
+
+type OneCMatch = AuditMatch["oneC"][number];
+const divergentCopies: [string, (entry: OneCMatch) => void][] = [
+  ["code leading zeroes", (entry) => { entry.code = "3254"; }],
+  ["full inventory number", (entry) => { entry.inventoryNumber = "241100389"; }],
+  ["supplied slash boundary", (entry) => { entry.inventoryNumber = "24110/0388"; }],
+  ["full inventory suffix", (entry) => { entry.inventoryNumber = "241100388-97"; }],
+  ["barcode", (entry) => { entry.barcode = "2411/00389"; }],
+  ["rejected barcode versus an absent barcode", (entry) => { entry.barcode = "TMP-123"; }],
+  ["proposed name", (entry) => { entry.name = "Ноутбук Lenovo другая запись"; }],
+];
+for (const [label, mutate] of divergentCopies) {
+  test(`different selected/current ${label} copies cannot choose a preferred 1C version`, () => {
+    for (const reverse of [false, true]) {
+      const { item, row } = fixture();
+      const selected: OneCMatch = { ...row.oneC[0], origins: ["selected_batch"] };
+      mutate(selected);
+      row.oneC.push(selected);
+      if (reverse) row.oneC.reverse();
+      const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+      assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+      assert.equal(plan.rows[0].reason, "source_ambiguous");
+      assert.equal(plan.rows[0].nextName, item.name);
+      assert.equal(plan.rows[0].nextCode, item.oneCCode);
+    }
+  });
+}
+
+test("a rejected structured number cannot disappear beside a barcode-only copy", () => {
+  for (const reverse of [false, true]) {
+    const { item, row } = fixture();
+    row.oneC[0].inventoryNumber = null;
+    row.oneC[0].barcode = "2411/00388";
+    row.oneC.push({ ...row.oneC[0], inventoryNumber: "TMP-123", origins: ["selected_batch"] });
+    if (reverse) row.oneC.reverse();
+    const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+    assert.equal(plan.rows[0].reason, "source_ambiguous");
+  }
+});
+
+test("missing source diagnostics distinguish 1C, Excel, and both", () => {
+  for (const missing of [["1c"], ["excel"], ["1c", "excel"]] as const) {
+    const { item, row } = fixture();
+    if (missing.some((source) => source === "1c")) row.oneC = [];
+    if (missing.some((source) => source === "excel")) row.excel = [];
+    const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+    assert.equal(plan.rows[0].reason, "sources_missing");
+    assert.deepEqual(plan.rows[0].missingSources, missing);
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+  }
+});
+
+test("empty, missing, and unsupported 1C origins are not confirmation evidence", () => {
+  for (const origins of [[], undefined, ["unsupported_source"]]) {
+    const { item, row } = fixture();
+    row.oneC[0].origins = origins as OneCMatch["origins"];
+    const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+    assert.equal(plan.rows[0].reason, "sources_missing");
+    assert.deepEqual(plan.rows[0].missingSources, ["1c"]);
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+  }
+});
+
 test("internal digit spaces and separator spaces retain the same complete identifier", () => {
   for (const value of ["2411 / 00388", "24 11/00 388", "2411\u00a000388", "２４１１/００３８８"]) {
     const { item, row } = fixture();
@@ -62,7 +146,6 @@ const rejected: [string, Mutation][] = [
   ["IT card", ({ item }) => { item.itemSection = "it"; }],
   ["changed item version", ({ item }) => { item.version++; }],
   ["changed site number even without a version bump", ({ item }) => { item.inventoryNumber = "2411/00389"; }],
-  ["historical-only 1C entry", ({ row }) => { row.oneC[0].origins = ["selected_batch"]; }],
   ["missing Excel", ({ row }) => { row.excel = []; }],
   ["missing 1C", ({ row }) => { row.oneC = []; }],
   ["missing Excel code", ({ row }) => { row.excel[0].oneCCode = null; }],
@@ -90,15 +173,18 @@ const rejected: [string, Mutation][] = [
 ];
 for (const [label, mutate] of rejected) {
   test(`enrichment skips ${label} instead of selecting or inventing a value`, () => {
-    const value = fixture();
-    mutate(value);
-    const plan = buildInventoryAuditEnrichmentPlan([value.row], [value.item]);
-    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
-    assert.equal(plan.rows[0].eligible, false, label);
-    assert.equal(plan.rows[0].changed, false, label);
-    assert.ok(plan.rows[0].reason);
-    assert.equal(plan.rows[0].nextName, value.item.name);
-    assert.equal(plan.rows[0].nextCode, value.item.oneCCode);
+    for (const origin of ["current_registry", "selected_batch"] as const) {
+      const value = fixture();
+      mutate(value);
+      for (const entry of value.row.oneC) entry.origins = [origin];
+      const plan = buildInventoryAuditEnrichmentPlan([value.row], [value.item]);
+      assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+      assert.equal(plan.rows[0].eligible, false, label);
+      assert.equal(plan.rows[0].changed, false, label);
+      assert.ok(plan.rows[0].reason);
+      assert.equal(plan.rows[0].nextName, value.item.name);
+      assert.equal(plan.rows[0].nextCode, value.item.oneCCode);
+    }
   });
 }
 

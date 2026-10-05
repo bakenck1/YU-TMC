@@ -83,6 +83,59 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
     expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
   });
 
+  it("persists the agreed name and code from the selected 1C batch and Excel when there is no current-registry copy", async () => {
+    const fixture = await createFixture({ selectedBatchOnly: true });
+    const audit = await new OneCReconciliationService(runtimePool).getInventoryAuditPage(fixture.batchId, { page: 1, pageSize: 50 });
+    expect(audit.data.find((row) => row.itemId === fixture.itemId)?.oneC[0]?.origins).toEqual(["selected_batch"]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(plan.rows[0]).toMatchObject({ eligible: true, nextName: SOURCE_NAME, nextCode: "00003254" });
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
+    const batchRows = await runtimePool.query(`select review_state,published_item_id from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [fixture.batchId]);
+    expect(batchRows.rows.every((row) => row.review_state !== "published" && row.published_item_id == null)).toBe(true);
+    const links = await runtimePool.query(`select item_id from "yu_inventory"."item_one_c_links" where item_id=$1`, [fixture.itemId]);
+    expect(links.rows).toHaveLength(0);
+  });
+
+  it("does not choose between conflicting selected and current names even when the codes and numbers agree", async () => {
+    const fixture = await createFixture({ divergentCurrentName: true });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.counts).toEqual({ ready: 0, unchanged: 0, skipped: 1 });
+    expect(plan.rows[0].reason).toBe("source_ambiguous");
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(0);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
+    await expectNoEnrichmentAudit();
+  });
+
+  it("checks a contradictory current 1C copy even when its changed identifier no longer matches any card", async () => {
+    const fixture = await createFixture({ divergentCurrentIdentity: true });
+    const audit = await new OneCReconciliationService(runtimePool).getInventoryAuditPage(fixture.batchId, { page: 1, pageSize: 50 });
+    expect(audit.data.find((row) => row.itemId === fixture.itemId)?.oneC.map((source) => source.origins)).toEqual([["selected_batch"]]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.counts).toEqual({ ready: 0, unchanged: 0, skipped: 1 });
+    expect(plan.rows[0].reason).toBe("source_ambiguous");
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(0);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
+    await expectNoEnrichmentAudit();
+  });
+
+  it("checks a contradictory selected 1C copy even when only the current registry matches the card", async () => {
+    const fixture = await createFixture({ divergentSelectedIdentity: true });
+    const audit = await new OneCReconciliationService(runtimePool).getInventoryAuditPage(fixture.batchId, { page: 1, pageSize: 50 });
+    expect(audit.data.find((row) => row.itemId === fixture.itemId)?.oneC.map((source) => source.origins)).toEqual([["current_registry"]]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.counts).toEqual({ ready: 0, unchanged: 0, skipped: 1 });
+    expect(plan.rows[0].reason).toBe("source_ambiguous");
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(0);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
+    await expectNoEnrichmentAudit();
+  });
+
   it("only the administrator receives the saved code while warehouse searches keep published numbers and barcodes", async () => {
     const fixture = await createFixture();
     const enrichment = new InventoryAuditEnrichmentService(runtimePool);
@@ -240,7 +293,7 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
   });
 });
 
-async function createFixture(options: { excelCode?: string; duplicateOneC?: boolean } = {}) {
+async function createFixture(options: { excelCode?: string; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean } = {}) {
   const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID(), externalId = randomUUID();
   await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
     values($1,$2,$3,'Enrichment admin','admin',now(),now())`, [userId, `enrich-${userId.slice(0, 8)}`, `${userId}@example.test`]);
@@ -257,8 +310,14 @@ async function createFixture(options: { excelCode?: string; duplicateOneC?: bool
     location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null,
     quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null,
   };
-  const assets = options.duplicateOneC ? [asset, { ...asset, externalId: randomUUID() }] : [asset];
+  const selectedAsset = options.divergentSelectedIdentity
+    ? { ...asset, code: "00009999", inventoryNumber: "241100389", name: "Ноутбук Lenovo другая запись №2411/00389" } : asset;
+  const assets = options.duplicateOneC ? [selectedAsset, { ...selectedAsset, externalId: randomUUID() }] : [selectedAsset];
   const batchId = await saveAssets(assets);
+  if (options.selectedBatchOnly) await migrationPool.query(`delete from "yu_inventory"."one_c_fixed_asset_inbox" where external_id=$1`, [externalId]);
+  if (options.divergentCurrentName) await saveAssets([{ ...asset, name: "Ноутбук Lenovo новая запись №2411/00388" }]);
+  if (options.divergentCurrentIdentity) await saveAssets([{ ...asset, code: "00009999", inventoryNumber: "241100389", name: "Ноутбук Lenovo другая запись №2411/00389" }]);
+  if (options.divergentSelectedIdentity) await saveAssets([asset]);
   const batch = await runtimePool.query<{ version: number }>(`select version from "yu_inventory"."one_c_import_batches" where id=$1`, [batchId]);
   const service = new OneCReconciliationService(runtimePool);
   await service.analyzeBatch(batchId, { version: batch.rows[0]!.version });

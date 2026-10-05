@@ -13,6 +13,7 @@ export default function InventoryAuditEnrichment({ batchId, runId, blocked, onAp
 
 export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) {
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [rowFilter, setRowFilter] = useState("ready");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -53,7 +54,9 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
         setPlan(null); setUncertain(false); onApplied();
       } else {
         if (body.plan?.runId !== runId || !/^[a-f0-9]{64}$/u.test(body.plan?.planHash ?? "") || !Array.isArray(body.plan?.rows)) throw new Error("Сверка изменилась. Обновите её и повторите проверку.");
-        setPlan(body.plan); setUncertain(false);
+        setPlan(body.plan);
+        setRowFilter(body.plan.counts.ready > 0 ? "ready" : body.plan.counts.skipped > 0 ? "skipped" : "unchanged");
+        setUncertain(false);
       }
     } catch (failure) {
       if (current !== generation.current || controller.signal.aborted) return;
@@ -62,9 +65,26 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
     } finally { if (current === generation.current) setBusy(false); }
   }
 
+  const skippedReasons = new Map<string, { label: string; count: number }>();
+  for (const row of plan?.rows ?? []) {
+    if (row.eligible) continue;
+    const key = reasonKey(row);
+    const group = skippedReasons.get(key) ?? { label: reasonLabel(row), count: 0 };
+    group.count++;
+    skippedReasons.set(key, group);
+  }
+  const reasonCounts = [...skippedReasons].sort(([, left], [, right]) => right.count - left.count || left.label.localeCompare(right.label, "ru"));
+  const visibleRows = (plan?.rows ?? []).filter((row) => {
+    if (rowFilter === "ready") return row.eligible && row.changed;
+    if (rowFilter === "unchanged") return row.eligible && !row.changed;
+    if (rowFilter === "skipped") return !row.eligible;
+    if (rowFilter.startsWith("reason:")) return !row.eligible && reasonKey(row) === rowFilter.slice(7);
+    return true;
+  });
+
   return <section className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4" aria-label="Обновление названий и кодов 1С">
     <h3 className="font-semibold">Названия и коды 1С в карточках ТМЦ</h3>
-    <p className="text-sm text-zinc-600">Обновление доступно, когда полный номер или официальный штрихкод подтверждён карточкой, текущим реестром 1С и Excel, а коды 1С совпадают в обоих источниках. Название берётся из 1С. Несовпадения и неоднозначные записи пропускаются; их можно исправить в карточке.</p>
+    <p className="text-sm text-zinc-600">Обновление доступно, когда полный номер или официальный штрихкод совпадает в карточке, загруженной партии или текущем реестре 1С и Excel, а коды 1С совпадают в обоих источниках. Название берётся из 1С. Проверьте предложенные изменения перед применением. Несовпадения и неоднозначные записи пропускаются.</p>
     {blocked ? <p className="text-sm text-amber-800">Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите dry-run заново.</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
@@ -73,18 +93,41 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
       {plan?.counts.ready ? <button disabled={busy || blocked} onClick={() => void perform(true)} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm text-white disabled:opacity-50">{uncertain ? "Проверить результат обновления" : `Применить ${plan.counts.ready} обновлений`}</button> : null}
     </div>
     {plan ? <><p className="text-sm">Можно обновить: {plan.counts.ready}. Без изменений: {plan.counts.unchanged}. Пропущено: {plan.counts.skipped}.</p>
-      <details><summary className="cursor-pointer text-sm text-blue-700">Показать изменения и причины пропуска</summary><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название из 1С", "Код 1С", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{plan.rows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.nextName ?? "—"}</td><td className="p-2 font-mono">{row.nextCode ?? "—"}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row.reason)}</td></tr>)}</tbody></table></div></details></> : null}
+      {reasonCounts.length ? <ul aria-label="Причины пропуска" className="space-y-1 text-sm text-zinc-600">{reasonCounts.map(([key, reason]) => <li key={key}>{reason.label}: <span className="font-medium text-zinc-900">{reason.count}</span></li>)}</ul> : null}
+      <details><summary className="cursor-pointer text-sm text-blue-700">Показать изменения и причины пропуска</summary>
+        <select aria-label="Какие обновления показать" value={rowFilter} onChange={(event) => setRowFilter(event.target.value)} className="mt-3 max-w-full rounded-lg border px-3 py-2 text-sm">
+          <option value="ready">Готовые к обновлению ({plan.counts.ready})</option>
+          <option value="unchanged">Без изменений ({plan.counts.unchanged})</option>
+          <option value="skipped">Пропущенные ({plan.counts.skipped})</option>
+          <option value="all">Все карточки ({plan.rows.length})</option>
+          {reasonCounts.length ? <optgroup label="Причины пропуска">{reasonCounts.map(([key, reason]) => <option key={key} value={`reason:${key}`}>{reason.label} ({reason.count})</option>)}</optgroup> : null}
+        </select>
+        <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название из 1С", "Код 1С после обновления", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.eligible ? row.nextName : "—"}</td><td className="p-2 font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row)}</td></tr>)}
+            {!visibleRows.length ? <tr><td colSpan={4} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
+          </tbody></table></div>
+      </details></> : null}
   </section>;
 }
 
-function reasonLabel(reason: string) {
+function reasonKey(row: InventoryAuditEnrichmentRow) {
+  return row.reason === "sources_missing" ? `${row.reason}:${(row.missingSources ?? []).join(",")}` : row.reason;
+}
+
+function reasonLabel(row: InventoryAuditEnrichmentRow) {
+  if (row.reason === "sources_missing" && row.missingSources?.length) {
+    if (row.missingSources.length === 2) return "Нет подтверждения в 1С и Excel — проверьте оба источника";
+    return row.missingSources[0] === "1c"
+      ? "Нет подтверждения в 1С — проверьте загруженную партию и полный номер"
+      : "Нет подтверждения в Excel — проверьте файл и полный номер";
+  }
   const labels: Record<string, string> = {
-    sources_missing: "Нужны подтверждения из текущего реестра 1С и Excel", code_missing: "Не указан код в одном из источников",
-    code_conflict: "Коды источников или заполненный код карточки не совпадают",
-    source_ambiguous: "Найдено несколько вариантов — требуется проверка", identity_conflict: "Номера или штрихкоды не совпадают",
+    sources_missing: "Нужны подтверждения из 1С и Excel — проверьте источники", code_missing: "Не указан код в одном из источников — проверьте коды 1С и Excel",
+    code_conflict: "Коды источников или карточки не совпадают — проверьте значения",
+    source_ambiguous: "Найдено несколько вариантов — проверьте записи источников", identity_conflict: "Номера или штрихкоды не совпадают — проверьте полные значения",
     item_ineligible: "Карточка архивирована или относится к разделу IT", name_invalid: "Название не подходит для сохранения",
     item_changed: "Карточка изменена после сверки", source_reused: "Запись источника соответствует нескольким карточкам",
     item_not_found: "Карточка больше не существует", identity_missing: "Полный номер или официальный штрихкод не подтверждены",
   };
-  return labels[reason] ?? "Требуется ручная проверка номера и кода";
+  return labels[row.reason] ?? "Требуется ручная проверка номера и кода";
 }

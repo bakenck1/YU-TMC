@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
 import { ApplicationError } from "@/lib/domain/application-error";
+import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem } from "@/lib/inventory-audit-enrichment";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
 import { exportInventorySourceAudit } from "@/lib/server/inventory-source-audit-service";
@@ -59,7 +60,7 @@ export class InventoryAuditEnrichmentService {
       from "yu_inventory"."items" i order by i.id ${lock ? "for update of i" : ""}`);
     const data = await exportInventorySourceAudit(client, batchId);
     const selection = await client.query(`select snapshot_id from "yu_inventory"."material_snapshot_selection" where id=1`);
-    const registry = await client.query(`select external_id,payload_hash from "yu_inventory"."one_c_fixed_asset_inbox" order by external_id`);
+    const registry = await client.query(`select external_id,payload_hash,payload from "yu_inventory"."one_c_fixed_asset_inbox" order by external_id`);
     const registryHash = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
     if (data.run.algorithm_version !== String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION)
       || data.run.inventory.stale || selection.rows[0]?.snapshot_id !== data.run.snapshot_id
@@ -67,7 +68,29 @@ export class InventoryAuditEnrichmentService {
     const items: InventoryAuditEnrichmentItem[] = cards.rows.map((row) => ({ id: row.id, name: row.name,
       inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes, oneCCode: row.one_c_code,
       version: row.version, itemSection: row.item_section, archivedAt: row.archived_at }));
-    const plan = buildInventoryAuditEnrichmentPlan(data.rows, items);
+    // Either copy can stop matching a card after its identifier changes.
+    // Compare selected/current copies by external ID as well, so the audit's
+    // matching filter cannot hide contradictory source evidence.
+    const selected = await client.query(`select external_id,payload from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [batchId]);
+    const currentById = new Map<string, OneCFixedAsset>(registry.rows.map((row) => [String(row.external_id), row.payload as OneCFixedAsset]));
+    const selectedById = new Map<string, OneCFixedAsset>(selected.rows.map((row) => [String(row.external_id), row.payload as OneCFixedAsset]));
+    const sourceCopies = [["current_registry", currentById], ["selected_batch", selectedById]] as const;
+    const evidence = data.rows.map((row) => {
+      const oneC = [...row.oneC];
+      const included = new Set(oneC.flatMap((source) => source.origins.map((origin) => `${origin}:${source.externalId}`)));
+      for (const source of row.oneC) {
+        for (const [origin, copies] of sourceCopies) {
+          const copy = copies.get(source.externalId), key = `${origin}:${source.externalId}`;
+          if (!copy || included.has(key)) continue;
+          oneC.push({ externalId: source.externalId, code: copy.code, inventoryNumber: copy.inventoryNumber,
+            barcode: copy.barcode, name: copy.name, status: copy.status ?? "",
+            origins: [origin], matchedBy: [], matchedBarcodes: [] });
+          included.add(key);
+        }
+      }
+      return { ...row, oneC };
+    });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items);
     const planHash = createHash("sha256").update(JSON.stringify({ runId: data.run.id,
       registryHash, excelSha256: data.run.sha256, rows: plan.rows })).digest("hex");
     return { runId: String(data.run.id), planHash, ...plan };
