@@ -68,41 +68,54 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
       actor_id: fixture.userId, actor_role_snapshot: "admin",
       before_values: { name: ORIGINAL_NAME, oneCCode: null, version: 1 },
       after_values: { name: SOURCE_NAME, oneCCode: "00003254", version: 2 },
-      metadata: { batchId: fixture.batchId, runId: plan.runId, planHash: plan.planHash, externalId: fixture.externalId, excelRowNumber: 2 },
+      metadata: { batchId: fixture.batchId, runId: plan.runId, planHash: plan.planHash, externalId: fixture.externalId, nameSource: "1c", codeStatus: "confirmed" },
     });
   });
 
-  it("persists the 1C name independently while leaving a disagreeing code unset", async () => {
+  it("persists both preferred 1C values even when Excel supplies a different code", async () => {
     const fixture = await createFixture({ excelCode: "00003255" });
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
     expect(plan.counts.ready).toBe(1);
-    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "code_conflict", nextCode: null });
+    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "confirmed", nextCode: "00003254" });
     const result = await service.apply(fixture.batchId, plan, fixture.actor);
     expect(result.updated).toBe(1);
-    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
   });
 
-  it("applies an Excel-only name without assigning its unconfirmed code, audits its source, and replays once", async () => {
+  it("applies an Excel-only name and code, audits its source, and replays once", async () => {
     const fixture = await createFixture({ excelOnly: true });
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
-    expect(plan.rows[0]).toMatchObject({ nameSource: "excel", codeStatus: "sources_missing", nextName: SOURCE_NAME, nextCode: null });
+    expect(plan.rows[0]).toMatchObject({ nameSource: "excel", codeStatus: "confirmed", nextName: SOURCE_NAME, nextCode: "00003254" });
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
-    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
     const audit = await runtimePool.query(`select metadata from "yu_inventory"."audit_records" where action='item.audit_enrichment'`);
     expect(audit.rows).toHaveLength(1);
-    expect(audit.rows[0].metadata).toMatchObject({ nameSource: "excel", codeStatus: "sources_missing", excelRowNumber: 2 });
+    expect(audit.rows[0].metadata).toMatchObject({ nameSource: "excel", codeStatus: "confirmed", excelRowNumber: 2 });
   });
 
-  it("applies a 1C-only name without depending on Excel confirmation", async () => {
+  it("applies a 1C-only name and code without depending on Excel confirmation", async () => {
     const fixture = await createFixture({ oneCOnly: true });
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
-    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "sources_missing", nextName: SOURCE_NAME, nextCode: null });
+    expect(plan.rows[0]).toMatchObject({ nameSource: "1c", codeStatus: "confirmed", nextName: SOURCE_NAME, nextCode: "00003254" });
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
-    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: null, version: 2 });
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
+  });
+
+  it("reviews and audits replacement of an existing code with the preferred source code", async () => {
+    const fixture = await createFixture();
+    await runtimePool.query(`update "yu_inventory"."items" set one_c_code='00009999' where id=$1`, [fixture.itemId]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.rows[0]).toMatchObject({ currentCode: "00009999", nextCode: "00003254", nameSource: "1c" });
+    expect(await itemState(fixture.itemId)).toMatchObject({ one_c_code: "00009999", version: 1 });
+    await service.apply(fixture.batchId, plan, fixture.actor);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
+    const audit = await runtimePool.query(`select before_values,after_values from "yu_inventory"."audit_records" where action='item.audit_enrichment'`);
+    expect(audit.rows[0]).toMatchObject({ before_values: { oneCCode: "00009999" }, after_values: { oneCCode: "00003254" } });
   });
 
   it("persists the agreed name and code from the selected 1C batch and Excel when there is no current-registry copy", async () => {

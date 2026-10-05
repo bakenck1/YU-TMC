@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem } from "../lib/inventory-audit-enrichment";
 import type { AuditMatch } from "../lib/inventory-source-audit";
 
-test("a safe 1C name cannot confirm a code across contradictory complete source identities", () => {
+function fixture(): { item: InventoryAuditEnrichmentItem; row: AuditMatch } {
   const item: InventoryAuditEnrichmentItem = {
     id: "site-1", name: "Ноутбук", inventoryNumber: "241100388", officialBarcodes: ["2411/00388"],
     oneCCode: null, version: 7, itemSection: "general", archivedAt: null,
@@ -22,9 +22,29 @@ test("a safe 1C name cannot confirm a code across contradictory complete source 
       oneCCode: "00003254", endingBalance: "1", matchedBy: ["number_without_slash"],
     }],
   };
+  return { item, row };
+}
+
+test("safe 1C supplies its name and code despite a contradictory Excel slash boundary", () => {
+  const { item, row } = fixture();
   const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
-  assert.equal(plan.rows[0].eligible, true, "The independently verified 1C name remains usable");
+  assert.equal(plan.rows[0].eligible, true, "The independently verified 1C source remains usable");
   assert.equal(plan.rows[0].nextName, row.oneC[0].name);
-  assert.equal(plan.rows[0].nextCode, null, "Different complete slash boundaries cannot confirm a code");
-  assert.equal(plan.rows[0].codeStatus, "identity_conflict");
+  assert.equal(plan.rows[0].nextCode, "00003254");
+  assert.equal(plan.rows[0].codeStatus, "confirmed");
+});
+
+test("contradictory complete boundaries inside 1C block both fields and Excel fallback", () => {
+  for (const field of ["inventoryNumber", "barcode", "name"] as const) {
+    const { item, row } = fixture();
+    row.excel[0].inventoryNumber = "2411/00388";
+    row.excel[0].nomenclature = "Ноутбук Lenovo №2411/00388";
+    if (field === "name") row.oneC[0].name = "Ноутбук Lenovo №24110/0388";
+    else row.oneC[0][field] = "24110/0388";
+    const plan = buildInventoryAuditEnrichmentPlan([row], [item]);
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+    assert.equal(plan.rows[0].reason, "identity_conflict", field);
+    assert.equal(plan.rows[0].nextName, item.name);
+    assert.equal(plan.rows[0].nextCode, item.oneCCode);
+  }
 });

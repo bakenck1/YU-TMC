@@ -14,7 +14,7 @@ export type InventoryAuditEnrichmentItem = {
   quantity?: number;
 };
 
-export type InventoryAuditEnrichmentReason = "confirmed" | "unchanged" | "item_not_found" | "item_ineligible" | "item_changed" | "sources_missing" | "source_ambiguous" | "source_reused" | "code_missing" | "code_conflict" | "identity_conflict" | "identity_missing" | "name_invalid";
+export type InventoryAuditEnrichmentReason = "confirmed" | "unchanged" | "item_not_found" | "item_ineligible" | "item_changed" | "sources_missing" | "source_ambiguous" | "source_reused" | "code_missing" | "code_invalid" | "code_conflict" | "identity_conflict" | "identity_missing" | "name_invalid";
 
 export type InventoryAuditEnrichmentRow = {
   itemId: string;
@@ -27,7 +27,7 @@ export type InventoryAuditEnrichmentRow = {
   changed: boolean;
   reason: InventoryAuditEnrichmentReason;
   nameSource?: "1c" | "excel";
-  codeStatus?: "confirmed" | "sources_missing" | "source_ambiguous" | "source_reused" | "code_missing" | "code_conflict" | "identity_conflict" | "identity_missing";
+  codeStatus?: "confirmed" | "code_missing" | "code_invalid";
   missingSources?: Array<"1c" | "excel">;
   externalId?: string;
   excelRowNumber?: number;
@@ -171,8 +171,6 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     if (distinct.size > 1) return skip("source_ambiguous");
     const source = [...distinct.values()][0];
     let excel: ExcelSourceRow | undefined;
-    let codeStatus: NonNullable<InventoryAuditEnrichmentRow["codeStatus"]> = "sources_missing";
-    let nextCode = item.oneCCode;
     let name: string;
     if (source) {
       if (!source.externalId) return skip("source_ambiguous");
@@ -181,25 +179,6 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       const issue = identityIssue(item, identities, source.name, source.barcode);
       if (issue) return skip(issue);
       name = source.name.trim();
-      // Excel can confirm the code, but cannot block a safely identified 1C name.
-      if (row.excel.length > 1) codeStatus = "source_ambiguous";
-      else if (row.excel.length === 1) {
-        const candidate = row.excel[0];
-        if (!Number.isSafeInteger(candidate.rowNumber) || candidate.rowNumber < 1) codeStatus = "source_ambiguous";
-        else if ((excelOwners.get(String(candidate.rowNumber))?.size ?? 0) > 1) codeStatus = "source_reused";
-        else {
-          const excelIdentities = excelNumbers(candidate);
-          const excelIssue = identityIssue(item, excelIdentities, candidate.nomenclature);
-          const oneCCode = code(source.code), excelCode = code(candidate.oneCCode);
-          if (excelIssue) codeStatus = excelIssue;
-          else if (!allAgree([...identities, ...descriptionNumbers(source.name), ...excelIdentities,
-            ...descriptionNumbers(candidate.nomenclature)], identities[0])) codeStatus = "identity_conflict";
-          else if (!oneCCode || !excelCode) codeStatus = "code_missing";
-          else if (oneCCode.length > 64 || excelCode.length > 64 || oneCCode !== excelCode
-            || (code(item.oneCCode) !== null && code(item.oneCCode) !== oneCCode)) codeStatus = "code_conflict";
-          else { codeStatus = "confirmed"; nextCode = oneCCode; excel = candidate; }
-        }
-      }
     } else {
       // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
       if (row.excel.length !== 1) return skip("source_ambiguous");
@@ -211,6 +190,12 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       name = excel.nomenclature.trim();
     }
     if (!name || [...name].length > 160 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(name)) return skip("name_invalid");
+    // Name and code come from the same identified source, with 1C priority.
+    // A missing/invalid preferred code never erases the saved code or borrows Excel's.
+    const chosenCode = code(source ? source.code : excel?.oneCCode);
+    const codeStatus = !chosenCode ? "code_missing"
+      : chosenCode.length > 64 || /[\u0000-\u001f\u007f]/u.test(chosenCode) ? "code_invalid" : "confirmed";
+    const nextCode = codeStatus === "confirmed" ? chosenCode : item.oneCCode;
     result.nameSource = source ? "1c" : "excel";
     result.codeStatus = codeStatus;
     result.externalId = source?.externalId;
