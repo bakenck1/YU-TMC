@@ -27,6 +27,7 @@ constraints, transaction rollback and privilege-sensitive behavior.
 | Photos/attachments | parent scope, MIME/size, lifecycle and byte serving | ✓ | ✓ | ✓ | ✓ | object-store outage is operational |
 | Asset loss (P0) | actor/BOLA, body bounds, exact period, receipt rollback/race | ✓ | ✓ | ✓ | n/a | API-only by recorded decision |
 | 1C fixed-assets inbox (P0) | auth-before-body, 64 MiB/deadline, lease, atomic bulk upsert | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
+| 1C/Excel inventory enrichment | complete identifier and equal codes, current sources, reviewed plan, atomic audit, idempotent replay | ✓ | ✓ | ✓ | ✓ | real production XLS and browser download — staging gate |
 | Dockflow external API | key rotation, bounded cursor, safe errors, public projection | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
 | Push/outbox | lease, retry/dead-letter, ownership and stale cleanup | ✓ | ✓ | ✓ | ✓ | provider delivery staging gate |
 | Settings | singleton, guarded import, locking/concurrency | ✓ | ✓ | ✓ | ✓ | — |
@@ -45,6 +46,15 @@ constraints, transaction rollback and privilege-sensitive behavior.
 [PostgreSQL](../tests/database/local-barcodes.test.ts); decommissioned-in-use —
 [service/presentation](../tests/decommissioned-items-service.test.ts) и связанные
 inventory PostgreSQL suites.
+
+Confirmed 1C/Excel enrichment is covered by
+[HTTP boundary](../tests/inventory-audit-enrichment-route.test.ts),
+[identity policy](../tests/inventory-audit-enrichment.test.ts),
+[PostgreSQL mutation](../tests/database/inventory-audit-enrichment.test.ts),
+[preview/apply/recovery UI](../tests/components/inventory-audit-enrichment.test.tsx),
+[whitespace attacks](../tests/inventory-source-audit-whitespace-attacks.test.ts),
+[combined whitespace and slash formats](../tests/inventory-source-audit-composed-format.test.ts)
+and [real BIFF8 code cells](../tests/material-snapshot-one-c-code.test.ts).
 
 Source-based architecture assertions для asset-loss, 1С, Dockflow, attachment,
 transfer и collection boundaries больше не являются единственным доказательством:

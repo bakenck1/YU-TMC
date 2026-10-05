@@ -106,6 +106,7 @@ const COLUMN_LABEL_KEYS = {
   photo: "items.photo",
   qrCode: "items.qrCode",
   name: "items.name",
+  oneCCode: "items.oneCCode",
   itemType: "items.type",
   brandModel: "items.brandModel",
   location: "items.location",
@@ -223,6 +224,7 @@ export default function ItemsTable({
   stateUrlParams,
   itemReturnHref,
   variant = "general",
+  canViewOneCCode = false,
   showSummary = false,
 }: {
   items: InventoryItem[];
@@ -254,6 +256,8 @@ export default function ItemsTable({
   /** Static fallback for tables whose own filters are not URL-managed. */
   itemReturnHref?: string;
   variant?: "general" | "it";
+  /** Granted by the authenticated server page; hidden unless explicitly allowed. */
+  canViewOneCCode?: boolean;
   showSummary?: boolean;
 }) {
   const { t, dataLabel } = useAppSettings();
@@ -281,10 +285,18 @@ export default function ItemsTable({
   const [filters, setFilters] = useState({ ...startingViewState.filters });
   const [draftFilters, setDraftFilters] = useState({ ...startingViewState.filters });
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const defaultColumns = useMemo(() => variant === "it"
-    ? { ...DEFAULT_INVENTORY_COLUMNS, qrCode: false, ipAddress: true, macAddress: true, responsible: false }
-    : DEFAULT_INVENTORY_COLUMNS, [variant]);
-  const [visibleColumns, setVisibleColumns] = useState(() => ({ ...defaultColumns }));
+  const showOneCCode = canViewOneCCode && variant !== "it";
+  const defaultColumns = useMemo(() => ({
+    ...(variant === "it"
+      ? { ...DEFAULT_INVENTORY_COLUMNS, qrCode: false, ipAddress: true, macAddress: true, responsible: false }
+      : DEFAULT_INVENTORY_COLUMNS),
+    oneCCode: showOneCCode,
+  }), [variant, showOneCCode]);
+  const [columnVisibility, setVisibleColumns] = useState(() => ({ ...defaultColumns }));
+  const visibleColumns = useMemo(() => ({
+    ...columnVisibility,
+    oneCCode: showOneCCode && columnVisibility.oneCCode,
+  }), [columnVisibility, showOneCCode]);
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(startingViewState.page);
@@ -317,7 +329,7 @@ export default function ItemsTable({
     const timeout = window.setTimeout(
       () => {
         const loaded = loadColumnVisibility(columnSettingsStorageKey, defaultColumns);
-        setVisibleColumns(variant === "it" ? { ...loaded, qrCode: false, responsible: false } : loaded);
+        setVisibleColumns(variant === "it" ? { ...loaded, qrCode: false, oneCCode: false, responsible: false } : loaded);
       },
       0,
     );
@@ -724,6 +736,7 @@ export default function ItemsTable({
               rooms={itemCreation.rooms}
               buildings={itemCreation.buildings}
               restricted={itemCreation.mode === "restricted"}
+              canViewOneCCode={showOneCCode}
               inventorySection={itemCreation.section ?? "general"}
             />
           ) : null}
@@ -866,7 +879,9 @@ export default function ItemsTable({
                   {[...INVENTORY_COLUMN_KEYS, ...IT_NETWORK_COLUMN_KEYS].filter(
                     (key) => variant === "it" || !IT_NETWORK_COLUMN_KEYS.includes(key as never),
                   ).filter(
-                    (key) => variant !== "it" || (key !== "responsible" && key !== "qrCode"),
+                    (key) => variant !== "it" || (key !== "responsible" && key !== "qrCode" && key !== "oneCCode"),
+                  ).filter(
+                    (key) => key !== "oneCCode" || showOneCCode,
                   ).map((key) => (
                     <label key={key} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
                       <input type="checkbox" checked={visibleColumns[key]} onChange={() => toggleColumn(key)} className="h-4 w-4 accent-emerald-500" />
@@ -952,6 +967,7 @@ export default function ItemsTable({
               {visibleColumns.photo ? <th className="px-3 py-4 font-medium">{t("items.photo")}</th> : null}
               {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th> : null}
               {visibleColumns.name ? <th className="px-3 py-4 font-medium">{t("items.name")}</th> : null}
+              {visibleColumns.oneCCode ? <th className="px-3 py-4 font-medium">{t("items.oneCCode")}</th> : null}
               {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
               {visibleColumns.brandModel ? <th className="px-3 py-4 font-medium">{t("items.brandModel")}</th> : null}
               {visibleColumns.location ? <th className="px-3 py-4 font-medium">{t("items.location")}</th> : null}
@@ -978,6 +994,7 @@ export default function ItemsTable({
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
                   {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
                   {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link>{issueMode && !canSelectItem(item) ? <p className="mt-1 text-xs font-medium text-red-700">{t("tmc.issue.decommissionedBlocked")}</p> : null}</td> : null}
+                  {visibleColumns.oneCCode ? <td className="whitespace-nowrap px-3 py-4 font-mono text-zinc-600">{item.oneCCode || "—"}</td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
                   {visibleColumns.brandModel ? <td className="max-w-[220px] px-3 py-4 text-zinc-800">{item.brandModel ?? "—"}</td> : null}
                   {visibleColumns.location ? <td className="max-w-[190px] px-3 py-4 text-zinc-600">{item.location}</td> : null}
@@ -1040,6 +1057,7 @@ export default function ItemsTable({
                 {issueMode || visibleColumns.status ? <InventoryVisibleStatus status={visibleItemStatus(item)} isProject={item.isProject} /> : null}
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-600">
+                {visibleColumns.oneCCode ? <><dt className="text-zinc-400">{t("items.oneCCode")}</dt><dd className="text-right font-mono">{item.oneCCode || "—"}</dd></> : null}
                 {issueMode || visibleColumns.location ? <><dt className="text-zinc-400">{t("items.location")}</dt><dd className="text-right">{item.location}</dd></> : null}
                 {issueMode ? <><dt className="text-zinc-400">{t("itemDetails.room")}</dt><dd className="text-right">{item.room || "—"}</dd></> : null}
                 {visibleColumns.ipAddress ? <><dt className="text-zinc-400">{t("it.ipAddress")}</dt><dd className="text-right"><NetworkAddressCell item={item} field="ipAddress" moreLabel={(count) => t("it.moreAddresses", { count })} /></dd></> : null}

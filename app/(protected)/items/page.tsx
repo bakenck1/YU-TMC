@@ -82,6 +82,7 @@ export default async function ItemsPage({
       ) : (
         <ItemsTable
           items={items}
+          canViewOneCCode={user.role === "admin"}
           searchHistoryScope={user.userId}
           columnSettingsScope={user.userId}
           excelDataset={canExport ? "items" : undefined}

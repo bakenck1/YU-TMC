@@ -294,14 +294,16 @@ test("close name forms rank above unrelated names when duplicate identifiers hav
   assert.equal(auditNeedsReview(row), false);
 });
 
-test("broad number search rejects different digits, hyphens, internal spaces, numeric substrings and name alone", () => {
+test("broad number search accepts complete numbers with spaces but rejects different digits, hyphens, substrings and name alone", () => {
   const item = (id: string, inventoryNumber: string): AuditItem => ({ id, name: "Лабораторный стенд", inventoryNumber, inventoryNumberKind: "official", oneCCode: null, sourceCodes: [], officialBarcodes: [], version: 1 });
   const source = { externalId: "stand-source", asset: { externalId: "stand-source", code: "123/768", inventoryNumber: "123768", barcode: null, name: "Лабораторный стенд", status: "Не в учёте" } as OneCFixedAsset };
   const reference = extractExcelInventoryReference("Лабораторный стенд 123768 от 24.05.24");
   const excel: ExcelSourceRow[] = [{ rowNumber: 2, nomenclature: "Лабораторный стенд 123768 от 24.05.24", ...reference!, endingBalance: "0" }];
   const audit = buildInventorySourceAudit([item("a", "123/0768"), item("b", "123-768"), item("c", "123 768"), item("d", "1237680"), item("e", "12376"), item("f", "OTHER")], [source], excel, []);
-  assert.equal(audit.counts.missing, 6);
-  assert.ok(audit.rows.every((row) => row.source === null));
+  assert.equal(audit.counts.missing, 5);
+  assert.ok(audit.rows.filter((row) => row.itemId !== "c").every((row) => row.source === null));
+  assert.equal(audit.rows.find((row) => row.itemId === "c")?.source, "1c+excel");
+  assert.equal(auditNeedsReview(audit.rows.find((row) => row.itemId === "c")!), true);
   for (const description of ["Модель X123768", "Модель 123768GB", "от 24.05.2024", "от 2026-10-02", "от 26-03-2020", "от 26/03/2020", "Стойка 123768.5", "1350/14464GB"]) {
     assert.equal(extractExcelInventoryReferences(description).length, 0, description);
   }

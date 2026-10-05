@@ -15,9 +15,11 @@ import type { InventoryItem } from "@/lib/types";
 export default function DecommissionedItemsView({
   items,
   canExport,
+  canViewOneCCode = false,
 }: {
   items: InventoryItem[];
   canExport: boolean;
+  canViewOneCCode?: boolean;
 }) {
   const { t } = useAppSettings();
   const [query, setQuery] = useState("");
@@ -143,6 +145,7 @@ export default function DecommissionedItemsView({
       </section>
       <ItemsTable
         items={inUse}
+        canViewOneCCode={canViewOneCCode}
         showFilters={false}
         itemReturnHref="/items/decommissioned"
         dateLabel={t("decommissioned.decommissionedAt")}
@@ -155,6 +158,7 @@ export default function DecommissionedItemsView({
       </h2>
       <ItemsTable
         items={archived}
+        canViewOneCCode={canViewOneCCode}
         showFilters={false}
         itemReturnHref="/items/decommissioned"
         dateLabel={t("decommissioned.decommissionedAt")}

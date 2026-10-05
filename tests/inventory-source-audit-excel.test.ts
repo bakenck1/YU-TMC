@@ -147,19 +147,19 @@ test("audit export labels search sources and separates saved counts from current
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   const sheet = workbook.getWorksheet("Все ТМЦ")!;
-  assert.deepEqual([sheet.getCell("B2").value, sheet.getCell("B3").value, sheet.getCell("B4").value], ["ОС", "Материальный предмет", "ОС + Материальный предмет"]);
+  assert.deepEqual([sheet.getCell("B2").value, sheet.getCell("B3").value, sheet.getCell("B4").value], ["Только 1С", "Только Excel", "1С + Excel"]);
   const summary = workbook.getWorksheet("Сводка")!;
   const fields = new Map<string, unknown>();
   summary.eachRow((row) => fields.set(String(row.getCell(1).value), row.getCell(2).value));
   assert.equal(summary.getCell("B8").value, "b".repeat(64));
   assert.equal(summary.getCell("B10").value, 3500);
-  assert.equal(fields.get("Сохранённая сверка: записей ТМЦ"), 1988);
-  assert.equal(fields.get("Сохранённая сверка: ОС"), 736);
-  assert.equal(fields.get("Сохранённая сверка: Материальный предмет"), 294);
-  assert.equal(fields.get("Сохранённая сверка: ОС + Материальный предмет"), 67);
-  assert.equal(fields.get("Сохранённая сверка: не найдено"), 891);
-  assert.equal(fields.get("Сохранённая сверка: из них временные"), 669);
-  assert.equal(fields.get("Сохранённая сверка: из найденных возможные"), 325);
+  assert.equal(fields.get("Всего"), 1988);
+  assert.equal(fields.get("Только 1С"), 736);
+  assert.equal(fields.get("Только Excel"), 294);
+  assert.equal(fields.get("1С + Excel"), 67);
+  assert.equal(fields.get("Не найдено"), 891);
+  assert.equal(fields.get("Из них временные"), 669);
+  assert.equal(fields.get("Из найденных: возможные"), 325);
   assert.equal(fields.get("Сейчас: всего записей ТМЦ"), 2040);
   assert.equal(fields.get("Сейчас: активных записей ТМЦ"), 2000);
   assert.equal(fields.get("Сейчас: всего единиц ТМЦ"), 2500);
@@ -174,4 +174,77 @@ test("audit export labels search sources and separates saved counts from current
   assert.match(String(fields.get("Записи и единицы ТМЦ")), /Количество/u);
   assert.equal(fields.has("oneCOnly"), false);
   assert.equal(fields.has("excelOnly"), false);
+});
+
+test("audit export partitions cards by source and keeps temporary and possible sheets as subsets", async () => {
+  const item = (itemId: string, overrides: Partial<AuditMatch> = {}): AuditMatch => ({
+    itemId, itemName: "Ноутбук", siteNumber: "2411/00388", siteBarcodes: [], numberKind: "official",
+    itemVersion: 1, result: "matched", source: "1c", excel: [], oneC: [], ...overrides,
+  });
+  const oneC = { externalId: "asset-1", code: "00003254", inventoryNumber: "2411/00388", barcode: "001122", name: "Ноутбук Lenovo", status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["number_spaces"], matchedBarcodes: [] } as AuditMatch["oneC"][number];
+  const rows = [
+    item("one-c", { oneC: [{ ...oneC, matchedBy: ["inventory_number"] }] }),
+    item("excel", { source: "excel", excel: [{ rowNumber: 786, inventoryNumber: "2411/00388", nomenclature: "Ноутбук Lenovo", oneCCode: "00003254", endingBalance: "1", matchedBy: ["site_number"] }] }),
+    item("both", { source: "1c+excel", oneC: [oneC], excel: [{ rowNumber: 787, inventoryNumber: "2411 / 00388", nomenclature: "Ноутбук Lenovo", endingBalance: "1", oneCCode: "00003254", matchedBy: ["number_spaces"] }] }),
+    item("missing", { source: null, result: "missing" }),
+    item("temporary", { source: null, result: "temporary", numberKind: "temporary", siteNumber: "TMP-123" }),
+  ];
+  const bytes = await exportInventorySourceAuditExcel({ run: { batch_id: "batch", batch_version: 7, counts: { total: 5, oneCOnly: 1, excelOnly: 1, both: 1, missing: 2, temporary: 1, possible: 1 } }, rows });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  const ids = (name: string) => {
+    const sheet = workbook.getWorksheet(name);
+    assert.ok(sheet, `Missing category sheet ${name}`);
+    return Array.from({ length: sheet.rowCount - 1 }, (_, index) => sheet.getCell(index + 2, 3).value);
+  };
+  assert.deepEqual(ids("Только 1С"), ["one-c"]);
+  assert.deepEqual(ids("Только Excel"), ["excel"]);
+  assert.deepEqual(ids("1С + Excel"), ["both"]);
+  assert.deepEqual(ids("Не найдено"), ["missing", "temporary"]);
+  assert.deepEqual(ids("Из них временные"), ["temporary"]);
+  assert.deepEqual(ids("Из найденных возможные"), ["both"]);
+  const partition = ["Только 1С", "Только Excel", "1С + Excel", "Не найдено"].flatMap(ids);
+  assert.equal(partition.length, rows.length);
+  assert.equal(new Set(partition).size, rows.length);
+  assert.equal(workbook.getWorksheet("Все ТМЦ")!.rowCount, rows.length + 1);
+  assert.equal(workbook.getWorksheet("1С + Excel")!.getCell("U2").value, "00003254");
+  assert.equal(workbook.getWorksheet("1С + Excel")!.getCell("V2").value, "00003254");
+  assert.equal(workbook.getWorksheet("1С + Excel")!.getCell("E2").value, "2411/00388");
+  assert.equal(workbook.getWorksheet("1С + Excel")!.getCell("Q2").value, "001122");
+  assert.equal(workbook.getWorksheet("1С + Excel")!.getCell("P2").value, "number_spaces");
+  assert.equal(workbook.getWorksheet("Все совпадения 1С")!.getCell("E2").value, "00003254");
+  assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("K2").value, "00003254");
+  const summary = workbook.getWorksheet("Сводка")!;
+  const fields = new Map<string, unknown>();
+  summary.eachRow((row) => fields.set(String(row.getCell(1).value), row.getCell(2).value));
+  assert.match(String(fields.get("Как читать количество")), /входят в «Не найдено»/u);
+  assert.match(String(fields.get("Как читать количество")), /не прибавляются к общему количеству/u);
+});
+
+test("every category sheet preserves leading zeros and protects untrusted names, codes and evidence from formulas", async () => {
+  const row: AuditMatch = {
+    itemId: "item", itemName: " =HYPERLINK(\"bad\")", siteNumber: "00003254", siteBarcodes: [{ kind: "official", value: "001122" }], numberKind: "official", itemVersion: 1,
+    result: "matched", source: "1c+excel", oneC: [{ externalId: "+bad", code: "@bad", inventoryNumber: "00003254", barcode: "001122", name: "-bad", status: "=bad", origins: ["current_registry"], matchedBy: ["number_spaces"], matchedBarcodes: [] }],
+    excel: [{ rowNumber: 786, inventoryNumber: "00003254", nomenclature: "\uFEFF=bad", endingBalance: "=bad", oneCCode: "+bad", matchedBy: ["number_spaces"] }],
+  };
+  const bytes = await exportInventorySourceAuditExcel({ run: { batch_id: "=bad", batch_version: 7, counts: { total: 1, oneCOnly: 0, excelOnly: 0, both: 1, missing: 0, temporary: 0, possible: 1 } }, rows: [row] });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  for (const name of ["Все ТМЦ", "1С + Excel", "Из найденных возможные"]) {
+    const sheet = workbook.getWorksheet(name);
+    assert.ok(sheet);
+    assert.equal(sheet.getCell("D2").value, "' =HYPERLINK(\"bad\")");
+    assert.equal(sheet.getCell("E2").value, "00003254");
+    assert.equal(sheet.getCell("G2").value, "'\uFEFF=bad");
+    assert.equal(sheet.getCell("I2").value, "'=bad");
+    assert.equal(sheet.getCell("J2").value, "'+bad");
+    assert.equal(sheet.getCell("L2").value, "'-bad");
+    assert.equal(sheet.getCell("U2").value, "'@bad");
+    assert.equal(sheet.getCell("V2").value, "'+bad");
+    sheet.eachRow((entry) => entry.eachCell((cell) => assert.notEqual(cell.type, 6, `${name}: formula ${cell.address}`)));
+  }
+  assert.equal(workbook.getWorksheet("Сводка")!.getCell("B2").value, "'=bad");
+  assert.equal(workbook.getWorksheet("Все совпадения 1С")!.getCell("E2").value, "'@bad");
+  assert.equal(workbook.getWorksheet("Все совпадения Excel")!.getCell("K2").value, "'+bad");
+  for (const name of ["Только 1С", "Только Excel", "Не найдено", "Из них временные"]) assert.equal(workbook.getWorksheet(name)!.rowCount, 1);
 });

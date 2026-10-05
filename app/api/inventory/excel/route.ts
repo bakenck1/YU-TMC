@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const services = getApplicationServices();
     if (dataset === "items") {
       return workbookResponse(
-        await exportInventoryItems(activeInventoryItems(await services.items.listItems(actor)), "Inventory items"),
+        await exportInventoryItems(activeInventoryItems(await services.items.listItems(actor)), "Inventory items", undefined, { canReadOneCCode: user.role === "admin" }),
         "inventory-items.xlsx",
       );
     }
@@ -49,6 +49,8 @@ export async function GET(request: Request) {
         await exportInventoryItems(
           (await services.items.listDecommissionedItems(actor)).filter((item) => item.status === "decommissioned"),
           "Decommissioned",
+          undefined,
+          { canReadOneCCode: user.role === "admin" },
         ),
         "decommissioned-items.xlsx",
       );
@@ -59,6 +61,8 @@ export async function GET(request: Request) {
         await exportInventoryItems(
           activeInventoryItems(await services.items.listItItems(actor)),
           "IT inventory items",
+          undefined,
+          { canReadOneCCode: user.role === "admin" },
         ),
         "it-inventory-items.xlsx",
       );
@@ -68,6 +72,8 @@ export async function GET(request: Request) {
         await exportInventoryItems(
           (await services.items.listDecommissionedItems(actor)).filter((item) => item.status === "decommissioned_in_use"),
           "Decommissioned but in use",
+          undefined,
+          { canReadOneCCode: user.role === "admin" },
         ),
         "decommissioned-in-use.xlsx",
       );
@@ -129,6 +135,7 @@ export async function POST(request: Request) {
           selected,
           body.dataset === "items" ? "Inventory items" : body.dataset === "it-items" ? "IT inventory items" : body.dataset === "decommissioned_in_use" ? "Decommissioned but in use" : "Decommissioned",
           columns,
+          { canReadOneCCode: user.role === "admin" },
         ),
         body.dataset === "items" ? "inventory-items.xlsx" : body.dataset === "it-items" ? "it-inventory-items.xlsx" : body.dataset === "decommissioned_in_use" ? "decommissioned-in-use.xlsx" : "decommissioned-items.xlsx",
       );

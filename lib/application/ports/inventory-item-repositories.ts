@@ -27,6 +27,8 @@ export interface InventoryItemRecord {
   oneCCode?: string | null;
   /** Supplemental identifiers from confirmed, published 1C links; search only. */
   searchIdentifiers?: string[];
+  /** Published inventory numbers and barcodes, excluding administrator-only source codes. */
+  searchIdentifiersWithoutCodes?: string[];
   /** Published 1C name aliases used in catalogue search and suggestions. */
   searchNames?: string[];
   quantity: number;

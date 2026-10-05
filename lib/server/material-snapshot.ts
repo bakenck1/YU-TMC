@@ -9,13 +9,32 @@ import { extractExcelInventoryReferences, type ExcelSourceRow } from "@/lib/inve
 export const MAX_MATERIAL_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 const OLE_HEADER = Buffer.from("d0cf11e0a1b11ae1", "hex");
 
+function isCodeHeader(value: unknown): boolean {
+  return typeof value === "string" && /^Код(?:\s*1[СC])?$/iu.test(value.trim());
+}
+
+function readOneCCode(cell: XLSX.CellObject | undefined, displayed: unknown): string | null {
+  // A formula's cached result is not an authoritative source identifier. Parsing
+  // retains the formula metadata only to distinguish it from a literal cell.
+  if (!cell || cell.f || (cell.t !== "s" && cell.t !== "n")) return null;
+  if (cell.t === "n" && (typeof cell.v !== "number" || !Number.isSafeInteger(cell.v) || cell.v < 0)) return null;
+  const code = String(displayed ?? "").trim();
+  if (code.length > 64) throw new ApplicationError("validation", "invalid_material_snapshot_file");
+  if (cell.t === "n") {
+    // Excel may round scientific notation or add separators and literal text.
+    // Keep display padding only when it still represents the exact integer.
+    return /^\d+$/u.test(code) && BigInt(code) === BigInt(cell.v as number) ? code : String(cell.v);
+  }
+  return code || null;
+}
+
 export function parseMaterialSnapshot(bytes: Buffer, options: { allowEmpty?: boolean } = {}): { sha256: string; accepted: ExcelSourceRow[]; skipped: number } {
   if (bytes.length < OLE_HEADER.length || bytes.length > MAX_MATERIAL_SNAPSHOT_BYTES || !bytes.subarray(0, OLE_HEADER.length).equals(OLE_HEADER)) {
     throw new ApplicationError("validation", "invalid_material_snapshot_file");
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex").toUpperCase();
   let workbook: XLSX.WorkBook;
-  try { workbook = XLSX.read(bytes, { type: "buffer", cellFormula: false, cellHTML: false, cellStyles: false, bookVBA: false, cellDates: false }); }
+  try { workbook = XLSX.read(bytes, { type: "buffer", cellFormula: true, cellHTML: false, cellStyles: false, bookVBA: false, cellDates: false }); }
   catch { throw new ApplicationError("validation", "invalid_material_snapshot_file"); }
   if (!Array.isArray(workbook.SheetNames) || workbook.SheetNames.length !== 1) throw new ApplicationError("validation", "material_snapshot_sheet_mismatch");
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -23,7 +42,7 @@ export function parseMaterialSnapshot(bytes: Buffer, options: { allowEmpty?: boo
   const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
   if (range.s.r !== 0 || range.s.c !== 0 || range.e.r > 65_535 || range.e.c > 255) throw new ApplicationError("validation", "invalid_material_snapshot_file");
   const lines = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, blankrows: true });
-  const headerIndex = lines.findIndex((line, index) => index < 50 && line?.[1] === "Номенклатура" && line?.[4] === "Код" && line?.[11] === "Количество");
+  const headerIndex = lines.findIndex((line, index) => index < 50 && line?.[1] === "Номенклатура" && isCodeHeader(line?.[4]) && line?.[11] === "Количество");
   if (headerIndex < 0) throw new ApplicationError("validation", "material_snapshot_columns_mismatch");
   const accepted: ExcelSourceRow[] = [];
   let skipped = 0;
@@ -31,11 +50,12 @@ export function parseMaterialSnapshot(bytes: Buffer, options: { allowEmpty?: boo
     const line = lines[index] ?? [];
     if (!/^\d{1,3}(?:,\d{3})*$|^\d+$/u.test(String(line[0] ?? "").trim())) continue;
     const nomenclature = String(line[1] ?? "").trim();
+    const oneCCode = readOneCCode(sheet[XLSX.utils.encode_cell({ r: index, c: 4 })], line[4]);
     if (nomenclature.length > 1_000 || String(line[11] ?? "").length > 100) throw new ApplicationError("validation", "invalid_material_snapshot_file");
     const references = extractExcelInventoryReferences(nomenclature);
     const reference = references[0];
     if (!reference || !inventoryNumberComparisonKey(reference.inventoryNumber)) { skipped++; continue; }
-    accepted.push({ rowNumber: index + 1, nomenclature, ...reference, ...(references.length > 1 ? { inventoryReferences: references } : {}), endingBalance: line[11] == null ? null : String(line[11]) });
+    accepted.push({ rowNumber: index + 1, nomenclature, oneCCode, ...reference, ...(references.length > 1 ? { inventoryReferences: references } : {}), endingBalance: line[11] == null ? null : String(line[11]) });
   }
   if (!accepted.length && !options.allowEmpty) throw new ApplicationError("validation", "material_snapshot_no_inventory_numbers");
   return { sha256, accepted, skipped };

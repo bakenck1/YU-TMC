@@ -336,6 +336,7 @@ export async function exportInventoryItems(
   items: InventoryItemDto[],
   title: string,
   visibleColumns?: readonly string[],
+  options: { canReadOneCCode: boolean } = { canReadOneCCode: true },
 ): Promise<Uint8Array> {
   const output = new PassThrough();
   const chunks: Buffer[] = [];
@@ -376,6 +377,7 @@ export async function exportInventoryItems(
     "name", "inventoryNumber", "oneCCode", "itemType", "brand", "model", "quantity", "unitPrice",
     "total", "building", "room", "status", "responsible", "createdAt", "updatedAt", "exportedAt",
   ]);
+  if (!options.canReadOneCCode) requested.delete("oneCCode");
   requested.add("name");
   const selectedColumns = allColumns.filter((column) => requested.has(column.key));
   sheet.columns = selectedColumns;
@@ -391,7 +393,7 @@ export async function exportInventoryItems(
     const row = sheet.addRow({
       name: item.name,
       inventoryNumber: item.inventoryNumber,
-      oneCCode: item.oneCCode ?? "",
+      oneCCode: options.canReadOneCCode ? item.oneCCode ?? "" : "",
       qrCode: item.qrCode ?? "",
       itemType: item.itemType,
       brand: item.brand ?? "",
