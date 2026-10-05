@@ -41,11 +41,28 @@ production-переменные из `.env.example`, включая `DATABASE_UR
 Backup читает только database-переменные из строк формата `KEY=value`; он не
 исполняет содержимое env-файла как shell-код.
 
+Web и push-worker читают отдельный `/etc/yu-inventory/yu-inventory-runtime.env`.
+Скрипт `deploy/prepare-runtime-env.mjs` создаёт его из основного файла без
+учётных данных мигратора. Пустые значения `DATABASE_MIGRATOR_URL` и
+`TEST_DATABASE_MIGRATOR_URL` предотвращают загрузку этих секретов из старого
+`.env.local`. Полный файл нужен только командам миграции и резервного копирования.
+Используйте одну строку `KEY=value` на переменную; переводы строк в значении
+сертификата задавайте как `\n`. Неподдерживаемый формат останавливает подготовку
+без вывода значений и без замены существующего runtime-файла.
+
 ## Первый запуск
 
-Выполните от имени `yu-inventory`:
+Выполните после размещения кода и настройки основного env-файла:
 
 ```bash
+sudo bash <<'FIRST_START'
+set -euo pipefail
+cd /opt/yu-inventory/current
+node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
+trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
+install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory.env .env.production.local
+sudo -u yu-inventory bash <<'SETUP'
+set -euo pipefail
 cd /opt/yu-inventory/current
 npm ci --include=dev
 npm run build
@@ -53,6 +70,8 @@ npm run db:migrate -- --target=production
 npm run db:import-settings -- --target=production
 npm run db:smoke -- --target=production
 mkdir -p .next/cache
+SETUP
+FIRST_START
 ```
 
 Если нужно перенести настройки со старой версии, вместо обычного импорта
@@ -171,14 +190,10 @@ DATABASE_TARGET=production
 
 Редактируйте через `sudoedit /etc/yu-inventory/yu-inventory.env`, затем
 выполните `sudo chmod 600 /etc/yu-inventory/yu-inventory.env`.
-Чтобы команды сборки и миграций получили ту же конфигурацию, что и systemd,
-скопируйте файл в игнорируемый Git файл приложения:
-
-```bash
-sudo install -o yu-inventory -g yu-inventory -m 600 \
-  /etc/yu-inventory/yu-inventory.env \
-  /opt/yu-inventory/current/.env.production.local
-```
+Сценарий ниже временно передаёт полный файл командам миграции и сборки через
+`.env.production.local`, затем заменяет его runtime-конфигурацией. Обработчик
+`EXIT` заменяет файл и при ошибке команды, чтобы учётные данные мигратора не
+оставались в каталоге приложения.
 
 Не используйте production-значения из примера development-базы; сохраните
 настоящие `DATABASE_URL`, `DATABASE_MIGRATOR_URL`, `DATABASE_DEPLOYMENT_ID`
@@ -188,34 +203,45 @@ sudo install -o yu-inventory -g yu-inventory -m 600 \
 Не коммитьте файлы с секретами.
 
 Изменения публикуются в `origin/codex/components-material-statement-code`.
-Для обновления непосредственно из этой ветки после резервной копии:
+Для обновления непосредственно из этой ветки:
 
 ```bash
-sudo systemctl stop yu-inventory yu-inventory-push-worker
-sudo -u yu-inventory bash <<'UPDATE'
-set -e
+sudo bash <<'DEPLOY'
+set -euo pipefail
+systemctl start yu-inventory-backup.service
+systemctl stop yu-inventory yu-inventory-push-worker
 cd /opt/yu-inventory/current
-git fetch origin
-git switch codex/components-material-statement-code
-git pull --ff-only origin codex/components-material-statement-code
+sudo -u yu-inventory git fetch origin
+sudo -u yu-inventory git switch codex/components-material-statement-code
+sudo -u yu-inventory git pull --ff-only origin codex/components-material-statement-code
+node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
+trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
+install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory.env .env.production.local
+sudo -u yu-inventory bash <<'UPDATE'
+set -euo pipefail
+cd /opt/yu-inventory/current
 npm ci --include=dev
 npm run db:migrate -- --target=production
 npm run db:smoke -- --target=production
 npm run build
+mkdir -p .next/cache
 UPDATE
-```
-
-Продолжайте только если все команды завершились успешно:
-
-```bash
-sudo systemctl restart yu-inventory yu-inventory-push-worker
-sudo systemctl --no-pager status yu-inventory yu-inventory-push-worker
-curl --fail --max-time 15 http://wa.yu.edu.kz/health
+install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env .env.production.local
+trap - EXIT
+install -o root -g root -m 644 deploy/systemd/yu-inventory.service /etc/systemd/system/yu-inventory.service
+install -o root -g root -m 644 deploy/systemd/yu-inventory-push-worker.service /etc/systemd/system/yu-inventory-push-worker.service
+systemctl daemon-reload
+systemctl restart yu-inventory yu-inventory-push-worker
+systemctl is-active --quiet yu-inventory
+systemctl is-active --quiet yu-inventory-push-worker
+curl --fail --silent --show-error --max-time 15 --retry 10 --retry-delay 1 --retry-connrefused --retry-max-time 30 https://inventory.yu.edu.kz/login >/dev/null
+DEPLOY
 ```
 
 Если эта ветка уже объединена в `master`, используйте `master` в командах
 `git switch` и `git pull`. `git push` сам по себе сайт не обновляет.
-Проверка `/health` показывает доступность шлюза, но готовность `otinish`
+Отдельная проверка `curl --fail --max-time 15 http://wa.yu.edu.kz/health`
+показывает доступность шлюза, но готовность `otinish`
 проверяйте отдельно в его консоли: нужен статус READY. После обновления
 создайте одну настоящую тестовую заявку между сотрудниками с WhatsApp-номерами
 и проверьте получение. Новые события отправляются после сохранения операции,
@@ -223,18 +249,12 @@ curl --fail --max-time 15 http://wa.yu.edu.kz/health
 Старые события и пропущенные уведомления автоматически не рассылаются.
 Отдельный WhatsApp-процесс или WhatsApp-worker поднимать не нужно.
 
-1. Сделайте и проверьте резервную копию PostgreSQL.
-2. Остановите web и worker: `sudo systemctl stop yu-inventory yu-inventory-push-worker`.
-3. Обновите код в `/opt/yu-inventory/current`, затем от имени `yu-inventory`
-   выполните `npm ci --include=dev`, `npm run build`, `npm run db:migrate -- --target=production`,
-   `npm run db:import-settings -- --target=production` и
-   `npm run db:smoke -- --target=production`.
-   Флаг `--include=dev` нужен и при `NODE_ENV=production`: сборка CSS использует
-   `@tailwindcss/postcss` из `devDependencies`. Если предыдущая сборка началась
-   без этого пакета, перед повторной сборкой переименуйте `.next` в том же
-   каталоге: Turbopack сохраняет кэш сборки внутри `.next`.
-4. Выполните `sudo systemctl restart yu-inventory yu-inventory-push-worker`.
-5. Проверьте `https://<домен>/login` и `journalctl -u yu-inventory -u yu-inventory-push-worker -n 100`.
+Флаг `--include=dev` нужен и при `NODE_ENV=production`: сборка CSS использует
+`@tailwindcss/postcss` из `devDependencies`. Если предыдущая сборка началась
+без этого пакета, перед повторной сборкой переименуйте `.next` в том же
+каталоге: Turbopack сохраняет кэш сборки внутри `.next`.
+После обновления сверьте `git log -1` и журналы
+`journalctl -u yu-inventory -u yu-inventory-push-worker -n 100`.
 
 Не удаляйте релиз до подтверждения работы. Откат схемы БД делается только
 проверенным восстановлением бэкапа или новой исправляющей миграцией.
