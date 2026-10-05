@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { buildInventorySourceAudit, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, type AuditItem, type AuditOneCRow, type AuditMatch } from "@/lib/inventory-source-audit";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
+import type { InventoryAuditInventoryState } from "@/lib/contracts/inventory-source-audit";
 import { parseStoredMaterialSnapshot } from "@/lib/server/material-snapshot";
 
 type Db = Pick<Pool, "query"> | PoolClient;
@@ -54,7 +55,7 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
       select $1,x.item_id,x.item_name,x.site_number,x.site_barcodes,x.number_kind,x.item_version,x.result,x.source,x.one_c_matches,x.excel_matches
       from jsonb_to_recordset($2::jsonb) as x(item_id uuid,item_name text,site_number text,site_barcodes jsonb,number_kind text,item_version integer,result text,source text,one_c_matches jsonb,excel_matches jsonb)`, [id, JSON.stringify(chunk)]);
   }
-  return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, batchVersion, snapshotId: String(snapshot.rows[0].id), algorithmVersion: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, excelAcceptedCount: parsedSnapshot.accepted.length, excelSkippedCount: parsedSnapshot.skipped };
+  return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, oneCLinksSha256: linksSha256(linkRows), batchVersion, snapshotId: String(snapshot.rows[0].id), algorithmVersion: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, excelAcceptedCount: parsedSnapshot.accepted.length, excelSkippedCount: parsedSnapshot.skipped };
 }
 
 export async function getInventorySourceAuditPage(db: Db, batchId: string, query: { page: number; pageSize: number; search?: string; result?: string; source?: string }) {
@@ -94,16 +95,58 @@ async function latestRun(db: Db, batchId: string) {
   const run = await db.query(`select a.*,s.filename,s.sha256,s.accepted_count,s.skipped_count,b.source_sha256 as batch_sha256,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'algorithmVersion' else null end as algorithm_version,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelAcceptedCount')::int else null end as excel_accepted_count,
-    case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelSkippedCount')::int else null end as excel_skipped_count
+    case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelSkippedCount')::int else null end as excel_skipped_count,
+    case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'oneCLinksSha256' else null end as one_c_links_sha256
     from ${SCHEMA}."inventory_source_audit_runs" a join ${SCHEMA}."material_snapshots" s on s.id=a.snapshot_id
     join ${SCHEMA}."one_c_import_batches" b on b.id=a.batch_id
     where a.batch_id=$1 order by a.run_at desc,a.id desc limit 1`, [batchId]);
   if (!run.rows[0]) throw new ApplicationError("not_found", "inventory_source_audit_not_found");
-  return run.rows[0] as Raw;
+  // Saved totals describe the dry-run, while these live counts reveal additions,
+  // removals and edits even if the total number of cards did not change.
+  const current = await db.query(`with live_barcodes as (
+      select item_id,jsonb_build_object('kind','official','value',original_value) as barcode
+        from ${SCHEMA}."barcode_registry" where kind='official'
+      union all
+      select item_id,jsonb_build_object('kind','local','value',barcode_value)
+        from ${SCHEMA}."local_item_groups" where status='active'
+    ), live as (
+      select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.status,i.quantity,i.version,
+        coalesce(br.barcodes,'[]'::jsonb) as barcodes
+      from ${SCHEMA}."items" i
+      left join (select item_id,jsonb_agg(barcode) as barcodes from live_barcodes group by item_id) br on br.item_id=i.id
+      where i.archived_at is null
+    ) select count(*)::int as current_total,
+      count(*) filter(where l.status='active')::int as current_active,
+      coalesce(sum(l.quantity),0)::float8 as current_quantity,
+      coalesce(sum(l.quantity) filter(where l.status='active'),0)::float8 as current_active_quantity,
+      count(*) filter(where s.item_id is null)::int as added,
+      count(*) filter(where s.item_id is not null and (s.item_version<>l.version or s.item_name<>l.name
+        or s.site_number<>l.inventory_number or s.number_kind<>l.inventory_number_kind::text
+        or not(coalesce(s.site_barcodes,'[]'::jsonb) @> l.barcodes and l.barcodes @> coalesce(s.site_barcodes,'[]'::jsonb))))::int as changed,
+      (select count(*)::int from ${SCHEMA}."inventory_source_audit_rows" saved
+        where saved.run_id=$1 and not exists(select 1 from live where live.id=saved.item_id)) as removed,
+      (select coalesce(jsonb_agg(jsonb_build_object('external_id',external_id,'item_id',item_id,'source_code',source_code)),'[]'::jsonb)
+        from ${SCHEMA}."item_one_c_links") as live_links
+    from live l left join ${SCHEMA}."inventory_source_audit_rows" s on s.run_id=$1 and s.item_id=l.id`, [run.rows[0].id]);
+  const state = current.rows[0];
+  const linksChanged = typeof run.rows[0].one_c_links_sha256 === "string"
+    && run.rows[0].one_c_links_sha256 !== linksSha256(state.live_links as Raw[]);
+  const inventory: InventoryAuditInventoryState = {
+    currentTotal: Number(state.current_total), currentActive: Number(state.current_active),
+    currentQuantity: Number(state.current_quantity), currentActiveQuantity: Number(state.current_active_quantity),
+    added: Number(state.added), removed: Number(state.removed), changed: Number(state.changed),
+    linksChanged, stale: Number(state.added) + Number(state.removed) + Number(state.changed) > 0 || linksChanged,
+  };
+  return { ...run.rows[0], inventory } as Raw & { inventory: InventoryAuditInventoryState };
 }
 
 function mapAuditRow(row: Raw): AuditMatch {
   return { itemId: String(row.item_id), itemName: String(row.item_name), siteNumber: String(row.site_number), siteBarcodes: row.site_barcodes as AuditMatch["siteBarcodes"], numberKind: String(row.number_kind), itemVersion: Number(row.item_version), result: row.result as AuditMatch["result"], source: row.source as AuditMatch["source"], oneC: row.one_c_matches as AuditMatch["oneC"], excel: row.excel_matches as AuditMatch["excel"] };
 }
 function nullable(value: unknown) { return typeof value === "string" && value.trim() ? value : null; }
+function linksSha256(rows: Raw[]) {
+  const values = rows.map((row) => [String(row.external_id), String(row.item_id), nullable(row.source_code)])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
+}
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }

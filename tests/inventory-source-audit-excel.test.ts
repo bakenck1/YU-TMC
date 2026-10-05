@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Workbook } from "exceljs";
 import { exportInventorySourceAuditExcel } from "../lib/server/excel/inventory-source-audit-excel";
-import { buildInventorySourceAudit, extractExcelInventoryReferences, type AuditItem, type ExcelSourceRow } from "../lib/inventory-source-audit";
+import { buildInventorySourceAudit, extractExcelInventoryReferences, type AuditItem, type AuditMatch, type ExcelSourceRow } from "../lib/inventory-source-audit";
 import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
 
 test("audit workbook mirrors item rows, retains duplicate details and writes untrusted cells as text", async () => {
@@ -129,4 +129,49 @@ test("export preserves the matched later literal range and names the closest dup
   assert.equal(oneCDetails.getCell("C3").value, "a-unrelated");
   assert.equal(oneCDetails.getCell("L2").value, "Да");
   assert.equal(oneCDetails.getCell("L3").value, "Нет");
+});
+
+test("audit export labels search sources and separates saved counts from current records and quantities", async () => {
+  const rows: AuditMatch[] = ["1c", "excel", "1c+excel"].map((source, index) => ({
+    itemId: `item-${index}`, itemName: "Скамья", siteNumber: `050-000028${index}`,
+    siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched",
+    source: source as AuditMatch["source"], oneC: [], excel: [],
+  }));
+  const bytes = await exportInventorySourceAuditExcel({
+    run: {
+      batch_id: "batch", batch_version: 12, sha256: "b".repeat(64), excel_accepted_count: 3500,
+      counts: { total: 1988, oneCOnly: 736, excelOnly: 294, both: 67, missing: 891, temporary: 669, possible: 325 },
+      inventory: { currentTotal: 2040, currentActive: 2000, currentQuantity: 2500, currentActiveQuantity: 2450, added: 52, removed: 0, changed: 3, linksChanged: true, stale: true },
+    }, rows,
+  });
+  const workbook = new Workbook();
+  await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  const sheet = workbook.getWorksheet("Все ТМЦ")!;
+  assert.deepEqual([sheet.getCell("B2").value, sheet.getCell("B3").value, sheet.getCell("B4").value], ["ОС", "Материальный предмет", "ОС + Материальный предмет"]);
+  const summary = workbook.getWorksheet("Сводка")!;
+  const fields = new Map<string, unknown>();
+  summary.eachRow((row) => fields.set(String(row.getCell(1).value), row.getCell(2).value));
+  assert.equal(summary.getCell("B8").value, "b".repeat(64));
+  assert.equal(summary.getCell("B10").value, 3500);
+  assert.equal(fields.get("Сохранённая сверка: записей ТМЦ"), 1988);
+  assert.equal(fields.get("Сохранённая сверка: ОС"), 736);
+  assert.equal(fields.get("Сохранённая сверка: Материальный предмет"), 294);
+  assert.equal(fields.get("Сохранённая сверка: ОС + Материальный предмет"), 67);
+  assert.equal(fields.get("Сохранённая сверка: не найдено"), 891);
+  assert.equal(fields.get("Сохранённая сверка: из них временные"), 669);
+  assert.equal(fields.get("Сохранённая сверка: из найденных возможные"), 325);
+  assert.equal(fields.get("Сейчас: всего записей ТМЦ"), 2040);
+  assert.equal(fields.get("Сейчас: активных записей ТМЦ"), 2000);
+  assert.equal(fields.get("Сейчас: всего единиц ТМЦ"), 2500);
+  assert.equal(fields.get("Сейчас: активных единиц ТМЦ"), 2450);
+  assert.equal(fields.get("После dry-run: добавлено записей"), 52);
+  assert.equal(fields.get("После dry-run: удалено записей"), 0);
+  assert.equal(fields.get("После dry-run: изменено записей"), 3);
+  assert.equal(fields.get("После dry-run: изменились связи с 1С"), "Да");
+  assert.equal(fields.get("Состояние сохранённой сверки"), "Устарела — повторите dry-run");
+  assert.match(String(fields.get("Что означают категории")), /источники поиска/u);
+  assert.match(String(fields.get("Что означают категории")), /учётную категорию/u);
+  assert.match(String(fields.get("Записи и единицы ТМЦ")), /Количество/u);
+  assert.equal(fields.has("oneCOnly"), false);
+  assert.equal(fields.has("excelOnly"), false);
 });
