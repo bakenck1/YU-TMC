@@ -46,11 +46,14 @@ function item(id: string, responsibleId: string | null = null): InventoryItemRec
   };
 }
 
-function createService(methods: Partial<InventoryItemRepository>) {
+function createService(methods: Partial<InventoryItemRepository>, onTransaction?: () => void) {
   const repositories = { items: methods as InventoryItemRepository } satisfies InventoryItemRepositories;
   const unitOfWork: UnitOfWork<InventoryItemRepositories> = {
     read: async (work) => work(repositories),
-    transaction: async (work) => work(repositories),
+    transaction: async (work) => {
+      onTransaction?.();
+      return work(repositories);
+    },
   };
   let sequence = 0;
   let entropySequence = 0;
@@ -108,6 +111,70 @@ test("component mutations are administrator-only and reject self-links", async (
     service.addComponent(IDS[0], IDS[0], { userId: IDS[0], role: "admin" }),
     /item_cannot_contain_itself/,
   );
+});
+
+test("adds multiple distinct selections in one transaction with audits for both sides", async () => {
+  const thirdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const records = [item(IDS[0]), item(IDS[1]), item(thirdId)];
+  const inserted: Array<{ leftItemId: string; rightItemId: string }> = [];
+  const audits: Array<{ subjectId: string; action: string }> = [];
+  let transactions = 0;
+  const service = createService({
+    findItemById: async (id) => records.find((record) => record.id === id) ?? null,
+    insertComponent: async (record) => { inserted.push(record); },
+    appendAudit: async (record) => { audits.push(record); },
+    listComponents: async () => records.slice(1),
+  }, () => { transactions += 1; });
+
+  const result = await service.addComponents(IDS[0], [thirdId.toUpperCase(), IDS[1], thirdId], {
+    userId: IDS[0], role: "admin",
+  });
+
+  assert.equal(transactions, 1);
+  assert.deepEqual(inserted.map((relation) => [relation.leftItemId, relation.rightItemId]), [
+    [IDS[0], IDS[1]], [IDS[0], thirdId],
+  ]);
+  assert.deepEqual(result.map((record) => record.id), [IDS[1], thirdId]);
+  assert.equal(audits.length, 4);
+  assert.equal(audits.filter((audit) => audit.subjectId === IDS[0]).length, 2);
+  assert.ok(audits.every((audit) => audit.action === "item.component_added"));
+});
+
+test("batch addition rejects unauthorized and malformed selections before accessing persistence", async () => {
+  let transactions = 0;
+  const service = createService({}, () => { transactions += 1; });
+  const admin = { userId: IDS[0], role: "admin" } as const;
+  await assert.rejects(service.addComponents(IDS[0], [IDS[1]], {
+    userId: "employee", role: "employee",
+  }), /forbidden/);
+  for (const selection of [[], null, "invalid", [123]]) {
+    await assert.rejects(service.addComponents(IDS[0], selection as string[], admin), /invalid_request/);
+  }
+  await assert.rejects(service.addComponents(IDS[0], [IDS[1], "invalid"], admin), /invalid_id/);
+  await assert.rejects(service.addComponents(IDS[0], [IDS[1], IDS[0]], admin), /item_cannot_contain_itself/);
+  assert.equal(transactions, 0);
+});
+
+test("batch prevalidation prevents any writes when a later selection is invalid", async () => {
+  const thirdId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const invalidCandidates = [
+    { record: null, code: "item_not_found" },
+    { record: { ...item(thirdId), status: "decommissioned" as const }, code: "item_component_decommissioned" },
+    { record: { ...item(thirdId), status: "decommissioned_in_use" as const }, code: "item_component_decommissioned" },
+    { record: { ...item(thirdId), itemSection: "it" as const }, code: "item_component_section_mismatch" },
+  ];
+  for (const candidate of invalidCandidates) {
+    let writes = 0;
+    const service = createService({
+      findItemById: async (id) => id === thirdId ? candidate.record : item(id),
+      insertComponent: async () => { writes += 1; },
+      appendAudit: async () => { writes += 1; },
+    });
+    await assert.rejects(service.addComponents(IDS[0], [IDS[1], thirdId], {
+      userId: IDS[0], role: "admin",
+    }), new RegExp(candidate.code));
+    assert.equal(writes, 0);
+  }
 });
 
 test("employee sees only assigned or open-room linked items", async () => {
