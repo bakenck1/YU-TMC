@@ -99,7 +99,7 @@ API.
    настройте `DATABASE_URL` перед `npm run dev:next`.
 
 3. Открыть в браузере `http://localhost:3000/api`.
-4. Нажать **Authorize**, вставить `dockflow-local-test-key` без слова
+4. Нажать **Authorize**, вставить `<ваш DOCKFLOW_TEST_API_KEY>` без слова
    `Bearer`, затем выполнить любой метод через **Try it out**.
 
 Проверка без Swagger:

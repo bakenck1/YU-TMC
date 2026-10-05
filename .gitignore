@@ -36,6 +36,12 @@ compose.yaml
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+.pgpass
+id_rsa
+id_ed25519
 
 # debug
 npm-debug.log*
@@ -67,6 +73,7 @@ yarn-error.log*
 
 # local agent/editor state and deployment bundles
 /.claude/
+/.codex-worktrees/
 /.tmp-dockflow-deploy/
 /.artifacts/
 /.private-transfer/
