@@ -72,6 +72,36 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
     });
   });
 
+  it("skips a rename that breaks a shared monitor/system-unit number, including an archived peer, without blocking other cards", async () => {
+    const paired = await createFixture({ sharedNumberPeer: true });
+    const independent = await createFixture({ inventoryNumber: "2411/00389" });
+    await expect(runtimePool.query(`update "yu_inventory"."items" set name=$2 where id=$1`, [paired.itemId, SOURCE_NAME]))
+      .rejects.toMatchObject({ code: "23505", message: "inventory number duplicate is allowed only for one monitor and one system unit" });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(independent.batchId, independent.actor);
+    expect(plan.rows.find((row) => row.itemId === paired.itemId)).toMatchObject({
+      eligible: false, changed: false, reason: "shared_number_conflict", nextName: "Монитор",
+    });
+    expect(plan.counts).toEqual({ ready: 1, unchanged: 0, skipped: 1 });
+    const result = await service.apply(independent.batchId, plan, independent.actor);
+    expect(result).toMatchObject({ updated: 1, skipped: 1 });
+    expect(await itemState(paired.itemId)).toMatchObject({ name: "Монитор", one_c_code: null, version: 1 });
+    expect(await itemState(independent.itemId)).toMatchObject({ one_c_code: "00003254", version: 2 });
+    expect(await service.apply(independent.batchId, plan, independent.actor)).toEqual(result);
+  });
+
+  it.each([
+    { sourceName: "Монитор Dell №2411/00388", expectedName: "Монитор Dell №2411/00388", oneCOnly: false },
+    { sourceName: "Монитор", expectedName: "Монитор", oneCOnly: true },
+  ])("allows a compatible shared-number rename or code-only update: $sourceName", async ({ sourceName, expectedName, oneCOnly }) => {
+    const fixture = await createFixture({ sharedNumberPeer: true, sourceName, oneCOnly });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    expect(plan.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+    expect(await itemState(fixture.itemId)).toMatchObject({ name: expectedName, one_c_code: "00003254", version: 2 });
+  });
+
   it("persists both preferred 1C values even when Excel supplies a different code", async () => {
     const fixture = await createFixture({ excelCode: "00003255" });
     const service = new InventoryAuditEnrichmentService(runtimePool);
@@ -305,6 +335,30 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
     expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
   });
 
+  it("returns a recoverable domain conflict if the duplicate policy rejects an apply, with all changes rolled back", async () => {
+    const fixture = await createFixture();
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.preview(fixture.batchId, fixture.actor);
+    await migrationPool.query(`create function "yu_inventory".reject_enrichment_name_test() returns trigger language plpgsql as $$
+      begin
+        raise exception using errcode='23505', message='inventory number duplicate is allowed only for one monitor and one system unit';
+      end;
+      $$`);
+    await migrationPool.query(`create trigger reject_enrichment_name_test before update of name on "yu_inventory"."items"
+      for each row execute function "yu_inventory".reject_enrichment_name_test()`);
+    try {
+      await expect(service.apply(fixture.batchId, plan, fixture.actor)).rejects.toMatchObject({
+        kind: "conflict", publicCode: "inventory_audit_enrichment_shared_number_conflict",
+      });
+      expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
+      await expectNoEnrichmentAudit();
+    } finally {
+      await migrationPool.query(`drop trigger if exists reject_enrichment_name_test on "yu_inventory"."items"`);
+      await migrationPool.query(`drop function if exists "yu_inventory".reject_enrichment_name_test()`);
+    }
+    expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
+  });
+
   it("serializes simultaneous applications of the same reviewed plan and safely replays after settlement", async () => {
     const fixture = await createFixture();
     const service = new InventoryAuditEnrichmentService(runtimePool);
@@ -328,7 +382,7 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
   });
 });
 
-async function createFixture(options: { excelCode?: string; excelOnly?: boolean; oneCOnly?: boolean; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean } = {}) {
+async function createFixture(options: { excelCode?: string; excelOnly?: boolean; oneCOnly?: boolean; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean; sharedNumberPeer?: boolean; inventoryNumber?: string; sourceName?: string } = {}) {
   const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID(), externalId = randomUUID();
   await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
     values($1,$2,$3,'Enrichment admin','admin',now(),now())`, [userId, `enrich-${userId.slice(0, 8)}`, `${userId}@example.test`]);
@@ -338,10 +392,17 @@ async function createFixture(options: { excelCode?: string; excelOnly?: boolean;
     values($1,$2,'101',$3,1,$4,$4)`, [roomId, buildingId, `enrich-${roomId}`, userId]);
   await runtimePool.query(`insert into "yu_inventory"."items"
     (id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
-    values($1,$2,'electronics',1,100,$3,'official','2411/00388','2411/00388',$4,$4)`, [itemId, ORIGINAL_NAME, roomId, userId]);
-  await uploadMaterialSnapshot("материалы 2026.xls", materialFile(options.excelCode ?? "00003254", options.oneCOnly ? "Другая запись №9999/00388" : SOURCE_NAME), userId, runtimePool);
+    values($1,$2,'electronics',1,100,$3,'official',$5::text,$5::text,$4,$4)`, [itemId, options.sharedNumberPeer ? "Монитор" : ORIGINAL_NAME, roomId, userId, options.inventoryNumber ?? "2411/00388"]);
+  if (options.sharedNumberPeer) {
+    await runtimePool.query(`insert into "yu_inventory"."items"
+      (id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by,archived_at,archived_by)
+      values($1,'Системный блок','electronics',1,100,$2,'official',$4::text,$4::text,$3,$3,now(),$3)`,
+    [randomUUID(), roomId, userId, options.inventoryNumber ?? "2411/00388"]);
+  }
+  const sourceName = options.sourceName ?? (options.inventoryNumber ? SOURCE_NAME.replace("2411/00388", options.inventoryNumber) : SOURCE_NAME);
+  await uploadMaterialSnapshot("материалы 2026.xls", materialFile(options.excelCode ?? "00003254", options.oneCOnly ? "Другая запись №9999/00388" : sourceName), userId, runtimePool);
   const asset: OneCFixedAsset = {
-    externalId, code: "00003254", inventoryNumber: "241100388", barcode: null, name: SOURCE_NAME, category: null,
+    externalId, code: "00003254", inventoryNumber: (options.inventoryNumber ?? "2411/00388").replace("/", ""), barcode: null, name: sourceName, category: null,
     location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null,
     quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null,
   };

@@ -173,6 +173,20 @@ test("GET and POST retain the stale-plan domain conflict with private no-store r
   }
 });
 
+test("a rolled-back shared-number violation is a private domain conflict, not an uncertain server failure", async () => {
+  const handlers = createInventoryAuditEnrichmentHandlers({
+    authenticate: async () => ACTOR,
+    service: () => ({
+      preview: async () => ({}),
+      apply: async () => { throw new ApplicationError("conflict", "inventory_audit_enrichment_shared_number_conflict"); },
+    }),
+  });
+  const response = await handlers.POST(jsonRequest(INPUT), CONTEXT);
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "inventory_audit_enrichment_shared_number_conflict" });
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+});
+
 test("unexpected errors hide internal details and remain uncached", async () => {
   const handlers = createInventoryAuditEnrichmentHandlers({
     authenticate: async () => ACTOR,

@@ -44,7 +44,12 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
       const body = await response.json();
       if (current !== generation.current) return;
       if (!response.ok) {
-        if (response.status === 409) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error("Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения."); }
+        if (response.status === 409) {
+          definitiveFailure = true; setPlan(null); setUncertain(false);
+          throw new Error(body.error === "inventory_audit_enrichment_shared_number_conflict"
+            ? "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и запустите dry-run заново."
+            : "Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения.");
+        }
         if (response.status === 401 || response.status === 403) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error("Недостаточно прав для обновления карточек."); }
         throw new Error("Не удалось получить результат. Повторите проверку.");
       }
@@ -122,6 +127,7 @@ function reasonLabel(row: InventoryAuditEnrichmentRow) {
       : "Нет подтверждения в Excel — проверьте файл и полный номер";
   }
   const labels: Record<string, string> = {
+    shared_number_conflict: "Новое название нарушает правило общего номера для монитора и системного блока — проверьте обе карточки, включая архив",
     sources_missing: "Нет подтверждения в источниках — проверьте полные номера", code_missing: "Код не указан в выбранной записи источника",
     code_invalid: "Код выбранной записи не подходит для сохранения",
     code_conflict: "Коды источников или карточки не совпадают — проверьте значения",

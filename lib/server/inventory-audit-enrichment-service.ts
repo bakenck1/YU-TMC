@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
-import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem } from "@/lib/inventory-audit-enrichment";
+import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem, type InventoryAuditEnrichmentPlan } from "@/lib/inventory-audit-enrichment";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
 import { exportInventorySourceAudit } from "@/lib/server/inventory-source-audit-service";
 import type { OneCAdminActor } from "@/lib/server/http/one-c-reconciliation-admin-handler";
@@ -32,10 +32,12 @@ export class InventoryAuditEnrichmentService {
       if (plan.runId !== input.runId || plan.planHash !== input.planHash) throw stale();
       const result: ApplyResult = { updated: plan.counts.ready, unchanged: plan.counts.unchanged, skipped: plan.counts.skipped, planHash: plan.planHash };
       for (const row of plan.rows.filter((entry) => entry.eligible && entry.changed)) {
-        const updated = await client.query(`update "yu_inventory"."items" set name=$3,one_c_code=$4,
-          version=version+1,updated_at=now(),updated_by=$5
+        const rename = row.nextName !== row.currentName;
+        // A code-only change must not invoke the UPDATE OF name identity trigger.
+        const updated = await client.query(`update "yu_inventory"."items" set ${rename ? "name=$5," : ""}one_c_code=$3,
+          version=version+1,updated_at=now(),updated_by=$4
           where id=$1 and version=$2 and archived_at is null and item_section='general' returning id`,
-        [row.itemId, row.itemVersion, row.nextName, row.nextCode, actor.userId]);
+        [row.itemId, row.itemVersion, row.nextCode, actor.userId, ...(rename ? [row.nextName] : [])]);
         if (updated.rowCount !== 1) throw stale();
         await client.query(`insert into "yu_inventory"."audit_records"
           (id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,before_values,after_values,metadata)
@@ -92,9 +94,47 @@ export class InventoryAuditEnrichmentService {
       return { ...row, oneC };
     });
     const plan = buildInventoryAuditEnrichmentPlan(evidence, items);
+    await this.checkSharedNumbers(client, plan);
     const planHash = createHash("sha256").update(JSON.stringify({ runId: data.run.id,
       registryHash, excelSha256: data.run.sha256, rows: plan.rows })).digest("hex");
     return { runId: String(data.run.id), planHash, ...plan };
+  }
+
+  private async checkSharedNumbers(client: PoolClient, plan: InventoryAuditEnrichmentPlan) {
+    const renames = plan.rows.filter((row) => row.eligible && row.changed && row.nextName !== row.currentName)
+      .map((row) => ({ id: row.itemId, next_name: row.nextName }));
+    if (!renames.length) return;
+    // Use the database's classifier and stored identity key, including archived
+    // peers. Both intermediate and final names must satisfy the trigger so the
+    // result does not depend on which card is updated first.
+    const conflicts = await client.query<{ id: string }>(`with proposed as (
+        select * from jsonb_to_recordset($1::jsonb) as p(id uuid,next_name text)
+      )
+      select target.id from proposed p join "yu_inventory"."items" target on target.id=p.id
+      cross join lateral (
+        select count(*) as peer_count,
+          min("yu_inventory"."inventory_shared_number_device"(other.name)) as current_device,
+          min("yu_inventory"."inventory_shared_number_device"(coalesce(next.next_name,other.name))) as next_device
+        from "yu_inventory"."items" other left join proposed next on next.id=other.id
+        where other.inventory_number_key=target.inventory_number_key and other.id<>target.id
+      ) peers
+      where not (target.item_section='general' and target.item_type='components'
+        and target.inventory_number='' and target.inventory_number_key='')
+      and (peers.peer_count=0 or (peers.peer_count=1
+        and "yu_inventory"."inventory_shared_number_device"(p.next_name)<>peers.current_device
+        and "yu_inventory"."inventory_shared_number_device"(p.next_name)<>peers.next_device)) is not true`,
+    [JSON.stringify(renames)]);
+    const blocked = new Set(conflicts.rows.map((row) => row.id));
+    for (const row of plan.rows) {
+      if (!blocked.has(row.itemId)) continue;
+      row.eligible = false;
+      row.changed = false;
+      row.reason = "shared_number_conflict";
+      row.nextName = row.currentName;
+      row.nextCode = row.currentCode;
+      plan.counts.ready--;
+      plan.counts.skipped++;
+    }
   }
 
   private async transaction<T>(actor: OneCAdminActor, mutation: boolean, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -112,6 +152,10 @@ export class InventoryAuditEnrichmentService {
     } catch (error) {
       await client.query("rollback").catch(() => undefined);
       if (error && typeof error === "object" && "code" in error && ["40001", "40P01"].includes(String(error.code))) throw stale();
+      if (error instanceof Error && "code" in error && error.code === "23505"
+        && error.message === "inventory number duplicate is allowed only for one monitor and one system unit") {
+        throw new ApplicationError("conflict", "inventory_audit_enrichment_shared_number_conflict");
+      }
       throw error;
     } finally { client.release(); }
   }

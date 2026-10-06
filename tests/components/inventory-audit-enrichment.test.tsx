@@ -74,6 +74,32 @@ describe("reviewing and applying confirmed inventory codes", () => {
     expect(props.onApplied).not.toHaveBeenCalled();
   });
 
+  it("explains a rolled-back shared-number conflict and allows reviewing a new plan", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply({ plan }))
+      .mockResolvedValueOnce(reply({ error: "inventory_audit_enrichment_shared_number_conflict" }, 409)));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Обновление отменено: название нарушает правило общего номера");
+    expect(screen.queryByRole("button", { name: "Проверить результат обновления" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(props.onApplied).not.toHaveBeenCalled();
+  });
+
+  it("shows and filters shared-number skips without offering the rejected rename", async () => {
+    const skippedPlan = { ...plan, counts: { ready: 0, unchanged: 0, skipped: 1 }, rows: [
+      { ...plan.rows[0], currentName: "Монитор", nextName: "Монитор", eligible: false, changed: false, reason: "shared_number_conflict" },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: skippedPlan })));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    expect((await screen.findByRole("list", { name: "Причины пропуска" })).textContent).toContain("включая архив: 1");
+    fireEvent.change(screen.getByRole("combobox", { name: "Какие обновления показать" }), { target: { value: "reason:shared_number_conflict" } });
+    expect(within(screen.getByRole("table")).getByRole("link", { name: "Монитор" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    expect(screen.queryByText("00003254")).toBeNull();
+  });
+
   it("recovers an ambiguous lost response by replaying the same plan rather than inventing another update", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan })).mockRejectedValueOnce(new TypeError("network lost"))
       .mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
