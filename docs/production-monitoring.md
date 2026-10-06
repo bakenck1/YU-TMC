@@ -65,6 +65,25 @@ The parser accepts both the JSON envelope and older journal text lines. Its JSON
 path is allowlist-based; the legacy text path applies defensive redaction before
 writing a report.
 
+## Navigation and private photo failures
+
+The sidebar keeps the last verified user during a temporary session read failure
+and shows a retry control. A definitive HTTP 401 clears the user. Initial session
+reads have a 15-second timeout and at most three automatic attempts, respecting
+`Retry-After`; a failed request cannot restore the user after logout.
+
+Private photo GET requests and session reads have separate durable limits:
+300 photos and 60 session reads per authenticated account per minute. Invalid
+or absent session tokens use a 20-request limit per IP in each of these scopes.
+These budgets use verified signed session subjects; live account revocation,
+phone setup, and item access checks still run before bytes are returned.
+Photo uploads, deletes, and other APIs retain the general request limit.
+
+A failed item thumbnail offers a retry button. A missing photo has no photo
+count badge. If a photo still fails, inspect its authenticated network response:
+401 requires sign-in, 403 requires checking access, 404 requires checking the
+stored photo, and 429 requires waiting for the request budget to reset.
+
 ## Legacy evidence report
 
 The same journal contains aggregate `legacy.usage` events for all six entries in

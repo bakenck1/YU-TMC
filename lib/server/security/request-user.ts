@@ -9,12 +9,12 @@ import {
 } from "@/lib/security/permissions";
 import { sessionFromRequest } from "@/lib/security/session";
 import { verifySessionToken } from "@/lib/security/session";
-import { consumeApiRateLimit } from "@/lib/security/rate-limiter";
+import { consumeApiRateLimit, consumePhotoReadRateLimit } from "@/lib/security/rate-limiter";
 import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import { emitLegacyUsage } from "@/lib/server/observability";
 
-export async function requireCurrentUser(request: Request) {
-  const user = await requirePhoneSetupUser(request);
+export async function requireCurrentUser(request: Request, options?: { photoRead?: boolean }) {
+  const user = await requirePhoneSetupUser(request, options);
   if (user.whatsappPhoneRequired) {
     throw new ApplicationError("forbidden", "whatsapp_phone_required");
   }
@@ -22,9 +22,11 @@ export async function requireCurrentUser(request: Request) {
 }
 
 /** Authentication-only entry point for completing the mandatory phone setup. */
-export async function requirePhoneSetupUser(request: Request) {
+export async function requirePhoneSetupUser(request: Request, options?: { photoRead?: boolean }) {
   requireSameOriginMutation(request);
-  const limit = await consumeApiRateLimit(request);
+  const limit = options?.photoRead && request.method === "GET"
+    ? await consumePhotoReadRateLimit(request)
+    : await consumeApiRateLimit(request);
   if (!limit.allowed) {
     throw new ApplicationError("rate_limited", "too_many_requests", {
       safeDetails: { retryAfterSeconds: String(limit.retryAfterSeconds) },

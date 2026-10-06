@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireCurrentUser(request, { photoRead: true });
     const actor = authorizationActor(user);
     const url = new URL(request.url);
     const value = url.searchParams.get("value");

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const get = createTmcTransferRequestPhotoGetHandler({
-  authenticate: requireCurrentUser,
+  authenticate: (request) => requireCurrentUser(request, { photoRead: true }),
   getItemPhoto: (requestId, itemId, actor) =>
     getApplicationServices().tmcTransferRequests.getItemPhoto(
       requestId,

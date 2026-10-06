@@ -13,7 +13,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireCurrentUser(request, { photoRead: true });
     const { id } = await context.params;
     if (!isUuid(id)) throw new ApplicationError("validation", "invalid_id");
     const photo = await getApplicationServices().items.getDecommissionedUsagePhoto(

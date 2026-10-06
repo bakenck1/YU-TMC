@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  consumeApiRateLimit,
+  consumeSessionReadRateLimit,
   rateLimitedResponse,
   rateLimitHeaders,
 } from "@/lib/security/rate-limiter";
@@ -20,7 +20,7 @@ export function GET(request: NextRequest) {
 }
 
 async function readSession(request: NextRequest) {
-  const apiLimit = await consumeApiRateLimit(request);
+  const apiLimit = await consumeSessionReadRateLimit(request);
   if (!apiLimit.allowed) return rateLimitedResponse(apiLimit);
 
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
