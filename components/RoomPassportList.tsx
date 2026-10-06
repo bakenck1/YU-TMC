@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Building2, MessageSquareText, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import { PASSPORT_STATUSES, type PassportStatus, type RoomPassportDto } from "@/lib/contracts/room-passports";
 import type { TranslationKey } from "@/lib/i18n";
+import { EMPTY_PASSPORT_FILTERS, PASSPORT_LIST_PATH, normalizePassportFilters, parsePassportFilters, passportDetailsHref, passportListHref, type RoomPassportFilters } from "@/lib/room-passport-list-state";
 
 const STATUS_STYLES: Record<PassportStatus, string> = {
   not_started: "border-zinc-200 bg-zinc-100 text-zinc-700",
@@ -19,15 +20,34 @@ function passportPriority(status: PassportStatus, prioritizeReview: boolean) {
   return prioritizeReview && status === "in_review" ? 0 : 1;
 }
 
-export default function RoomPassportList({ passports, prioritizeReview = false }: {
+export default function RoomPassportList({ passports, prioritizeReview = false, initialFilters = EMPTY_PASSPORT_FILTERS }: {
   passports: RoomPassportDto[];
   prioritizeReview?: boolean;
+  initialFilters?: RoomPassportFilters;
 }) {
   const { t, dataLabel } = useAppSettings();
-  const [building, setBuilding] = useState("");
-  const [floor, setFloor] = useState("");
-  const [room, setRoom] = useState("");
-  const [status, setStatus] = useState("");
+  const [filters, setFilters] = useState(() => normalizePassportFilters(
+    typeof window !== "undefined" && window.location.pathname === PASSPORT_LIST_PATH
+      ? parsePassportFilters(new URLSearchParams(window.location.search)) : initialFilters,
+    passports,
+  ));
+  const currentFilters = normalizePassportFilters(filters, passports);
+  const { building, floor, room, status } = currentFilters;
+  if (filters.building !== building || filters.floor !== floor || filters.room !== room) setFilters(currentFilters);
+  const listHref = passportListHref(currentFilters);
+  function updateFilters(change: Partial<RoomPassportFilters>) { setFilters({ ...currentFilters, ...change }); }
+  useEffect(() => {
+    if (window.location.pathname === PASSPORT_LIST_PATH && `${window.location.pathname}${window.location.search}` !== listHref) {
+      window.history.replaceState(null, "", listHref);
+    }
+  }, [listHref]);
+  useEffect(() => {
+    function restoreFilters() {
+      if (window.location.pathname === PASSPORT_LIST_PATH) setFilters(parsePassportFilters(new URLSearchParams(window.location.search)));
+    }
+    window.addEventListener("popstate", restoreFilters);
+    return () => window.removeEventListener("popstate", restoreFilters);
+  }, []);
   const buildings = [...new Map(passports.map(row => [row.buildingId, row.buildingName])).entries()];
   const byBuilding = passports.filter(row => !building || row.buildingId === building);
   const floors = [...new Set(byBuilding.map(row => row.floorNumber))].sort((a, b) => a - b);
@@ -56,7 +76,7 @@ export default function RoomPassportList({ passports, prioritizeReview = false }
       {prioritizeReview ? <button
         type="button"
         aria-pressed={status === "in_review"}
-        onClick={() => setStatus(current => current === "in_review" ? "" : "in_review")}
+        onClick={() => updateFilters({ status: status === "in_review" ? "" : "in_review" })}
         className={`inline-flex min-h-12 items-center gap-3 rounded-xl border px-4 text-sm font-semibold text-orange-900 transition-colors hover:bg-orange-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700 ${status === "in_review" ? "border-orange-500 bg-orange-200" : "border-orange-200 bg-orange-100"}`}
       >
         {t("passport.status.in_review")}{" "}
@@ -66,13 +86,13 @@ export default function RoomPassportList({ passports, prioritizeReview = false }
     <section aria-label={t("passport.filters")} className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800"><SlidersHorizontal size={16} aria-hidden="true" />{t("passport.filters")}</h2>
-        <button type="button" disabled={!building && !floor && !room && !status} onClick={() => { setBuilding(""); setFloor(""); setRoom(""); setStatus(""); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-default disabled:text-zinc-400 disabled:hover:bg-transparent"><RotateCcw size={14} aria-hidden="true" />{t("passport.reset")}</button>
+        <button type="button" disabled={!building && !floor && !room && !status} onClick={() => setFilters({ ...EMPTY_PASSPORT_FILTERS })} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-default disabled:text-zinc-400 disabled:hover:bg-transparent"><RotateCcw size={14} aria-hidden="true" />{t("passport.reset")}</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {select("passport.building", building, value => { setBuilding(value); setFloor(""); setRoom(""); }, buildings.map(([id, name]) => [id, dataLabel(name)]))}
-        {select("passport.floor", floor, value => { setFloor(value); setRoom(""); }, floors.map(value => [String(value), String(value)]))}
-        {select("passport.room", room, setRoom, rooms.map(row => [row.roomId, `${row.designation} · ${dataLabel(row.buildingName)} · ${row.floorLabel ?? row.floorNumber}`]))}
-        {select("passport.status", status, setStatus, PASSPORT_STATUSES.map(value => [value, t(`passport.status.${value}`)]))}
+        {select("passport.building", building, value => updateFilters({ building: value, floor: "", room: "" }), buildings.map(([id, name]) => [id, dataLabel(name)]))}
+        {select("passport.floor", floor, value => updateFilters({ floor: value, room: "" }), floors.map(value => [String(value), String(value)]))}
+        {select("passport.room", room, value => updateFilters({ room: value }), rooms.map(row => [row.roomId, `${row.designation} · ${dataLabel(row.buildingName)} · ${row.floorLabel ?? row.floorNumber}`]))}
+        {select("passport.status", status, value => updateFilters({ status: value as RoomPassportFilters["status"] }), PASSPORT_STATUSES.map(value => [value, t(`passport.status.${value}`)]))}
       </div>
     </section>
     <p className="text-sm text-zinc-500" aria-live="polite">{t("passport.foundRooms")}: <span className="font-semibold tabular-nums text-zinc-700">{filtered.length}</span></p>
@@ -81,7 +101,7 @@ export default function RoomPassportList({ passports, prioritizeReview = false }
         const remark = row.status === "in_progress" && row.rejectionReason ? t(`passport.reason.${row.rejectionReason}`) : null;
         return <article key={row.roomId} className="min-w-0">
         <Link
-          href={`/room-passports/${row.roomId}`}
+          href={passportDetailsHref(row.roomId, listHref)}
           aria-label={`${t("passport.open")}: ${row.designation} · ${dataLabel(row.buildingName)} · ${t("passport.floor")}: ${row.floorLabel ?? row.floorNumber} · ${t(`passport.status.${row.status}`)}${remark ? ` · ${t("passport.hasRemarks")}: ${remark}` : ""}`}
           className={`group flex h-full flex-col gap-4 rounded-2xl border bg-white p-5 transition-colors hover:bg-zinc-50 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700 ${row.status === "in_review" ? "border-orange-200 hover:border-orange-400" : "border-zinc-200 hover:border-zinc-300"}`}
         >

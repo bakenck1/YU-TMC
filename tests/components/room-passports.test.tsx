@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RoomPassportList from "@/components/RoomPassportList";
 import RoomPassportCard from "@/components/RoomPassportCard";
 import RoomWorkspaceView from "@/components/RoomWorkspaceView";
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({ language: "ru" as "ru" | "kk" | "en" }));
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ t: (key: TranslationKey) => translate(state.language, key), dataLabel: (value: string) => value }) }));
 vi.mock("@/components/ProblemReportButton", () => ({ default: () => null }));
 const passport: RoomPassportDto = { roomId: "room1", buildingId: "building1", buildingName: "Main", floorNumber: 1, floorLabel: null, designation: "101", status: "not_started", version: 0, file: null, uploadedBy: null, submittedBy: null, rejectionReason: null, rejectionComment: null, actions: ["start"] };
+beforeEach(() => window.history.replaceState(null, "", "/"));
 afterEach(() => { vi.unstubAllGlobals(); state.language = "ru"; });
 
 describe("room passports", () => {
@@ -21,7 +22,9 @@ describe("room passports", () => {
     fireEvent.change(screen.getByLabelText("Кабинет"), { target: { value: "room2" } });
     expect(screen.getAllByRole("article")).toHaveLength(1);
     const roomLink = screen.getByRole("link", { name: "Открыть паспорт: 202 · Main · Этаж: 2 · Готово" });
-    expect(roomLink.getAttribute("href")).toBe("/room-passports/room2");
+    const destination = new URL(roomLink.getAttribute("href")!, window.location.origin);
+    expect(destination.pathname).toBe("/room-passports/room2");
+    expect(destination.searchParams.get("returnTo")).toBe("/room-passports?building=building1&floor=2&room=room2");
     expect(roomLink.querySelector("h2")?.textContent).toBe("202");
     fireEvent.change(screen.getByLabelText("Статус"), { target: { value: "not_started" } });
     expect(screen.getByRole("status").textContent).toContain("не найдены");
@@ -31,6 +34,55 @@ describe("room passports", () => {
     expect(screen.getAllByRole("article")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
     expect(screen.getAllByRole("article")).toHaveLength(3);
+  });
+  it("restores every filter through the card back link, reload and browser history", () => {
+    window.history.replaceState(null, "", "/room-passports");
+    const passports = [passport, { ...passport, roomId: "review", designation: "202", floorNumber: 0, status: "in_review" as const, actions: ["return" as const] }];
+    const list = render(<RoomPassportList passports={passports} prioritizeReview />);
+    fireEvent.change(screen.getByLabelText("Корпус"), { target: { value: "building1" } });
+    fireEvent.change(screen.getByLabelText("Этаж"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Кабинет"), { target: { value: "review" } });
+    fireEvent.click(screen.getByRole("button", { name: "На проверке 1" }));
+    const selectedHref = "/room-passports?building=building1&floor=0&room=review&status=in_review";
+    expect(`${window.location.pathname}${window.location.search}`).toBe(selectedHref);
+    const details = new URL(screen.getByRole("link", { name: /Открыть паспорт: 202/ }).getAttribute("href")!, window.location.origin);
+    expect(details.searchParams.get("returnTo")).toBe(selectedHref);
+    list.unmount();
+    window.history.pushState(null, "", `${details.pathname}${details.search}`);
+    const card = render(<RoomPassportCard initialPassport={passports[1]} returnHref={details.searchParams.get("returnTo")!} />);
+    const backHref = screen.getByRole("link", { name: /К списку паспортов/ }).getAttribute("href")!;
+    expect(backHref).toBe(selectedHref);
+    card.unmount();
+    window.history.pushState(null, "", backHref);
+    const restored = render(<RoomPassportList passports={passports} prioritizeReview />);
+    for (const [label, value] of [["Корпус", "building1"], ["Этаж", "0"], ["Кабинет", "review"], ["Статус", "in_review"]]) {
+      expect((screen.getByLabelText(label) as HTMLSelectElement).value).toBe(value);
+    }
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    expect(window.location.search).toBe("");
+    act(() => {
+      window.history.replaceState(null, "", selectedHref);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect((screen.getByLabelText("Статус") as HTMLSelectElement).value).toBe("in_review");
+    restored.unmount();
+    render(<RoomPassportList passports={passports.map(row => row.roomId === "review" ? { ...row, status: "approved" } : row)} prioritizeReview />);
+    expect((screen.getByLabelText("Статус") as HTMLSelectElement).value).toBe("in_review");
+    expect(screen.getByRole("status").textContent).toContain("не найдены");
+  });
+  it("drops stale dependent location filters and makes unsafe card return links local", () => {
+    window.history.replaceState(null, "", "/room-passports?building=building1&floor=1&room=room1&status=in_progress");
+    const list = render(<RoomPassportList passports={[passport]} />);
+    expect((screen.getByLabelText("Кабинет") as HTMLSelectElement).value).toBe("room1");
+    list.rerender(<RoomPassportList passports={[]} />);
+    for (const label of ["Корпус", "Этаж", "Кабинет"]) expect((screen.getByLabelText(label) as HTMLSelectElement).value).toBe("");
+    expect(window.location.search).toBe("?status=in_progress");
+    list.rerender(<RoomPassportList passports={[passport]} />);
+    for (const label of ["Корпус", "Этаж", "Кабинет"]) expect((screen.getByLabelText(label) as HTMLSelectElement).value).toBe("");
+    list.unmount();
+    render(<RoomPassportCard initialPassport={passport} returnHref="//example.com/room-passports" />);
+    expect(screen.getByRole("link", { name: /К списку паспортов/ }).getAttribute("href")).toBe("/room-passports");
   });
   it("puts completed passports last for authors and review work first for reviewers, preserving filters", () => {
     const passports = [

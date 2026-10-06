@@ -6,6 +6,7 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import PassportFileLinks from "@/components/PassportFileLinks";
 import { MAX_PASSPORT_BYTES, PASSPORT_REJECTION_REASONS, type PassportAction, type PassportRejectionReason, type RoomPassportDto } from "@/lib/contracts/room-passports";
 import type { TranslationKey } from "@/lib/i18n";
+import { passportReturnHref } from "@/lib/room-passport-list-state";
 
 const STAGES = ["not_started", "in_progress", "in_review", "approved"] as const;
 const ACTIVE_STAGE_STYLES = {
@@ -19,9 +20,10 @@ const ERRORS: Record<string, TranslationKey> = {
   passport_rejection_required: "passport.rejectionRequired", passport_action_unavailable: "passport.unavailableAction",
   passport_pdf_busy: "passport.pdfBusy",
 };
-export default function RoomPassportCard({ initialPassport, viewerId }: {
+export default function RoomPassportCard({ initialPassport, viewerId, returnHref }: {
   initialPassport: RoomPassportDto;
   viewerId?: string;
+  returnHref?: string;
 }) {
   const { t, dataLabel } = useAppSettings();
   const [passport, setPassport] = useState(initialPassport);
@@ -70,7 +72,7 @@ export default function RoomPassportCard({ initialPassport, viewerId }: {
     finally { busyRef.current = false; setBusy(false); }
   }
   return <main className="mx-auto max-w-4xl space-y-5 pb-24 md:pb-6" aria-busy={busy}>
-    <Link href="/room-passports" className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-800">← {t("passport.back")}</Link>
+    <Link href={passportReturnHref(returnHref)} className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-800">← {t("passport.back")}</Link>
     <section className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-5 sm:p-7">
       <h1 className="text-2xl font-bold text-[#002060]">{t("passport.roomTitle")}: {passport.designation}</h1>
       <p className="text-zinc-600">{dataLabel(passport.buildingName)} · {t("passport.floor")}: {passport.floorLabel ?? passport.floorNumber}</p>
