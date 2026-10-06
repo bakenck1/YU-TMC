@@ -172,7 +172,7 @@ sudo systemctl reload nginx
 ```
 
 Nginx должен быть единственным публичным входом: открыты TCP 80/443, а порт
-3000 доступен только на `127.0.0.1`. Конфигурация пропускает запросы до 11 МБ,
+3000 доступен только на `127.0.0.1`. Конфигурация пропускает запросы до 65 МБ,
 чтобы прикладной лимит фотографии 5 MiB применялся самим приложением; также
 она отключает proxy buffering для streaming и перезаписывает `X-Real-IP`.
 
@@ -203,17 +203,24 @@ DATABASE_TARGET=production
 Не коммитьте файлы с секретами.
 
 Изменения публикуются в `origin/codex/components-material-statement-code`.
-Для обновления непосредственно из этой ветки:
+Для обновления непосредственно из этой ветки выполните весь блок ниже.
+Он проверяет результат резервного копирования и чистоту рабочей копии до
+остановки сервисов. При ошибке выполнение прекращается; после остановки
+сервисов сайт останется недоступен до устранения причины и успешного запуска:
 
 ```bash
 sudo bash <<'DEPLOY'
 set -euo pipefail
 systemctl start yu-inventory-backup.service
-systemctl stop yu-inventory yu-inventory-push-worker
+test "$(systemctl show yu-inventory-backup.service -p Result --value)" = success
+test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" = 0
 cd /opt/yu-inventory/current
+test -z "$(sudo -u yu-inventory git status --porcelain)"
 sudo -u yu-inventory git fetch origin
 sudo -u yu-inventory git switch codex/components-material-statement-code
 sudo -u yu-inventory git pull --ff-only origin codex/components-material-statement-code
+sudo -u yu-inventory git merge-base --is-ancestor a6c425b HEAD
+systemctl stop yu-inventory yu-inventory-push-worker
 node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
 trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
 install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory.env .env.production.local

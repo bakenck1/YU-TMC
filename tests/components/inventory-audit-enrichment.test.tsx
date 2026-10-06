@@ -16,6 +16,36 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("shows the chosen name source and the retained code when only a name is confirmed", async () => {
+    const nameOnlyPlan = { ...plan, counts: { ready: 2, unchanged: 0, skipped: 0 }, rows: [
+      { ...plan.rows[0], nameSource: "1c", codeStatus: "code_invalid", nextCode: "00009999" },
+      { ...plan.rows[0], itemId: "excel-only", currentName: "Стул", nameSource: "excel", codeStatus: "code_missing", nextName: "Стул из Excel", nextCode: null },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: nameOnlyPlan })));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    await screen.findByRole("button", { name: "Применить 2 обновлений" });
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    expect(within(rows[0]).getAllByRole("cell")[2].textContent).toBe("1С");
+    expect(within(rows[1]).getAllByRole("cell")[2].textContent).toBe("Excel");
+    expect(within(rows[0]).getByText("00009999")).not.toBeNull();
+    expect(within(rows[1]).getByText("Стул из Excel")).not.toBeNull();
+    expect(screen.getAllByText(/Код сохранён без изменения:/)).toHaveLength(2);
+  });
+  it("shows old and new codes from either preferred source before applying a replacement", async () => {
+    const singleSourcePlan = { ...plan, counts: { ready: 2, unchanged: 0, skipped: 0 }, rows: [
+      { ...plan.rows[0], nameSource: "1c", codeStatus: "confirmed", currentCode: "00009999" },
+      { ...plan.rows[0], itemId: "excel-only", nameSource: "excel", codeStatus: "confirmed", nextName: "Стул из Excel", nextCode: "00000005003" },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: singleSourcePlan })));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    await screen.findByRole("button", { name: "Применить 2 обновлений" });
+    expect(screen.getByText("Было: 00009999")).not.toBeNull();
+    expect(screen.getByText("00003254")).not.toBeNull();
+    expect(screen.getByText("00000005003")).not.toBeNull();
+    expect(screen.queryByText(/Код сохранён без изменения:/)).toBeNull();
+  });
   it("does not change inventory during preview and applies only the reviewed run and hash", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
     vi.stubGlobal("fetch", fetcher);
@@ -42,6 +72,32 @@ describe("reviewing and applying confirmed inventory codes", () => {
     expect(screen.queryByRole("button", { name: "Проверить результат обновления" })).toBeNull();
     expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(false);
     expect(props.onApplied).not.toHaveBeenCalled();
+  });
+
+  it("explains a rolled-back shared-number conflict and allows reviewing a new plan", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply({ plan }))
+      .mockResolvedValueOnce(reply({ error: "inventory_audit_enrichment_shared_number_conflict" }, 409)));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Обновление отменено: название нарушает правило общего номера");
+    expect(screen.queryByRole("button", { name: "Проверить результат обновления" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(props.onApplied).not.toHaveBeenCalled();
+  });
+
+  it("shows and filters shared-number skips without offering the rejected rename", async () => {
+    const skippedPlan = { ...plan, counts: { ready: 0, unchanged: 0, skipped: 1 }, rows: [
+      { ...plan.rows[0], currentName: "Монитор", nextName: "Монитор", eligible: false, changed: false, reason: "shared_number_conflict" },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: skippedPlan })));
+    render(<InventoryAuditEnrichment {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    expect((await screen.findByRole("list", { name: "Причины пропуска" })).textContent).toContain("включая архив: 1");
+    fireEvent.change(screen.getByRole("combobox", { name: "Какие обновления показать" }), { target: { value: "reason:shared_number_conflict" } });
+    expect(within(screen.getByRole("table")).getByRole("link", { name: "Монитор" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    expect(screen.queryByText("00003254")).toBeNull();
   });
 
   it("recovers an ambiguous lost response by replaying the same plan rather than inventing another update", async () => {
@@ -102,7 +158,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
       "Нет подтверждения в 1С — проверьте загруженную партию и полный номер: 1",
       "Нет подтверждения в Excel — проверьте файл и полный номер: 2",
       "Нет подтверждения в 1С и Excel — проверьте оба источника: 1",
-      "Нужны подтверждения из 1С и Excel — проверьте источники: 1",
+      "Нет подтверждения в источниках — проверьте полные номера: 1",
     ]));
     expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
     fireEvent.click(screen.getByText("Показать изменения и причины пропуска"));

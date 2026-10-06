@@ -27,7 +27,7 @@ constraints, transaction rollback and privilege-sensitive behavior.
 | Photos/attachments | parent scope, MIME/size, lifecycle and byte serving | ✓ | ✓ | ✓ | ✓ | object-store outage is operational |
 | Asset loss (P0) | actor/BOLA, body bounds, exact period, receipt rollback/race | ✓ | ✓ | ✓ | n/a | API-only by recorded decision |
 | 1C fixed-assets inbox (P0) | auth-before-body, 64 MiB/deadline, lease, atomic bulk upsert | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
-| 1C/Excel inventory enrichment | complete identifier and equal codes, selected/current 1C evidence, conflicting copies skipped, reviewed plan, atomic audit, idempotent replay | ✓ | ✓ | ✓ | ✓ | real production XLS and browser download — staging gate |
+| 1C/Excel inventory enrichment | complete identifier, 1C name/code priority and Excel fallback, one confirmed source suffices, conflicting copies skipped, reviewed code replacement, atomic audit, idempotent replay | ✓ | ✓ | ✓ | ✓ | real production XLS and browser download — staging gate |
 | Dockflow external API | key rotation, bounded cursor, safe errors, public projection | ✓ | ✓ | ✓ | n/a | external consumer staging gate |
 | Push/outbox | lease, retry/dead-letter, ownership and stale cleanup | ✓ | ✓ | ✓ | ✓ | provider delivery staging gate |
 | Settings | singleton, guarded import, locking/concurrency | ✓ | ✓ | ✓ | ✓ | — |

@@ -44,7 +44,12 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
       const body = await response.json();
       if (current !== generation.current) return;
       if (!response.ok) {
-        if (response.status === 409) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error("Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения."); }
+        if (response.status === 409) {
+          definitiveFailure = true; setPlan(null); setUncertain(false);
+          throw new Error(body.error === "inventory_audit_enrichment_shared_number_conflict"
+            ? "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и запустите dry-run заново."
+            : "Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения.");
+        }
         if (response.status === 401 || response.status === 403) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error("Недостаточно прав для обновления карточек."); }
         throw new Error("Не удалось получить результат. Повторите проверку.");
       }
@@ -84,7 +89,7 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
 
   return <section className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4" aria-label="Обновление названий и кодов 1С">
     <h3 className="font-semibold">Названия и коды 1С в карточках ТМЦ</h3>
-    <p className="text-sm text-zinc-600">Обновление доступно, когда полный номер или официальный штрихкод совпадает в карточке, загруженной партии или текущем реестре 1С и Excel, а коды 1С совпадают в обоих источниках. Название берётся из 1С. Проверьте предложенные изменения перед применением. Несовпадения и неоднозначные записи пропускаются.</p>
+    <p className="text-sm text-zinc-600">Наименование и код берутся из однозначного совпадения 1С. Если совпадения в 1С нет, оба значения берутся из Excel. Достаточно одного источника, подтверждённого полным номером или официальным штрихкодом карточки; неоднозначные записи пропускаются. Пустой или некорректный код источника оставляет прежний код карточки. Проверьте предложенные изменения перед применением.</p>
     {blocked ? <p className="text-sm text-amber-800">Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите dry-run заново.</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
@@ -102,9 +107,9 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
           <option value="all">Все карточки ({plan.rows.length})</option>
           {reasonCounts.length ? <optgroup label="Причины пропуска">{reasonCounts.map(([key, reason]) => <option key={key} value={`reason:${key}`}>{reason.label} ({reason.count})</option>)}</optgroup> : null}
         </select>
-        <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название из 1С", "Код 1С после обновления", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.eligible ? row.nextName : "—"}</td><td className="p-2 font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row)}</td></tr>)}
-            {!visibleRows.length ? <tr><td colSpan={4} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
+        <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr>{["ТМЦ", "Новое название", "Источник названия и кода", "Код 1С после обновления", "Результат"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t align-top"><td className="p-2"><Link href={`/items/${row.itemId}`} className="text-blue-700">{row.currentName}</Link></td><td className="p-2">{row.eligible ? row.nextName : "—"}</td><td className="p-2">{row.eligible ? row.nameSource === "excel" ? "Excel" : "1С" : "—"}</td><td className="p-2"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">Было: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">Код сохранён без изменения: {reasonLabel({ ...row, reason: row.codeStatus })}</p> : null}</td><td className="p-2">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row)}</td></tr>)}
+            {!visibleRows.length ? <tr><td colSpan={5} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
           </tbody></table></div>
       </details></> : null}
   </section>;
@@ -122,7 +127,9 @@ function reasonLabel(row: InventoryAuditEnrichmentRow) {
       : "Нет подтверждения в Excel — проверьте файл и полный номер";
   }
   const labels: Record<string, string> = {
-    sources_missing: "Нужны подтверждения из 1С и Excel — проверьте источники", code_missing: "Не указан код в одном из источников — проверьте коды 1С и Excel",
+    shared_number_conflict: "Новое название нарушает правило общего номера для монитора и системного блока — проверьте обе карточки, включая архив",
+    sources_missing: "Нет подтверждения в источниках — проверьте полные номера", code_missing: "Код не указан в выбранной записи источника",
+    code_invalid: "Код выбранной записи не подходит для сохранения",
     code_conflict: "Коды источников или карточки не совпадают — проверьте значения",
     source_ambiguous: "Найдено несколько вариантов — проверьте записи источников", identity_conflict: "Номера или штрихкоды не совпадают — проверьте полные значения",
     item_ineligible: "Карточка архивирована или относится к разделу IT", name_invalid: "Название не подходит для сохранения",
