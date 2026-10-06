@@ -37,8 +37,16 @@ test("invoice carries the full selected quantity and calculated amount", () => {
   assert.match(html, /2(?:&nbsp;|\u00a0|\s)500(?:&nbsp;|\u00a0|\s)000,00/);
   assert.match(html, /«<span class="line day">09<\/span>»/);
   assert.match(html, /сентября/);
-  assert.match(html, /Дата выписки:/);
-  assert.doesNotMatch(html, /Поставщик|Получатель|Принял\(а\)|Отпустил\(а\)|Подпись/);
+  assert.doesNotMatch(html, /Дата выписки:/);
+  assert.match(html, /Поставщик/);
+  assert.match(html, /Получатель/);
+  assert.match(html, /Принял\(а\)/);
+  assert.match(html, /Отпустил\(а\)/);
+  assert.match(html, /\(Подпись\)/);
+  assert.match(html, /\(Ф.И.О.\)/);
+  assert.equal((html.match(/<th>/g) ?? []).length, 7);
+  assert.match(html, /Счет<br>учета/);
+  assert.match(html, /Код<br>номер/);
 });
 
 test("small invoice prints two copies and paginates selections by twelve lines", () => {
@@ -64,9 +72,29 @@ test("invoice escapes values before writing the printable document", () => {
     items: [item({ name: "<script>alert(1)</script>" })],
     invoiceNumber: '<42>&"',
     date: "2026-09-09",
+    supplier: '<img src=x onerror="alert(1)">',
+    recipient: "Получатель & партнёры",
   });
 
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /&lt;42&gt;&amp;&quot;/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /Получатель &amp; партнёры/);
+});
+
+test("large invoice retains every selected item over multiple twelve-row pages", () => {
+  const html = buildInventoryInvoiceHtml({ variant: "large", invoiceNumber: "", date: "",
+    items: Array.from({ length: 25 }, (_, index) => item({ inventoryNumber: `CODE-${index}` })),
+  });
+  assert.equal((html.match(/data-invoice-page=/g) ?? []).length, 3);
+  for (let index = 0; index < 25; index += 1) assert.match(html, new RegExp(`>CODE-${index}<`));
+  assert.doesNotMatch(html, /overflow: hidden/);
+});
+
+test("the code column retains the inventory number and never invents an accounting account", () => {
+  const html = buildInventoryInvoiceHtml({ variant: "large", invoiceNumber: "", date: "",
+    items: [item({ oneCCode: "000002864" })],
+  });
+  assert.match(html, /<td><\/td>\s*<td class="item-code">INV-001<\/td>/);
 });

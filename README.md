@@ -182,6 +182,15 @@ failures are logged. The durable TMC outbox is processed by:
 npm run worker:tmc-push
 ```
 
+## Inventory invoice printing
+
+Select inventory rows and open **Накладная** to enter the document number, date,
+supplier and recipient. Both print sizes use the seven-column paper form with
+acceptance and issue signatures. Each form has twelve item rows; larger selections
+continue onto additional forms. Small printing creates two copies per A4 sheet.
+The code column retains the item's existing inventory number;
+the accounting account stays blank because the item card has no account field.
+
 ## Production deployment
 
 Production uses a regular Node.js process managed by systemd, with Nginx in

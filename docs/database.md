@@ -237,6 +237,17 @@ update and delete. Administrative exceptions set
 Non-administrative actions may still include an optional operator reason. The
 before/after snapshot constraint applies to every audit entry.
 
+Administrative item deletion records `item.deleted` in the same transaction.
+The `20261006054456_item-delete-source-links` migration makes 1C batch match and
+publication references nullable on deletion and removes the item's current 1C
+link. Source payloads, hashes, review decisions and publication dates remain in
+the batch; completed publication rows stay completed. Publication still checks
+that the selected target item exists before linking or updating it.
+Local barcode distribution history and loss compensation cases remain protected:
+deleting such a card returns a conflict with a specific explanation. Use
+decommissioning to preserve these records. A blocked bulk deletion rolls back
+every selected item, detached reference and deletion audit record.
+
 Before applying the concurrency migration to an existing database, resolve
 legacy duplicate QR values, inventory numbers, active responsibilities, pending
 transfers and per-inspection item results. The migration fails before changing

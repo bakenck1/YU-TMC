@@ -927,14 +927,27 @@ export class InventoryItemService {
     requirePermission(actor, "inventory.item.delete");
     const ids = normalizeBulkItemIds(itemIds);
     if (itemSection === "it") requirePermission(actor, "inventory.it.manage");
+    const occurredAt = this.clock.now();
     return this.unitOfWork.transaction(
       async ({ items }) => {
-        const visibleIds: string[] = [];
+        const selected: InventoryItemRecord[] = [];
         for (const id of ids) {
           const item = await items.findItemById(id);
-          if (item && (item.itemSection ?? "general") === itemSection) visibleIds.push(id);
+          if (item && (item.itemSection ?? "general") === itemSection) selected.push(item);
         }
-        return visibleIds.length ? items.deleteItems(visibleIds) : [];
+        if (!selected.length) return [];
+        const deletedIds = await items.deleteItems(selected.map((item) => item.id));
+        const deleted = new Set(deletedIds);
+        for (const item of selected) {
+          if (!deleted.has(item.id)) continue;
+          await items.appendAudit(createAudit({
+            id: this.ids.create(), actor, subjectId: item.id,
+            subjectRevision: item.version, action: "item.deleted",
+            beforeValues: { name: item.name, inventoryNumber: item.inventoryNumber },
+            occurredAt,
+          }));
+        }
+        return deletedIds;
       },
       { isolation: "serializable", maxAttempts: 3 },
     );

@@ -2954,13 +2954,13 @@ export const oneCImportBatchRowsTable = inventorySchema.table(
     payload: jsonb().$type<Record<string, unknown>>().notNull(),
     reviewState: varchar({ length: 24 }).notNull().default("pending"),
     proposedAction: varchar({ length: 24 }).notNull().default("manual_review"),
-    matchedItemId: uuid().references(() => itemsTable.id, { onDelete: "restrict", onUpdate: "restrict" }),
+    matchedItemId: uuid().references(() => itemsTable.id, { onDelete: "set null", onUpdate: "restrict" }),
     matchMethod: varchar({ length: 48 }),
     issues: jsonb().$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
     decision: jsonb().$type<Record<string, unknown>>(),
     decidedBy: uuid().references(() => usersTable.id, { onDelete: "restrict", onUpdate: "restrict" }),
     decidedAt: timestamp({ withTimezone: true, mode: "date" }),
-    publishedItemId: uuid().references(() => itemsTable.id, { onDelete: "restrict", onUpdate: "restrict" }),
+    publishedItemId: uuid().references(() => itemsTable.id, { onDelete: "set null", onUpdate: "restrict" }),
     publishedAt: timestamp({ withTimezone: true, mode: "date" }),
   },
   (table) => [
@@ -2969,10 +2969,12 @@ export const oneCImportBatchRowsTable = inventorySchema.table(
     check("one_c_import_batch_rows_review_state_check", sql`${table.reviewState} in ('pending','ready','matched','conflict','blocked','excluded','approved','published','failed')`),
     check("one_c_import_batch_rows_action_check", sql`${table.proposedAction} in ('create','link','update','exclude','manual_review','no_change')`),
     check("one_c_import_batch_rows_decision_actor_check", sql`(${table.decision} IS NULL) = (${table.decidedBy} IS NULL) AND (${table.decision} IS NULL) = (${table.decidedAt} IS NULL)`),
-    check("one_c_import_batch_rows_publication_check", sql`(${table.publishedItemId} IS NULL) = (${table.publishedAt} IS NULL)`),
+    // Keep the publication date after an administrator deletes its item.
+    check("one_c_import_batch_rows_publication_check", sql`${table.publishedItemId} IS NULL OR ${table.publishedAt} IS NOT NULL`),
     index("one_c_import_batch_rows_batch_state_action_idx").on(table.batchId, table.reviewState, table.proposedAction),
     index("one_c_import_batch_rows_external_idx").on(table.externalId),
     index("one_c_import_batch_rows_matched_item_idx").on(table.matchedItemId),
+    index("one_c_import_batch_rows_published_item_idx").on(table.publishedItemId),
   ],
 );
 
@@ -3039,7 +3041,7 @@ export const itemOneCLinksTable = inventorySchema.table(
   "item_one_c_links",
   {
     externalId: text().primaryKey(),
-    itemId: uuid().notNull().unique().references(() => itemsTable.id, { onDelete: "restrict", onUpdate: "restrict" }),
+    itemId: uuid().notNull().unique().references(() => itemsTable.id, { onDelete: "cascade", onUpdate: "restrict" }),
     sourceCode: text(),
     sourceInventoryNumber: text(),
     linkedBy: uuid().notNull().references(() => usersTable.id, { onDelete: "restrict", onUpdate: "restrict" }),
