@@ -4,6 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 import { ApplicationError } from "../lib/domain/application-error";
 import { isInventoryItemCategory } from "../lib/inventory-categories";
+import { isEmployeeRole } from "../lib/contracts/users";
 
 const ID = "10000000-0000-4000-8000-000000000001";
 async function routeHarness(role: string) {
@@ -12,6 +13,7 @@ async function routeHarness(role: string) {
   const calls: unknown[][] = [];
   const actor = { userId: ID, role };
   const deps: Record<string, unknown> = {
+    "@/lib/contracts/users": { isEmployeeRole },
     "next/server": { after: () => undefined },
     "@/lib/server/whatsapp-tmc": {},
     "@/lib/domain/application-error": { ApplicationError },

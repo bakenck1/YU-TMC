@@ -5,6 +5,7 @@ import type {
 } from "@/lib/contracts/inventory-domain";
 
 export interface RoomWorkspaceRecord {
+  passport?: import("@/lib/contracts/room-passports").PassportFileDto | null;
   id: string;
   designation: string;
   buildingName: string;

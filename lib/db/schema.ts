@@ -55,6 +55,7 @@ import {
 } from "@/lib/contracts/inventory-domain";
 import { USER_ROLES } from "@/lib/contracts/users";
 import { INVENTORY_SECTIONS, IT_EQUIPMENT_TYPES } from "@/lib/it-inventory";
+import { PASSPORT_STATUSES, PASSPORT_REJECTION_REASONS } from "@/lib/contracts/room-passports";
 
 /**
  * All application tables are schema-qualified so PostgreSQL's public schema is
@@ -85,6 +86,28 @@ export const oneCFixedAssetInboxTable = inventorySchema.table(
 const binaryData = customType<{ data: Uint8Array; driverData: Uint8Array }>({
   dataType: () => "bytea",
 });
+
+export const roomPassportsTable = inventorySchema.table("room_passports", {
+  roomId: uuid().primaryKey().references((): AnyPgColumn => roomsTable.id, { onDelete: "cascade" }),
+  status: varchar({ length: 24, enum: PASSPORT_STATUSES }).notNull().default("not_started"),
+  version: integer().notNull().default(0),
+  fileId: uuid(),
+  fileName: varchar({ length: 240 }),
+  fileSize: integer(),
+  binaryData: binaryData(),
+  uploadedBy: uuid().references((): AnyPgColumn => usersTable.id, { onDelete: "restrict" }),
+  submittedBy: uuid().references((): AnyPgColumn => usersTable.id, { onDelete: "restrict" }),
+  rejectionReason: varchar({ length: 24, enum: PASSPORT_REJECTION_REASONS }),
+  rejectionComment: varchar({ length: 1000 }),
+}, table => [
+  check("room_passports_version_check", sql`${table.version} >= 0`),
+  check("room_passports_status_check", sql`${table.status} in ('not_started','in_progress','in_review','needs_correction','approved')`),
+  check("room_passports_file_check", sql`(${table.fileId} is null and ${table.fileName} is null and ${table.fileSize} is null and ${table.binaryData} is null and ${table.uploadedBy} is null) or (${table.fileId} is not null and ${table.fileName} is not null and length(${table.fileName}) > 0 and ${table.fileSize} between 1 and 20971520 and ${table.binaryData} is not null and octet_length(${table.binaryData}) = ${table.fileSize} and ${table.uploadedBy} is not null)`),
+  check("room_passports_state_check", sql`(${table.status} <> 'not_started' or ${table.fileId} is null) and (${table.status} not in ('in_review','needs_correction','approved') or (${table.fileId} is not null and ${table.submittedBy} is not null)) and (${table.status} <> 'needs_correction' or ${table.rejectionReason} is not null)`),
+  check("room_passports_reason_check", sql`${table.rejectionReason} is null or ${table.rejectionReason} in ('wrong_room','incomplete','incorrect','unreadable','unsigned','other')`),
+  check("room_passports_other_comment_check", sql`${table.rejectionReason} is distinct from 'other' or (${table.rejectionComment} is not null and length(trim(${table.rejectionComment})) > 0)`),
+  index("room_passports_status_idx").on(table.status),
+]);
 
 export const authRoleEnum = inventorySchema.enum("auth_role", USER_ROLES);
 // Audit snapshots are immutable historical facts. Keep the retired owner

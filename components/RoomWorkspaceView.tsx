@@ -7,6 +7,7 @@ import type { PublicRoomDto, RoomWorkspaceDto } from "@/lib/contracts/room-works
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import ProblemReportButton from "@/components/ProblemReportButton";
 import RoomMetric from "./RoomMetric";
+import PassportFileLinks from "@/components/PassportFileLinks";
 
 export default function RoomWorkspaceView({
   room,
@@ -70,6 +71,10 @@ export default function RoomWorkspaceView({
       {room.access === "limited" ? (
         <p className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">{t("room.limitedAccess")}</p>
       ) : null}
+      {room.passport ? <section className="space-y-3 rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-zinc-900">{t("passport.roomTitle")}</h2>
+        <PassportFileLinks file={room.passport} />
+      </section> : null}
         <>
           <section className="grid grid-cols-3 gap-3">
             <RoomMetric icon={Package} label={t("room.itemCount")} value={room.itemCount ?? 0} />

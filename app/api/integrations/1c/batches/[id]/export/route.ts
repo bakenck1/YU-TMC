@@ -16,12 +16,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const actor = authorizationActor(await requirePermission(request, "inventory.integration.one_c.manage"));
     const { id } = await context.params;
     if (!UUID_PATTERN.test(id)) throw new ApplicationError("validation", "invalid_request");
+    const scope = new URL(request.url).searchParams.get("scope") ?? "all";
+    if (scope !== "all" && scope !== "missing") throw new ApplicationError("validation", "invalid_request");
     const data = await getApplicationServices().oneCReconciliation.exportBatch(id, actor) as OneCReconciliationExport;
-    const bytes = await exportOneCReconciliation(data);
+    const summary = data.batch.summary as Record<string, unknown> | null | undefined;
+    if (scope === "missing" && typeof summary?.identifierMatched !== "number") {
+      throw new ApplicationError("conflict", "one_c_analysis_required");
+    }
+    const bytes = await exportOneCReconciliation(data, scope);
     return new Response(Buffer.from(bytes), {
       headers: {
         "cache-control": "private, no-store",
-        "content-disposition": `attachment; filename="one-c-reconciliation-${id}.xlsx"`,
+        "content-disposition": `attachment; filename="one-c-${scope === "missing" ? "missing-inventory" : "reconciliation"}-${id}.xlsx"`,
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "x-content-type-options": "nosniff",
       },

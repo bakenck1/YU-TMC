@@ -3,9 +3,16 @@ export const USER_ROLES = [
   "warehouse",
   "employee",
   "typography",
+  "passport_author",
+  "passport_reviewer",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
+
+/** Passport staff retain the same inventory scope as ordinary employees. */
+export function isEmployeeRole(role: unknown): role is "employee" | "passport_author" | "passport_reviewer" {
+  return role === "employee" || role === "passport_author" || role === "passport_reviewer";
+}
 
 export interface UserDto {
   id: string;

@@ -1,6 +1,8 @@
 import type { AppLanguage } from "./app-settings";
+import { passportRu, passportKk, passportEn } from "./room-passport-translations";
 
 const ru = {
+  ...passportRu,
   "common.save": "Сохранить",
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
@@ -1203,6 +1205,7 @@ export type TranslationParams = Record<string, string | number>;
 
 const kk: Record<TranslationKey, string> = {
   ...ru,
+  ...passportKk,
   "nav.scanQr": "Кабинет QR-кодын сканерлеу", "nav.requests": "Өтініштер",
   "room.title": "Кабинет", "room.responsible": "Жауапты", "room.floor": "Қабат",
   "room.itemCount": "Барлық ТМҚ", "room.connected": "Қосылған", "room.disconnected": "Қосылмаған",
@@ -1939,6 +1942,7 @@ const kk: Record<TranslationKey, string> = {
 
 const en: Record<TranslationKey, string> = {
   ...ru,
+  ...passportEn,
   "nav.scanQr": "Scan room QR", "nav.requests": "Requests",
   "room.title": "Room", "room.responsible": "Responsible person", "room.floor": "Floor",
   "room.itemCount": "Total items", "room.connected": "Connected", "room.disconnected": "Not connected",

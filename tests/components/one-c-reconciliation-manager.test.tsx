@@ -9,6 +9,31 @@ const currentBatch = { id: BATCH_ID, received_at: "2026-09-21T10:00:00Z", receiv
 describe("1C reconciliation manager", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("shows missing cabinets, resets unrelated filters and exports the entire missing list", async () => {
+    const row = { external_id: "cabinet-1", review_state: "blocked", match_method: "new_candidate", issues: [{ code: "missing_room" }], payload: { name: "Шкаф книжный", inventoryNumber: "0001/02", status: "Принято к учёту", location: "Библиотека", responsibleName: "Иванов" } };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith(`/batches/${BATCH_ID}`)) return new Response(JSON.stringify({ batch: { ...currentBatch, summary: { identifierMatched: 0, activeMatched: 0, conflicts: 0, missingInventory: 1 } } }));
+      return new Response(JSON.stringify({ rows: { data: [row], page: 1, pageSize: 50, total: 1 } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<OneCReconciliationManager initialBatches={{ data: [currentBatch], page: 1, pageSize: 50, total: 1 }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
+    await screen.findByText("Осы шкаф жоқ — нет в Inventory");
+    expect(screen.getByRole("heading", { name: "Нет в Inventory: 1" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Скачать отсутствующие в Excel" }).getAttribute("href")).toBe(`/api/integrations/1c/batches/${BATCH_ID}/export?scope=missing`);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Показать отсутствующие" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.change(screen.getByRole("textbox", { name: "Поиск по строкам" }), { target: { value: "Другое название" } });
+    fireEvent.click(screen.getByRole("button", { name: "Показать отсутствующие" }));
+    await waitFor(() => {
+      const url = new URL(String(fetchMock.mock.calls.at(-1)?.[0]), "https://inventory.test");
+      expect(url.searchParams.get("match")).toBe("missing");
+      expect(url.searchParams.get("page")).toBe("1");
+      expect(url.searchParams.has("search")).toBe(false);
+      expect(url.searchParams.has("reviewState")).toBe(false);
+      expect(url.searchParams.has("proposedAction")).toBe(false);
+    });
+  });
+
   it("opens the current batch and reuses its latest version after analysis and reopening", async () => {
     let serverVersion = 11;
     const postedVersions: number[] = [];

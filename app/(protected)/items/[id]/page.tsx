@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 // Authentication for this route group is enforced by the adjacent layout.
 import { notFound } from "next/navigation";
 import InventoryItemDetails from "@/components/InventoryItemDetails";
@@ -59,7 +61,7 @@ export default async function ItemPage({
       "inventory.item.manage_components",
     );
     const ownsItem = item.responsible?.id === user.userId;
-    const canMutateAsEmployee = user.role !== "employee" || ownsItem;
+    const canMutateAsEmployee = !isEmployeeRole(user.role) || ownsItem;
     const canComment = canMutateAsEmployee && hasPermission(user.role, "inventory.item.comment");
     const [components, operations, comments, localGroups] = await readHiddenPageResource(
       () =>
@@ -67,7 +69,7 @@ export default async function ItemPage({
           services.items.listComponents(id, actor),
           services.items.listOperations(id, actor),
           services.items.listComments(id, actor),
-          user.role !== "employee" || ownsItem
+          !isEmployeeRole(user.role) || ownsItem
             ? services.localBarcodes.getDistribution(id, actor).then((value) => value.groups)
             : Promise.resolve([]),
         ]),
@@ -109,7 +111,7 @@ export default async function ItemPage({
         actorRole={user.role}
         returnHref={returnHref}
       />
-      {user.role === "admin" || (user.role === "employee" && ownsItem) ? (
+      {user.role === "admin" || (isEmployeeRole(user.role) && ownsItem) ? (
         <Wrapper width="full" responsive={{ at: "md", display: "inline-flex", width: "auto" }}>
           <ProblemReportButton
             items={[{ id: item.id, name: item.name, inventoryNumber: item.inventoryNumber }]}

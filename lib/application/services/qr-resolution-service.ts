@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
 import type {
   QrResolutionRecord,
@@ -110,7 +112,7 @@ export class QrResolutionService {
     if (
       record?.targetKind === "room" &&
       record.roomAccessMode === "closed" &&
-      actor.role === "employee" &&
+      isEmployeeRole(actor.role) &&
       !record.currentUserHasRoomItem
     ) {
       return {
@@ -240,7 +242,7 @@ function isClosedForeignItem(
 ): boolean {
   return record?.targetKind === "item" &&
     record.roomAccessMode === "closed" &&
-    actor.role === "employee" &&
+    isEmployeeRole(actor.role) &&
     record.responsibleUserId !== actor.userId;
 }
 

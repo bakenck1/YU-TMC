@@ -7,6 +7,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
 import { qrIdentifierFromEntropy } from "@/lib/domain/qr-identifier";
 import { analyzeOneCFixedAsset, buildOneCPublicationPlan, createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
+import { oneCInventoryPresence } from "@/lib/one-c-inventory-presence";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { createInventorySourceAudit, getInventorySourceAuditPage, exportInventorySourceAudit, getInventorySourceExcelRow } from "@/lib/server/inventory-source-audit-service";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
@@ -140,12 +141,26 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
   }
 
   async listBatchRows(batchId: string, query: OneCBatchRowsQuery) {
-    await this.assertBatch(batchId);
+    if (query.match === "missing") {
+      const batch = await this.getBatch(batchId);
+      const summary = batch.summary as Row | null | undefined;
+      if (typeof summary?.identifierMatched !== "number") throw new ApplicationError("conflict", "one_c_analysis_required");
+    } else {
+      await this.assertBatch(batchId);
+    }
     const values: unknown[] = [batchId];
     const clauses = ["r.batch_id = $1"];
     if (query.reviewState) clauses.push(`r.review_state = $${values.push(query.reviewState)}`);
     if (query.proposedAction) clauses.push(`r.proposed_action = $${values.push(query.proposedAction)}`);
     if (query.match === "active") clauses.push(`r.matched_item_id is not null and r.review_state not in ('conflict','excluded') and r.payload->>'status' = 'Принято к учёту' and i.status = 'active'`);
+    if (query.match === "missing") clauses.push(`r.match_method = 'new_candidate'
+      and r.review_state not in ('pending','conflict','excluded')
+      and r.matched_item_id is null and r.published_item_id is null
+      and r.payload->>'status' = 'Принято к учёту'
+      and (length(trim(coalesce(r.payload->>'inventoryNumber',''))) > 0
+        or length(trim(coalesce(r.payload->>'code',''))) > 0)
+      and not coalesce(r.issues @> '[{"code":"invalid_one_c_barcode"}]'::jsonb, false)
+      and not coalesce(r.issues @> '[{"code":"non_physical_asset"}]'::jsonb, false)`);
     if (query.search) {
       values.push(`%${query.search}%`);
       clauses.push(`(r.external_id ilike $${values.length}
@@ -204,7 +219,8 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       const candidateById = new Map(candidates.rows.map((r) => [String(r.id), r]));
       const planRows = [];
       const rowUpdates = [];
-      const summary: Record<string, number> = { matched: 0, activeMatched: 0, identifierMatched: 0, create: 0, conflicts: 0, blocked: 0, excluded: 0 };
+      const summary: Record<string, number> = { matched: 0, activeMatched: 0, identifierMatched: 0, missingInventory: 0, create: 0, conflicts: 0, blocked: 0, excluded: 0 };
+      const sourceRowsById = new Map(rows.rows.map((row) => [String(row.external_id), row]));
       for (const row of rows.rows) {
         const asset = row.payload as OneCFixedAsset;
         const decision = (row.decision ?? {}) as Row;
@@ -263,6 +279,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
           update.review_state = "conflict";
           update.proposed_action = "manual_review";
         }
+        if (oneCInventoryPresence({ ...sourceRowsById.get(update.external_id), ...update }) === "missing") summary.missingInventory += 1;
         if (update.matched_item_id && update.review_state !== "conflict" && update.review_state !== "excluded") {
           summary.identifierMatched += 1;
           if (update.source_status === "Принято к учёту" && itemStatus.get(update.matched_item_id) === "active") summary.activeMatched += 1;

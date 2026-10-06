@@ -40,7 +40,7 @@ export type OneCBatchRowsQuery = {
   reviewState?: string;
   proposedAction?: string;
   search?: string;
-  match?: "active";
+  match?: "active" | "missing";
 };
 
 export type OneCDecisionInput = {
@@ -199,7 +199,7 @@ function parseRowsQuery(url: string): OneCBatchRowsQuery {
   }
   const match = query.get("match");
   if (match !== null) {
-    if (match !== "active") throw invalid();
+    if (match !== "active" && match !== "missing") throw invalid();
     result.match = match;
   }
   return result;

@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import {
   USER_ROLES,
   type UserRole,
@@ -22,6 +24,7 @@ export function isAuthRole(value: unknown): value is AuthRole {
 }
 
 const ROUTE_PERMISSIONS = [
+  ["/room-passports", "inventory.passport.manage"],
   ["/settings/integrations/1c", "inventory.integration.one_c.manage"],
   ["/it-items", "inventory.it.read"],
   ["/requests", "inventory.notification.read"],
@@ -55,7 +58,7 @@ export function permissionForPath(pathname: string): AppPermission | null {
 
 export function canAccessPath(role: unknown, pathname: string) {
   const pathOnly = pathname.split(/[?#]/, 1)[0] || "/";
-  if (pathOnly === "/" && role === "employee") {
+  if (pathOnly === "/" && isEmployeeRole(role)) {
     return false;
   }
   if (matchesRoute(pathOnly, "/tmc/transfer")) {

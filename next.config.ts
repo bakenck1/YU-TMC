@@ -28,6 +28,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+  outputFileTracingIncludes: {
+    "/api/room-passports/*/file": ["./lib/server/pdf/validate-passport-worker.mjs", "./node_modules/pdfjs-dist/**/*", "./node_modules/@napi-rs/canvas*/**/*"],
+  },
   devIndicators: false,
   poweredByHeader: false,
   typescript: {

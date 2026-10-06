@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 // Authentication for this route group is enforced by the adjacent layout.
 import ItemsTable from "@/components/ItemsTable";
 import EmployeeItemsTabs from "@/components/EmployeeItemsTabs";
@@ -32,11 +34,11 @@ export default async function ItemsPage({
   const services = getApplicationServices();
   const [serverItems, localGroups] = await Promise.all([
     services.items.listItems(actor),
-    user.role === "employee"
+    isEmployeeRole(user.role)
       ? services.localBarcodes.listActiveGroupsAssignedTo(actor)
       : Promise.resolve([]),
   ]);
-  const originalRemainders = user.role === "employee"
+  const originalRemainders = isEmployeeRole(user.role)
     ? new Map(
         (await Promise.all(
           serverItems.map(async (item) => {
@@ -68,7 +70,7 @@ export default async function ItemsPage({
 
   return (
     <Wrapper direction="column" gap="md">
-      {user.role === "employee" ? (
+      {isEmployeeRole(user.role) ? (
         <EmployeeItemsTabs
           items={items}
           searchHistoryScope={user.userId}

@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import InventoryInspectionsManager from "@/components/InventoryInspectionsManager";
 import MaintenanceItemsPanel from "@/components/MaintenanceItemsPanel";
 import Wrapper from "@/components/Wrapper";
@@ -43,14 +45,14 @@ export default async function InventoryInspectionsPage({
             (candidate) =>
               candidate.active &&
               (candidate.role === "warehouse" ||
-                candidate.role === "employee"),
+                isEmployeeRole(candidate.role)),
           )
           .map((candidate) => ({
             id: candidate.id,
             fullName: candidate.fullName,
             role: candidate.role as "warehouse" | "employee",
           }))
-      : user.role === "warehouse" || user.role === "employee"
+      : user.role === "warehouse" || isEmployeeRole(user.role)
         ? [{ id: user.userId, fullName: user.name, role: user.role }]
         : [];
   return (

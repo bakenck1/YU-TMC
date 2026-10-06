@@ -21,6 +21,8 @@ const ROLE_LABEL_KEYS = {
   warehouse: "users.warehouse",
   employee: "users.employee",
   typography: "users.typography",
+  passport_author: "users.passport_author",
+  passport_reviewer: "users.passport_reviewer",
 } as const satisfies Record<TmcOperationUserDto["role"], TranslationKey>;
 
 type TmcUserPickerValue = Pick<TmcOperationUserDto, "id" | "fullName"> &

@@ -14,6 +14,12 @@ if (process.platform !== "win32" || process.arch !== "x64") {
 }
 
 const root = process.cwd();
+const requestedTests = process.argv.slice(2);
+const availableTests = getDatabaseTestFiles(root);
+const selectedTests = requestedTests.length ? availableTests.filter(file => requestedTests.includes(path.basename(file))) : availableTests;
+for (const requested of requestedTests) {
+  if (!selectedTests.some(file => path.basename(file) === requested)) throw new Error(`Unknown database test: ${requested}`);
+}
 const work = mkdtempSync(path.join(tmpdir(), "yu-inventory-db-test-"));
 const data = path.join(work, "data");
 const passwordFile = path.join(work, "password.txt");
@@ -81,7 +87,7 @@ try {
     TEST_DATABASE_MIGRATOR_URL:
       `postgresql://${migrator}:${migratorPassword}@127.0.0.1:${port}/${database}`,
   };
-  for (const databaseTest of getDatabaseTestFiles(root)) {
+  for (const databaseTest of selectedTests) {
     run(process.execPath, [
       path.join(root, "node_modules/vitest/vitest.mjs"),
       "run",

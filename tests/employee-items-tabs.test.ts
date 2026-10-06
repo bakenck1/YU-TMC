@@ -70,13 +70,13 @@ test("employee status selection returns only the selected status items", () => {
   assert.deepEqual(renderedIds, ["m"]);
 });
 
-test("only employees receive the tabbed inventory interface", async () => {
+test("employee roles receive the tabbed inventory interface", async () => {
   const source = await readFile(
     new URL("../app/(protected)/items/page.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(source, /user\.role === "employee"/);
+  assert.match(source, /isEmployeeRole\(user\.role\)/);
   assert.match(source, /<EmployeeItemsTabs/);
   assert.match(source, /<EmployeeItemsTabs[\s\S]*items=\{items\}/);
   assert.doesNotMatch(source, /recipientName/);

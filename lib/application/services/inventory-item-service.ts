@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   CreateInventoryItemInput,
   CreateItInventoryItemInput,
@@ -123,7 +125,7 @@ export class InventoryItemService {
     return repositories
       .filter((item) =>
         (item.itemSection ?? "general") === "general" &&
-        (actor.role !== "employee" || item.responsibleId === actor.userId),
+        (!isEmployeeRole(actor.role) || item.responsibleId === actor.userId),
       )
       .map((item) => toItemDto(item, actor.role));
   }
@@ -172,7 +174,7 @@ export class InventoryItemService {
       throw forbidden();
     }, { isolation: "repeatable-read", readOnly: true });
     return records
-      .filter((item) => actor.role !== "employee" || item.responsibleId === actor.userId)
+      .filter((item) => !isEmployeeRole(actor.role) || item.responsibleId === actor.userId)
       .map((item) => toItemDto(item, actor.role));
   }
 
@@ -1538,7 +1540,7 @@ export class InventoryItemService {
       if (current.itemSection === "it") {
         requirePermission(actor, "inventory.it.manage");
       }
-      if (actor.role === "employee" && current.responsibleId !== actor.userId) {
+      if (isEmployeeRole(actor.role) && current.responsibleId !== actor.userId) {
         throw forbidden();
       }
       if (current.version !== version) throw versionConflict();

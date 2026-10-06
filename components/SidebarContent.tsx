@@ -1,5 +1,7 @@
 "use client";
 
+import { isEmployeeRole } from "@/lib/contracts/users";
+
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Archive,
@@ -10,6 +12,7 @@ import {
   ChevronLeft,
   ClipboardCheck,
   ClipboardList,
+  FileCheck,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
@@ -46,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/tmc", labelKey: "tmc.entryPoint", icon: ArrowLeftRight },
   { href: "/items/decommissioned", labelKey: "nav.decommissioned", icon: Archive },
   { href: "/inventory", labelKey: "nav.objects", icon: Building2 },
+  { href: "/room-passports", labelKey: "passport.title", icon: FileCheck },
   { href: "/inventory/inspections", labelKey: "nav.inspections", icon: ClipboardCheck },
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { href: "/users", labelKey: "nav.users", icon: Users },
@@ -57,7 +61,7 @@ const EMPLOYEE_NAV_PATHS = new Set(["/items", "/scan", "/requests", "/tmc"]);
 export function sidebarItemsForRole(role: UserRole) {
   return NAV_ITEMS.filter(
     (item) =>
-      (role !== "employee" || EMPLOYEE_NAV_PATHS.has(item.href)) &&
+      (!isEmployeeRole(role) || EMPLOYEE_NAV_PATHS.has(item.href) || item.href === "/room-passports") &&
       canAccessPath(role, item.href),
   );
 }

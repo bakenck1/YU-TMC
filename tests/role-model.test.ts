@@ -15,8 +15,8 @@ import {
   APP_PERMISSIONS,
 } from "../lib/security/permissions";
 
-test("exposes the four product roles", () => {
-  assert.deepEqual(USER_ROLES, ["admin", "warehouse", "employee", "typography"]);
+test("exposes the product roles, including passport staff", () => {
+  assert.deepEqual(USER_ROLES, ["admin", "warehouse", "employee", "typography", "passport_author", "passport_reviewer"]);
   assert.equal(isAuthRole("owner"), false);
   assert.equal(translate("ru", "auth.roleWarehouse"), "Кладовщик");
   assert.equal(translate("kk", "auth.roleWarehouse"), "Қоймашы");

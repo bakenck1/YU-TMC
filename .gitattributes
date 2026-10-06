@@ -2,3 +2,6 @@
 # Windows and Linux even when core.autocrlf is enabled.
 drizzle/*.sql text eol=lf
 drizzle/meta/*.json text eol=lf
+
+# Preserve PDF byte offsets and encrypted streams on every platform.
+*.pdf binary

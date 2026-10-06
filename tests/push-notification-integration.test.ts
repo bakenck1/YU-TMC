@@ -120,7 +120,7 @@ test("durable TMC push worker is kicked after mutations and is available to ever
     assert.match(whatsappRoute, /export const maxDuration = 60/);
   }
   assert.match(landing, /PushNotificationControl/);
-  assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee'\)/);
+  assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee', 'passport_author', 'passport_reviewer'\)/);
   assert.match(worker, /processTmcPushOutbox/);
   assert.match(worker, /process\.argv\.includes\("--loop"\)/);
   assert.match(service, /ExecStart=\/usr\/bin\/npm run worker:tmc-push -- --loop/);
