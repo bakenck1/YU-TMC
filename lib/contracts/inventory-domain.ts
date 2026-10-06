@@ -155,6 +155,9 @@ export const DECISION_RESOLUTIONS = [
 export type DecisionResolution = (typeof DECISION_RESOLUTIONS)[number];
 
 export const NOTIFICATION_EVENT_TYPES = [
+  "passport.submitted",
+  "passport.approved",
+  "passport.rejected",
   "transfer.requested",
   "transfer.confirmed",
   "transfer.rejected",
@@ -178,6 +181,7 @@ export type NotificationEventType =
   (typeof NOTIFICATION_EVENT_TYPES)[number];
 
 export const NOTIFICATION_SUBJECT_KINDS = [
+  "room_passport",
   "item",
   "transfer",
   "tmc_transfer_request",

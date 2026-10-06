@@ -25,5 +25,5 @@ test("service request stores its photo separately from the primary item photo", 
   assert.match(repository, /'service_request'/);
   assert.match(repository, /purpose = 'item' and status = 'attached'/);
   assert.match(route, /notifyMaintenanceRequest/);
-  assert.match(route, /user\.role === "employee"/);
+  assert.match(route, /isEmployeeRole\(user\.role\)/);
 });

@@ -1,5 +1,7 @@
 "use client";
 
+import { isEmployeeRole } from "@/lib/contracts/users";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -37,7 +39,7 @@ import ReportMetric from "./ReportMetric";
 interface InspectionTechnician {
   id: string;
   fullName: string;
-  role: "warehouse" | "employee";
+  role: "warehouse" | "employee" | "passport_author" | "passport_reviewer";
 }
 
 export default function InventoryInspectionsManager({
@@ -306,7 +308,7 @@ export default function InventoryInspectionsManager({
           </div>
           {canExport ? <a href="/api/inventory/excel?action=export&dataset=inspection-results" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700"><FileSpreadsheet className="h-4 w-4" />{t("excel.exportResults")}</a> : null}
         </div>
-        {actorRole !== "employee" ? (
+        {!isEmployeeRole(actorRole) ? (
           <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(13rem,0.7fr)_12rem_auto]">
             <input
               value={name}

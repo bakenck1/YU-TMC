@@ -4,6 +4,37 @@ import { Workbook } from "exceljs";
 
 import { exportOneCReconciliation } from "../lib/server/excel/one-c-reconciliation-excel";
 
+test("Excel separates missing cabinets from possible matches, pending rows and published items", async () => {
+  const missing = {
+    external_id: "cabinet-1", review_state: "blocked", match_method: "new_candidate",
+    payload: { name: "Шкаф книжный", inventoryNumber: "0001/02", code: "000007", status: "Принято к учёту", location: "Библиотека", responsibleName: "Иванов", quantity: 1 },
+    issues: [{ code: "missing_room" }],
+  };
+  const data = { batch: { summary: { identifierMatched: 0 } }, rows: [
+    missing,
+    { ...missing, external_id: "possible", match_method: "possible_match" },
+    { ...missing, external_id: "pending", review_state: "pending" },
+    { ...missing, external_id: "published", review_state: "published", published_item_id: "item-1" },
+    { ...missing, external_id: "withdrawn", payload: { ...missing.payload, status: "Снято с учёта" } },
+    { ...missing, external_id: "excluded", review_state: "excluded" },
+  ] };
+  for (const scope of ["all", "missing"] as const) {
+    const bytes = await exportOneCReconciliation(data, scope);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const sheet = workbook.getWorksheet("Нет в Inventory")!;
+    assert.equal(sheet.rowCount, 2);
+    assert.equal(sheet.getCell("C2").text, "cabinet-1");
+    assert.equal(sheet.getCell("E2").value, "0001/02");
+    assert.equal(sheet.getCell("I2").text, "Библиотека");
+    assert.equal(sheet.getCell("J2").text, "Иванов");
+    assert.equal(sheet.getCell("V2").text, "Нет в Inventory");
+    assert.equal(sheet.getCell("W2").text, "Осы шкаф жоқ — нет в Inventory");
+    assert.equal(workbook.getWorksheet("Требует проверки")?.rowCount, scope === "all" ? 4 : undefined);
+    assert.equal(workbook.getWorksheet("Все ОС")?.rowCount, scope === "all" ? 7 : undefined);
+  }
+});
+
 test("exports every 1C reconciliation row with Russian labels and responsible details", async () => {
   const bytes = await exportOneCReconciliation({
     batch: {

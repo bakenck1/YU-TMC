@@ -18,7 +18,7 @@ export interface InspectionRecord {
 
 export interface AssignableTechnicianRecord {
   id: string;
-  role: "warehouse" | "employee";
+  role: "warehouse" | "employee" | "passport_author" | "passport_reviewer";
 }
 
 export interface InspectionRoomRecord {

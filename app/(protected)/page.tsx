@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 // Authentication for this route group is enforced by the adjacent layout.
 import Dashboard from "@/components/Dashboard";
 import { buildCampusMapData } from "@/lib/campus-map-data";
@@ -38,7 +40,7 @@ export default async function Home() {
     <Dashboard
       totalUsers={users.length}
       campus={buildCampusMapData(buildings, rooms, items)}
-      isEmployee={currentUser.role === "employee"}
+      isEmployee={isEmployeeRole(currentUser.role)}
     />
   );
 }

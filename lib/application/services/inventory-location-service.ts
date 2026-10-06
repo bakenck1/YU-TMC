@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   BuildingDto,
   CreateBuildingInput,
@@ -199,7 +201,7 @@ export class InventoryLocationService {
       if (!building || building.status !== "active") {
         throw new ApplicationError("not_found", "building_not_found");
       }
-      const rooms = actor.role === "employee"
+      const rooms = isEmployeeRole(actor.role)
         ? await locations.listRoomsAssignedTo(buildingId, actor.userId)
         : await locations.listRooms(buildingId);
       return rooms.map(toRoomDto);

@@ -11,6 +11,9 @@ import type { TranslationKey } from "@/lib/i18n";
 
 /** Maps static notification types to their translation keys. */
 const NOTIFICATION_LABEL: Partial<Record<string, TranslationKey>> = {
+  "passport.submitted": "passport.notification.submitted",
+  "passport.approved": "passport.notification.approved",
+  "passport.rejected": "passport.notification.rejected",
   "tmc_transfer.overdue":   "tmc.notifications.overdue",
   "tmc_transfer.requested": "tmc.notifications.requested",
   "tmc_transfer.cancelled": "tmc.notifications.cancelled",
@@ -98,7 +101,7 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
     setOpen(false);
     openingIdRef.current = null;
     setOpeningId(null);
-    router.push(`/tmc/transfer-requests/${notification.requestId}`);
+    router.push(notificationHref(notification));
   }
 
   async function markAllRead() {
@@ -152,10 +155,15 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
           </div>
           <div className="max-h-96 overflow-y-auto p-2">
             {feed?.notifications.length ? feed.notifications.map((notification) => (
-              <Link key={notification.id} href={`/tmc/transfer-requests/${notification.requestId}`} onClick={(event) => void openNotification(event, notification)} aria-busy={openingId === notification.id} className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-zinc-50 ${notification.readAt ? "text-zinc-500" : "bg-emerald-50/60 font-semibold text-zinc-900"} ${openingId === notification.id ? "pointer-events-none opacity-60" : ""}`}>
+              <Link key={notification.id} href={notificationHref(notification)} onClick={(event) => void openNotification(event, notification)} aria-busy={openingId === notification.id} className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-zinc-50 ${notification.readAt ? "text-zinc-500" : "bg-emerald-50/60 font-semibold text-zinc-900"} ${openingId === notification.id ? "pointer-events-none opacity-60" : ""}`}>
                 <span>{notification.type === "tmc_transfer.completed"
                   ? t(completedLabel(notification.safePayload))
-                  : t(NOTIFICATION_LABEL[notification.type] ?? "tmc.notifications.completed")}</span>
+                  : t(NOTIFICATION_LABEL[notification.type] ?? "tmc.notifications.completed")}
+                  {notification.roomId ? <span className="mt-1 block text-xs font-normal">
+                    {String(notification.safePayload.building ?? "")} · {String(notification.safePayload.room ?? "")}
+                    {notification.type === "passport.rejected" && notification.safePayload.reason ? <span className="block">{t(`passport.reason.${notification.safePayload.reason}` as TranslationKey)}{notification.safePayload.comment ? ` · ${notification.safePayload.comment}` : ""}</span> : null}
+                  </span> : null}
+                </span>
                 {notification.readAt
                   ? <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-500">{t("tmc.notifications.read")}</span>
                   : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />}
@@ -166,4 +174,8 @@ export default function TmcNotifications({ compact = false }: { compact?: boolea
       )}
     </div>
   );
+}
+
+function notificationHref(notification: TmcNotificationFeedDto["notifications"][number]) {
+  return notification.roomId ? `/room-passports/${notification.roomId}` : `/tmc/transfer-requests/${notification.requestId}`;
 }

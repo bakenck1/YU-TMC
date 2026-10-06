@@ -22,6 +22,12 @@ test("active-match filter is accepted only with its explicit value",async()=>{
   assert.equal((await h.listBatchRows(new Request("https://x.test/api?match=all"),context())).status,400);
 });
 test("row candidates are scoped by validated batch and external identifiers",async()=>{const h=handlers();const ctx={params:Promise.resolve({id:ID,externalId:ID})};assert.equal((await h.getRowCandidates(new Request("https://x.test/api"),ctx)).status,200);});
+test("missing Inventory filter keeps search and pagination on the server", async () => {
+  let received: unknown;
+  const h = handlers({ listBatchRows: async (_id, query) => { received = query; return {}; } });
+  assert.equal((await h.listBatchRows(new Request("https://x.test/api?match=missing&search=2416%2F01&page=2&pageSize=100"), context())).status, 200);
+  assert.deepEqual(received, { page: 2, pageSize: 100, match: "missing", search: "2416/01" });
+});
 test("candidate lookup forwards 1C GUID, 1C code and inventory number searches exactly",async()=>{
   const searches=[ID,"000009352","2416/1056"];
   const seen:string[]=[];

@@ -48,7 +48,7 @@ interface InspectionRow extends QueryResultRow {
 
 interface AssignableTechnicianRow extends QueryResultRow {
   id: string;
-  role: "warehouse" | "employee";
+  role: "warehouse" | "employee" | "passport_author" | "passport_reviewer";
 }
 
 interface InspectionRoomRow extends QueryResultRow {
@@ -148,7 +148,7 @@ class PostgresInventoryInspectionRepository
         where id = $1
           and is_active = true
           and deleted_at is null
-          and role in ('warehouse', 'employee')
+          and role in ('warehouse', 'employee', 'passport_author', 'passport_reviewer')
         for share`,
       [id],
     );

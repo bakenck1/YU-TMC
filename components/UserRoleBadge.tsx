@@ -8,6 +8,8 @@ const ROLE_TONES = {
   warehouse: "info",
   employee: "neutral",
   typography: "info",
+  passport_author: "neutral",
+  passport_reviewer: "info",
 } as const;
 
 export default function UserRoleBadge({ role }: { role: UserRole }) {

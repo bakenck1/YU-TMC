@@ -896,10 +896,11 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
       `update ${NOTIFICATION_DELIVERIES} delivery
           set read_at = coalesce(delivery.read_at, $3)
          from ${NOTIFICATION_EVENTS} event
-         join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
-         join ${REQUESTS} request on request.id = tmc.request_id
+         left join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+         left join ${REQUESTS} request on request.id = tmc.request_id
         where delivery.event_id = $1 and delivery.recipient_id = $2
           and event.id = delivery.event_id and event.occurred_at <= $3
+          and (tmc.notification_event_id is not null or event.subject_kind = 'room_passport')
           and (event.type <> 'tmc_transfer.overdue'
                or (request.status = 'pending' and request.expires_at <= $3))`,
       [input.notificationId, input.actorId, input.readAt],
@@ -928,11 +929,12 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
       `update ${NOTIFICATION_DELIVERIES} delivery
           set read_at = coalesce(delivery.read_at, $2)
          from ${NOTIFICATION_EVENTS} event
-         join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
-         join ${REQUESTS} request on request.id = tmc.request_id
+         left join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
+         left join ${REQUESTS} request on request.id = tmc.request_id
         where delivery.event_id = event.id
           and delivery.recipient_id = $1
           and delivery.read_at is null
+          and (tmc.notification_event_id is not null or event.subject_kind = 'room_passport')
           and event.occurred_at <= $2
           and (event.type <> 'tmc_transfer.overdue'
                or (request.status = 'pending' and request.expires_at <= $2))`,
@@ -961,7 +963,8 @@ class PostgresTmcStageFourRepository implements TmcStageFourRepository {
 interface NotificationRow extends QueryResultRow {
   id: string;
   type: TmcNotificationRecord["type"];
-  request_id: string;
+  request_id: string | null;
+  room_id?: string | null;
   item_id: string | null;
   safe_payload: Record<string, string | number | boolean | null>;
   occurred_at: Date;
@@ -970,7 +973,7 @@ interface NotificationRow extends QueryResultRow {
 
 function notificationFeedSql(extraPredicate: string, includeLimit = true) {
   return `select feed.* from (
-    select event.id, event.type, tmc.request_id, tmc.item_id,
+    select event.id, event.type, tmc.request_id, tmc.item_id, null::uuid as room_id,
            event.safe_payload, event.occurred_at, delivery.read_at
       from ${NOTIFICATION_EVENTS} event
       join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
@@ -980,7 +983,7 @@ function notificationFeedSql(extraPredicate: string, includeLimit = true) {
        and (event.type <> 'tmc_transfer.overdue'
             or (request.status = 'pending' and request.expires_at <= $3))
     union all
-    select event.id, event.type, tmc.request_id, tmc.item_id,
+    select event.id, event.type, tmc.request_id, tmc.item_id, null::uuid as room_id,
            event.safe_payload, event.occurred_at, receipt.read_at
       from ${NOTIFICATION_EVENTS} event
       join ${TMC_NOTIFICATIONS} tmc on tmc.notification_event_id = event.id
@@ -991,6 +994,12 @@ function notificationFeedSql(extraPredicate: string, includeLimit = true) {
        and event.occurred_at <= $3
        and (event.type <> 'tmc_transfer.overdue'
             or (request.status = 'pending' and request.expires_at <= $3))
+    union all
+    select event.id, event.type, null::uuid as request_id, null::uuid as item_id, event.subject_id as room_id,
+           event.safe_payload, event.occurred_at, delivery.read_at
+      from ${NOTIFICATION_EVENTS} event
+      join ${NOTIFICATION_DELIVERIES} delivery on delivery.event_id = event.id
+     where event.subject_kind = 'room_passport' and delivery.recipient_id = $1 and event.occurred_at <= $3
   ) feed where true ${extraPredicate}
   order by feed.occurred_at desc, feed.id desc
   ${includeLimit ? "limit $4" : ""}`;
@@ -1001,6 +1010,7 @@ function mapNotification(row: NotificationRow): TmcNotificationRecord {
     id: row.id,
     type: row.type,
     requestId: row.request_id,
+    ...(row.room_id ? { roomId: row.room_id } : {}),
     itemId: row.item_id,
     safePayload: row.safe_payload,
     occurredAt: new Date(row.occurred_at),

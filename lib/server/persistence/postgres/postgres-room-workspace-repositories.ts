@@ -23,6 +23,9 @@ const RESPONSIBILITY = '"yu_inventory"."responsibility_periods"';
 const PHOTOS = '"yu_inventory"."photos"';
 
 interface RoomRow extends QueryResultRow {
+  passport_file_id: string | null;
+  passport_file_name: string | null;
+  passport_file_size: number | null;
   id: string;
   designation: string;
   building_name: string;
@@ -163,11 +166,14 @@ class PostgresRoomWorkspaceRepository implements RoomWorkspaceRepository {
 
 function roomSelect(joinAndWhere: string) {
   return `select r.id, r.designation, b.name as building_name,
+                 passport.file_id as passport_file_id, passport.file_name as passport_file_name,
+                 passport.file_size as passport_file_size,
                  r.floor_number, r.floor_label, r.primary_responsible_id,
                  r.access_mode,
                  responsible.full_name as primary_responsible_name
             from ${ROOMS} r
             join ${BUILDINGS} b on b.id = r.building_id
+            left join "yu_inventory"."room_passports" passport on passport.room_id = r.id and passport.status = 'approved'
             left join ${USERS} responsible on responsible.id = r.primary_responsible_id
             ${joinAndWhere}
            limit 1`;
@@ -176,6 +182,7 @@ function roomSelect(joinAndWhere: string) {
 function mapRoom(row: RoomRow): RoomWorkspaceRecord {
   return {
     id: row.id,
+    passport: row.passport_file_id ? { id: row.passport_file_id, name: row.passport_file_name!, size: row.passport_file_size!, url: `/api/room-passports/${row.id}/published?fileId=${row.passport_file_id}` } : null,
     designation: row.designation,
     buildingName: row.building_name,
     floorNumber: Number(row.floor_number),

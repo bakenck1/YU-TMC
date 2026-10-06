@@ -23,6 +23,7 @@ export interface RoomWorkspaceItemDto {
 }
 
 export interface VisibleRoomWorkspaceDto {
+  passport?: import("@/lib/contracts/room-passports").PassportFileDto | null;
   access: "full" | "limited";
   id: string;
   designation: string;

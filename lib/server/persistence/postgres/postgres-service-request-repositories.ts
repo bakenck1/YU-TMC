@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isEmployeeRole } from "@/lib/contracts/users";
+
 import type { QueryResultRow } from "pg";
 import { ApplicationError } from "@/lib/domain/application-error";
 import type {
@@ -99,7 +101,7 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
             and authorized_actor.version = $${actorVersionIndex}
        )`,
     );
-    if (actor.role === "employee") {
+    if (isEmployeeRole(actor.role)) {
       clauses.push(
         `period.responsible_user_id = $${actorIdIndex}`,
       );

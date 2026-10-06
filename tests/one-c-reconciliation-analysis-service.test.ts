@@ -10,7 +10,16 @@ const batchId = "11111111-1111-4111-8111-111111111111";
 const externalId = "22222222-2222-4222-8222-222222222222";
 const itemId = "33333333-3333-4333-8333-333333333333";
 
-test("dry-run finds an active item by 1C code and writes row results in a batch", async () => {
+test("the missing list requires analysis instead of reporting an empty result for untouched data", async () => {
+  let queries = 0;
+  const pool = { query: async () => { queries++; return { rows: [{ id: batchId, summary: {} }] }; } };
+  const service = new OneCReconciliationService(pool as unknown as Pick<Pool, "query" | "connect">);
+  await assert.rejects(service.listBatchRows(batchId, { page: 1, pageSize: 50, match: "missing" }), /one_c_analysis_required/);
+  assert.equal(queries, 1);
+});
+
+for (const hasMatch of [true, false]) {
+test(hasMatch ? "dry-run finds an active item by 1C code and writes row results in a batch" : "dry-run counts absent items even when publication is blocked by missing room and type", async () => {
   const header = Array(12).fill(""); header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
   const excelRow = Array(12).fill(""); excelRow[0] = 1; excelRow[1] = "Другой предмет №999/888"; excelRow[11] = 0;
   const workbook = XLSX.utils.book_new();
@@ -36,7 +45,7 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
       }
       if (sql.includes("array_agg(br.original_value")) {
         return { rows: [
-          { id: itemId, name: "Предмет сайта", inventory_number: "SITE-42", inventory_number_kind: "official", one_c_code: "00042", status: "active", version: 1, archived_at: null, official_barcodes: [] },
+          { id: itemId, name: "Предмет сайта", inventory_number: "SITE-42", inventory_number_kind: "official", one_c_code: hasMatch ? "00042" : null, status: "active", version: 1, archived_at: null, official_barcodes: [] },
           { id: "55555555-5555-4555-8555-555555555555", name: "Удалённый предмет", inventory_number: "ARCHIVED-1", inventory_number_kind: "official", one_c_code: null, status: "active", version: 1, archived_at: new Date(), official_barcodes: [] },
         ], rowCount: 2 };
       }
@@ -63,12 +72,14 @@ test("dry-run finds an active item by 1C code and writes row results in a batch"
   ).analyzeBatch(batchId, { version: 1 });
 
   assert.equal(rowUpdateCount, 1);
-  assert.equal(rowUpdate?.matched_item_id, itemId);
-  assert.equal(rowUpdate?.match_method, "code");
-  assert.equal(rowUpdate?.review_state, "matched");
-  assert.equal(savedSummary?.identifierMatched, 1);
-  assert.equal(savedSummary?.activeMatched, 1);
-  assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: 1, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 0 });
+  assert.equal(rowUpdate?.matched_item_id, hasMatch ? itemId : null);
+  assert.equal(rowUpdate?.match_method, hasMatch ? "code" : "new_candidate");
+  assert.equal(rowUpdate?.review_state, hasMatch ? "matched" : "blocked");
+  assert.equal(savedSummary?.identifierMatched, hasMatch ? 1 : 0);
+  assert.equal(savedSummary?.activeMatched, hasMatch ? 1 : 0);
+  assert.equal(savedSummary?.missingInventory, hasMatch ? 0 : 1);
+  assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: hasMatch ? 1 : 0, excelOnly: 0, both: 0, missing: hasMatch ? 0 : 1, temporary: 0, possible: 0 });
   assert.equal((savedSummary?.inventoryAudit as Record<string, unknown>)?.algorithmVersion, 7);
-  assert.equal(plan.link, 1);
+  assert.equal(plan.link, hasMatch ? 1 : 0);
 });
+}

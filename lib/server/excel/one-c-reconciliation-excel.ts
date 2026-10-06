@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Workbook, type Worksheet } from "exceljs";
+import { oneCInventoryPresence, oneCMissingInventoryMessage, ONE_C_PRESENCE_LABELS } from "@/lib/one-c-inventory-presence";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -46,12 +47,17 @@ const ISSUE_LABELS: Record<string, string> = {
   identifier_conflict: "Конфликт идентификаторов",
 };
 
-export async function exportOneCReconciliation(data: OneCReconciliationExport): Promise<Uint8Array> {
+export async function exportOneCReconciliation(data: OneCReconciliationExport, scope: "all" | "missing" = "all"): Promise<Uint8Array> {
   const workbook = new Workbook();
   workbook.creator = "Yessenov University Inventory";
   workbook.created = new Date();
   addSummarySheet(workbook, data);
-  addRowsSheet(workbook, data.rows);
+  const missing = data.rows.filter((row) => oneCInventoryPresence(row) === "missing");
+  addRowsSheet(workbook, missing, "Нет в Inventory");
+  if (scope === "all") {
+    addRowsSheet(workbook, data.rows.filter((row) => ["review", "pending"].includes(oneCInventoryPresence(row))), "Требует проверки");
+    addRowsSheet(workbook, data.rows, "Все ОС");
+  }
   return new Uint8Array(await workbook.xlsx.writeBuffer());
 }
 
@@ -80,12 +86,17 @@ function addSummarySheet(workbook: Workbook, data: OneCReconciliationExport) {
     })),
     { label: "ID партии 1С", value: text(batch.id) },
     { label: "Версия партии 1С", value: typeof batch.version === "number" ? batch.version : text(batch.version) },
+    ...Object.entries(ONE_C_PRESENCE_LABELS).map(([presence, label]) => ({
+      label, value: data.rows.filter((row) => oneCInventoryPresence(row) === presence).length,
+    })),
+    { label: "Как читать результат", value: "Нет в Inventory: действующие физические ТМЦ 1С, не найденные по идентификаторам при последнем анализе. Названия не используются для сопоставления. Неоднозначные записи требуют проверки." },
+    { label: "Актуальность", value: "Результат последнего анализа выбранной партии. После изменения Inventory запустите сверку заново." },
   ]);
   styleSheet(sheet, 2);
 }
 
-function addRowsSheet(workbook: Workbook, rows: JsonRecord[]) {
-  const sheet = workbook.addWorksheet("Все ОС", { views: [{ state: "frozen", ySplit: 1 }] });
+function addRowsSheet(workbook: Workbook, rows: JsonRecord[], name: string) {
+  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
   sheet.columns = [
     { header: "Статус проверки", key: "reviewState", width: 24 },
     { header: "Предлагаемое действие", key: "action", width: 26 },
@@ -108,6 +119,8 @@ function addRowsSheet(workbook: Workbook, rows: JsonRecord[]) {
     { header: "Проблемы", key: "issues", width: 64 },
     { header: "Решение администратора", key: "decision", width: 44 },
     { header: "ID опубликованной карточки", key: "publishedItemId", width: 38 },
+    { header: "Наличие в Inventory", key: "inventoryPresence", width: 28 },
+    { header: "Сообщение", key: "message", width: 44 },
   ];
   for (const source of rows) {
     const payload = record(source.payload);
@@ -137,6 +150,8 @@ function addRowsSheet(workbook: Workbook, rows: JsonRecord[]) {
       }).filter(Boolean).join("; "),
       decision: decisionLabel(record(source.decision)),
       publishedItemId: text(source.published_item_id),
+      inventoryPresence: ONE_C_PRESENCE_LABELS[oneCInventoryPresence(source)],
+      message: oneCInventoryPresence(source) === "missing" ? oneCMissingInventoryMessage(text(payload.name)) : "",
     });
     if (row.number % 2 === 0) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
   }

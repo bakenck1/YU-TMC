@@ -58,6 +58,7 @@ function buildWorkspace(
   return {
     access: fullAccess ? "full" : "limited",
     id: room.id,
+    passport: room.passport ?? null,
     designation: room.designation,
     buildingName: room.buildingName,
     floorNumber: room.floorNumber,

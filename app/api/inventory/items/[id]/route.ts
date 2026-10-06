@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   UpdateInventoryItemContentInput,
   UpdateInventoryItemProtectedInput,
@@ -103,7 +105,7 @@ export async function PATCH(
       const responsibleId = item.responsible.id;
       try { after(() => notifyCurrentResponsibilityByWhatsApp(item.id, responsibleId)); } catch { /* Best-effort notification scheduling. */ }
     }
-    if (serviceRequest && user.role === "employee") {
+    if (serviceRequest && isEmployeeRole(user.role)) {
       after(async () => {
         const admins = (await services.users.listUsers())
           .filter((candidate) => candidate.role === "admin" && candidate.active)

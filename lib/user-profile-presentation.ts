@@ -14,6 +14,8 @@ export const USER_PROFILE_ROLE_COPY: Record<UserRole, { labelKey: TranslationKey
     labelKey: "users.employee",
     descriptionKey: "profile.roleEmployeeDescription",
   },
+  passport_author: { labelKey: "users.passport_author", descriptionKey: "profile.rolePassportAuthorDescription" },
+  passport_reviewer: { labelKey: "users.passport_reviewer", descriptionKey: "profile.rolePassportReviewerDescription" },
   typography: {
     labelKey: "users.typography",
     descriptionKey: "profile.roleTypographyDescription",

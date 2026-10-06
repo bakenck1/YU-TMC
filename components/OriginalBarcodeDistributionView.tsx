@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import Link from "next/link";
 import LocalBarcodeDistributionPanel from "@/components/LocalBarcodeDistributionPanel";
 import Wrapper from "@/components/Wrapper";
@@ -16,7 +18,7 @@ export default function OriginalBarcodeDistributionView({
   actorRole,
 }: OriginalBarcodeDistributionViewProps) {
   const canOpenItem =
-    actorRole !== "employee" || distribution.originalResponsible?.id === actorId;
+    !isEmployeeRole(actorRole) || distribution.originalResponsible?.id === actorId;
 
   return (
     <Wrapper direction="column" gap="md">

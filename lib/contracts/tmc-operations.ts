@@ -202,12 +202,16 @@ export interface TmcLocationHistoryDto {
 export interface TmcNotificationDto {
   id: string;
   type:
+    | "passport.submitted"
+    | "passport.approved"
+    | "passport.rejected"
     | "tmc_transfer.requested"
     | "tmc_transfer.completed"
     | "tmc_transfer.cancelled"
     | "tmc_transfer.problem"
     | "tmc_transfer.overdue";
-  requestId: string;
+  requestId: string | null;
+  roomId?: string;
   itemId: string | null;
   safePayload: Record<string, string | number | boolean | null>;
   occurredAt: string;

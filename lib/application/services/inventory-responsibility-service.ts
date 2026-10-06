@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   CreateTransferInput,
   DecideTransferInput,
@@ -202,7 +204,7 @@ export class InventoryResponsibilityService {
           !proposedResponsible ||
           !proposedResponsible.active ||
           proposedResponsible.deletedAt ||
-          proposedResponsible.role !== "employee"
+          !isEmployeeRole(proposedResponsible.role)
         ) {
           throw conflict("proposed_responsible_unavailable");
         }

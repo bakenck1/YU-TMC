@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import { Barcode, Clock3, MapPin, Package, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -29,7 +31,7 @@ export default function LocalBarcodeGroupDetails({
   actorId,
   actorRole,
 }: LocalBarcodeGroupDetailsProps) {
-  const canOpenDistribution = group.status === "active" || actorRole !== "employee";
+  const canOpenDistribution = group.status === "active" || !isEmployeeRole(actorRole);
 
   return (
     <Wrapper direction="column" gap="md">

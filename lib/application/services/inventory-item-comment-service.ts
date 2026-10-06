@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type { InventoryItemCommentDto } from "@/lib/contracts/inventory-items";
 import type {
   InventoryItemCommentRecord,
@@ -153,7 +155,7 @@ function assertItemReadable(item: InventoryItemRecord, actor: AuthorizationActor
 
 function assertItemWritable(item: InventoryItemRecord, actor: AuthorizationActor) {
   if (actor.role === "admin") return;
-  if (actor.role === "employee" && item.responsibleId === actor.userId) return;
+  if (isEmployeeRole(actor.role) && item.responsibleId === actor.userId) return;
   throw itemNotFound();
 }
 

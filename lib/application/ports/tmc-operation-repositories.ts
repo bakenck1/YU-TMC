@@ -231,8 +231,9 @@ export interface CreateTmcNotificationRecord {
 
 export interface TmcNotificationRecord {
   id: string;
-  type: Extract<NotificationEventType, `tmc_transfer.${string}`>;
-  requestId: string;
+  type: Extract<NotificationEventType, `tmc_transfer.${string}` | `passport.${string}`>;
+  requestId: string | null;
+  roomId?: string;
   itemId: string | null;
   safePayload: Record<string, string | number | boolean | null>;
   occurredAt: Date;

@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import { USER_ROLES, type UserRole } from "@/lib/contracts/users";
 
 export const APP_PERMISSIONS = [
@@ -66,6 +68,8 @@ export const APP_PERMISSIONS = [
   "inventory.photo.dispute_original",
   "inventory.report.export",
   "inventory.integration.one_c.manage",
+  "inventory.passport.manage",
+  "inventory.passport.review",
 ] as const;
 
 export type AppPermission = (typeof APP_PERMISSIONS)[number];
@@ -149,6 +153,8 @@ export const PERMISSION_ROLES = {
   "inventory.photo.dispute_original": ["admin", "employee"],
   "inventory.report.export": ADMIN_WAREHOUSE,
   "inventory.integration.one_c.manage": ADMIN_ONLY,
+  "inventory.passport.manage": ["admin", "passport_author", "passport_reviewer"],
+  "inventory.passport.review": ["admin", "passport_reviewer"],
 } as const satisfies Record<AppPermission, readonly UserRole[]>;
 
 export interface AuthorizationActor {
@@ -267,6 +273,10 @@ export function hasPermission(
   permission: unknown,
 ): boolean {
   if (!isUserRole(role) || !isAppPermission(permission)) return false;
+  // Inherit employee scope centrally; passport-wide room access is confined
+  // to the passport APIs and never grants general inventory permissions.
+  if (!permission.startsWith("inventory.passport.") &&
+      (role === "passport_author" || role === "passport_reviewer")) role = "employee";
   return PERMISSION_ROLES[permission].some(
     (permittedRole) => permittedRole === role,
   );
@@ -413,7 +423,7 @@ export function canPerformInventoryOperation(
         (actor.role === "typography" &&
           hasPermission(actor.role, "inventory.room.read_all") &&
           hasPermission(actor.role, "inventory.photo.item_preview")) ||
-        (actor.role === "employee" &&
+        (isEmployeeRole(actor.role) &&
           (actor.userId === request.currentResponsibleId ||
             request.viaAuthorizedActiveItemScan) &&
           hasPermission(actor.role, "inventory.photo.item_preview")))

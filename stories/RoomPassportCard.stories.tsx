@@ -1,0 +1,11 @@
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import RoomPassportCard from "@/components/RoomPassportCard";
+import { PASSPORT_FIXTURE, PASSPORT_FILE_FIXTURE } from "./room-passport-fixtures";
+const meta = { title: "Inventory/RoomPassportCard", component: RoomPassportCard, tags: ["autodocs"], parameters: { layout: "fullscreen" }, args: { initialPassport: PASSPORT_FIXTURE } } satisfies Meta<typeof RoomPassportCard>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const NotStarted: Story = {};
+export const Review: Story = { args: { initialPassport: { ...PASSPORT_FIXTURE, status: "in_review", file: PASSPORT_FILE_FIXTURE, actions: ["return", "approve", "reject"] } } };
+export const AwaitingReview: Story = { args: { viewerId: "author", initialPassport: { ...PASSPORT_FIXTURE, status: "in_review", file: PASSPORT_FILE_FIXTURE, submittedBy: "author", actions: ["return"] } } };
+export const Correction: Story = { args: { initialPassport: { ...PASSPORT_FIXTURE, status: "needs_correction", file: PASSPORT_FILE_FIXTURE, rejectionReason: "incomplete", rejectionComment: "Дополните сведения об оборудовании кабинета.", actions: ["upload"] } } };
+export const Approved: Story = { args: { initialPassport: { ...PASSPORT_FIXTURE, status: "approved", file: PASSPORT_FILE_FIXTURE, actions: ["return", "delete"] } } };

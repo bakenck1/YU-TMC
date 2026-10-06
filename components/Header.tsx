@@ -34,6 +34,8 @@ const ROLE_LABELS: Record<AuthRole, TranslationKey> = {
   admin: "auth.roleAdmin",
   warehouse: "auth.roleWarehouse",
   employee: "auth.roleEmployee",
+  passport_author: "users.passport_author",
+  passport_reviewer: "users.passport_reviewer",
   typography: "auth.roleTypography",
 };
 

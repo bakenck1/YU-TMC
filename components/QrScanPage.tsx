@@ -1,5 +1,7 @@
 "use client";
 
+import { isEmployeeRole } from "@/lib/contracts/users";
+
 import { Barcode, MapPinned, Pencil, RotateCcw, ScanLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -171,7 +173,7 @@ export default function QrScanPage({
     );
   }
 
-  const canClaim = actorRole === "employee";
+  const canClaim = isEmployeeRole(actorRole);
   const canEditItem = hasPermission(actorRole, "inventory.item.edit_content");
   const itemActive = item?.status === "active";
   const assignedToOther =

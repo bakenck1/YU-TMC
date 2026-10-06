@@ -1,3 +1,5 @@
+
+import { isEmployeeRole } from "@/lib/contracts/users";
 import type { ServiceRequestRepositories } from "@/lib/application/ports/service-request-repositories";
 import type { UnitOfWork } from "@/lib/application/ports/unit-of-work";
 import type {
@@ -39,7 +41,7 @@ export class ServiceRequestService {
     if (
       actor.role !== "admin" &&
       actor.role !== "warehouse" &&
-      actor.role !== "employee"
+      !isEmployeeRole(actor.role)
     ) {
       throw forbidden();
     }
@@ -53,7 +55,7 @@ export class ServiceRequestService {
     actor: AuthenticatedServiceRequestActor,
   ) {
     assertAuthenticatedActor(actor);
-    if (actor.role !== "admin" && actor.role !== "employee") throw forbidden();
+    if (actor.role !== "admin" && !isEmployeeRole(actor.role)) throw forbidden();
     if (!isUuid(input.itemId)) throw validation();
     if (![
       "not_working",
@@ -66,7 +68,7 @@ export class ServiceRequestService {
       const context = await requests.findItemContext(input.itemId);
       if (!context) throw new ApplicationError("not_found", "item_not_found");
       if (
-        actor.role === "employee" &&
+        isEmployeeRole(actor.role) &&
         context.itemResponsibleId !== actor.userId
       ) {
         throw itemNotFound();
@@ -92,7 +94,7 @@ export class ServiceRequestService {
       const context = authorization.item;
       if (!context) throw itemNotFound();
       if (
-        actor.role === "employee" &&
+        isEmployeeRole(actor.role) &&
         context.itemResponsibleId !== actor.userId
       ) {
         throw itemNotFound();

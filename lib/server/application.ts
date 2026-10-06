@@ -5,6 +5,9 @@ import { createStructuredWorkerLogger } from "@/lib/server/observability";
 
 import { InventoryLocationService } from "@/lib/application/services/inventory-location-service";
 import { RoomWorkspaceService } from "@/lib/application/services/room-workspace-service";
+import { RoomPassportService } from "@/lib/application/services/room-passport-service";
+import { createPostgresPassportRepositories } from "@/lib/server/persistence/postgres/postgres-room-passport-repository";
+import { validatePassportPdf } from "@/lib/server/pdf/validate-passport";
 import { ServiceRequestService } from "@/lib/application/services/service-request-service";
 import { InventoryItemService } from "@/lib/application/services/inventory-item-service";
 import { QrResolutionService } from "@/lib/application/services/qr-resolution-service";
@@ -47,6 +50,7 @@ export interface ApplicationServices {
   readonly items: InventoryItemService;
   readonly locations: InventoryLocationService;
   readonly rooms: RoomWorkspaceService;
+  readonly passports: RoomPassportService;
   readonly requests: ServiceRequestService;
   readonly qr: QrResolutionService;
   readonly responsibility: InventoryResponsibilityService;
@@ -123,6 +127,7 @@ function createApplicationServices(): ApplicationServices {
     rooms: new RoomWorkspaceService(
       createPostgresUnitOfWork(createPostgresRoomWorkspaceRepositories),
     ),
+    passports: new RoomPassportService(createPostgresUnitOfWork(createPostgresPassportRepositories), { create: randomUUID }, { validate: validatePassportPdf }),
     requests: new ServiceRequestService(
       createPostgresUnitOfWork(createPostgresServiceRequestRepositories),
       { now: () => new Date() },

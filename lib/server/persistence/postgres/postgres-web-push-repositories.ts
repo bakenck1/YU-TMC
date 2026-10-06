@@ -264,7 +264,7 @@ class PostgresWebPushSubscriptionRepository
         where s.user_id = $1
           and u.is_active = true
           and u.deleted_at is null
-          and u.role in ('admin', 'warehouse', 'employee')
+          and u.role in ('admin', 'warehouse', 'employee', 'passport_author', 'passport_reviewer')
         order by s.updated_at desc, s.id
         ${sqlCollectionLimit(COLLECTION_LIMITS.pushSubscriptionsPerUser)}`,
       [userId],

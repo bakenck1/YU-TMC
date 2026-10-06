@@ -43,10 +43,10 @@ test("internal service requests require photos while dormitory requests remain p
   }
 });
 
-test("mobile navigation contains the standard destinations and the printing workspace", () => {
+test("mobile navigation contains standard destinations, printing and passport workspaces", () => {
   const navigation = read("components/MobileBottomNavigation.tsx");
   const hrefs = [...navigation.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/profile", "/inventory"]);
+  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/profile", "/inventory", "/room-passports"]);
   assert.match(navigation, /min-h-11/);
   assert.match(navigation, /md:hidden/);
 });
