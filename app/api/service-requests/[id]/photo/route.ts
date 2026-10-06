@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireCurrentUser(request, { photoRead: true });
     const { id } = await params;
     const photo = await getApplicationServices().requests.getPhoto(
       id,

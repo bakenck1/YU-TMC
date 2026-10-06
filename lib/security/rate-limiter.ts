@@ -2,7 +2,7 @@ import "server-only";
 
 import { isIP } from "node:net";
 import { getDatabasePool } from "@/lib/db/client";
-import { createServerValueDigest } from "./session";
+import { createServerValueDigest, sessionFromRequest } from "./session";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -255,6 +255,25 @@ export function consumeApiRateLimit(request: Request): Promise<RateLimitResult> 
     });
   }
   return Promise.resolve(apiRateLimiter.consume(getClientIp(request)));
+}
+
+// Reading a page of private photos must not consume the session or mutation
+// budget. A signed session identifies the account; anonymous requests stay
+// bounded by IP. Each photo still requires live account and item permissions.
+export function consumePhotoReadRateLimit(request: Request) {
+  return consumeAuthenticatedReadLimit(request, "photo-read-v1", 300);
+}
+
+export function consumeSessionReadRateLimit(request: Request) {
+  return consumeAuthenticatedReadLimit(request, "session-read-v1", 60);
+}
+
+function consumeAuthenticatedReadLimit(request: Request, namespace: string, limit: number): Promise<RateLimitResult> {
+  const session = sessionFromRequest(request);
+  const key = session ? `user:${session.sub}` : `anonymous:${getClientIp(request)}`;
+  const options = { namespace, key, limit: session ? limit : 20, windowMs: 60_000 };
+  if (process.env.NODE_ENV !== "test") return consumeDurableRateLimit(options);
+  return Promise.resolve(new InMemoryRateLimiter(options).consume(key));
 }
 
 export function resetRateLimitStateForTests() {

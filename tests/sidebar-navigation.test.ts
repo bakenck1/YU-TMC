@@ -33,5 +33,8 @@ test("logout control calls the authenticated logout flow", async () => {
   );
 
   assert.match(source, /await logout\(\)/);
-  assert.doesNotMatch(source, /href="\/login"[\s\S]*nav\.logout/);
+  const logoutControl = source.match(/<button\b[^>]*onClick=\{handleLogout\}[\s\S]*?<\/button>/)?.[0];
+  assert.ok(logoutControl, "logout must invoke its button handler");
+  assert.match(logoutControl, /nav\.logout/);
+  assert.doesNotMatch(logoutControl, /href=/);
 });

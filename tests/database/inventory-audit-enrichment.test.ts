@@ -23,7 +23,7 @@ let runtimePool: Pool;
 const ORIGINAL_NAME = "Ноутбук";
 const SOURCE_NAME = "Ноутбук Lenovo IdeaPad №2411/00388";
 
-describe("confirmed inventory audit enrichment against PostgreSQL", () => {
+describe("inventory source enrichment and deletion against PostgreSQL", () => {
   beforeAll(async () => {
     migrationConfig = readDatabaseConfig({ purpose: "migration", target: "test" });
     await resetSchemas(migrationConfig);
@@ -70,6 +70,136 @@ describe("confirmed inventory audit enrichment against PostgreSQL", () => {
       after_values: { name: SOURCE_NAME, oneCCode: "00003254", version: 2 },
       metadata: { batchId: fixture.batchId, runId: plan.runId, planHash: plan.planHash, externalId: fixture.externalId, nameSource: "1c", codeStatus: "confirmed" },
     });
+  });
+
+  it("reproduces the old 1C foreign-key deletion failure without changing the migrated schema", async () => {
+    const fixture = await createFixture();
+    await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set matched_item_id=$2 where batch_id=$1`, [fixture.batchId, fixture.itemId]);
+    const client = await migrationPool.connect();
+    try {
+      await client.query("begin");
+      await client.query(`alter table "yu_inventory"."one_c_import_batch_rows" drop constraint "one_c_import_batch_rows_matched_item_id_items_id_fk"`);
+      await client.query(`alter table "yu_inventory"."one_c_import_batch_rows" add constraint "one_c_import_batch_rows_matched_item_id_items_id_fk"
+        foreign key (matched_item_id) references "yu_inventory"."items"(id) on delete restrict`);
+      await expect(client.query(`delete from "yu_inventory"."items" where id=$1`, [fixture.itemId])).rejects.toMatchObject({
+        code: "23503", constraint: "one_c_import_batch_rows_matched_item_id_items_id_fk",
+      });
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+    expect(await itemState(fixture.itemId)).toBeDefined();
+  });
+
+  it.each([false, true])("administrator deletes a 1C matched card, including a published link: %s", async (published) => {
+    const fixture = await createFixture();
+    const before = await runtimePool.query(`select payload,payload_hash from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [fixture.batchId]);
+    const publicationTime = published ? new Date("2026-10-06T05:00:00Z") : null;
+    await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows"
+      set matched_item_id=$2, published_item_id=$3, published_at=$4,
+          review_state=case when $3::uuid is not null then 'published' else 'matched' end
+      where batch_id=$1`, [fixture.batchId, fixture.itemId, published ? fixture.itemId : null, publicationTime]);
+    if (published) await runtimePool.query(`insert into "yu_inventory"."item_one_c_links"
+      (external_id,item_id,linked_by,link_method,last_batch_id,last_payload_hash)
+      select external_id,$2,$3,'manual',batch_id,payload_hash from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`,
+    [fixture.batchId, fixture.itemId, fixture.userId]);
+    const service = deletionService();
+    expect(await service.deleteItems([fixture.itemId], fixture.actor)).toEqual([fixture.itemId]);
+    expect(await itemState(fixture.itemId)).toBeUndefined();
+    expect((await runtimePool.query(`select * from "yu_inventory"."barcode_registry" where item_id=$1`, [fixture.itemId])).rowCount).toBe(0);
+    expect((await runtimePool.query(`select * from "yu_inventory"."item_one_c_links" where item_id=$1`, [fixture.itemId])).rowCount).toBe(0);
+    const after = await runtimePool.query(`select payload,payload_hash,matched_item_id,published_item_id,published_at,review_state
+      from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [fixture.batchId]);
+    expect(after.rows[0]).toMatchObject({ ...before.rows[0], matched_item_id: null, published_item_id: null,
+      published_at: publicationTime, review_state: published ? "published" : "matched" });
+    expect((await runtimePool.query(`select actor_id,action,before_values from "yu_inventory"."audit_records" where subject_id=$1`, [fixture.itemId])).rows)
+      .toContainEqual({ actor_id: fixture.userId, action: "item.deleted", before_values: { name: ORIGINAL_NAME, inventoryNumber: "2411/00388" } });
+    // Repeating the request is harmless; it neither recreates the card nor adds a second audit record.
+    expect(await service.deleteItems([fixture.itemId], fixture.actor)).toEqual([]);
+    expect((await runtimePool.query(`select * from "yu_inventory"."audit_records" where subject_id=$1 and action='item.deleted'`, [fixture.itemId])).rowCount).toBe(1);
+  });
+
+  it("rolls back the complete deletion when another selected card has protected local history", async () => {
+    const first = await createFixture();
+    const second = await createFixture({ inventoryNumber: "2411/00389" });
+    await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set matched_item_id=$2 where batch_id=$1`, [first.batchId, first.itemId]);
+    const room = await runtimePool.query(`select room_id from "yu_inventory"."items" where id=$1`, [second.itemId]);
+    const groupId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."local_item_groups"
+      (id,item_id,sequence_number,barcode_value,barcode_key,quantity,responsible_user_id,room_id,created_by)
+      values($1,$2,nextval('"yu_inventory"."local_barcode_sequence"'),$3::text,$3::text,1,$4,$5,$4)`,
+    [groupId, second.itemId, `L-${groupId}`, second.userId, room.rows[0].room_id]);
+    await expect(deletionService().deleteItems([first.itemId, second.itemId], first.actor)).rejects.toMatchObject({
+      kind: "conflict", publicCode: "item_has_local_groups",
+    });
+    expect(await itemState(first.itemId)).toBeDefined();
+    expect(await itemState(second.itemId)).toBeDefined();
+    expect((await runtimePool.query(`select matched_item_id from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [first.batchId])).rows[0].matched_item_id).toBe(first.itemId);
+    expect((await runtimePool.query(`select * from "yu_inventory"."audit_records" where action='item.deleted'`)).rowCount).toBe(0);
+  });
+
+  it("refuses deletion by a non-administrator before changing 1C references", async () => {
+    const fixture = await createFixture();
+    await expect(deletionService().deleteItems([fixture.itemId], { userId: fixture.userId, role: "warehouse" })).rejects.toMatchObject({ kind: "forbidden" });
+    expect(await itemState(fixture.itemId)).toBeDefined();
+  });
+
+  it("a previously approved 1C link cannot recreate or publish a deleted target", async () => {
+    const fixture = await createFixture();
+    await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set matched_item_id=$2,
+      review_state='approved', proposed_action='link', decision=$3::jsonb, decided_by=$4, decided_at=now()
+      where batch_id=$1`, [fixture.batchId, fixture.itemId, { itemId: fixture.itemId, confirmLink: true, expectedItemVersion: 1 }, fixture.userId]);
+    const runId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."one_c_publication_runs"(id,batch_id,idempotency_key,state,requested_by)
+      values($1,$2,$3,'pending',$4)`, [runId, fixture.batchId, randomUUID(), fixture.userId]);
+    expect(await deletionService().deleteItems([fixture.itemId], fixture.actor)).toEqual([fixture.itemId]);
+    expect(await new OneCReconciliationService(runtimePool).processNextPublication()).toBe(true);
+    const run = await runtimePool.query(`select state,failed_items,created_items,linked_items from "yu_inventory"."one_c_publication_runs" where id=$1`, [runId]);
+    expect(run.rows[0]).toEqual({ state: "failed", failed_items: 1, created_items: 0, linked_items: 0 });
+    expect((await runtimePool.query(`select id from "yu_inventory"."items"`)).rowCount).toBe(0);
+  });
+
+  it("retains the card and financial case with a specific deletion conflict", async () => {
+    const fixture = await createFixture();
+    const periodId = randomUUID();
+    await runtimePool.query(`insert into "yu_inventory"."responsibility_periods"
+      (id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'transfer',$3)`, [periodId, fixture.itemId, fixture.userId]);
+    const lossId = randomUUID();
+    const client = await runtimePool.connect();
+    try {
+      await client.query("begin");
+      await client.query(`insert into "yu_inventory"."asset_loss_cases"
+      (id,employee_id,item_id,responsibility_period_id,amount) values($1,$2,$3,$4,100)`,
+      [lossId, fixture.userId, fixture.itemId, periodId]);
+      await client.query(`insert into "yu_inventory"."asset_loss_case_events"
+        (id,loss_case_id,to_status,actor_id) values($1,$2,'payment_pending',$3)`, [randomUUID(), lossId, fixture.userId]);
+      await client.query("commit");
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+    await expect(deletionService().deleteItems([fixture.itemId], fixture.actor)).rejects.toMatchObject({
+      kind: "conflict", publicCode: "item_has_loss_case",
+    });
+    expect(await itemState(fixture.itemId)).toBeDefined();
+    expect((await runtimePool.query(`select id from "yu_inventory"."asset_loss_cases" where id=$1`, [lossId])).rowCount).toBe(1);
+  });
+
+  it("rolls back item deletion and detached 1C references if writing its audit fails", async () => {
+    const fixture = await createFixture();
+    await runtimePool.query(`update "yu_inventory"."one_c_import_batch_rows" set matched_item_id=$2 where batch_id=$1`, [fixture.batchId, fixture.itemId]);
+    await migrationPool.query(`create function "yu_inventory".reject_deletion_audit_test() returns trigger language plpgsql as $$
+      begin if NEW.action = 'item.deleted' then raise exception 'test_deletion_audit_unavailable'; end if; return NEW; end $$`);
+    await migrationPool.query(`create trigger reject_deletion_audit_test before insert on "yu_inventory"."audit_records"
+      for each row execute function "yu_inventory".reject_deletion_audit_test()`);
+    try {
+      await expect(deletionService().deleteItems([fixture.itemId], fixture.actor)).rejects.toThrow("test_deletion_audit_unavailable");
+      expect(await itemState(fixture.itemId)).toBeDefined();
+      expect((await runtimePool.query(`select matched_item_id from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [fixture.batchId])).rows[0].matched_item_id).toBe(fixture.itemId);
+    } finally {
+      await migrationPool.query(`drop trigger reject_deletion_audit_test on "yu_inventory"."audit_records"`);
+      await migrationPool.query(`drop function "yu_inventory".reject_deletion_audit_test()`);
+    }
   });
 
   it("skips a rename that breaks a shared monitor/system-unit number, including an archived peer, without blocking other cards", async () => {
@@ -443,6 +573,11 @@ async function saveAssets(assets: OneCFixedAsset[]) {
 async function itemState(itemId: string) {
   const result = await runtimePool.query(`select name,one_c_code,version,updated_by,updated_at from "yu_inventory"."items" where id=$1`, [itemId]);
   return result.rows[0];
+}
+
+function deletionService() {
+  return new InventoryItemService(new PostgresUnitOfWork(() => runtimePool, createPostgresInventoryItemRepositories),
+    { now: () => new Date() }, { create: randomUUID }, { create: () => new Uint8Array(16) }, { next: () => "unused" });
 }
 
 async function expectNoEnrichmentAudit() {

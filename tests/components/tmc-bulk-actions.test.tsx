@@ -178,6 +178,26 @@ describe("TmcBulkActions", () => {
     expect(screen.queryByRole("dialog", { name: "items.deleteTitle" })).toBeNull();
   });
 
+  it.each([
+    [409, "item_has_local_groups", "items.deleteLocalGroups"],
+    [409, "item_has_loss_case", "items.deleteLossCase"],
+    [409, "item_has_related_records", "items.deleteRelatedRecords"],
+    [429, "rate_limited", "items.deleteRateLimited"],
+    [503, "items_unavailable", "tmc.bulk.error"],
+  ])("shows the deletion reason and preserves the selection on HTTP %s / %s", async (status, error, expectedMessage) => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false, status, json: async () => ({ error }) } as Response);
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} onClear={onClear} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "items.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "items.delete" }));
+    await waitFor(() => expect(screen.getByText(expectedMessage)).not.toBeNull());
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "items.deleteTitle" })).not.toBeNull();
+  });
+
   it("removes an item from the operation and submits only the remaining rows", async () => {
     const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002" };
     vi.mocked(fetch).mockResolvedValue({

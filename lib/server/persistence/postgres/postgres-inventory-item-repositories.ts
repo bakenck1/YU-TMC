@@ -919,13 +919,27 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
 
   async deleteItems(ids: readonly string[]): Promise<string[]> {
     if (!ids.length) return [];
-    const result = await this.source.query<{ id: string }>(
-      `delete from ${ITEMS}
-       where id = any($1::uuid[])
-       returning id`,
-      [ids],
-    );
-    return result.rows.map((row) => row.id);
+    try {
+      const result = await this.source.query<{ id: string }>(
+        `delete from ${ITEMS}
+         where id = any($1::uuid[])
+         returning id`,
+        [ids],
+      );
+      return result.rows.map((row) => row.id);
+    } catch (error) {
+      const databaseError = error as { code?: string; table?: string };
+      if (databaseError.code === "23503") {
+        if (databaseError.table === "local_item_groups") {
+          throw new ApplicationError("conflict", "item_has_local_groups");
+        }
+        if (databaseError.table === "asset_loss_cases") {
+          throw new ApplicationError("conflict", "item_has_loss_case");
+        }
+        throw new ApplicationError("conflict", "item_has_related_records");
+      }
+      throw error;
+    }
   }
 
   async updateItemStatus(

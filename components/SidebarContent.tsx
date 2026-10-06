@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -76,7 +77,7 @@ export default function SidebarContent({
 }: SidebarContentProps) {
   const pathname = usePathname();
   const { settings, t } = useAppSettings();
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, sessionError, refreshSession, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
   const visibleItems = user ? sidebarItemsForRole(user.role) : [];
@@ -119,7 +120,7 @@ export default function SidebarContent({
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
-        {authLoading ? (
+        {authLoading && !user ? (
           <div className="space-y-2 px-1" aria-hidden="true">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="h-10 animate-pulse rounded-xl bg-zinc-100" />
@@ -138,6 +139,10 @@ export default function SidebarContent({
             />
           ))
         )}
+        {sessionError ? <div role="status" className="px-2 py-3 text-xs text-zinc-600">
+          {!collapsed ? <p>{t("auth.connectionError")}</p> : null}
+          <button type="button" disabled={authLoading} onClick={() => void refreshSession()} className="mt-2 text-blue-700 disabled:opacity-50" aria-label={t("error.retry")}>{t("error.retry")}</button>
+        </div> : !authLoading && !user ? <Link href="/login" className="block rounded-lg px-3 py-2 text-sm text-blue-700">{t("auth.loginTitle")}</Link> : null}
       </nav>
 
       <div className="border-t border-black/5 px-3 py-3">

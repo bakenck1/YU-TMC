@@ -52,11 +52,13 @@ describe("InventoryInvoiceActions", () => {
     fireEvent.click(screen.getByRole("button", { name: "invoice.action" }));
 
     expect(screen.getByRole("dialog", { name: "invoice.title" })).not.toBeNull();
-    expect(screen.queryByText("invoice.supplier")).toBeNull();
-    expect(screen.queryByText("invoice.recipient")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "invoice.supplier" })).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "invoice.recipient" })).not.toBeNull();
     expect(screen.getByText('invoice.selectedSummary:{"count":1,"quantity":20}')).not.toBeNull();
 
     fireEvent.change(screen.getByRole("textbox", { name: "invoice.number" }), { target: { value: "42" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "invoice.supplier" }), { target: { value: "Склад" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "invoice.recipient" }), { target: { value: "Кафедра" } });
     fireEvent.click(screen.getByRole("button", { name: /invoice.large/ }));
 
     expect(window.open).toHaveBeenCalledWith("", "_blank");
@@ -65,5 +67,7 @@ describe("InventoryInvoiceActions", () => {
     expect(documentWrite).toHaveBeenCalledWith(expect.stringContaining("data-invoice-copy=\"1\""));
     expect(documentWrite).toHaveBeenCalledWith(expect.stringContaining("Моноблок"));
     expect(documentWrite).toHaveBeenCalledWith(expect.stringContaining("№ 42"));
+    expect(documentWrite).toHaveBeenCalledWith(expect.stringContaining("Склад"));
+    expect(documentWrite).toHaveBeenCalledWith(expect.stringContaining("Кафедра"));
   });
 });

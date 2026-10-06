@@ -15,7 +15,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireCurrentUser(request, { photoRead: true });
     const { id } = await context.params;
     const photo = await getApplicationServices().localBarcodes.getGroupPhoto(
       id,

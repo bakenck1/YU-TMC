@@ -375,7 +375,16 @@ export default function TmcBulkActions({
           ...(itemSection === "it" ? { itemSection } : {}),
         }),
       });
-      if (!response.ok) throw new Error("request_failed");
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        const code = result?.error;
+        setError(t(code === "item_has_local_groups" ? "items.deleteLocalGroups"
+          : code === "item_has_loss_case" ? "items.deleteLossCase"
+          : code === "item_has_related_records" ? "items.deleteRelatedRecords"
+          : response.status === 429 ? "items.deleteRateLimited"
+          : "tmc.bulk.error"));
+        return;
+      }
       setMode(null);
       onClear?.();
       onComplete();

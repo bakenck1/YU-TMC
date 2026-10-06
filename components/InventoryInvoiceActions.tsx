@@ -18,6 +18,8 @@ export default function InventoryInvoiceActions({ items }: { items: InventoryIte
   const [open, setOpen] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [date, setDate] = useState(todayInputValue);
+  const [supplier, setSupplier] = useState("");
+  const [recipient, setRecipient] = useState("");
   const [error, setError] = useState(false);
 
   function openDialog() {
@@ -39,6 +41,8 @@ export default function InventoryInvoiceActions({ items }: { items: InventoryIte
       items,
       invoiceNumber,
       date,
+      supplier,
+      recipient,
     });
     printWindow.document.open();
     printWindow.document.write(html);
@@ -89,6 +93,14 @@ export default function InventoryInvoiceActions({ items }: { items: InventoryIte
               <label className="text-sm font-medium text-zinc-700">
                 {t("invoice.date")}
                 <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+              </label>
+              <label className="text-sm font-medium text-zinc-700">
+                {t("invoice.supplier")}
+                <input value={supplier} onChange={(event) => setSupplier(event.target.value)} maxLength={180} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+              </label>
+              <label className="text-sm font-medium text-zinc-700">
+                {t("invoice.recipient")}
+                <input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={180} className="mt-1 min-h-11 w-full rounded-xl border border-black/10 px-3 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
               </label>
             </div>
             {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{t("invoice.popupBlocked")}</p> : null}
