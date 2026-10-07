@@ -14,15 +14,6 @@ import { requireSameOriginMutation } from "@/lib/security/request-integrity";
 import { emitLegacyUsage } from "@/lib/server/observability";
 
 export async function requireCurrentUser(request: Request, options?: { photoRead?: boolean }) {
-  const user = await requirePhoneSetupUser(request, options);
-  if (user.whatsappPhoneRequired) {
-    throw new ApplicationError("forbidden", "whatsapp_phone_required");
-  }
-  return user;
-}
-
-/** Authentication-only entry point for completing the mandatory phone setup. */
-export async function requirePhoneSetupUser(request: Request, options?: { photoRead?: boolean }) {
   requireSameOriginMutation(request);
   const limit = options?.photoRead && request.method === "GET"
     ? await consumePhotoReadRateLimit(request)

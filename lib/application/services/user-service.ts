@@ -772,32 +772,6 @@ export class UserService {
     return toUserDto(user);
   }
 
-  /** The caller must check WhatsApp registration before passing this number. */
-  async saveOwnWhatsAppPhone(actor: CurrentAccount, verifiedPhone: string): Promise<CurrentAccount> {
-    if (!/^7\d{10}$/.test(verifiedPhone)) {
-      throw new ApplicationError("validation", "invalid_phone");
-    }
-    return this.unitOfWork.transaction(async ({ users }) => {
-      const current = await requireCurrentActor(users, actor.userId, actor.sessionVersion);
-      if (!currentAccount(current).whatsappPhoneRequired) {
-        throw new ApplicationError("conflict", "whatsapp_phone_already_set");
-      }
-      const updated = await users.update({
-        id: current.id,
-        fullName: current.fullName,
-        role: current.role,
-        phone: verifiedPhone,
-        defaultRoomId: current.defaultRoomId,
-        emailVerified: current.emailVerified,
-        active: current.active,
-        expectedVersion: current.version,
-        updatedAt: this.clock.now(),
-      });
-      if (!updated) throw new ApplicationError("conflict", "user_version_conflict");
-      return currentAccount(updated);
-    });
-  }
-
   async createUser(
     input: CreateUserInput,
     actorUserId: string,
@@ -1012,18 +986,9 @@ function currentAccount(user: UserRecord): CurrentAccount {
   return {
     userId: user.id,
     sessionVersion: user.version,
-    whatsappPhoneRequired:
-      process.env.NODE_ENV !== "development" &&
-      user.role !== "warehouse" &&
-      user.role !== "typography" &&
-      !hasPhone(user.phone),
+    whatsappPhoneRequired: false,
     ...authenticatedAccount(user),
   };
-}
-
-function hasPhone(phone: string | null): boolean {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  return /^\d{10}$/.test(digits) || /^[78]\d{10}$/.test(digits);
 }
 
 function toUserDto(

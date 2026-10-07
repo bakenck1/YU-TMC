@@ -355,7 +355,7 @@ describe("persistent PostgreSQL users", () => {
     });
   });
 
-  it("persists a completed WhatsApp profile across reconnection and rejects a stale session", async () => {
+  it("allows a profile without a phone across reconnection", async () => {
     const employee = await service.createUser({
       email: "onboarding@yu.edu.kz",
       fullName: "Onboarding Employee",
@@ -363,15 +363,11 @@ describe("persistent PostgreSQL users", () => {
       active: true,
     }, adminActorId, await sessionVersionFor(adminActorId));
     const actor = (await service.resolveCurrentAccount(employee.email))!;
-    expect(actor.whatsappPhoneRequired).toBe(true);
-    const completed = await service.saveOwnWhatsAppPhone(actor, "77011112233");
-    expect(completed.whatsappPhoneRequired).toBe(false);
-    expect(completed.sessionVersion).toBe(actor.sessionVersion + 1);
-    await expect(service.saveOwnWhatsAppPhone(actor, "77022223344")).rejects.toMatchObject({ publicCode: "forbidden" });
+    expect(actor.whatsappPhoneRequired).toBe(false);
     await pool.end();
     ({ pool, service } = createService(runtimeConfig));
     expect((await service.resolveCurrentAccount(employee.email))?.whatsappPhoneRequired).toBe(false);
-    expect((await service.getProfile(employee.id)).phone).toBe("77011112233");
+    expect((await service.getProfile(employee.id)).phone).toBeNull();
   });
 
   async function sessionVersionFor(userId: string) {
