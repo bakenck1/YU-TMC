@@ -96,8 +96,8 @@ Administrators can select **Типография** (`typography`) when creating 
 This role opens **Объекты**, lists all cabinets, prints selected or all cabinet QR codes,
 and scans cabinet QR codes to view their contents. It has no item management,
 transfer, inspection, analytics, or user management access.
-The user form hides the phone field for this role. Creation and role assignment
-skip WhatsApp verification, and sign-in does not require phone setup.
+The user form does not ask for a phone number for any role. Sign-in and API
+access never require WhatsApp phone setup, including in production.
 Batch print sheets embed their QR images in the authorized page response, so
 printing all cabinets does not exhaust the shared API request limit. Production
 QR links use the configured `APP_PUBLIC_ORIGIN`.
@@ -132,13 +132,11 @@ phone number is left unsaved and the UI shows a warning. Numbers received from
 Yessenov ID and the personnel directory are also checked before persistence;
 unavailable checks do not prevent sign-in or erase an existing number.
 
-Users without a usable saved phone must complete `/whatsapp-phone` after login
-before accessing work pages or authenticated work APIs. Warehouse and printing staff users are
-exempt. The server checks registration through `/v1/check` before saving the
-number to the logged-in account; unavailable checks leave the form open for a
-later attempt. Successful completion renews the session after the account version
-changes. The form cannot be skipped, but users can sign out. Administrator user
-tables keep their phone and IIN columns under the existing server permissions.
+The site never asks users to enter a phone number. Work pages and authenticated
+APIs remain available without a saved phone for every role and environment.
+The retired `/whatsapp-phone` page redirects to the user's default page.
+Administrator user tables keep existing phone and IIN data under the existing
+server permissions.
 
 WhatsApp events for TMC transfers and responsibility:
 

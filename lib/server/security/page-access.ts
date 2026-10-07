@@ -11,12 +11,8 @@ import {
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { requireCurrentUserToken } from "@/lib/server/security/request-user";
 
-export async function requireAuthenticatedPage(options?: { allowPhoneSetup?: boolean }) {
-  const user = await currentPageUser();
-  if (user.whatsappPhoneRequired && !options?.allowPhoneSetup) {
-    redirect("/whatsapp-phone");
-  }
-  return user;
+export async function requireAuthenticatedPage() {
+  return currentPageUser();
 }
 
 export async function requireAuthorizedPage(pathname: string) {

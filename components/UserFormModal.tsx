@@ -18,7 +18,6 @@ export interface UserFormValues {
   fullName: string;
   iin: string;
   email: string;
-  phone: string;
   role: UserRole;
   emailVerified: boolean;
   active: boolean;
@@ -50,7 +49,6 @@ export default function UserFormModal({
     fullName: user?.fullName ?? "",
     iin: user?.iin ?? "",
     email: user?.email ?? "",
-    phone: user?.phone === "—" ? "" : (user?.phone ?? ""),
     role: user?.role ?? "employee",
     emailVerified: user?.emailVerified ?? false,
     active: user?.active ?? false,
@@ -68,7 +66,6 @@ export default function UserFormModal({
         fullName: values.fullName.trim(),
         iin: values.iin.trim(),
         email: values.email.trim(),
-        phone: values.role === "typography" ? "" : values.phone.trim() || "—",
       });
     } catch {
       setSubmitError(t("users.saveError"));
@@ -97,9 +94,6 @@ export default function UserFormModal({
           <TextField required readOnly label={t("users.code")} value={values.code} placeholder={t("users.codePlaceholder")} />
           <TextField required inputMode="numeric" pattern="[0-9]{12}" minLength={12} maxLength={12} label="ИИН" value={values.iin} onChange={(event) => setValues((current) => ({ ...current, iin: event.target.value.replace(/\D/g, "").slice(0, 12) }))} placeholder="000000000000" />
           <TextField required type="email" readOnly={user !== null} label="Email" value={values.email} onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))} placeholder="name@example.com" />
-          {values.role !== "typography" && (
-            <TextField type="tel" label={t("users.phone")} value={values.phone} onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))} placeholder={t("users.phonePlaceholder")} />
-          )}
         </Wrapper>
 
         <Wrapper display="block" margin={{ top: "md" }}>

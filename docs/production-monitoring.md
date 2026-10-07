@@ -75,8 +75,8 @@ reads have a 15-second timeout and at most three automatic attempts, respecting
 Private photo GET requests and session reads have separate durable limits:
 300 photos and 60 session reads per authenticated account per minute. Invalid
 or absent session tokens use a 20-request limit per IP in each of these scopes.
-These budgets use verified signed session subjects; live account revocation,
-phone setup, and item access checks still run before bytes are returned.
+These budgets use verified signed session subjects; live account revocation
+and item access checks still run before bytes are returned.
 Photo uploads, deletes, and other APIs retain the general request limit.
 
 A failed item thumbnail offers a retry button. A missing photo has no photo

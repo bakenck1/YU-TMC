@@ -172,7 +172,6 @@ export default function UsersManager({
             ? {
                 fullName: values.fullName,
                 iin: values.iin,
-                phone: values.role === "typography" ? undefined : values.phone,
                 role: values.role,
                 emailVerified: values.emailVerified,
                 active: values.active,
@@ -183,7 +182,6 @@ export default function UsersManager({
                 fullName: values.fullName,
                 iin: values.iin,
                 email: values.email,
-                phone: values.role === "typography" ? undefined : values.phone,
                 role: values.role,
                 emailVerified: values.emailVerified,
                 active: values.active,
