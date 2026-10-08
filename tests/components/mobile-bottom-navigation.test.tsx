@@ -30,6 +30,14 @@ describe("mobile bottom navigation", () => {
     expect(screen.getByRole("link", { name: translate("ru", "nav.items") }).getAttribute("aria-current")).toBe("page");
   });
 
+  it.each(["admin", "warehouse", "employee", "typography", "passport_author", "passport_reviewer"] as const)("highlights the scanner only for admin and warehouse: %s", (role) => {
+    state.role = role;
+    render(<MobileBottomNavigation />);
+    const scanner = screen.getByRole("link", { name: translate("ru", "nav.scanQr") });
+    const iconContainer = scanner.querySelector("svg")?.parentElement;
+    expect(iconContainer?.classList.contains("bg-emerald-500")).toBe(role === "admin" || role === "warehouse");
+  });
+
   it.each(["admin", "warehouse", "typography", "passport_author", "passport_reviewer"] as const)("preserves navigation access for %s", (role) => {
     state.role = role;
     render(<MobileBottomNavigation />);

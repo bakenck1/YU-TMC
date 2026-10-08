@@ -35,10 +35,13 @@ export default function MobileBottomNavigation() {
       <div className="mx-auto grid h-[72px] max-w-xl gap-1 px-2 py-1.5" style={{ gridTemplateColumns: `repeat(${visibleItems.length || 1}, minmax(0, 1fr))` }}>
         {visibleItems.map(({ href, key, icon: Icon, ...item }) => {
           const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+          const prominent = href === "/scan" && (user?.role === "admin" || user?.role === "warehouse");
           return (
             <Link key={href} href={href} aria-label={t(key)} aria-current={active ? "page" : undefined} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent active:bg-zinc-100 ${active ? "bg-blue-50 text-[#002060]" : "text-zinc-600 hover:bg-zinc-50"}`}>
-              <Icon aria-hidden="true" className="h-6 w-6 shrink-0" />
-              <span className="max-w-full truncate whitespace-nowrap leading-4">{t(("shortKey" in item ? item.shortKey : undefined) ?? key)}</span>
+              <span className={prominent ? "-mt-7 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 border-white bg-emerald-500 text-white shadow-lg" : "flex h-6 items-center justify-center"}>
+                <Icon aria-hidden="true" className={prominent ? "h-7 w-7" : "h-6 w-6 shrink-0"} />
+              </span>
+              <span className={`${prominent ? "-mt-1 " : ""}max-w-full truncate whitespace-nowrap leading-4`}>{t(("shortKey" in item ? item.shortKey : undefined) ?? key)}</span>
             </Link>
           );
         })}
