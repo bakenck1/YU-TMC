@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 
 import { isEmployeeRole } from "@/lib/contracts/users";
 // Authentication for this route group is enforced by the adjacent layout.
@@ -13,6 +14,7 @@ import { requireAuthorizedPage } from "@/lib/server/security/page-access";
 import { hasPermission } from "@/lib/security/permissions";
 import { isInventoryBuildingName } from "@/lib/campus-directory";
 import {
+  inventoryTableViewHref,
   parseInventoryTableViewState,
   type InventorySearchParams,
 } from "@/lib/inventory-list-state";
@@ -26,10 +28,20 @@ export default async function ItemsPage({
   const resolvedSearchParams = await searchParams;
   const initialViewState = parseInventoryTableViewState(resolvedSearchParams);
   const requestedTab = resolvedSearchParams.tab;
-  const initialEmployeeTab = employeeItemTabFromParam(
-    Array.isArray(requestedTab) ? requestedTab[0] : requestedTab,
-  );
   const user = await requireAuthorizedPage("/items");
+  // Convert saved tab links to an ordinary, clearable status filter.
+  if (isEmployeeRole(user.role) && requestedTab !== undefined) {
+    const status = employeeItemTabFromParam(Array.isArray(requestedTab) ? requestedTab[0] : requestedTab);
+    redirect(inventoryTableViewHref("/items", {
+      ...initialViewState,
+      filters: {
+        ...initialViewState.filters,
+        statusKey: initialViewState.filters.statusKey === "all"
+          ? `lifecycle:${status}`
+          : initialViewState.filters.statusKey,
+      },
+    }));
+  }
   const actor = authorizationActor(user);
   const services = getApplicationServices();
   const [serverItems, localGroups] = await Promise.all([
@@ -77,7 +89,6 @@ export default async function ItemsPage({
           columnSettingsScope={user.userId}
           actorUserId={user.userId}
           actorRole={user.role}
-          initialStatus={initialEmployeeTab}
           initialViewState={initialViewState}
           locations={{ buildings, rooms }}
         />
