@@ -70,7 +70,7 @@ test("employee status selection returns only the selected status items", () => {
   assert.deepEqual(renderedIds, ["m"]);
 });
 
-test("employee roles receive the tabbed inventory interface", async () => {
+test("employee roles receive their assigned inventory interface", async () => {
   const source = await readFile(
     new URL("../app/(protected)/items/page.tsx", import.meta.url),
     "utf8",
@@ -92,4 +92,12 @@ test("the invoice action is shown to an employee only when they have assigned in
 
   assert.match(source, /const invoiceActions = items\.length > 0;/);
   assert.match(source, /invoiceActions=\{invoiceActions\}/);
+});
+
+test("employee saved tab links migrate to a clearable status filter", async () => {
+  const source = await readFile(new URL("../app/(protected)/items/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /isEmployeeRole\(user\.role\) && requestedTab !== undefined/);
+  assert.match(source, /redirect\(inventoryTableViewHref\("\/items"/);
+  assert.match(source, /statusKey: initialViewState\.filters\.statusKey === "all"/);
+  assert.match(source, /`lifecycle:\$\{status\}`/);
 });

@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { type KeyboardEvent } from "react";
 import Link from "next/link";
 import { ArrowRightLeft } from "lucide-react";
 
@@ -20,18 +17,8 @@ import type { UserRole } from "@/lib/contracts/users";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import {
   DEFAULT_INVENTORY_TABLE_VIEW_STATE,
-  inventoryTableViewHref,
-  parseInventoryTableViewState,
   type InventoryTableViewState,
 } from "@/lib/inventory-list-state";
-
-const EMPLOYEE_TAB_LABELS = {
-  active: "status.active",
-  maintenance: "status.maintenance",
-  broken: "status.broken",
-  decommissioned: "status.decommissioned",
-  decommissioned_in_use: "status.decommissioned_in_use",
-} as const;
 
 export function EmployeeItemsTabList({
   activeStatus,
@@ -193,7 +180,6 @@ export default function EmployeeItemsTabs({
   columnSettingsScope,
   actorUserId,
   actorRole,
-  initialStatus = "active",
   initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
   locations,
 }: {
@@ -202,27 +188,11 @@ export default function EmployeeItemsTabs({
   columnSettingsScope: string;
   actorUserId: string;
   actorRole: UserRole;
-  initialStatus?: ItemStatus;
   initialViewState?: InventoryTableViewState;
   locations?: { buildings: BuildingDto[]; rooms: RoomDto[] };
 }) {
   const { t } = useAppSettings();
-  const [activeStatus, setActiveStatus] = useState<ItemStatus>(initialStatus);
-
-  function selectStatus(status: ItemStatus) {
-    if (typeof window !== "undefined" && window.location.pathname === "/items") {
-      const state = parseInventoryTableViewState(
-        new URLSearchParams(window.location.search),
-      );
-      const href = inventoryTableViewHref(
-        "/items",
-        { ...state, page: 1 },
-        { tab: status === "active" ? undefined : status },
-      );
-      window.history.replaceState(null, "", href);
-    }
-    setActiveStatus(status);
-  }
+  const invoiceActions = items.length > 0;
 
   return (
     <section aria-label={t("nav.items")} className="space-y-4">
@@ -231,18 +201,16 @@ export default function EmployeeItemsTabs({
           <ArrowRightLeft className="h-4 w-4" /> {t("nav.transfers")}
         </Link>
       </div>
-      <EmployeeItemsTabsView
+      <ItemsTable
         items={items}
-        activeStatus={activeStatus}
-        ariaLabel={t("nav.items")}
-        label={(status) => t(EMPLOYEE_TAB_LABELS[status])}
-        onSelect={selectStatus}
         searchHistoryScope={searchHistoryScope}
         columnSettingsScope={columnSettingsScope}
-        actorUserId={actorUserId}
-        actorRole={actorRole}
+        bulkActions={{ actorUserId, actorRole, buildings: [], rooms: [] }}
+        invoiceActions={invoiceActions}
         initialViewState={initialViewState}
+        stateUrlPath="/items"
         locations={locations}
+        showSummary
       />
     </section>
   );

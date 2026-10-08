@@ -220,7 +220,7 @@ test("inventory-list entry points wire durable navigation state", async () => {
   assert.match(page, /initialViewState=\{initialViewState\}/);
   assert.match(page, /stateUrlPath="\/items"/);
   assert.match(table, /window\.history\.replaceState\(null/);
-  assert.match(employeeTabs, /window\.history\.replaceState\(null/);
+  assert.match(employeeTabs, /stateUrlPath="\/items"/);
   assert.doesNotMatch(
     `${table}\n${employeeTabs}`,
     /replaceState\(window\.history\.state/,

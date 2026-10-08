@@ -33,7 +33,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((v) => !v)}
@@ -42,7 +42,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onOpenMobile={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 md:p-6">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:p-6">{children}</main>
         <MobileBottomNavigation />
       </div>
     </div>
