@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { auditNeedsReview, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, type AuditMatch, type AuditCounts } from "@/lib/inventory-source-audit";
+import { auditNeedsReview, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
+import type { AuditMatch, AuditCounts } from "@/lib/inventory-source-audit";
 import type { InventoryAuditInventoryState } from "@/lib/contracts/inventory-source-audit";
 import InventoryAuditEnrichment from "@/components/InventoryAuditEnrichment";
 

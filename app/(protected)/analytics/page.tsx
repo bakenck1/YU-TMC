@@ -100,7 +100,7 @@ export default async function AnalyticsPage() {
   return <AnalyticsCharts data={data} itData={itData} />;
 }
 
-export function buildAnalyticsDashboard(items: InventoryItemDto[]): AnalyticsDashboardData {
+function buildAnalyticsDashboard(items: InventoryItemDto[]): AnalyticsDashboardData {
   const totalValue = items.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
     0,

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import InventorySourceAuditPanel, { type AuditPage } from "@/components/InventorySourceAuditPanel";
-import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
+import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
 
 const page: AuditPage = {
   run: { id: "audit", batch_id: "batch", batch_version: 12, algorithm_version: String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION),
