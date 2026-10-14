@@ -6,8 +6,9 @@ import { materialIdentityKey, type OneCMaterial, type OneCMaterialsSnapshot } fr
 export const MAX_ONE_C_MATERIALS_XML_BYTES = 64 * 1024 * 1024;
 export const MAX_ONE_C_MATERIALS_RECORDS = 50_000;
 export const MAX_ONE_C_MATERIALS_TEXT_LENGTH = 255;
+export const MAX_ONE_C_MATERIALS_IDENTIFIER_BYTES = 128;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const FIELDS = new Set(["GUID", "Code", "Name", "WarehouseGUID", "WarehouseCode", "WarehouseName", "Responsible", "ResponsibleGUID", "InventoryNumber", "Barcode", "Unit", "Quantity", "UnitPrice", "Currency"]);
+const FIELDS = new Set(["GUID", "Code", "Name", "AccountCode", "WarehouseGUID", "WarehouseCode", "WarehouseName", "Responsible", "ResponsibleGUID", "ResponsibleCode", "InventoryNumber", "Barcode", "Unit", "Quantity", "UnitPrice", "Currency"]);
 const parser = new XMLParser({ ignoreAttributes: false, trimValues: true, parseTagValue: false, processEntities: true });
 
 export class OneCMaterialsContractError extends Error {
@@ -22,19 +23,23 @@ export function parseOneCMaterials(xml: string): OneCMaterialsSnapshot {
   const document = parser.parse(xml) as Record<string, unknown>;
   if (!Object.hasOwn(document, "Materials") || Object.keys(document).some((key) => !key.startsWith("?") && key !== "Materials")) fail("invalid_root");
   const root = document.Materials;
-  if (!isRecord(root) || Object.keys(root).some((key) => key !== "Material" && key !== "SnapshotAt")) fail("invalid_root_shape");
+  if (!isRecord(root) || Object.keys(root).some((key) => !["Material", "SnapshotAt", "SchemaVersion", "ReplaceLegacyBalances"].includes(key))) fail("invalid_root_shape");
+  const schemaVersion = text(root, "SchemaVersion") ?? "1";
+  if (schemaVersion !== "1" && schemaVersion !== "2") fail("unsupported_schema_version");
+  const replaceLegacy = text(root, "ReplaceLegacyBalances");
+  if (replaceLegacy !== null && (schemaVersion !== "2" || !["true", "false"].includes(replaceLegacy))) fail("invalid_replace_legacy_balances");
   const snapshotAt = timestamp(text(root, "SnapshotAt"));
   const raw = root.Material;
   const records = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
   if (!records.length || records.some((record) => !isRecord(record))) fail("materials_not_found");
   if (records.length > MAX_ONE_C_MATERIALS_RECORDS) fail("too_many_records");
-  const materials = records.map((record, index) => normalizeMaterial(record as Record<string, unknown>, index));
+  const materials = records.map((record, index) => normalizeMaterial(record as Record<string, unknown>, index, schemaVersion));
   const identities = new Set<string>();
   const codes = new Map<string, string>();
   const warehouses = new Map<string, string>();
   for (const material of materials) {
     const identity = materialIdentityKey(material);
-    if (identities.has(identity)) fail("duplicate_material_warehouse");
+    if (identities.has(identity)) fail(schemaVersion === "2" ? "duplicate_material_balance" : "duplicate_material_warehouse");
     identities.add(identity);
     // A stable code cannot identify two different objects in one snapshot.
     if (material.externalId) {
@@ -46,10 +51,10 @@ export function parseOneCMaterials(xml: string): OneCMaterialsSnapshot {
       warehouses.set(material.warehouseCode, material.warehouseExternalId);
     }
   }
-  return { snapshotAt, materials };
+  return { snapshotAt, materials, ...(replaceLegacy === "true" ? { replaceLegacyBalances: true as const } : {}) };
 }
 
-function normalizeMaterial(record: Record<string, unknown>, index: number): OneCMaterial {
+function normalizeMaterial(record: Record<string, unknown>, index: number, schemaVersion: string): OneCMaterial {
   const row = index + 1;
   if (Object.keys(record).some((key) => !FIELDS.has(key))) fail(`row_${row}_unsupported_field`);
   const code = text(record, "Code", row);
@@ -65,6 +70,18 @@ function normalizeMaterial(record: Record<string, unknown>, index: number): OneC
   const warehouseName = text(record, "WarehouseName", row);
   const responsibleName = text(record, "Responsible", row);
   const responsibleExternalId = guid(record, "ResponsibleGUID", row);
+  const responsibleCode = text(record, "ResponsibleCode", row);
+  const accountCode = text(record, "AccountCode", row);
+  if (schemaVersion === "2") {
+    if (!accountCode) fail(`row_${row}_account_code_required`);
+    if (responsibleName && !responsibleCode && !responsibleExternalId) fail(`row_${row}_responsible_identity_required`);
+    // Bound compound PostgreSQL btree keys by encoded bytes, not Unicode character count.
+    for (const identifier of [code, warehouseCode, accountCode, responsibleCode]) {
+      if (identifier && (Buffer.byteLength(identifier, "utf8") > MAX_ONE_C_MATERIALS_IDENTIFIER_BYTES || /[\u0000-\u001f\u007f]/.test(identifier))) {
+        fail(`row_${row}_invalid_identifier`);
+      }
+    }
+  } else if (responsibleCode || accountCode) fail(`row_${row}_schema_version_2_required`);
   if (warehouseName && !warehouseCode && !warehouseExternalId) fail(`row_${row}_warehouse_identity_required`);
   return {
     externalId: guid(record, "GUID", row), code, name,
@@ -75,6 +92,7 @@ function normalizeMaterial(record: Record<string, unknown>, index: number): OneC
     // Do not change hashes of older XML packets that have no responsible-person fields.
     ...(responsibleName ? { responsibleName } : {}),
     ...(responsibleExternalId ? { responsibleExternalId } : {}),
+    ...(schemaVersion === "2" ? { balanceSchemaVersion: 2 as const, accountCode: accountCode!, ...(responsibleCode ? { responsibleCode } : {}) } : {}),
   };
 }
 

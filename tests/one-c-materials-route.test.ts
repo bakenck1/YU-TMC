@@ -10,7 +10,7 @@ import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-
 import { observeHttpRequest } from "@/lib/server/observability";
 
 const key = "test-materials-route-credential";
-const xml = `<Materials><SnapshotAt>2026-10-14T12:00:00+05:00</SnapshotAt><Material><Code>00006135</Code><Name>МФУ</Name><WarehouseCode>WH-01</WarehouseCode><Quantity>1</Quantity><UnitPrice>66784,48</UnitPrice><Responsible>Иванов Иван Иванович</Responsible><ResponsibleGUID>eba5b834-db3b-11f0-a26e-7cc25579bdd7</ResponsibleGUID></Material></Materials>`;
+const xml = `<Materials><SchemaVersion>2</SchemaVersion><SnapshotAt>2026-10-14T12:00:00+05:00</SnapshotAt><Material><Code>00006135</Code><Name>МФУ</Name><AccountCode>1317</AccountCode><WarehouseCode>WH-01</WarehouseCode><Quantity>1</Quantity><UnitPrice>66784,48</UnitPrice><Responsible>Иванов Иван Иванович</Responsible><ResponsibleCode>001</ResponsibleCode><ResponsibleGUID>eba5b834-db3b-11f0-a26e-7cc25579bdd7</ResponsibleGUID></Material></Materials>`;
 
 test("materials POST forwards its parsed snapshot and original source metadata through the real route", async () => {
   let stored: OneCMaterialsSnapshot | undefined;
@@ -55,6 +55,9 @@ test("materials POST forwards its parsed snapshot and original source metadata t
   assert.equal(stored?.materials[0].unitPrice, "66784.48");
   assert.equal(stored?.materials[0].responsibleName, "Иванов Иван Иванович");
   assert.equal(stored?.materials[0].responsibleExternalId, "eba5b834-db3b-11f0-a26e-7cc25579bdd7");
+  assert.equal(stored?.materials[0].responsibleCode, "001");
+  assert.equal(stored?.materials[0].accountCode, "1317");
+  assert.equal(stored?.materials[0].balanceSchemaVersion, 2);
   assert.equal(stored?.snapshotAt, "2026-10-14T07:00:00.000Z");
   assert.deepEqual(metadata, {
     requestId: body.requestId, sourceFilename: "materials.xml",

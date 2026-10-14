@@ -86,6 +86,12 @@ export const oneCMaterialInboxTable = inventorySchema.table("one_c_material_inbo
   rowKey: text().primaryKey(),
   materialCode: text().notNull(),
   warehouseKey: text().notNull(),
+  identityVersion: integer().notNull().default(1),
+  accountKey: text().notNull().default("unspecified"),
+  responsibleKey: text().notNull().default("unspecified"),
+  responsibleCode: text(),
+  responsibleExternalId: uuid(),
+  supersededAt: timestamp({ withTimezone: true, mode: "date" }),
   materialExternalId: uuid(),
   warehouseExternalId: uuid(),
   payloadHash: varchar({ length: 64 }).notNull(),
@@ -99,13 +105,16 @@ export const oneCMaterialInboxTable = inventorySchema.table("one_c_material_inbo
   updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
   lastSeenAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
 }, table => [
-  unique("one_c_material_inbox_identity_unique").on(table.materialCode, table.warehouseKey),
+  unique("one_c_material_inbox_identity_unique").on(table.materialCode, table.warehouseKey, table.identityVersion, table.accountKey, table.responsibleKey),
+  check("one_c_material_inbox_dimensions_check", sql`(${table.identityVersion} = 1 AND ${table.accountKey} = 'unspecified' AND ${table.responsibleKey} = 'unspecified') OR (${table.identityVersion} = 2 AND ${table.accountKey} <> 'unspecified' AND length(trim(${table.accountKey})) > 0)`),
   check("one_c_material_inbox_hash_check", sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
   check("one_c_material_inbox_price_check", sql`${table.unitPrice} IS NULL OR ${table.unitPrice} >= 0`),
   check("one_c_material_inbox_code_check", sql`length(trim(${table.materialCode})) > 0`),
   index("one_c_material_inbox_snapshot_idx").on(table.sourceSnapshotAt),
   index("one_c_material_inbox_material_guid_idx").on(table.materialExternalId),
   index("one_c_material_inbox_warehouse_guid_idx").on(table.warehouseExternalId),
+  index("one_c_material_inbox_responsible_guid_idx").on(table.responsibleExternalId),
+  index("one_c_material_inbox_current_idx").on(table.identityVersion, table.supersededAt),
 ]);
 
 export const oneCMaterialImportBatchRowsTable = inventorySchema.table("one_c_material_import_batch_rows", {

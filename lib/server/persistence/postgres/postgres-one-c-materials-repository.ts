@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient, QueryConfig, QueryResultRow } from "pg";
 import { OneCMaterialsImportError, type OneCMaterialsRepository } from "@/lib/application/ports/one-c-materials-repository";
-import { materialIdentityKey, type OneCMaterialsImportMetadata, type OneCMaterialsSnapshot } from "@/lib/contracts/one-c-materials";
+import { materialIdentityKey, materialWarehouseKey, materialResponsibleKey, type OneCMaterialsImportMetadata, type OneCMaterialsSnapshot } from "@/lib/contracts/one-c-materials";
 import { getDatabasePool } from "@/lib/db/client";
 
 type ImportTimeouts = { statementTimeoutMs: number; transactionTimeoutMs: number };
@@ -12,6 +12,7 @@ const IMPORT_LOCK_KEY = "yu-inventory:one-c-materials:v1";
 const CLIENT_TIMEOUT_GRACE_MS = 1_000;
 const INCOMING_ROWS = `select row.* from jsonb_to_recordset($1::jsonb) as row(
   row_key text, material_code text, warehouse_key text, payload_hash varchar(64),
+  identity_version integer, account_key text, responsible_key text,
   payload jsonb, quantity numeric(18,3), unit_price numeric(18,2)
 )`;
 
@@ -27,15 +28,24 @@ export class PostgresOneCMaterialsRepository implements OneCMaterialsRepository 
     let destroyClient = false;
     const deadline = Date.now() + this.timeouts.transactionTimeoutMs;
     try {
+      if (new Set(snapshot.materials.map(material => material.balanceSchemaVersion ?? 1)).size > 1) {
+        throw new OneCMaterialsImportError("snapshot_conflict");
+      }
       const keys = new Set<string>();
       const rows = snapshot.materials.map(material => {
+        if (material.balanceSchemaVersion === 2 && (!material.accountCode || (material.responsibleName && !material.responsibleCode && !material.responsibleExternalId))) {
+          throw new OneCMaterialsImportError("snapshot_conflict");
+        }
         const rowKey = materialIdentityKey(material);
         if (keys.has(rowKey)) throw new OneCMaterialsImportError("snapshot_conflict");
         keys.add(rowKey);
         return {
           row_key: rowKey,
           material_code: material.code,
-          warehouse_key: JSON.parse(rowKey)[1] as string,
+          warehouse_key: materialWarehouseKey(material),
+          identity_version: material.balanceSchemaVersion ?? 1,
+          account_key: material.balanceSchemaVersion === 2 ? `code:${material.accountCode}` : "unspecified",
+          responsible_key: materialResponsibleKey(material),
           payload_hash: createHash("sha256").update(JSON.stringify(material)).digest("hex"),
           payload: material,
           quantity: material.quantity,
@@ -85,7 +95,9 @@ export class PostgresOneCMaterialsRepository implements OneCMaterialsRepository 
         `with incoming as (${INCOMING_ROWS}),
          materials as (select distinct material_code, payload->>'externalId' as guid from incoming),
          warehouses as (select distinct warehouse_key, payload->>'warehouseExternalId' as guid from incoming),
-         current_warehouses as (select distinct warehouse_key, warehouse_external_id::text as guid from "yu_inventory"."one_c_material_inbox")
+         current_warehouses as (select distinct warehouse_key, warehouse_external_id::text as guid from "yu_inventory"."one_c_material_inbox"),
+         responsibles as (select distinct responsible_key, payload->>'responsibleExternalId' as guid from incoming where identity_version = 2),
+         current_responsibles as (select distinct responsible_key, responsible_external_id::text as guid from "yu_inventory"."one_c_material_inbox" where identity_version = 2)
          select exists (
            select 1 from materials group by material_code having count(distinct guid) > 1
          ) or exists (
@@ -109,10 +121,33 @@ export class PostgresOneCMaterialsRepository implements OneCMaterialsRepository 
          ) or exists (
            select 1 from warehouses i join current_warehouses current on current.guid = i.guid
            where current.warehouse_key <> i.warehouse_key
+         ) or exists (
+           select 1 from responsibles group by responsible_key having count(distinct guid) > 1
+         ) or exists (
+           select 1 from responsibles where guid is not null group by guid having count(distinct responsible_key) > 1
+         ) or exists (
+           select 1 from responsibles i join current_responsibles current using (responsible_key)
+           where i.guid is not null and current.guid is not null and i.guid <> current.guid
+         ) or exists (
+           select 1 from responsibles i join current_responsibles current on current.guid = i.guid
+           where current.responsible_key <> i.responsible_key
          ) as conflict`,
         [serializedRows],
       );
       if (identity.rows[0]?.conflict) throw new OneCMaterialsImportError("snapshot_conflict");
+      // A legacy aggregate must never be restored over balances already split by account/MOL.
+      const transition = await query<{ conflict: boolean }>(
+        `with incoming as (${INCOMING_ROWS})
+         select exists (
+           select 1 from incoming i join "yu_inventory"."one_c_material_inbox" current
+             on current.material_code = i.material_code and current.warehouse_key = i.warehouse_key
+           where (i.identity_version = 1 and current.identity_version = 2)
+              or (i.identity_version = 2 and current.identity_version = 1
+                  and current.superseded_at is null
+                  and (not $3::boolean or current.source_snapshot_at >= $2::timestamptz))
+         ) as conflict`, [serializedRows, snapshot.snapshotAt, snapshot.replaceLegacyBalances === true],
+      );
+      if (transition.rows[0]?.conflict) throw new OneCMaterialsImportError("snapshot_conflict");
       const timestamps = await query<{ stale: boolean; conflict: boolean }>(
         `with incoming as (${INCOMING_ROWS})
          select exists (select 1 from "yu_inventory"."one_c_material_import_batches" b where b.source_snapshot_at > $2::timestamptz)
@@ -152,17 +187,29 @@ export class PostgresOneCMaterialsRepository implements OneCMaterialsRepository 
       await query(
         `with incoming as (${INCOMING_ROWS})
          insert into "yu_inventory"."one_c_material_inbox" as current
-           (row_key,material_code,warehouse_key,material_external_id,warehouse_external_id,payload_hash,payload,quantity,unit_price,source_snapshot_at,last_batch_id,last_request_id)
-           select row_key,material_code,warehouse_key,(payload->>'externalId')::uuid,(payload->>'warehouseExternalId')::uuid,payload_hash,payload,quantity,unit_price,$2::timestamptz,$3::uuid,$4::uuid from incoming
+           (row_key,material_code,warehouse_key,identity_version,account_key,responsible_key,responsible_code,responsible_external_id,material_external_id,warehouse_external_id,payload_hash,payload,quantity,unit_price,source_snapshot_at,last_batch_id,last_request_id)
+           select row_key,material_code,warehouse_key,identity_version,account_key,responsible_key,payload->>'responsibleCode',
+             case when identity_version = 2 then (payload->>'responsibleExternalId')::uuid else null end,
+             (payload->>'externalId')::uuid,(payload->>'warehouseExternalId')::uuid,payload_hash,payload,quantity,unit_price,$2::timestamptz,$3::uuid,$4::uuid from incoming
          on conflict (row_key) do update set
            payload_hash=excluded.payload_hash,payload=excluded.payload,
            material_external_id=coalesce(excluded.material_external_id,current.material_external_id),
            warehouse_external_id=coalesce(excluded.warehouse_external_id,current.warehouse_external_id),
+           responsible_code=excluded.responsible_code,
+           responsible_external_id=coalesce(excluded.responsible_external_id,current.responsible_external_id),
            quantity=excluded.quantity,unit_price=excluded.unit_price,
            source_snapshot_at=excluded.source_snapshot_at,last_batch_id=excluded.last_batch_id,
            last_request_id=excluded.last_request_id,last_seen_at=transaction_timestamp(),
            updated_at=case when current.payload_hash <> excluded.payload_hash then transaction_timestamp() else current.updated_at end`,
         [serializedRows, snapshot.snapshotAt, batchId, metadata.requestId],
+      );
+      await query(
+        `with incoming as (${INCOMING_ROWS})
+         update "yu_inventory"."one_c_material_inbox" current set superseded_at = transaction_timestamp()
+         where $2::boolean and current.identity_version = 1 and current.superseded_at is null and exists (
+           select 1 from incoming i where i.identity_version = 2 and i.material_code = current.material_code
+             and i.warehouse_key = current.warehouse_key
+         )`, [serializedRows, snapshot.replaceLegacyBalances === true],
       );
       await query("commit");
       inTransaction = false;

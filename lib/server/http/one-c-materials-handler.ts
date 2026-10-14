@@ -23,6 +23,8 @@ export function getOneCMaterialsCapability(apiKey = process.env.ONE_C_MATERIALS_
     method: "POST", authentication: "Bearer token required", contentType: MEDIA_TYPES,
     maximumBytes: MAX_ONE_C_MATERIALS_XML_BYTES, maximumRecords: MAX_ONE_C_MATERIALS_RECORDS,
     snapshotAtRequired: true, warehouseUnknownAllowed: true, automaticPublication: false,
+    schemaVersions: [1, 2], recommendedSchemaVersion: 2,
+    version2BalanceDimensions: ["material", "account", "warehouse", "responsible"],
   });
 }
 
