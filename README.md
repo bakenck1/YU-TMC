@@ -5,6 +5,10 @@ inspections, responsibility transfers, service requests and TMC operations.
 The application uses PostgreSQL as its durable source of truth and supports
 Russian, Kazakh and English UI languages.
 
+1C fixed assets and materials use separate import endpoints. The materials XML
+contract, warehouse-specific balances and deployment steps are documented in
+[1C materials API](docs/one-c-materials-api.md).
+
 ## Prerequisites
 
 - Node.js 24.15+ within the Node 24 major (the repository pins the CI baseline
