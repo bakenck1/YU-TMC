@@ -65,6 +65,60 @@ import { PASSPORT_STATUSES, PASSPORT_REJECTION_REASONS } from "@/lib/contracts/r
  */
 export const inventorySchema = pgSchema("yu_inventory");
 
+export const oneCMaterialImportBatchesTable = inventorySchema.table("one_c_material_import_batches", {
+  id: uuid().primaryKey(),
+  requestId: uuid().notNull(),
+  sourceFilename: text(),
+  sourceSha256: varchar({ length: 64 }).notNull().unique(),
+  sourceSnapshotAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  receivedCount: integer().notNull(),
+  createdCount: integer().notNull(),
+  updatedCount: integer().notNull(),
+  unchangedCount: integer().notNull(),
+  receivedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}, table => [
+  check("one_c_material_batches_hash_check", sql`${table.sourceSha256} ~ '^[0-9a-f]{64}$'`),
+  check("one_c_material_batches_counts_check", sql`${table.receivedCount} >= 0 AND ${table.createdCount} >= 0 AND ${table.updatedCount} >= 0 AND ${table.unchangedCount} >= 0 AND ${table.createdCount} + ${table.updatedCount} + ${table.unchangedCount} = ${table.receivedCount}`),
+  index("one_c_material_batches_received_idx").on(table.receivedAt),
+]);
+
+export const oneCMaterialInboxTable = inventorySchema.table("one_c_material_inbox", {
+  rowKey: text().primaryKey(),
+  materialCode: text().notNull(),
+  warehouseKey: text().notNull(),
+  materialExternalId: uuid(),
+  warehouseExternalId: uuid(),
+  payloadHash: varchar({ length: 64 }).notNull(),
+  payload: jsonb().$type<Record<string, unknown>>().notNull(),
+  quantity: numeric({ precision: 18, scale: 3 }).notNull(),
+  unitPrice: numeric({ precision: 18, scale: 2 }),
+  sourceSnapshotAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  lastBatchId: uuid().notNull().references(() => oneCMaterialImportBatchesTable.id, { onDelete: "restrict" }),
+  lastRequestId: uuid().notNull(),
+  receivedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  lastSeenAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}, table => [
+  unique("one_c_material_inbox_identity_unique").on(table.materialCode, table.warehouseKey),
+  check("one_c_material_inbox_hash_check", sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
+  check("one_c_material_inbox_price_check", sql`${table.unitPrice} IS NULL OR ${table.unitPrice} >= 0`),
+  check("one_c_material_inbox_code_check", sql`length(trim(${table.materialCode})) > 0`),
+  index("one_c_material_inbox_snapshot_idx").on(table.sourceSnapshotAt),
+  index("one_c_material_inbox_material_guid_idx").on(table.materialExternalId),
+  index("one_c_material_inbox_warehouse_guid_idx").on(table.warehouseExternalId),
+]);
+
+export const oneCMaterialImportBatchRowsTable = inventorySchema.table("one_c_material_import_batch_rows", {
+  batchId: uuid().notNull().references(() => oneCMaterialImportBatchesTable.id, { onDelete: "restrict" }),
+  rowKey: text().notNull(),
+  payloadHash: varchar({ length: 64 }).notNull(),
+  payload: jsonb().$type<Record<string, unknown>>().notNull(),
+}, table => [
+  primaryKey({ name: "one_c_material_batch_rows_pk", columns: [table.batchId, table.rowKey] }),
+  check("one_c_material_batch_rows_hash_check", sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
+  index("one_c_material_batch_rows_identity_idx").on(table.rowKey),
+]);
+
 export const oneCFixedAssetInboxTable = inventorySchema.table(
   "one_c_fixed_asset_inbox",
   {

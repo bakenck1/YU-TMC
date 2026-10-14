@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Materials>
+  <SnapshotAt>2026-10-14T12:00:00+05:00</SnapshotAt>
+  <Material>
+    <Code>00000006135</Code>
+    <Name>МФУ Laser Jet M130 №1350/14444</Name>
+    <InventoryNumber>1350/14444</InventoryNumber>
+    <Barcode/>
+    <Unit>шт</Unit>
+    <Quantity>1</Quantity>
+    <UnitPrice>66784.48</UnitPrice>
+    <WarehouseCode>WH-01</WarehouseCode>
+    <WarehouseName>Основной склад</WarehouseName>
+  </Material>
+  <Material>
+    <Code>00000006135</Code>
+    <Name>МФУ Laser Jet M130 №1350/14444</Name>
+    <Unit>шт</Unit>
+    <Quantity>2</Quantity>
+    <UnitPrice>65000.00</UnitPrice>
+    <WarehouseCode>WH-02</WarehouseCode>
+    <WarehouseName>Второй склад</WarehouseName>
+  </Material>
+</Materials>
