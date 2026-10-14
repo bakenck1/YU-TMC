@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { materialIdentityKey, type OneCMaterialsSnapshot, type OneCMaterialsImportMetadata } from "@/lib/contracts/one-c-materials";
 import { OneCMaterialsImportError } from "@/lib/application/ports/one-c-materials-repository";
@@ -9,6 +10,7 @@ import { MAX_ONE_C_MATERIALS_RECORDS, MAX_ONE_C_MATERIALS_XML_BYTES, parseOneCMa
 const KEY = "test-materials-api-key";
 const ROW = "<Material><Code>0000006135</Code><Name>МФУ Laser Jet M130 №1350/1444</Name><Quantity>1</Quantity></Material>";
 function xml(rows = ROW, date = "2026-10-14T13:11:41+05:00") { return `<Materials><SnapshotAt>${date}</SnapshotAt>${rows}</Materials>`; }
+function xmlV2(rows: string, extra = "") { return xml(rows).replace("<Materials>", `<Materials><SchemaVersion>2</SchemaVersion>${extra}`); }
 function request(body: string | Uint8Array = xml(), headers: Record<string, string> = {}) {
   return new Request("https://inventory.example/api/integrations/1c/materials", {
     method: "POST", headers: { authorization: `Bearer ${KEY}`, "content-type": "application/xml; charset=utf-8", ...headers },
@@ -20,6 +22,49 @@ function successfulService() {
 }
 
 describe("1C materials XML contract", () => {
+  it("separates balances by account, warehouse and stable MOL code, never by name or price", () => {
+    const row = (account: string, person: string, name: string, warehouse = "") => ROW.replace("</Material>", `<AccountCode>${account}</AccountCode><ResponsibleCode>${person}</ResponsibleCode><Responsible>${name}</Responsible>${warehouse ? `<WarehouseCode>${warehouse}</WarehouseCode>` : ""}</Material>`);
+    const parsed = parseOneCMaterials(xmlV2(row("1317", "001", "Иванов") + row("1317", "002", "Иванов") + row("1350", "001", "Иванов") + row("1317", "001", "Иванов", "WH-01")));
+    assert.equal(new Set(parsed.materials.map(materialIdentityKey)).size, 4);
+    assert.equal(parsed.materials[0].responsibleCode, "001");
+    assert.equal(parsed.materials[0].accountCode, "1317");
+    assert.equal(parsed.materials[0].balanceSchemaVersion, 2);
+    assert.equal(materialIdentityKey(parsed.materials[0]), materialIdentityKey({ ...parsed.materials[0], responsibleName: "Переименован" }));
+    assert.throws(() => parseOneCMaterials(xmlV2(row("1317", "001", "Иванов") + row("1317", "001", "Другое ФИО"))), /duplicate_material_balance/);
+  });
+  it("supports MOL GUID without a code and true absence of MOL, but rejects name-only version 2", () => {
+    const fields = "<AccountCode>1317</AccountCode>";
+    const withFields = (suffix: string) => ROW.replace("</Material>", fields + suffix + "</Material>");
+    const noPerson = parseOneCMaterials(xmlV2(withFields("<Responsible/>"))).materials[0];
+    assert.equal(noPerson.responsibleName, undefined);
+    assert.throws(() => parseOneCMaterials(xmlV2(withFields("<Responsible>Иванов</Responsible>"))), /responsible_identity_required/);
+    const guidOnly = parseOneCMaterials(xmlV2(withFields("<ResponsibleGUID>eba5b834-db3b-11f0-a26e-7cc25579bdd7</ResponsibleGUID>"))).materials[0];
+    assert.notEqual(materialIdentityKey(guidOnly), materialIdentityKey(noPerson));
+    assert.throws(() => parseOneCMaterials(xmlV2(ROW)), /account_code_required/);
+  });
+  it("bounds compound identity bytes and rejects control characters before database import", () => {
+    const row = ROW.replace("</Material>", "<AccountCode>1317</AccountCode><ResponsibleCode>001</ResponsibleCode></Material>");
+    for (const code of ["я".repeat(65), "a".repeat(129), "bad\ncode"]) {
+      assert.throws(() => parseOneCMaterials(xmlV2(row.replace("0000006135", code))), /invalid_identifier/);
+    }
+    const allMaximum = row.replace("0000006135", "a".repeat(128)).replace("<AccountCode>1317", `<AccountCode>${"b".repeat(128)}`).replace("<ResponsibleCode>001", `<ResponsibleCode>${"c".repeat(128)}`).replace("</Material>", `<WarehouseCode>${"d".repeat(128)}</WarehouseCode></Material>`);
+    assert.equal(parseOneCMaterials(xmlV2(allMaximum)).materials.length, 1);
+  });
+  it("requires explicit version 2 for new dimensions and validates transition flags", () => {
+    const row = ROW.replace("</Material>", "<AccountCode>1317</AccountCode></Material>");
+    assert.throws(() => parseOneCMaterials(xml(row)), /schema_version_2_required/);
+    assert.throws(() => parseOneCMaterials(xmlV2(row).replace("<SchemaVersion>2", "<SchemaVersion>3")), /unsupported_schema_version/);
+    assert.throws(() => parseOneCMaterials(xmlV2(row, "<ReplaceLegacyBalances>yes</ReplaceLegacyBalances>")), /invalid_replace_legacy_balances/);
+    assert.throws(() => parseOneCMaterials(xml().replace("<Materials>", "<Materials><ReplaceLegacyBalances>true</ReplaceLegacyBalances>")), /invalid_replace_legacy_balances/);
+    assert.equal(parseOneCMaterials(xmlV2(row, "<ReplaceLegacyBalances>true</ReplaceLegacyBalances>")).replaceLegacyBalances, true);
+    assert.equal(parseOneCMaterials(xmlV2(row, "<ReplaceLegacyBalances>false</ReplaceLegacyBalances>")).replaceLegacyBalances, undefined);
+  });
+  it("accepts the documented version 2 example with the same material at different MOLs", () => {
+    const parsed = parseOneCMaterials(readFileSync("docs/examples/one-c-materials.xml", "utf8"));
+    assert.ok(parsed.materials.every(material => material.balanceSchemaVersion === 2));
+    assert.ok(parsed.materials.length >= 2);
+    assert.equal(new Set(parsed.materials.map(materialIdentityKey)).size, parsed.materials.length);
+  });
   it("accepts optional responsible name and GUID independently without changing material identity", () => {
     const base = parseOneCMaterials(xml()).materials[0];
     const id = "EBA5B834-DB3B-11F0-A26E-7CC25579BDD7";
@@ -128,6 +173,8 @@ describe("1C materials HTTP boundary", () => {
     assert.equal(capability.service, "1c-materials");
     assert.equal(capability.configured, false);
     assert.equal(capability.automaticPublication, false);
+    assert.deepEqual(capability.schemaVersions, [1, 2]);
+    assert.equal(capability.recommendedSchemaVersion, 2);
     const handler = createOneCMaterialsPostHandler({ service: successfulService(), apiKey: () => KEY });
     assert.equal((await handler(request(xml(), { authorization: "Bearer fixed-assets-test-key" }))).status, 401);
     assert.equal((await createOneCMaterialsPostHandler({ service: successfulService(), apiKey: () => "" })(request())).status, 503);

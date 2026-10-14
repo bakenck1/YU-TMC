@@ -19,6 +19,7 @@ const material: OneCMaterial = {
 };
 const firstDate = "2026-10-14T01:00:00.000Z";
 const secondDate = "2026-10-15T01:00:00.000Z";
+const balance: OneCMaterial = { ...material, balanceSchemaVersion: 2, accountCode: "1317", responsibleCode: "000001", responsibleName: "Иванов Иван Иванович" };
 const snapshot = (materials = [material], snapshotAt = firstDate): OneCMaterialsSnapshot => ({ snapshotAt, materials });
 const metadata = (source = randomUUID()) => ({
   sourceSha256: createHash("sha256").update(source).digest("hex"), requestId: randomUUID(), sourceFilename: "materials.xml",
@@ -82,6 +83,107 @@ describe("PostgreSQL separate 1C materials inbox", () => {
       { material_code: "missing", quantity: "-123.456", unit_price: null },
       { material_code: "zero", quantity: "0.000", unit_price: "0.00" },
     ]);
+  });
+
+  it("stores 7, 15 and 1 at different MOLs separately, including independent accounts and warehouses", async () => {
+    const initialItems = await count("items");
+    const initialAssets = await count("one_c_fixed_asset_inbox");
+    const records = [
+      { ...balance, quantity: "7" },
+      { ...balance, responsibleCode: "000002", quantity: "15" },
+      { ...balance, responsibleCode: "000003", quantity: "1" },
+      { ...balance, warehouseCode: "0002", unitPrice: "65000" },
+      { ...balance, accountCode: "1350", unitPrice: "123" },
+    ];
+    const source = metadata();
+    const result = await repository.saveSnapshot(snapshot(records), source);
+    expect(result).toMatchObject({ created: 5, updated: 0, unchanged: 0 });
+    const rows = (await runtimePool.query('select responsible_code,quantity::text from "yu_inventory"."one_c_material_inbox" where account_key=$1 and warehouse_key=$2 order by responsible_code', ["code:1317", "code:0001"])).rows;
+    expect(rows).toEqual([
+      { responsible_code: "000001", quantity: "7.000" },
+      { responsible_code: "000002", quantity: "15.000" },
+      { responsible_code: "000003", quantity: "1.000" },
+    ]);
+    const repeated = await repository.saveSnapshot(snapshot(records), { ...source, requestId: randomUUID() });
+    expect(repeated).toMatchObject({ created: 0, updated: 0, unchanged: 5, batchId: result.batchId, replayed: true });
+    expect(await count("items")).toBe(initialItems);
+    expect(await count("one_c_fixed_asset_inbox")).toBe(initialAssets);
+  });
+
+  it("stores maximal encoded dimension keys, including escaped characters, without index overflow", async () => {
+    const record = {
+      ...balance, externalId: null, code: '"'.repeat(128), warehouseCode: "\\".repeat(128),
+      accountCode: "я".repeat(64), responsibleCode: "ю".repeat(64),
+    };
+    const result = await repository.saveSnapshot(snapshot([record]), metadata());
+    expect(result).toMatchObject({ created: 1, updated: 0, unchanged: 0 });
+    expect((await runtimePool.query('select row_key,material_code,account_key,responsible_key from "yu_inventory"."one_c_material_inbox"')).rows[0]).toEqual({
+      row_key: materialIdentityKey(record), material_code: record.code,
+      account_key: `code:${record.accountCode}`, responsible_key: `code:${record.responsibleCode}`,
+    });
+  });
+
+  it("allows renaming a MOL but retains known GUID and rejects changed or reused person identity", async () => {
+    const guid = randomUUID();
+    await repository.saveSnapshot(snapshot([{ ...balance, responsibleExternalId: guid }]), metadata());
+    const updated = await repository.saveSnapshot(snapshot([{ ...balance, responsibleName: "Другое написание" }], secondDate), metadata());
+    expect(updated).toMatchObject({ created: 0, updated: 1, unchanged: 0 });
+    expect(await count("one_c_material_inbox")).toBe(1);
+    expect((await runtimePool.query('select responsible_external_id::text,payload from "yu_inventory"."one_c_material_inbox"')).rows[0]).toMatchObject({ responsible_external_id: guid, payload: { responsibleName: "Другое написание" } });
+    const date = "2026-10-16T01:00:00Z";
+    await expect(repository.saveSnapshot(snapshot([{ ...balance, responsibleExternalId: randomUUID() }], date), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot(snapshot([{ ...balance, responsibleCode: "000002", responsibleExternalId: guid }], date), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot(snapshot([{ ...balance, responsibleCode: undefined, responsibleExternalId: guid }], date), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+  });
+
+  it("does not merge identical names with different MOL GUIDs or a genuinely unspecified MOL", async () => {
+    const records = [
+      { ...balance, responsibleCode: undefined, responsibleExternalId: randomUUID() },
+      { ...balance, responsibleCode: undefined, responsibleExternalId: randomUUID() },
+      { ...balance, responsibleCode: undefined, responsibleName: undefined },
+    ];
+    expect((await repository.saveSnapshot(snapshot(records), metadata())).created).toBe(3);
+    expect(await count("one_c_material_inbox")).toBe(3);
+  });
+
+  it("moves quantities only via explicit zero updates and cannot replay an old balance over newer quantities", async () => {
+    const source = metadata();
+    const original = snapshot([{ ...balance, quantity: "7" }, { ...balance, responsibleCode: "000002", quantity: "15" }]);
+    const batch = await repository.saveSnapshot(original, source);
+    const newer = snapshot([{ ...balance, quantity: "0" }, { ...balance, responsibleCode: "000002", quantity: "22" }], secondDate);
+    expect(await repository.saveSnapshot(newer, metadata())).toMatchObject({ created: 0, updated: 2, unchanged: 0 });
+    expect(await repository.saveSnapshot(original, { ...source, requestId: randomUUID() })).toMatchObject({ unchanged: 2, batchId: batch.batchId, replayed: true });
+    await repository.saveSnapshot(snapshot([{ ...balance, quantity: "0" }], "2026-10-16T01:00:00Z"), metadata());
+    const rows = (await runtimePool.query('select responsible_code,quantity::text from "yu_inventory"."one_c_material_inbox" order by responsible_code')).rows;
+    expect(rows).toEqual([{ responsible_code: "000001", quantity: "0.000" }, { responsible_code: "000002", quantity: "22.000" }]);
+  });
+
+  it("requires an explicit newer legacy transition, archives the aggregate, and cannot restore it by replay", async () => {
+    const legacySource = metadata();
+    const legacyBatch = await repository.saveSnapshot(snapshot(), legacySource);
+    const detailed = snapshot([{ ...balance, quantity: "7" }, { ...balance, responsibleCode: "000002", quantity: "15" }], secondDate);
+    await expect(repository.saveSnapshot(detailed, metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot({ ...detailed, snapshotAt: firstDate, replaceLegacyBalances: true }, metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    expect(await count("one_c_material_inbox")).toBe(1);
+    const detailSource = metadata();
+    const transition = { ...detailed, replaceLegacyBalances: true as const };
+    expect(await repository.saveSnapshot(transition, detailSource)).toMatchObject({ created: 2, updated: 0, unchanged: 0 });
+    expect((await runtimePool.query('select count(*)::int count,sum(quantity)::text total from "yu_inventory"."one_c_material_inbox" where superseded_at is null')).rows[0]).toEqual({ count: 2, total: "22.000" });
+    const history = (await runtimePool.query('select payload from "yu_inventory"."one_c_material_import_batch_rows" where batch_id=$1', [legacyBatch.batchId])).rows[0].payload;
+    expect(history).toEqual(material);
+    await repository.saveSnapshot(snapshot(), { ...legacySource, requestId: randomUUID() });
+    expect((await runtimePool.query('select superseded_at from "yu_inventory"."one_c_material_inbox" where identity_version=1')).rows[0].superseded_at).not.toBeNull();
+    await expect(repository.saveSnapshot(snapshot([material], "2026-10-16T01:00:00Z"), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    expect(await repository.saveSnapshot(transition, detailSource)).toMatchObject({ unchanged: 2, replayed: true });
+  });
+
+  it("rejects mixed-version packets, conflicting MOL GUIDs and duplicate complete keys atomically", async () => {
+    await expect(repository.saveSnapshot(snapshot([material, balance]), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot(snapshot([balance, balance]), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot(snapshot([{ ...balance, responsibleExternalId: randomUUID() }, { ...balance, code: "different-material", externalId: null, responsibleExternalId: randomUUID() }]), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    await expect(repository.saveSnapshot(snapshot([{ ...balance, responsibleCode: undefined, responsibleName: "ФИО без идентификатора" }]), metadata())).rejects.toMatchObject({ code: "snapshot_conflict" });
+    expect(await count("one_c_material_inbox")).toBe(0);
+    expect(await count("one_c_material_import_batches")).toBe(0);
   });
 
   it("stores responsible source details in current and historical rows without duplicating the position", async () => {
@@ -224,7 +326,7 @@ describe("PostgreSQL separate 1C materials inbox", () => {
   });
 
   it("imports 50,000 rows in one transaction without per-row SQL", async () => {
-    const records = Array.from({ length: 50_000 }, (_, index) => ({ ...material, externalId: null, code: String(index).padStart(10, "0") }));
+    const records = Array.from({ length: 50_000 }, (_, index) => ({ ...balance, externalId: null, code: String(index).padStart(10, "0") }));
     const result = await repository.saveSnapshot(snapshot(records), metadata());
     expect(result).toMatchObject({ created: 50_000, updated: 0, unchanged: 0 });
     expect(await count("one_c_material_inbox")).toBe(50_000);
