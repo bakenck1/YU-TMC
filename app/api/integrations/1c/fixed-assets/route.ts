@@ -11,7 +11,7 @@ export function GET(request: Request) {
 
 const post = createOneCFixedAssetsPostHandler({
   service: {
-    importBatch: (assets) => getApplicationServices().oneCFixedAssets.importBatch(assets),
+    importBatch: (assets, metadata) => getApplicationServices().oneCFixedAssets.importBatch(assets, metadata),
     tryAcquireLease: (keyId) => getApplicationServices().oneCFixedAssets.tryAcquireLease(keyId),
   },
 });
