@@ -6,6 +6,9 @@ export type OneCMaterial = {
   warehouseExternalId: string | null;
   warehouseCode: string | null;
   warehouseName: string | null;
+  /** Source information only; absence is preserved for compatibility with older snapshots. */
+  responsibleName?: string;
+  responsibleExternalId?: string;
   inventoryNumber: string | null;
   barcode: string | null;
   unit: string | null;

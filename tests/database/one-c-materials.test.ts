@@ -6,6 +6,7 @@ import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 import { PostgresOneCMaterialsRepository } from "@/lib/server/persistence/postgres/postgres-one-c-materials-repository";
+import { parseOneCMaterials } from "@/lib/server/integrations/one-c-materials";
 
 let migrationConfig: DatabaseConfig;
 let migrationPool: Pool;
@@ -81,6 +82,35 @@ describe("PostgreSQL separate 1C materials inbox", () => {
       { material_code: "missing", quantity: "-123.456", unit_price: null },
       { material_code: "zero", quantity: "0.000", unit_price: "0.00" },
     ]);
+  });
+
+  it("stores responsible source details in current and historical rows without duplicating the position", async () => {
+    const initialItems = await count("items");
+    const person = { responsibleName: "Иванов Иван Иванович", responsibleExternalId: randomUUID() };
+    const first = await repository.saveSnapshot(snapshot([{ ...material, ...person }]), metadata());
+    const current = (await runtimePool.query('select payload from "yu_inventory"."one_c_material_inbox"')).rows[0].payload;
+    expect(current).toMatchObject(person);
+    const repeated = await repository.saveSnapshot(snapshot([{ ...material, ...person }], secondDate), metadata());
+    expect(repeated).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+    const changed = await repository.saveSnapshot(snapshot([{ ...material, responsibleName: "Петров Пётр Петрович", responsibleExternalId: randomUUID() }], "2026-10-16T01:00:00Z"), metadata());
+    expect(changed).toMatchObject({ created: 0, updated: 1, unchanged: 0 });
+    const cleared = await repository.saveSnapshot(snapshot([material], "2026-10-17T01:00:00Z"), metadata());
+    expect(cleared).toMatchObject({ created: 0, updated: 1, unchanged: 0 });
+    expect((await runtimePool.query('select payload from "yu_inventory"."one_c_material_inbox"')).rows[0].payload).toEqual(material);
+    const historical = (await runtimePool.query('select payload from "yu_inventory"."one_c_material_import_batch_rows" where batch_id=$1', [first.batchId])).rows[0].payload;
+    expect(historical).toMatchObject(person);
+    expect(await count("one_c_material_inbox")).toBe(1);
+    expect(await count("items")).toBe(initialItems);
+  });
+
+  it("replays XML accepted before responsible fields existed with the same payload hash", async () => {
+    const originalXml = `<Materials><SnapshotAt>${firstDate}</SnapshotAt><Material><GUID>${material.externalId}</GUID><Code>${material.code}</Code><Name>${material.name}</Name><WarehouseCode>${material.warehouseCode}</WarehouseCode><WarehouseName>${material.warehouseName}</WarehouseName><InventoryNumber>${material.inventoryNumber}</InventoryNumber><Unit>${material.unit}</Unit><Quantity>${material.quantity}</Quantity><UnitPrice>${material.unitPrice}</UnitPrice></Material></Materials>`;
+    const source = metadata(originalXml);
+    // The old normalized shape has no responsible-person keys.
+    const accepted = await repository.saveSnapshot(snapshot(), source);
+    const result = await repository.saveSnapshot(parseOneCMaterials(originalXml), { ...source, requestId: randomUUID() });
+    expect(result).toEqual({ created: 0, updated: 0, unchanged: 1, batchId: accepted.batchId, replayed: true });
+    expect(await count("one_c_material_import_batches")).toBe(1);
   });
 
   it("replays an accepted XML without reverting balances from a newer snapshot", async () => {

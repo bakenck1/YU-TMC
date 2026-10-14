@@ -11,6 +11,8 @@
     <UnitPrice>66784.48</UnitPrice>
     <WarehouseCode>WH-01</WarehouseCode>
     <WarehouseName>Основной склад</WarehouseName>
+    <Responsible>Иванов Иван Иванович</Responsible>
+    <ResponsibleGUID>eba5b834-db3b-11f0-a26e-7cc25579bdd7</ResponsibleGUID>
   </Material>
   <Material>
     <Code>00000006135</Code>
@@ -20,5 +22,6 @@
     <UnitPrice>65000.00</UnitPrice>
     <WarehouseCode>WH-02</WarehouseCode>
     <WarehouseName>Второй склад</WarehouseName>
+    <Responsible/>
   </Material>
 </Materials>
