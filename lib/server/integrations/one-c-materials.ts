@@ -7,7 +7,7 @@ export const MAX_ONE_C_MATERIALS_XML_BYTES = 64 * 1024 * 1024;
 export const MAX_ONE_C_MATERIALS_RECORDS = 50_000;
 export const MAX_ONE_C_MATERIALS_TEXT_LENGTH = 255;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const FIELDS = new Set(["GUID", "Code", "Name", "WarehouseGUID", "WarehouseCode", "WarehouseName", "InventoryNumber", "Barcode", "Unit", "Quantity", "UnitPrice", "Currency"]);
+const FIELDS = new Set(["GUID", "Code", "Name", "WarehouseGUID", "WarehouseCode", "WarehouseName", "Responsible", "ResponsibleGUID", "InventoryNumber", "Barcode", "Unit", "Quantity", "UnitPrice", "Currency"]);
 const parser = new XMLParser({ ignoreAttributes: false, trimValues: true, parseTagValue: false, processEntities: true });
 
 export class OneCMaterialsContractError extends Error {
@@ -63,6 +63,8 @@ function normalizeMaterial(record: Record<string, unknown>, index: number): OneC
   const warehouseExternalId = guid(record, "WarehouseGUID", row);
   const warehouseCode = text(record, "WarehouseCode", row);
   const warehouseName = text(record, "WarehouseName", row);
+  const responsibleName = text(record, "Responsible", row);
+  const responsibleExternalId = guid(record, "ResponsibleGUID", row);
   if (warehouseName && !warehouseCode && !warehouseExternalId) fail(`row_${row}_warehouse_identity_required`);
   return {
     externalId: guid(record, "GUID", row), code, name,
@@ -70,6 +72,9 @@ function normalizeMaterial(record: Record<string, unknown>, index: number): OneC
     inventoryNumber: text(record, "InventoryNumber", row), barcode: text(record, "Barcode", row),
     unit: text(record, "Unit", row), quantity,
     unitPrice: decimal(text(record, "UnitPrice", row), 2, false, row, "unit_price"), currency,
+    // Do not change hashes of older XML packets that have no responsible-person fields.
+    ...(responsibleName ? { responsibleName } : {}),
+    ...(responsibleExternalId ? { responsibleExternalId } : {}),
   };
 }
 

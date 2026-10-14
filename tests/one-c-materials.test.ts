@@ -20,6 +20,38 @@ function successfulService() {
 }
 
 describe("1C materials XML contract", () => {
+  it("accepts optional responsible name and GUID independently without changing material identity", () => {
+    const base = parseOneCMaterials(xml()).materials[0];
+    const id = "EBA5B834-DB3B-11F0-A26E-7CC25579BDD7";
+    for (const [fields, expected] of [
+      ["<Responsible>  Иванов Иван Иванович  </Responsible>", { responsibleName: "Иванов Иван Иванович" }],
+      [`<ResponsibleGUID>${id}</ResponsibleGUID>`, { responsibleExternalId: id.toLowerCase() }],
+      [`<Responsible>Иванов &amp; Петров</Responsible><ResponsibleGUID>${id}</ResponsibleGUID>`, { responsibleName: "Иванов & Петров", responsibleExternalId: id.toLowerCase() }],
+    ] as const) {
+      const parsed = parseOneCMaterials(xml(ROW.replace("</Material>", fields + "</Material>"))).materials[0];
+      assert.deepEqual(parsed, { ...base, ...expected });
+      assert.equal(materialIdentityKey(parsed), materialIdentityKey(base));
+    }
+  });
+  it("preserves the legacy payload and hash when responsible fields are empty or omitted", () => {
+    const legacy = {
+      externalId: null, code: "0000006135", name: "МФУ Laser Jet M130 №1350/1444",
+      warehouseExternalId: null, warehouseCode: null, warehouseName: null,
+      inventoryNumber: null, barcode: null, unit: null, quantity: "1", unitPrice: null, currency: "KZT",
+    };
+    for (const fields of ["", "<Responsible/><ResponsibleGUID/>", "<Responsible> </Responsible><ResponsibleGUID> </ResponsibleGUID>"]) {
+      const parsed = parseOneCMaterials(xml(ROW.replace("</Material>", fields + "</Material>"))).materials[0];
+      assert.equal(JSON.stringify(parsed), JSON.stringify(legacy));
+    }
+  });
+  it("rejects malformed, repeated, nested and oversized responsible fields", () => {
+    for (const [fields, error] of [
+      ["<ResponsibleGUID>not-a-guid</ResponsibleGUID>", "invalid_responsibleguid"],
+      ["<Responsible>Иванов</Responsible><Responsible>Петров</Responsible>", "invalid_responsible"],
+      ["<Responsible><Name>Иванов</Name></Responsible>", "invalid_responsible"],
+      [`<Responsible>${"a".repeat(256)}</Responsible>`, "text_too_long"],
+    ]) assert.throws(() => parseOneCMaterials(xml(ROW.replace("</Material>", fields + "</Material>"))), new RegExp(error));
+  });
   it("keeps leading zeros, optional missing price/barcode, and explicit unknown warehouse", () => {
     const result = parseOneCMaterials(xml());
     assert.equal(result.snapshotAt, "2026-10-14T08:11:41.000Z");
