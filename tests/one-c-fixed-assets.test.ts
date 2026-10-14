@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Pool } from "pg";
+import ts from "typescript";
 
 import { createOneCFixedAssetsPostHandler, getOneCFixedAssetsCapability } from "@/lib/server/http/one-c-fixed-assets-handler";
-import type { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
-import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
+import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
+import { OneCImportUnavailableError, type OneCImportMetadata } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { MAX_ONE_C_RECORDS, MAX_ONE_C_TEXT_LENGTH, MAX_ONE_C_XML_BYTES, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 import { observeHttpRequest } from "@/lib/server/observability";
@@ -15,6 +17,49 @@ const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
 const XML = `<FixedAssets><FixedAsset><GUID>${GUID}</GUID><Code>000009352</Code><Name>Компьютер</Name></FixedAsset></FixedAssets>`;
 
 describe("1C fixed assets HTTP boundary", () => {
+  it("the real POST route preserves source metadata through the service to persistence", async () => {
+    let storedMetadata: OneCImportMetadata | undefined;
+    const service = new OneCFixedAssetImportService({
+      saveBatch: async (assets, metadata) => {
+        assert.equal(assets[0]?.externalId, GUID);
+        storedMetadata = metadata;
+        return { created: 1, updated: 0, unchanged: 0 };
+      },
+      tryAcquireLease: async () => ({ release: async () => undefined }),
+    });
+    const source = readFileSync("app/api/integrations/1c/fixed-assets/route.ts", "utf8");
+    const code = ts.transpileModule(source, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    const dependencies: Record<string, unknown> = {
+      "@/lib/server/http/one-c-fixed-assets-handler": {
+        createOneCFixedAssetsPostHandler: (deps: Parameters<typeof createOneCFixedAssetsPostHandler>[0]) =>
+          createOneCFixedAssetsPostHandler({ ...deps, apiKey: () => API_KEY }),
+        getOneCFixedAssetsCapability,
+      },
+      "@/lib/server/application": { getApplicationServices: () => ({ oneCFixedAssets: service }) },
+      "@/lib/server/observability": {
+        observeHttpRequest: (req: Request, route: string, handler: () => Promise<Response>) =>
+          observeHttpRequest(req, route, handler, { sink: () => undefined }),
+      },
+    };
+    const exports: Record<string, unknown> = {};
+    new Function("require", "exports", code)((name: string) => {
+      if (!(name in dependencies)) throw new Error("Unexpected route dependency: " + name);
+      return dependencies[name];
+    }, exports);
+    const post = exports.POST as (req: Request) => Promise<Response>;
+    const response = await post(request(XML, { "x-source-filename": "inventory_20261013_062117.xml" }));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.requestId, response.headers.get("x-request-id"));
+    assert.deepEqual(storedMetadata, {
+      sourceSha256: createHash("sha256").update(XML).digest("hex"),
+      requestId: body.requestId,
+      sourceFilename: "inventory_20261013_062117.xml",
+    });
+  });
+
   it("reports capability and configuration without claiming database readiness", async () => {
     const response = getOneCFixedAssetsCapability("");
     assert.equal(response.status, 200);
