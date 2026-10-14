@@ -1,11 +1,12 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
+import { auditNeedsReview, isWeakEvidence } from "@/lib/inventory-source-audit-review";
+export { auditNeedsReview, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
 import { extractExcelInventoryReferences, inventoryAuditNumberKey, inventoryAuditSlashlessKey, inventoryAuditSpacelessKey, inventoryAuditSuffixStem, type ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 export { extractExcelInventoryNumber, extractExcelInventoryReference, extractExcelInventoryReferences } from "@/lib/inventory-audit-numbers";
 export type { ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 
-export const INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION = 7;
 export type ExcelSourceRow = ExcelInventoryReference & { rowNumber: number; nomenclature: string; endingBalance: string | null; oneCCode?: string | null; inventoryReferences?: ExcelInventoryReference[]; matchedInventoryNumber?: string; matchedReference?: ExcelInventoryReference; matchedBy?: ("site_number" | "barcode" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[] };
 export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
@@ -46,15 +47,6 @@ function differsBySpacedNumberFormat(left: string, right: string): boolean {
   const withoutSlash = compactA.includes("/") ? compactB : compactA;
   return /^\d+\/\d+$/u.test(withSlash) && /^\d+$/u.test(withoutSlash)
     && withSlash.replace("/", "") === withoutSlash;
-}
-
-export function auditNeedsReview(row: AuditMatch): boolean {
-  const reasons = [...row.oneC.flatMap((entry) => entry.matchedBy), ...row.excel.flatMap((entry) => entry.matchedBy ?? [])];
-  return reasons.length > 0 && reasons.every(isWeakEvidence);
-}
-
-function isWeakEvidence(reason: string): boolean {
-  return reason === "number_without_slash" || reason === "number_in_description" || reason === "number_format" || reason === "number_suffix" || reason === "number_spaces";
 }
 
 function nameTokens(value: string): Set<string> {
