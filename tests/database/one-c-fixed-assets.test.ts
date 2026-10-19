@@ -90,7 +90,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await expect(uploadMaterialSnapshot("bad.xls", Buffer.from("fake"), userId, runtimePool)).rejects.toThrow();
   });
 
-  it("runs the real dry-run against PostgreSQL with an Excel number and an active site barcode", async () => {
+  it("runs the real dry-run with an active site barcode while ignoring retired Excel input", async () => {
     const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID();
     const groupId = randomUUID(), externalId = randomUUID();
     await runtimePool.query(`insert into "yu_inventory"."users"(id,code,email,full_name,role,created_at,updated_at)
@@ -121,11 +121,11 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
     const audit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
     const found = audit.data.find((entry) => entry.itemId === itemId);
-    expect(found?.source).toBe("1c+excel");
+    expect(found?.source).toBe("1c");
     expect(found?.oneC[0]?.matchedBy).toContain("barcode");
     expect(found?.oneC[0]?.matchedBarcodes).toContain(localBarcode);
     expect(found?.oneC[0]?.origins).toEqual(["selected_batch"]);
-    expect(found?.excel[0]?.inventoryNumber).toBe("1350-00065");
+    expect(found?.excel).toEqual([]);
     expect(audit.run.counts.total).toBe(audit.data.length);
     const searched = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50, search: localBarcode });
     expect(searched.data.map((entry) => entry.itemId)).toContain(itemId);
@@ -256,17 +256,10 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await reconciliation.analyzeBatch(batch.id, { version: batch.version });
     const audit = await reconciliation.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
     const byId = new Map(audit.data.map((row) => [row.itemId, row]));
-    const tablet = byId.get(itemIds.get("1350/14464")!)!;
-    expect(tablet.source).toBe("excel");
-    expect(tablet.excel[0]).toMatchObject({ rowNumber: 2, inventoryNumber: "1350/14464", numberIsUnmarked: true });
-    expect(tablet.excel[0].matchedBy).toContain("number_in_description");
-    expect(byId.get(itemIds.get("206/486-487")!)?.source).toBe("excel");
-    expect(byId.get(itemIds.get("206/486-487")!)?.excel[0]).toMatchObject({ inventoryNumber: "206/486", sourceInventoryNumber: "206/486-487" });
-    expect(byId.get(itemIds.get("206/486")!)?.source).toBe("excel");
-    expect(byId.get(itemIds.get("206/487")!)?.result).toBe("missing");
-    expect(byId.get(itemIds.get("050-0002223")!)?.source).toBe("excel");
-    expect(await reconciliation.getInventoryAuditExcelRow(batch.id, 2)).toMatchObject({ row_number: 2, inventory_number: "1350/14464", nomenclature: descriptions[0] });
-    expect(await reconciliation.getInventoryAuditExcelRow(batch.id, 3)).toMatchObject({ inventory_number: "206/486", nomenclature: descriptions[1] });
+    // Historical evidence was readable above, but must not enter a new API-only run.
+    for (const itemId of itemIds.values()) {
+      expect(byId.get(itemId)).toMatchObject({ result: "missing", source: null, excel: [] });
+    }
     const oldSaved = await runtimePool.query<{ excel_matches: unknown }>(`select excel_matches from "yu_inventory"."inventory_source_audit_rows" where run_id=$1`, [oldRunId]);
     expect(oldSaved.rows[0]?.excel_matches).toEqual(oldPlateEvidence);
     const reuploaded = await uploadMaterialSnapshot("same-description.xls", bytes, userId, runtimePool);
@@ -333,22 +326,19 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const audit = await reconciliation.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
     const byId = new Map(audit.data.map((row) => [row.itemId, row]));
     const stand = byId.get(itemIds.get("№123/768")!)!;
-    expect(stand.source).toBe("1c+excel");
+    expect(stand.source).toBe("1c");
     expect(stand.oneC.map((row) => row.externalId)).toEqual([closestExternalId, otherExternalId]);
     expect(stand.oneC[0]?.matchedBy).toContain("number_without_slash");
-    expect(stand.excel.map((row) => row.rowNumber)).toEqual([3, 5, 2]);
-    expect(stand.excel[0]).toMatchObject({ matchedInventoryNumber: "123768", matchedReference: { inventoryNumber: "123768", numberIsUnmarked: true } });
+    expect(stand.excel).toEqual([]);
     const printer = byId.get(itemIds.get("050-0002224")!)!;
-    expect(printer.source).toBe("1c+excel");
+    expect(printer.source).toBe("1c");
     expect(printer.oneC[0]).toMatchObject({ externalId: printerExternalId, inventoryNumber: "№050-0002224" });
     expect(printer.oneC[0]?.matchedBy).toContain("number_format");
-    expect(printer.excel[0]).toMatchObject({ rowNumber: 4, matchedInventoryNumber: "050-0002224", matchedReference: { inventoryNumber: "050-0002224", numberIsUnmarked: true } });
-    expect(printer.excel[0]?.matchedBy).toContain("number_in_description");
+    expect(printer.excel).toEqual([]);
     const additionalPrinter = byId.get(itemIds.get("55500099")!)!;
-    expect(additionalPrinter.source).toBe("1c+excel");
-    expect(additionalPrinter.excel[0]).toMatchObject({ rowNumber: 4, matchedInventoryNumber: "555/00099", matchedReference: { inventoryNumber: "555/00099" } });
+    expect(additionalPrinter.source).toBe("1c");
+    expect(additionalPrinter.excel).toEqual([]);
     expect(additionalPrinter.oneC[0]?.matchedBy).toContain("number_in_description");
-    expect(await reconciliation.getInventoryAuditExcelRow(batch.id, 4)).toMatchObject({ row_number: 4, nomenclature: descriptions[2], inventory_number: "555/00099" });
     expect(await getSelectedMaterialSnapshot(runtimePool)).toMatchObject({ id: snapshotId, acceptedCount: 5, skippedCount: 0, importedAcceptedCount: 3, importedSkippedCount: 2 });
     expect(plan.create).toBe(0);
     const planRows = await runtimePool.query<{ matched_item_id: string | null; review_state: string }>(`select matched_item_id,review_state from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1`, [batch.id]);

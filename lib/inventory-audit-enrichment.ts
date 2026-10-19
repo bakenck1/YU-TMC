@@ -26,7 +26,7 @@ export type InventoryAuditEnrichmentRow = {
   eligible: boolean;
   changed: boolean;
   reason: InventoryAuditEnrichmentReason;
-  nameSource?: "1c" | "excel";
+  nameSource?: "1c" | "excel" | "materials_api";
   codeStatus?: "confirmed" | "code_missing" | "code_invalid";
   missingSources?: Array<"1c" | "excel">;
   externalId?: string;
@@ -181,11 +181,22 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       name = source.name.trim();
     } else {
       // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
-      if (row.excel.length !== 1) return skip("source_ambiguous");
+      const materialRows = row.excel.filter(entry => entry.sourceKind === "materials_api");
+      // Repeated MOL/account balances are one nomenclature, but names/codes/number claims must agree.
+      if (materialRows.length && materialRows.length === row.excel.length) {
+        const signatures = new Set(materialRows.map(entry => JSON.stringify([
+          entry.materialGuid ?? null, entry.oneCCode ?? null, entry.nomenclature,
+          [...new Set(excelNumbers(entry))].sort(), entry.barcode ?? null,
+        ])));
+        if (signatures.size !== 1) return skip("source_ambiguous");
+      } else if (row.excel.length !== 1) return skip("source_ambiguous");
       excel = row.excel[0];
       if (!Number.isSafeInteger(excel.rowNumber) || excel.rowNumber < 1) return skip("source_ambiguous");
-      if ((excelOwners.get(String(excel.rowNumber))?.size ?? 0) > 1) return skip("source_reused");
-      const issue = identityIssue(item, excelNumbers(excel), excel.nomenclature);
+      if (row.excel.some(entry => (excelOwners.get(String(entry.rowNumber))?.size ?? 0) > 1)) return skip("source_reused");
+      const identities = excel.sourceKind === "materials_api"
+        ? [number(excel.explicitInventoryNumber), barcode(excel.barcode)].filter((value): value is string => Boolean(value))
+        : excelNumbers(excel);
+      const issue = identityIssue(item, identities, excel.nomenclature, excel.sourceKind === "materials_api" ? excel.barcode : null);
       if (issue) return skip(issue);
       name = excel.nomenclature.trim();
     }
@@ -196,7 +207,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     const codeStatus = !chosenCode ? "code_missing"
       : chosenCode.length > 64 || /[\u0000-\u001f\u007f]/u.test(chosenCode) ? "code_invalid" : "confirmed";
     const nextCode = codeStatus === "confirmed" ? chosenCode : item.oneCCode;
-    result.nameSource = source ? "1c" : "excel";
+    result.nameSource = source ? "1c" : excel?.sourceKind === "materials_api" ? "materials_api" : "excel";
     result.codeStatus = codeStatus;
     result.externalId = source?.externalId;
     result.excelRowNumber = excel?.rowNumber;

@@ -5,9 +5,7 @@ import OneCReconciliationManager from "@/components/OneCReconciliationManager";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
 
 const id = "11111111-1111-4111-8111-111111111111";
-const snapshot = (sha256: string) => ({ id, filename: "material.xls", sha256, byteSize: 4,
-  receivedAt: "2026-10-01T08:00:00Z", selectedAt: "2026-10-01T08:00:00Z",
-  acceptedCount: 1, skippedCount: 0, importedAcceptedCount: 1, importedSkippedCount: 0 });
+const snapshot = (sha256: string) => ({ kind: "materials_api" as const, batchId: id, sha256, receivedAt: "2026-10-16T14:03:21Z", snapshotAt: "2026-10-16T14:03:08Z", rowCount: 5, materialCount: 3, positiveRows: 5, nonPositiveRows: 0 });
 const batch = (version: number) => ({ id, version, received_at: "2026-10-01T08:00:00Z",
   received_count: 1, source_filename: "full.xml", source_sha256: "b".repeat(64),
   request_id: "request", state: "review_required",
@@ -17,7 +15,7 @@ const rows = (name?: string) => ({ rows: { data: name ? [{ external_id: id, revi
   payload: { name: `payload-${name}`, inventoryNumber: "1350/123", code: "001", residualCost: 1 } }] : [], page: 1, pageSize: 50, total: name ? 1 : 0 } });
 const audit = (version: number, hash = "a".repeat(64)) => ({ audit: { run: { id: `run-${version}`,
   batch_id: id, batch_version: version, algorithm_version: String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION),
-  sha256: hash, one_c_registry_sha256: "c".repeat(64), run_at: "2026-10-01T08:00:00Z",
+  sha256: hash, material_source: snapshot(hash), one_c_registry_sha256: "c".repeat(64), run_at: "2026-10-01T08:00:00Z",
   counts: { total: 0, oneCOnly: 0, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 0 } },
   data: [], page: 1, pageSize: 50, total: 0 } });
 const response = (value: unknown) => new Response(JSON.stringify(value));
@@ -27,9 +25,9 @@ function deferred<T>() {
   return { promise, resolve };
 }
 async function open() {
-  render(<OneCReconciliationManager initialBatches={{ data: [batch(1)], page: 1, pageSize: 50, total: 1 }} initialSnapshot={snapshot("a".repeat(64))} />);
+  render(<OneCReconciliationManager initialBatches={{ data: [batch(1)], page: 1, pageSize: 50, total: 1 }} initialMaterials={snapshot("a".repeat(64))} />);
   fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
-  await screen.findByText(/Партия 1С:.*версия 1/);
+  await screen.findByText(/Партия ОС:.*версия 1/);
   await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
 }
 
@@ -72,8 +70,8 @@ describe("adversarial 1C analysis regressions", () => {
     vi.stubGlobal("fetch", fetchMock);
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("загрузите файл заново");
-    expect(screen.getByText(/Партия 1С:.*версия 1/)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("API 1С");
+    expect(screen.getByText(/Партия ОС:.*версия 1/)).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/batches/${id}`))).toHaveLength(2);
   });
 
@@ -119,10 +117,10 @@ describe("adversarial 1C analysis regressions", () => {
     await open();
     fireEvent.change(screen.getByRole("combobox", { name: "Источник сводки" }), { target: { value: "1c" } });
     fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
-    await screen.findByText(/Партия 1С:.*версия 2/);
+    await screen.findByText(/Партия ОС:.*версия 2/);
     await act(async () => { oldAudit.resolve(response(audit(1))); await oldAudit.promise; });
-    expect(screen.queryByText(/Партия 1С:.*версия 1/)).toBeNull();
-    expect(screen.getByText(/Партия 1С:.*версия 2/)).toBeTruthy();
+    expect(screen.queryByText(/Партия ОС:.*версия 1/)).toBeNull();
+    expect(screen.getByText(/Партия ОС:.*версия 2/)).toBeTruthy();
   });
 
   it("does not attach a delayed audit to a different selected batch", async () => {
@@ -140,14 +138,14 @@ describe("adversarial 1C analysis regressions", () => {
     }));
     render(<OneCReconciliationManager initialBatches={{ data: [batch(1), { ...batch(2), id: secondId }], page: 1, pageSize: 50, total: 2 }} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Открыть сверку" })[0]);
-    await screen.findByText(/Партия 1С:.*версия 1/);
+    await screen.findByText(/Партия ОС:.*версия 1/);
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Открыть сверку" })[1].hasAttribute("disabled")).toBe(false));
     fireEvent.change(screen.getByRole("combobox", { name: "Источник сводки" }), { target: { value: "1c" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Открыть сверку" })[1]);
-    await screen.findByText(/Партия 1С:.*версия 2/);
+    await screen.findByText(/Партия ОС:.*версия 2/);
     await act(async () => { oldAudit.resolve(response(audit(1))); await oldAudit.promise; });
-    expect(screen.queryByText(/Партия 1С:.*версия 1/)).toBeNull();
-    expect(screen.getByText(/Партия 1С:.*версия 2/)).toBeTruthy();
+    expect(screen.queryByText(/Партия ОС:.*версия 1/)).toBeNull();
+    expect(screen.getByText(/Партия ОС:.*версия 2/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Скачать сводку Excel" }).getAttribute("href")).toContain(secondId);
   });
 
@@ -176,25 +174,22 @@ describe("adversarial 1C analysis regressions", () => {
     expect(screen.getByText("Current matching item")).toBeTruthy();
   });
 
-  it("warns when Excel changes while the server is analyzing its previous snapshot", async () => {
-    let version = 1;
-    const post = deferred<Response>();
+  it("warns when API materials changed after dry-run", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.endsWith("/material-snapshot")) return response({ snapshot: snapshot("d".repeat(64)) });
-      if (url.endsWith("/analyze")) return post.promise;
-      if (url.endsWith(`/batches/${id}`)) return response({ batch: batch(version) });
-      if (url.includes("/audit?")) return response(audit(version));
+      if (url.endsWith(`/batches/${id}`)) return response({ batch: batch(1) });
+      if (url.includes("/audit?")) {
+        const saved = audit(1);
+        return response({ audit: { ...saved.audit, run: { ...saved.audit.run, inventory: {
+          currentTotal: 0, currentActive: 0, currentQuantity: 0, currentActiveQuantity: 0,
+          added: 0, removed: 0, changed: 0, materialSourceChanged: true, stale: true,
+        } } } });
+      }
       return response(rows());
     }));
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
-    fireEvent.change(screen.getByLabelText("Файл материальной ведомости XLS"), { target: { files: [new File(["test"], "material.xls")] } });
-    fireEvent.submit(screen.getByRole("button", { name: "Загрузить Excel" }).closest("form")!);
-    await screen.findByText("d".repeat(64));
-    version = 2;
-    await act(async () => { post.resolve(response({ analysis: {} })); await post.promise; });
-    await screen.findByText(/Эта сводка построена по прежнему снимку Excel/);
-    expect(screen.getByText(/Партия 1С:.*версия 2/)).toBeTruthy();
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("Изменился источник материалов 1С"));
+    expect(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Загрузить Excel" })).toBeNull();
   });
 });

@@ -9,6 +9,8 @@ import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem, t
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
 import { exportInventorySourceAudit } from "@/lib/server/inventory-source-audit-service";
 import type { OneCAdminActor } from "@/lib/server/http/one-c-reconciliation-admin-handler";
+import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
+import type { ExcelSourceRow } from "@/lib/inventory-source-audit";
 
 type ApplyInput = { runId: string; planHash: string };
 type ApplyResult = { updated: number; unchanged: number; skipped: number; planHash: string };
@@ -62,11 +64,13 @@ export class InventoryAuditEnrichmentService {
         where b.item_id=i.id and b.kind='official'),'{}') as barcodes
       from "yu_inventory"."items" i order by i.id ${lock ? "for update of i" : ""}`);
     const data = await exportInventorySourceAudit(client, batchId);
-    const selection = await client.query(`select snapshot_id from "yu_inventory"."material_snapshot_selection" where id=1`);
+    const materials = await readMaterialRegistry(client);
+    const materialSource = materials.metadata;
     const registry = await client.query(`select external_id,payload_hash,payload from "yu_inventory"."one_c_fixed_asset_inbox" order by external_id`);
     const registryHash = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
     if (data.run.algorithm_version !== String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION)
-      || data.run.inventory.stale || selection.rows[0]?.snapshot_id !== data.run.snapshot_id
+      || data.run.inventory.stale || !data.run.material_source
+      || (data.run.material_source as { sha256?: string }).sha256 !== materialSource.sha256
       || registryHash !== data.run.one_c_registry_sha256) throw stale();
     const items: InventoryAuditEnrichmentItem[] = cards.rows.map((row) => ({ id: row.id, name: row.name,
       inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes, oneCCode: row.one_c_code,
@@ -78,6 +82,13 @@ export class InventoryAuditEnrichmentService {
     const currentById = new Map<string, OneCFixedAsset>(registry.rows.map((row) => [String(row.external_id), row.payload as OneCFixedAsset]));
     const selectedById = new Map<string, OneCFixedAsset>(selected.rows.map((row) => [String(row.external_id), row.payload as OneCFixedAsset]));
     const sourceCopies = [["current_registry", currentById], ["selected_batch", selectedById]] as const;
+    const materialBalancesByCode = new Map<string, ExcelSourceRow[]>();
+    for (const balance of materials.rows) {
+      if (!balance.oneCCode) continue;
+      const balances = materialBalancesByCode.get(balance.oneCCode) ?? [];
+      balances.push(balance);
+      materialBalancesByCode.set(balance.oneCCode, balances);
+    }
     const evidence = data.rows.map((row) => {
       const oneC = [...row.oneC];
       const included = new Set(oneC.flatMap((source) => source.origins.map((origin) => `${origin}:${source.externalId}`)));
@@ -91,12 +102,25 @@ export class InventoryAuditEnrichmentService {
           included.add(key);
         }
       }
-      return { ...row, oneC };
+      // Number matching can omit a contradictory MOL/account balance before a
+      // card has a code. Recheck every positive balance of each matched material,
+      // not just the subset that happened to match this card's identifiers.
+      const excel = [...row.excel];
+      const includedBalances = new Set(excel.map(entry => entry.sourceKey));
+      for (const entry of row.excel) {
+        if (entry.sourceKind !== "materials_api" || !entry.oneCCode) continue;
+        for (const balance of materialBalancesByCode.get(entry.oneCCode) ?? []) {
+          if (includedBalances.has(balance.sourceKey)) continue;
+          includedBalances.add(balance.sourceKey);
+          excel.push(balance);
+        }
+      }
+      return { ...row, oneC, excel };
     });
     const plan = buildInventoryAuditEnrichmentPlan(evidence, items);
     await this.checkSharedNumbers(client, plan);
     const planHash = createHash("sha256").update(JSON.stringify({ runId: data.run.id,
-      registryHash, excelSha256: data.run.sha256, rows: plan.rows })).digest("hex");
+      registryHash, materialRegistrySha256: materialSource.sha256, rows: plan.rows })).digest("hex");
     return { runId: String(data.run.id), planHash, ...plan };
   }
 

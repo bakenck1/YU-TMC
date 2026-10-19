@@ -1,0 +1,2 @@
+ALTER TABLE "yu_inventory"."inventory_source_audit_runs" ALTER COLUMN "snapshot_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "yu_inventory"."inventory_source_audit_runs" ADD COLUMN "material_source" jsonb;

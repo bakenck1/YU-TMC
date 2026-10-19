@@ -6,16 +6,14 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import { buildInventorySourceAudit, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, type AuditItem, type AuditOneCRow, type AuditMatch } from "@/lib/inventory-source-audit";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import type { InventoryAuditInventoryState } from "@/lib/contracts/inventory-source-audit";
-import { parseStoredMaterialSnapshot } from "@/lib/server/material-snapshot";
+import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
 
 type Db = Pick<Pool, "query"> | PoolClient;
 type Raw = Record<string, unknown>;
 const SCHEMA = '"yu_inventory"';
 
 export async function createInventorySourceAudit(client: PoolClient, batchId: string, batchVersion: number, candidateRows: Raw[], linkRows: Raw[]) {
-  const snapshot = await client.query(`select s.id,s.sha256,s.byte_size,s.source_file from ${SCHEMA}."material_snapshot_selection" chosen join ${SCHEMA}."material_snapshots" s on s.id=chosen.snapshot_id where chosen.id=1`);
-  if (!snapshot.rows[0]) throw new ApplicationError("unavailable", "material_snapshot_not_imported");
-  const parsedSnapshot = parseStoredMaterialSnapshot(snapshot.rows[0]);
+  const materials = await readMaterialRegistry(client);
   const registry = await client.query(`select external_id,payload_hash,payload from ${SCHEMA}."one_c_fixed_asset_inbox" order by external_id`);
   const batchRows = await client.query(`select external_id,payload_hash,payload,matched_item_id,review_state from ${SCHEMA}."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]);
   if (!registry.rows.length && !batchRows.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
@@ -37,7 +35,7 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
     }
   }
   const links = linkRows.map((row) => ({ externalId: String(row.external_id), itemId: String(row.item_id) }));
-  const { rows, counts } = buildInventorySourceAudit(items, assets, parsedSnapshot.accepted, links);
+  const { rows, counts } = buildInventorySourceAudit(items, assets, materials.rows, links);
   if (counts.total !== counts.oneCOnly + counts.excelOnly + counts.both + counts.missing) throw new Error("inventory_audit_count_mismatch");
   const byItemId = new Map(rows.map((row) => [row.itemId, row]));
   for (const batchRow of batchRows.rows) {
@@ -48,14 +46,14 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
     }
   }
   const id = randomUUID();
-  await client.query(`insert into ${SCHEMA}."inventory_source_audit_runs"(id,batch_id,batch_version,snapshot_id,one_c_registry_sha256,counts) values($1,$2,$3,$4,$5,$6::jsonb)`, [id, batchId, batchVersion, snapshot.rows[0].id, oneCRegistrySha256, JSON.stringify(counts)]);
+  await client.query(`insert into ${SCHEMA}."inventory_source_audit_runs"(id,batch_id,batch_version,snapshot_id,one_c_registry_sha256,counts,material_source) values($1,$2,$3,null,$4,$5::jsonb,$6::jsonb)`, [id, batchId, batchVersion, oneCRegistrySha256, JSON.stringify(counts), JSON.stringify(materials.metadata)]);
   for (let start = 0; start < rows.length; start += 500) {
     const chunk = rows.slice(start, start + 500).map((row) => ({ item_id: row.itemId, item_name: row.itemName, site_number: row.siteNumber, site_barcodes: row.siteBarcodes, number_kind: row.numberKind, item_version: row.itemVersion, result: row.result, source: row.source, one_c_matches: row.oneC, excel_matches: row.excel }));
     await client.query(`insert into ${SCHEMA}."inventory_source_audit_rows"(run_id,item_id,item_name,site_number,site_barcodes,number_kind,item_version,result,source,one_c_matches,excel_matches)
       select $1,x.item_id,x.item_name,x.site_number,x.site_barcodes,x.number_kind,x.item_version,x.result,x.source,x.one_c_matches,x.excel_matches
       from jsonb_to_recordset($2::jsonb) as x(item_id uuid,item_name text,site_number text,site_barcodes jsonb,number_kind text,item_version integer,result text,source text,one_c_matches jsonb,excel_matches jsonb)`, [id, JSON.stringify(chunk)]);
   }
-  return { id, counts, excelSha256: String(snapshot.rows[0].sha256), oneCRegistrySha256, oneCLinksSha256: linksSha256(linkRows), batchVersion, snapshotId: String(snapshot.rows[0].id), algorithmVersion: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION, excelAcceptedCount: parsedSnapshot.accepted.length, excelSkippedCount: parsedSnapshot.skipped };
+  return { id, counts, materialSource: materials.metadata, oneCRegistrySha256, oneCLinksSha256: linksSha256(linkRows), batchVersion, snapshotId: null, algorithmVersion: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION };
 }
 
 export async function getInventorySourceAuditPage(db: Db, batchId: string, query: { page: number; pageSize: number; search?: string; result?: string; source?: string }) {
@@ -88,16 +86,17 @@ export async function getInventorySourceExcelRow(db: Db, batchId: string, rowNum
     from ${SCHEMA}."inventory_source_audit_rows" r cross join lateral jsonb_array_elements(r.excel_matches) match
     where r.run_id=$1 and match->>'rowNumber'=$2 order by r.item_id limit 1`, [run.id, String(rowNumber)]);
   if (!result.rows[0]) throw new ApplicationError("not_found", "material_snapshot_row_not_found");
-  return { file: run.filename, sha256: run.sha256, ...result.rows[0] };
+  return { file: run.filename, sha256: run.sha256, source: run.material_source ?? { kind: "legacy_excel" }, ...result.rows[0] };
 }
 
 async function latestRun(db: Db, batchId: string) {
-  const run = await db.query(`select a.*,s.filename,s.sha256,s.accepted_count,s.skipped_count,b.source_sha256 as batch_sha256,
+  const run = await db.query(`select a.*,coalesce(s.filename,'Материалы 1С API') as filename,
+    coalesce(a.material_source->>'sha256',s.sha256) as sha256,s.accepted_count,s.skipped_count,b.source_sha256 as batch_sha256,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'algorithmVersion' else null end as algorithm_version,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelAcceptedCount')::int else null end as excel_accepted_count,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then (b.summary->'inventoryAudit'->>'excelSkippedCount')::int else null end as excel_skipped_count,
     case when b.summary->'inventoryAudit'->>'id'=a.id::text then b.summary->'inventoryAudit'->>'oneCLinksSha256' else null end as one_c_links_sha256
-    from ${SCHEMA}."inventory_source_audit_runs" a join ${SCHEMA}."material_snapshots" s on s.id=a.snapshot_id
+    from ${SCHEMA}."inventory_source_audit_runs" a left join ${SCHEMA}."material_snapshots" s on s.id=a.snapshot_id
     join ${SCHEMA}."one_c_import_batches" b on b.id=a.batch_id
     where a.batch_id=$1 order by a.run_at desc,a.id desc limit 1`, [batchId]);
   if (!run.rows[0]) throw new ApplicationError("not_found", "inventory_source_audit_not_found");
@@ -131,11 +130,15 @@ async function latestRun(db: Db, batchId: string) {
   const state = current.rows[0];
   const linksChanged = typeof run.rows[0].one_c_links_sha256 === "string"
     && run.rows[0].one_c_links_sha256 !== linksSha256(state.live_links as Raw[]);
+  const currentMaterials = await readMaterialRegistry(db);
+  const savedMaterials = run.rows[0].material_source as { kind?: string; sha256?: string } | null;
+  const materialSourceChanged = savedMaterials?.kind !== "materials_api" || savedMaterials.sha256 !== currentMaterials.metadata.sha256;
   const inventory: InventoryAuditInventoryState = {
     currentTotal: Number(state.current_total), currentActive: Number(state.current_active),
     currentQuantity: Number(state.current_quantity), currentActiveQuantity: Number(state.current_active_quantity),
     added: Number(state.added), removed: Number(state.removed), changed: Number(state.changed),
-    linksChanged, stale: Number(state.added) + Number(state.removed) + Number(state.changed) > 0 || linksChanged,
+    linksChanged, materialSourceChanged,
+    stale: Number(state.added) + Number(state.removed) + Number(state.changed) > 0 || linksChanged || materialSourceChanged,
   };
   return { ...run.rows[0], inventory } as Raw & { inventory: InventoryAuditInventoryState };
 }
