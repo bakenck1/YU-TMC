@@ -29,18 +29,20 @@ function safeText(value: unknown): string {
   return /^[\s\uFEFF]*[=+@-]/u.test(text) ? `'${text}` : text;
 }
 
-function addInventoryRows(sheet: Worksheet, rows: AuditMatch[]): void {
+function addInventoryRows(sheet: Worksheet, rows: AuditMatch[], api = false): void {
   sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по", "Запись 1С из", "Статус проверки партии 1С", "Код 1С", "Код 1С из Excel"]);
   for (const row of rows) {
     const excel = row.excel[0], oneC = row.oneC[0];
-    sheet.addRow([auditNeedsReview(row) ? "Возможное совпадение — проверьте номер" : label(row.result), source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.matchedInventoryNumber ?? excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(oneC?.reviewState), safeText(oneC?.code), safeText(excel?.oneCCode)]);
+    sheet.addRow([auditNeedsReview(row) ? "Возможное совпадение — проверьте номер" : label(row.result), api ? row.source === "excel" ? "Материалы 1С" : row.source === "1c+excel" ? "ОС + Материалы" : row.source === "1c" ? "ОС" : "" : source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.matchedInventoryNumber ?? excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(oneC?.reviewState), safeText(oneC?.code), safeText(excel?.oneCCode)]);
   }
+  if (api) sheet.getRow(1).eachCell(cell => { if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Excel", "материалов API 1С"); });
   sheet.columns.forEach((column) => { column.width = 24; });
   sheet.getColumn(4).width = 42;
   sheet.getColumn(7).width = 60;
 }
 
 export async function exportInventorySourceAuditExcel(data: AuditExport): Promise<Uint8Array> {
+  const api = (data.run.material_source as { kind?: string } | undefined)?.kind === "materials_api";
   const workbook = new Workbook();
   workbook.creator = "Yessenov University Inventory";
   const summary = workbook.addWorksheet("Сводка");
@@ -76,7 +78,7 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
   summary.getColumn(1).width = 60; summary.getColumn(2).width = 80;
   summary.getColumn(2).alignment = { vertical: "top", wrapText: true };
   const sheet = workbook.addWorksheet("Все ТМЦ", { views: [{ state: "frozen", ySplit: 1 }] });
-  addInventoryRows(sheet, data.rows);
+  addInventoryRows(sheet, data.rows, api);
   const groups: { name: string; contains: (row: AuditMatch) => boolean }[] = [
     { name: "Только 1С", contains: (row) => row.result === "matched" && row.source === "1c" },
     { name: "Только Excel", contains: (row) => row.result === "matched" && row.source === "excel" },
@@ -87,13 +89,28 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
     { name: "Из найденных возможные", contains: (row) => row.result === "matched" && auditNeedsReview(row) },
   ];
   const groupSheets = groups.map(({ name, contains }) => {
-    const group = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
-    addInventoryRows(group, data.rows.filter(contains));
+    const group = workbook.addWorksheet(api ? name.replace("Только 1С", "Только ОС").replace("Только Excel", "Только материалы").replace("1С + Excel", "ОС + Материалы") : name, { views: [{ state: "frozen", ySplit: 1 }] });
+    addInventoryRows(group, data.rows.filter(contains), api);
     return group;
   });
-  const details = workbook.addWorksheet("Все совпадения Excel", { views: [{ state: "frozen", ySplit: 1 }] });
+  const details = workbook.addWorksheet(api ? "Все совпадения материалов" : "Все совпадения Excel", { views: [{ state: "frozen", ySplit: 1 }] });
   details.addRow(["ID ТМЦ", "Наименование сайта", "Основная строка", "Строка Excel", "Инв. номер Excel", "Номенклатура Excel", "Конечный остаток Excel", "Найдено по", "Исходная запись диапазона", "Номер без пометки инв.", "Код 1С из Excel"]);
   for (const row of data.rows) row.excel.forEach((excel, index) => details.addRow([safeText(row.itemId), safeText(row.itemName), index === 0 ? "Да" : "Нет", excel.rowNumber, safeText(excel.matchedInventoryNumber ?? excel.inventoryNumber), safeText(excel.nomenclature), safeText(excel.endingBalance), safeText(excel.matchedBy?.join(", ")), safeText((excel.matchedReference ?? excel).sourceInventoryNumber), (excel.matchedReference ?? excel).numberIsUnmarked ? "Да — проверить" : "Нет", safeText(excel.oneCCode)]));
+  if (api) {
+    details.getRow(1).eachCell(cell => { if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Excel", "материалов 1С"); });
+    ["Счёт", "Склад", "Код МОЛ", "ФИО МОЛ", "Учётная цена KZT", "Единица", "Ключ остатка"].forEach((label, index) => { details.getRow(1).getCell(12 + index).value = label; });
+    let line = 2;
+    for (const row of data.rows) for (const material of row.excel) {
+      [material.accountCode, material.warehouseName ?? material.warehouseCode, material.responsibleCode, material.responsibleName, material.unitPrice, material.unit, material.sourceKey].forEach((value, index) => { details.getRow(line).getCell(12 + index).value = safeText(value); });
+      line++;
+    }
+    summary.eachRow(row => row.eachCell(cell => {
+      if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Только 1С", "Только ОС").replaceAll("1С + Excel", "ОС + Материалы").replaceAll("Excel", "материалов API 1С");
+    }));
+    summary.addRow(["Источник", "Текущий реестр материалов API 1С; Excel не используется"]);
+    const material = data.run.material_source as Record<string, unknown>;
+    summary.addRows([["Пакет материалов", safeText(material.batchId)], ["Дата среза материалов", safeText(material.snapshotAt)], ["Всего текущих остатков", material.rowCount], ["Положительные остатки для поиска", material.positiveRows]]);
+  }
   const oneCDetails = workbook.addWorksheet("Все совпадения 1С", { views: [{ state: "frozen", ySplit: 1 }] });
   oneCDetails.addRow(["ID ТМЦ", "Номер сайта", "GUID 1С", "Источник записи", "Код 1С", "Инв. номер 1С", "Штрихкод 1С", "Наименование 1С", "Статус 1С", "Найдено по", "Статус проверки партии 1С", "Основной вариант"]);
   for (const row of data.rows) for (const entry of row.oneC) oneCDetails.addRow([safeText(row.itemId), safeText(row.siteNumber), safeText(entry.externalId), safeText(entry.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(entry.code), safeText(entry.inventoryNumber), safeText(entry.barcode), safeText(entry.name), safeText(entry.status), safeText(entry.matchedBy?.join(", ")), safeText(entry.reviewState), entry === row.oneC[0] ? "Да" : "Нет"]);

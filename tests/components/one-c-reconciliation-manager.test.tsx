@@ -106,7 +106,7 @@ describe("1C reconciliation manager", () => {
   });
 
   it.each([
-    ["material_snapshot_integrity_mismatch", "загрузите файл заново"],
+    ["material_snapshot_integrity_mismatch", "API 1С"],
     ["one_c_analysis_timeout", "Сервер не успел выполнить dry-run"],
     ["one_c_analysis_schema_outdated", "применить миграции"],
   ])("explains the dry-run failure %s", async (code, message) => {
@@ -124,20 +124,20 @@ describe("1C reconciliation manager", () => {
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining(message));
   });
 
-  it("uploads the administrator's XLS and shows the selected snapshot hash", async () => {
-    const snapshot = { id: "11111111-1111-4111-8111-111111111111", filename: "материалы 2026.xls", sha256: "A".repeat(64), byteSize: 4, receivedAt: "2026-10-01T08:00:00.000Z", acceptedCount: 1, skippedCount: 2, importedAcceptedCount: 1, importedSkippedCount: 2, selectedAt: "2026-10-01T08:00:00.000Z" };
-    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ snapshot }), { status: 201, headers: { "content-type": "application/json" } }));
+  it("replaces XLS upload with a read-only materials API registry", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [], page: 1, pageSize: 50, total: 14364 }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    render(<OneCReconciliationManager initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} />);
-    const file = new File(["test"], "материалы 2026.xls", { type: "application/vnd.ms-excel" });
-    fireEvent.change(screen.getByLabelText("Файл материальной ведомости XLS"), { target: { files: [file] } });
-    fireEvent.submit(screen.getByRole("button", { name: "Загрузить Excel" }).closest("form")!);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/integrations/1c/material-snapshot");
-    expect(init.method).toBe("POST");
-    expect((init.body as FormData).get("file")).toBe(file);
-    expect(await screen.findByText("A".repeat(64))).toBeTruthy();
+    render(<OneCReconciliationManager initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} initialMaterials={{
+      kind: "materials_api", batchId: BATCH_ID, sha256: "a".repeat(64), receivedAt: "2026-10-16T14:03:21Z", snapshotAt: "2026-10-16T14:03:08Z",
+      rowCount: 14364, materialCount: 8882, positiveRows: 14000, nonPositiveRows: 364,
+    }} />);
+    expect(screen.queryByLabelText("Файл материальной ведомости XLS")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Загрузить Excel" })).toBeNull();
+    expect(screen.getByText("14364")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Показать материалы 1С" }));
+    await screen.findByText("Найдено строк: 14364.");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/integrations/1c/materials/registry?");
+    expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
   });
 
   it("shows all-row pagination and exposes a safe Excel export for a legacy snapshot", async () => {

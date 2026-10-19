@@ -7,7 +7,17 @@ import { extractExcelInventoryReferences, inventoryAuditNumberKey, inventoryAudi
 export { extractExcelInventoryNumber, extractExcelInventoryReference, extractExcelInventoryReferences } from "@/lib/inventory-audit-numbers";
 export type { ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 
-export type ExcelSourceRow = ExcelInventoryReference & { rowNumber: number; nomenclature: string; endingBalance: string | null; oneCCode?: string | null; inventoryReferences?: ExcelInventoryReference[]; matchedInventoryNumber?: string; matchedReference?: ExcelInventoryReference; matchedBy?: ("site_number" | "barcode" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[] };
+/** Legacy field names remain readable in saved reports; live rows come from the materials API. */
+export type ExcelSourceRow = ExcelInventoryReference & {
+  rowNumber: number; nomenclature: string; endingBalance: string | null; oneCCode?: string | null;
+  sourceKind?: "materials_api"; sourceKey?: string; materialGuid?: string | null;
+  barcode?: string | null; accountCode?: string | null; warehouseName?: string | null;
+  explicitInventoryNumber?: string | null;
+  warehouseCode?: string | null; responsibleName?: string | null; responsibleCode?: string | null;
+  unitPrice?: string | null; unit?: string | null;
+  inventoryReferences?: ExcelInventoryReference[]; matchedInventoryNumber?: string; matchedReference?: ExcelInventoryReference;
+  matchedBy?: ("code" | "site_number" | "barcode" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[];
+};
 export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
 export type AuditOneCRow = { externalId: string; asset: OneCFixedAsset; origins?: AuditOneCOrigin[]; batchMatchedItemId?: string | null; reviewState?: string | null };
@@ -74,7 +84,14 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   const excelByNumberWithoutSlash = new Map<string, IndexedExcel[]>();
   const excelBySpacelessNumber = new Map<string, IndexedExcel[]>();
   const excelBySuffixStem = new Map<string, IndexedExcel[]>();
+  const apiByCode = new Map<string, ExcelSourceRow[]>();
+  const apiByBarcode = new Map<string, ExcelSourceRow[]>();
   for (const row of excelRows) {
+    if (row.sourceKind === "materials_api") {
+      if (row.oneCCode) apiByCode.set(row.oneCCode, [...(apiByCode.get(row.oneCCode) ?? []), row]);
+      const parsed = row.barcode ? parseCode39ScanInput(row.barcode) : null;
+      if (parsed?.ok) apiByBarcode.set(parsed.value, [...(apiByBarcode.get(parsed.value) ?? []), row]);
+    }
     for (const reference of row.inventoryReferences ?? [row]) {
       for (const number of new Set([reference.inventoryNumber, reference.sourceInventoryNumber].filter((value): value is string => Boolean(value)))) {
         const entry = { row, reference: { inventoryNumber: reference.inventoryNumber, sourceInventoryNumber: reference.sourceInventoryNumber, numberIsUnmarked: reference.numberIsUnmarked }, number };
@@ -215,6 +232,12 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       ...(inventoryAuditSuffixStem(key) ? excelByNumber.get(inventoryAuditSuffixStem(key)!) ?? [] : excelBySuffixStem.get(key) ?? [])
         .map(({ row, reference, number }): ExcelSourceRow => ({ ...row, matchedInventoryNumber: number, matchedReference: reference, matchedBy: ["number_suffix"], matchedBarcodes: evidence.barcodes })),
     ]);
+    // Codes are exact text, not numeric values; OS link codes are not material identities.
+    if (item.oneCCode) for (const row of apiByCode.get(item.oneCCode) ?? []) excelCandidates.push({ ...row, matchedBy: ["code"] });
+    for (const value of [...item.officialBarcodes, ...(item.localBarcodes ?? [])]) {
+      const parsed = parseCode39ScanInput(value);
+      if (parsed.ok) for (const row of apiByBarcode.get(parsed.value) ?? []) excelCandidates.push({ ...row, matchedBy: ["barcode"], matchedBarcodes: [value] });
+    }
     const weakExcelMatch = (row: ExcelSourceRow) => row.matchedBy?.every(isWeakEvidence) ? 1 : 0;
     const uniqueExcelRows = new Map<number, ExcelSourceRow>();
     for (const row of excelCandidates.sort((a, b) => nameScore(item.name, b.nomenclature) - nameScore(item.name, a.nomenclature) || weakExcelMatch(a) - weakExcelMatch(b) || a.rowNumber - b.rowNumber)) {

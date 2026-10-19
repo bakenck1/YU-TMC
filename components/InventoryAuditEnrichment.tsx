@@ -89,7 +89,7 @@ export function EnrichmentReview({ batchId, runId, blocked, onApplied }: Props) 
 
   return <section className="space-y-3 rounded-xl border border-emerald-200 bg-white p-4" aria-label="Обновление названий и кодов 1С">
     <h3 className="font-semibold">Названия и коды 1С в карточках ТМЦ</h3>
-    <p className="text-sm text-zinc-600">Наименование и код берутся из однозначного совпадения 1С. Если совпадения в 1С нет, оба значения берутся из Excel. Достаточно одного источника, подтверждённого полным номером или официальным штрихкодом карточки; неоднозначные записи пропускаются. Пустой или некорректный код источника оставляет прежний код карточки. Проверьте предложенные изменения перед применением.</p>
+    <p className="text-sm text-zinc-600">Наименование и код берутся из однозначного совпадения ОС либо материалов API 1С. Для изменения карточки нужен подтверждённый полный номер или официальный штрихкод; одного совпадения названия или кода недостаточно. Неоднозначные записи пропускаются. Проверьте изменения перед применением; цены, количество и ответственные здесь не меняются.</p>
     {blocked ? <p className="text-sm text-amber-800">Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите dry-run заново.</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
@@ -121,10 +121,10 @@ function reasonKey(row: InventoryAuditEnrichmentRow) {
 
 function reasonLabel(row: InventoryAuditEnrichmentRow) {
   if (row.reason === "sources_missing" && row.missingSources?.length) {
-    if (row.missingSources.length === 2) return "Нет подтверждения в 1С и Excel — проверьте оба источника";
+    if (row.missingSources.length === 2) return "Нет подтверждения в ОС и материалах API 1С — проверьте оба источника";
     return row.missingSources[0] === "1c"
-      ? "Нет подтверждения в 1С — проверьте загруженную партию и полный номер"
-      : "Нет подтверждения в Excel — проверьте файл и полный номер";
+      ? "Нет подтверждения в ОС 1С — проверьте партию и полный номер"
+      : "Нет подтверждения в материалах API 1С — проверьте реестр и полный номер";
   }
   const labels: Record<string, string> = {
     shared_number_conflict: "Новое название нарушает правило общего номера для монитора и системного блока — проверьте обе карточки, включая архив",

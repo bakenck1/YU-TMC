@@ -5,8 +5,8 @@ import { oneCInventoryPresence, oneCMissingInventoryMessage, ONE_C_PRESENCE_LABE
 import { useRef, useState } from "react";
 import type { ButtonHTMLAttributes } from "react";
 import InventorySourceAuditPanel, { type AuditPage } from "@/components/InventorySourceAuditPanel";
-import MaterialSnapshotUploadPanel from "@/components/MaterialSnapshotUploadPanel";
-import type { MaterialSnapshotMetadata } from "@/lib/server/material-snapshot-service";
+import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
+import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-audit";
 
 type Row = Record<string, unknown>;
 type Page = { data: Row[]; page: number; pageSize: number; total: number };
@@ -14,7 +14,7 @@ type Reason = "guid" | "code" | "inventory_number" | "barcode";
 type Candidate = { id: string; name: string; inventoryNumber: string; oneCCode: string | null; status: string; version: number; matchedBy: Reason[] };
 type RowFilters = { pageSize?: number; reviewState?: string; proposedAction?: string; match?: "" | "active" | "missing"; search?: string };
 
-export default function OneCReconciliationManager({ initialBatches, initialSnapshot }: { initialBatches: Page; initialSnapshot?: MaterialSnapshotMetadata | null }) {
+export default function OneCReconciliationManager({ initialBatches, initialMaterials }: { initialBatches: Page; initialMaterials?: MaterialRegistryMetadata | null }) {
   const [selected, setSelected] = useState<Row | null>(null);
   const [batches, setBatches] = useState(initialBatches.data);
   const [rows, setRows] = useState<Page | null>(null);
@@ -30,7 +30,6 @@ export default function OneCReconciliationManager({ initialBatches, initialSnaps
   const [candidateBusy, setCandidateBusy] = useState(false);
   const [audit, setAudit] = useState<AuditPage | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
-  const [activeSnapshot, setActiveSnapshot] = useState(initialSnapshot ?? null);
   const context = useRef(0);
   const rowRequest = useRef(0);
   const auditRequest = useRef(0);
@@ -215,7 +214,7 @@ export default function OneCReconciliationManager({ initialBatches, initialSnaps
       {selected ? <div className="flex flex-wrap gap-2"><a href={`/api/integrations/1c/batches/${selected.id}/export`} className="rounded-xl border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700">Скачать Excel ({String(selected.received_count)})</a><button disabled={busy} onClick={() => void analyze()} className="rounded-xl bg-[#002060] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Запустить dry-run</button>{selected.state === "review_required" && !massBlocked ? <button disabled={busy} onClick={() => void transition("approve")} className="rounded-xl border px-4 py-2 text-sm">Утвердить</button> : null}{selected.state === "approved" && !massBlocked ? <button disabled={busy} onClick={() => void transition("publish")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm text-white">Опубликовать</button> : null}</div> : null}
     </header>
     {error ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-    <MaterialSnapshotUploadPanel initialSnapshot={initialSnapshot} onUploaded={(snapshot) => { auditRequest.current++; setAuditBusy(false); setActiveSnapshot(snapshot); setAudit(null); setError(null); }} />
+    <MaterialRegistryPanel source={initialMaterials ?? null} />
     {selected && massBlocked ? <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Это исторический снимок без исходного XML. Его можно просматривать, искать и выгружать в Excel, но утверждение и публикация заблокированы. Для публикации используйте новый полный XML-пакет от 1С.</p> : null}
     <p className="text-sm text-zinc-600">Откройте нужную выгрузку 1С → запустите dry-run → нажмите «Показать отсутствующие» или скачайте Excel. После изменения Inventory запустите сверку заново.</p>
     <BatchTable batches={batches} onOpen={openBatch} disabled={busy}/>
@@ -230,7 +229,7 @@ export default function OneCReconciliationManager({ initialBatches, initialSnaps
           <a href={`/api/integrations/1c/batches/${selected.id}/export?scope=missing`} className="rounded-lg bg-amber-800 px-3 py-2 text-sm font-medium text-white">Скачать отсутствующие в Excel</a>
         </div>
       </section> : null}
-      {audit ? <InventorySourceAuditPanel key={audit.run.id} batchId={String(selected.id)} audit={audit} activeSnapshotSha256={activeSnapshot?.sha256} busy={auditBusy || busy} onLoad={(page, filters) => { if (mutating.current) return; void loadAudit(selected, page, filters).catch(() => setError("Не удалось загрузить сводку ТМЦ.")); }} /> : null}
+      {audit ? <InventorySourceAuditPanel key={audit.run.id} batchId={String(selected.id)} audit={audit} busy={auditBusy || busy} onLoad={(page, filters) => { if (mutating.current) return; void loadAudit(selected, page, filters).catch(() => setError("Не удалось загрузить сводку ТМЦ.")); }} /> : null}
       <div className="overflow-hidden rounded-2xl border border-black/5 bg-white">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-black/5 p-4"><div><h2 className="font-semibold">Строки сверки</h2><p className="text-xs text-zinc-500">{rows ? `Показано ${rows.total ? (rows.page - 1) * rows.pageSize + 1 : 0}–${Math.min(rows.page * rows.pageSize, rows.total)} из ${rows.total}` : "Загрузка списка"}</p></div>
           <form onSubmit={(event) => { event.preventDefault(); void reloadRows(); }} className="flex flex-wrap gap-2"><input aria-label="Поиск по строкам" value={search} onChange={(event) => setSearch(event.target.value)} className="min-w-64 rounded-lg border border-zinc-200 px-3 py-2" placeholder="GUID, код, номер, barcode, название"/><Filter disabled={busy} value={matchFilter} label="Совпадения" onChange={(value) => { if (mutating.current) return; const match = value as "" | "active" | "missing"; setMatchFilter(match); void queryRows(selected, 1, { match }, "Фильтр не применён"); }} options={[["", "Все строки"], ["active", "Активные совпадения"], ...(hasAnalysis ? [["missing", "Нет в Inventory"]] : [])]}/><Filter disabled={busy} value={reviewState} label="Статус проверки" onChange={(value) => { if (mutating.current) return; setReviewState(value); void queryRows(selected, 1, { reviewState: value }, "Фильтр не применён"); }} options={[["", "Все статусы"], ["matched", "Найдено совпадение"], ["blocked", "Заблокировано"], ["conflict", "Конфликт"], ["excluded", "Исключено"], ["approved", "Подтверждено"], ["published", "Опубликовано"]]}/><Filter disabled={busy} value={proposedAction} label="Действие" onChange={(value) => { if (mutating.current) return; setProposedAction(value); void queryRows(selected, 1, { proposedAction: value }, "Фильтр не применён"); }} options={[["", "Все действия"], ["link", "Связать"], ["create", "Создать"], ["manual_review", "Ручная проверка"], ["exclude", "Исключить"]]}/><select disabled={busy} aria-label="Строк на странице" value={pageSize} onChange={(event) => { if (mutating.current) return; const value = Number(event.target.value); setPageSize(value); void queryRows(selected, 1, { pageSize: value }); }} className="rounded-lg border border-zinc-200 px-3 py-2"><option value="50">50 строк</option><option value="100">100 строк</option></select><button disabled={busy} className="rounded-lg border px-3 py-2">Найти</button></form>
@@ -268,7 +267,7 @@ async function request(url: string, init?: RequestInit) {
 function analysisErrorMessage(cause: unknown) {
   const code = cause instanceof Error ? cause.message : "";
   if (code === "batch_version_conflict") return "Партия изменилась или её статус не допускает анализ. Проверьте статус партии; при необходимости откройте сверку заново и повторите dry-run.";
-  if (code.includes("material_snapshot")) return "Снимок Excel не загружен или повреждён. Dry-run не выполнен; загрузите файл заново.";
+  if (code.includes("material_snapshot")) return "Исторический источник Excel больше не используется. Обновите страницу и запустите сверку по API 1С.";
   if (code === "one_c_registry_empty") return "Текущий реестр 1С пуст. Dry-run не выполнен.";
   if (code === "one_c_analysis_timeout") return "Сервер не успел выполнить dry-run. Предыдущая сводка сохранена. Обратитесь к администратору сервера.";
   if (code === "one_c_analysis_schema_outdated") return "Схема базы данных не обновлена. Администратору сервера нужно применить миграции и повторить dry-run.";

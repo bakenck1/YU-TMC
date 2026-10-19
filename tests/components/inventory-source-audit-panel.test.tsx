@@ -6,6 +6,7 @@ import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source
 const page: AuditPage = {
   run: { id: "audit", batch_id: "batch", batch_version: 12, algorithm_version: String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION),
     one_c_registry_sha256: "c".repeat(64), sha256: "a".repeat(64), run_at: "2026-10-05T04:17:11Z",
+    material_source: { kind: "materials_api", batchId: "materials", sha256: "a".repeat(64), receivedAt: "2026-10-16T14:03:21Z", snapshotAt: "2026-10-16T14:03:08Z", rowCount: 14364, materialCount: 8882, positiveRows: 14000, nonPositiveRows: 364 },
     counts: { total: 1988, oneCOnly: 736, excelOnly: 294, both: 67, missing: 891, temporary: 669, possible: 325 } },
   data: [], page: 1, pageSize: 50, total: 1988,
 };
@@ -14,8 +15,8 @@ describe("inventory audit counts and source explanations", () => {
   it("names source categories and explains overlap and subsets", () => {
     render(<InventorySourceAuditPanel batchId="batch" audit={page} busy={false} onLoad={vi.fn()} />);
     expect(screen.getAllByText("ОС").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Материальный предмет").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("ОС + Материальный предмет").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Материалы").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ОС + Материалы").length).toBeGreaterThan(0);
     expect(screen.queryByText("Только 1С")).toBeNull();
     expect(screen.queryByText("Только Excel")).toBeNull();
     expect(screen.getByText(/736 \+ 294 \+ 67 \+ 891 = 1988/)).toBeTruthy();
@@ -29,8 +30,8 @@ describe("inventory audit counts and source explanations", () => {
       added: 57, removed: 0, changed: 2, stale: true,
     } } };
     render(<InventorySourceAuditPanel batchId="batch" audit={audit} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getByText(/Сейчас на сайте: 2045 карточек, из них активных: 2040/)).toBeTruthy();
-    expect(screen.getByText(/Количество единиц: 3000, из них в активных карточках: 2900/)).toBeTruthy();
+    expect(screen.getByText(/Сейчас на сайте: 2045 карточек, активных: 2040/)).toBeTruthy();
+    expect(screen.getByText(/Количество единиц: 3000, в активных карточках: 2900/)).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toMatch(/добавлено 57.*удалено 0.*изменено 2/);
     expect(screen.getByRole("alert").textContent).toContain("dry-run");
     expect(screen.getByText("1988")).toBeTruthy();
@@ -43,5 +44,11 @@ describe("inventory audit counts and source explanations", () => {
     } } };
     render(<InventorySourceAuditPanel batchId="batch" audit={audit} busy={false} onLoad={vi.fn()} />);
     expect(screen.getByRole("alert").textContent).toMatch(/добавлено 1.*удалено 1/);
+  });
+
+  it("keeps old Excel evidence explicitly historical and cannot apply it as a current API audit", () => {
+    render(<InventorySourceAuditPanel batchId="batch" audit={{ ...page, run: { ...page.run, material_source: null } }} busy={false} onLoad={vi.fn()} />);
+    expect(screen.getByRole("alert").textContent).toContain("Историческая сводка");
+    expect(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }).hasAttribute("disabled")).toBe(true);
   });
 });

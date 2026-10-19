@@ -155,9 +155,9 @@ describe("reviewing and applying confirmed inventory codes", () => {
     await screen.findByText("Можно обновить: 0. Без изменений: 0. Пропущено: 5.");
     const reasons = within(screen.getByRole("list", { name: "Причины пропуска" })).getAllByRole("listitem").map((row) => row.textContent);
     expect(reasons).toEqual(expect.arrayContaining([
-      "Нет подтверждения в 1С — проверьте загруженную партию и полный номер: 1",
-      "Нет подтверждения в Excel — проверьте файл и полный номер: 2",
-      "Нет подтверждения в 1С и Excel — проверьте оба источника: 1",
+      "Нет подтверждения в ОС 1С — проверьте партию и полный номер: 1",
+      "Нет подтверждения в материалах API 1С — проверьте реестр и полный номер: 2",
+      "Нет подтверждения в ОС и материалах API 1С — проверьте оба источника: 1",
       "Нет подтверждения в источниках — проверьте полные номера: 1",
     ]));
     expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();

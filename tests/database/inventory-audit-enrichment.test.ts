@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import * as XLSX from "xlsx";
 
 import { closeDatabase } from "@/lib/db/client";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
-import { uploadMaterialSnapshot } from "@/lib/server/material-snapshot-service";
+import { PostgresOneCMaterialsRepository } from "@/lib/server/persistence/postgres/postgres-one-c-materials-repository";
+import type { OneCMaterial } from "@/lib/contracts/one-c-materials";
 import { InventoryAuditEnrichmentService } from "@/lib/server/inventory-audit-enrichment-service";
 import { OneCReconciliationService } from "@/lib/server/one-c-reconciliation-service";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
@@ -39,7 +39,8 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
       "yu_inventory"."material_snapshot_selection", "yu_inventory"."material_snapshot_rows", "yu_inventory"."material_snapshots",
       "yu_inventory"."inventory_source_audit_rows", "yu_inventory"."inventory_source_audit_runs",
       "yu_inventory"."item_one_c_links", "yu_inventory"."one_c_import_batch_rows",
-      "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_import_batches" cascade`);
+      "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_import_batches",
+      "yu_inventory"."one_c_material_inbox", "yu_inventory"."one_c_material_import_batches" cascade`);
   });
   afterAll(async () => {
     await runtimePool?.end();
@@ -48,7 +49,7 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
     await resetSchemas(migrationConfig);
   });
 
-  it("uses the real saved XLS and 1C evidence, previews without edits, and persists the agreed code and source name atomically", async () => {
+  it("uses material API and fixed asset evidence, previews without edits, and persists the agreed code and source name atomically", async () => {
     const fixture = await createFixture();
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
@@ -243,17 +244,17 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
     expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
   });
 
-  it("applies an Excel-only name and code, audits its source, and replays once", async () => {
+  it("applies a materials API-only name and code, audits its source, and replays once", async () => {
     const fixture = await createFixture({ excelOnly: true });
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
-    expect(plan.rows[0]).toMatchObject({ nameSource: "excel", codeStatus: "confirmed", nextName: SOURCE_NAME, nextCode: "00003254" });
+    expect(plan.rows[0]).toMatchObject({ nameSource: "materials_api", codeStatus: "confirmed", nextName: SOURCE_NAME, nextCode: "00003254" });
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
     expect(await itemState(fixture.itemId)).toMatchObject({ name: SOURCE_NAME, one_c_code: "00003254", version: 2 });
     const audit = await runtimePool.query(`select metadata from "yu_inventory"."audit_records" where action='item.audit_enrichment'`);
     expect(audit.rows).toHaveLength(1);
-    expect(audit.rows[0].metadata).toMatchObject({ nameSource: "excel", codeStatus: "confirmed", excelRowNumber: 2 });
+    expect(audit.rows[0].metadata).toMatchObject({ nameSource: "materials_api", codeStatus: "confirmed", excelRowNumber: 1 });
   });
 
   it("applies a 1C-only name and code without depending on Excel confirmation", async () => {
@@ -378,11 +379,11 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
     await expectNoEnrichmentAudit();
   });
 
-  it("rejects a changed selected Excel source even when its identifiers still agree", async () => {
+  it("rejects a changed material API source even when its identifiers still agree", async () => {
     const fixture = await createFixture();
     const service = new InventoryAuditEnrichmentService(runtimePool);
     const plan = await service.preview(fixture.batchId, fixture.actor);
-    await uploadMaterialSnapshot("материалы 2026.xls", materialFile("00003254", SOURCE_NAME, 2), fixture.userId, runtimePool);
+    await importMaterial("00003254", SOURCE_NAME, "2411/00388", 2);
     await expect(service.apply(fixture.batchId, plan, fixture.actor)).rejects.toMatchObject({ kind: "conflict", publicCode: "inventory_audit_enrichment_stale" });
     expect(await itemState(fixture.itemId)).toMatchObject({ name: ORIGINAL_NAME, one_c_code: null, version: 1 });
     await expectNoEnrichmentAudit();
@@ -530,7 +531,7 @@ async function createFixture(options: { excelCode?: string; excelOnly?: boolean;
     [randomUUID(), roomId, userId, options.inventoryNumber ?? "2411/00388"]);
   }
   const sourceName = options.sourceName ?? (options.inventoryNumber ? SOURCE_NAME.replace("2411/00388", options.inventoryNumber) : SOURCE_NAME);
-  await uploadMaterialSnapshot("материалы 2026.xls", materialFile(options.excelCode ?? "00003254", options.oneCOnly ? "Другая запись №9999/00388" : sourceName), userId, runtimePool);
+  await importMaterial(options.excelCode ?? "00003254", options.oneCOnly ? "Другая запись №9999/00388" : sourceName, options.oneCOnly ? "9999/00388" : options.inventoryNumber ?? "2411/00388");
   const asset: OneCFixedAsset = {
     externalId, code: "00003254", inventoryNumber: (options.inventoryNumber ?? "2411/00388").replace("/", ""), barcode: null, name: sourceName, category: null,
     location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null,
@@ -553,14 +554,12 @@ async function createFixture(options: { excelCode?: string; excelOnly?: boolean;
   return { userId, itemId, externalId, batchId, asset, actor: { userId, role: "admin" as const, sessionVersion: 1 } };
 }
 
-function materialFile(code: string, nomenclature = SOURCE_NAME, quantity = 1): Buffer {
-  const header: unknown[] = Array(12).fill("");
-  header[1] = "Номенклатура"; header[4] = "Код"; header[11] = "Количество";
-  const row: unknown[] = Array(12).fill("");
-  row[0] = 1; row[1] = nomenclature; row[4] = code; row[11] = quantity;
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, row]), "Лист_1");
-  return Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" }));
+async function importMaterial(code: string, name: string, number: string, quantity = 1) {
+  const record: OneCMaterial = { externalId: null, code, name, inventoryNumber: number, barcode: null,
+    warehouseCode: null, warehouseExternalId: null, warehouseName: null, accountCode: "1317",
+    balanceSchemaVersion: 2, unit: "шт", quantity: String(quantity), unitPrice: "100", currency: "KZT" };
+  return new PostgresOneCMaterialsRepository(runtimePool).saveSnapshot({ materials: [record], snapshotAt: new Date().toISOString() },
+    { sourceSha256: createHash("sha256").update(randomUUID()).digest("hex"), requestId: randomUUID(), sourceFilename: "materials.xml" });
 }
 
 async function saveAssets(assets: OneCFixedAsset[]) {
