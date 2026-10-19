@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,11 +59,23 @@ describe("complete room QR print sheets", () => {
     render(<RoomQrBatchPrintView rooms={rooms} qrImages={Object.fromEntries(rooms.map((room) => [room.id, QR_IMAGE]))} />);
     const images = screen.getAllByRole("img");
     expect(images).toHaveLength(125);
+    const sheets = screen.getAllByRole("region");
+    expect(sheets).toHaveLength(11);
+    expect(sheets.map((sheet) => within(sheet).getAllByRole("img").length))
+      .toEqual([12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5]);
+    // Per-room downloads belong with the preview, keeping the print toolbar compact.
+    expect(within(screen.getByRole("banner")).getAllByRole("link")).toHaveLength(1);
     expect(images.every((image) => image.getAttribute("src") === QR_IMAGE)).toBe(true);
     act(() => { for (const image of images) fireEvent.load(image); });
     const print = screen.getByRole("button", { name: "room.qrPrint" });
     expect((print as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(print);
     expect(window.print).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not add an empty sheet when the last page has exactly 12 codes", () => {
+    const rooms = Array.from({ length: 24 }, (_, index) => ({ ...ROOMS[0], id: `room-${index}` }));
+    render(<RoomQrBatchPrintView rooms={rooms} qrImages={Object.fromEntries(rooms.map((room) => [room.id, QR_IMAGE]))} />);
+    expect(screen.getAllByRole("region").map((sheet) => within(sheet).getAllByRole("img").length)).toEqual([12, 12]);
   });
 });

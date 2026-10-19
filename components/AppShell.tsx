@@ -23,10 +23,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const isPublicApiDocumentation = pathname === "/api";
   const isRoomQrPrintPage = pathname === "/inventory/rooms/qr-print";
 
+  // Print sheets must use document scrolling and browser page fragmentation.
+  if (isRoomQrPrintPage) return children;
+
   if (
     isAuthPage ||
     isPublicApiDocumentation ||
-    isRoomQrPrintPage ||
     (isPublicRoomQr && (loading || !user))
   ) {
     return <div className="min-h-screen bg-background">{children}</div>;

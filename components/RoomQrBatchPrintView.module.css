@@ -1,0 +1,182 @@
+/* Keep the document, rather than a viewport-height container, scrollable. */
+:global(html):has(.root),
+:global(body):has(.root) {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.root {
+  min-height: 100vh;
+  background: #f4f5f7;
+  color: #111;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fff;
+}
+
+.toolbarContent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.content {
+  padding: 20px 12px 32px;
+}
+
+.help {
+  max-width: 190mm;
+  margin: 0 auto 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #52525b;
+}
+
+.sheet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5mm;
+  max-width: 190mm;
+  margin: 0 auto 24px;
+  padding: 5mm;
+  background: #fff;
+  box-shadow: 0 2px 12px #0000000a;
+}
+
+.sheetTitle {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d4d4d8;
+  padding: 2mm;
+  background: #fff;
+}
+
+.qr {
+  display: block;
+  width: 50mm;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.labelDetails {
+  width: 100%;
+  text-align: center;
+}
+
+.roomName {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.buildingName {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+@media screen and (max-width: 600px) {
+  .sheet {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3mm;
+    padding: 3mm;
+  }
+}
+
+/* A named page avoids changing printing for other application routes. */
+@page roomQr {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
+@media print {
+  :global(html):has(.root),
+  :global(body):has(.root) {
+    background: #fff;
+  }
+
+  .root {
+    page: roomQr;
+    min-height: 0;
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .screenOnly {
+    display: none !important;
+  }
+
+  .content {
+    padding: 0;
+  }
+
+  .sheet {
+    width: 190mm;
+    max-width: none;
+    grid-template-columns: repeat(3, 60mm);
+    grid-auto-rows: 65mm;
+    gap: 4mm 5mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    break-inside: avoid;
+    break-after: page;
+  }
+
+  .sheet:last-child {
+    break-after: auto;
+  }
+
+  .label {
+    width: 60mm;
+    height: 65mm;
+    padding: 1.5mm;
+    border: 0.2mm dashed #b5b5b5;
+    break-inside: avoid;
+  }
+
+  .labelDetails {
+    flex: 0 0 auto;
+  }
+
+  .roomName {
+    font-size: 10pt;
+    line-height: 11pt;
+  }
+
+  .buildingName {
+    font-size: 8pt;
+    line-height: 9pt;
+  }
+
+  .qr {
+    width: 50mm;
+    height: 50mm;
+    max-width: none;
+    min-height: 0;
+  }
+}

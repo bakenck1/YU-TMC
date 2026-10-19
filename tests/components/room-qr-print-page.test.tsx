@@ -62,7 +62,7 @@ describe("room QR printing authorization and selection", () => {
     expect(page.props.buildings).toEqual([BUILDING]);
     expect(Object.keys(page.props.qrImages)).toHaveLength(125);
     for (const room of ROOMS) {
-      const svg = await QRCode.toString(`https://inventory.yu.edu.kz/rooms/qr/${encodeURIComponent(room.qrCode)}`, { type: "svg", errorCorrectionLevel: "M", margin: 1, width: 768 });
+      const svg = await QRCode.toString(`https://inventory.yu.edu.kz/rooms/qr/${encodeURIComponent(room.qrCode)}`, { type: "svg", errorCorrectionLevel: "M", margin: 4, width: 768 });
       expect(page.props.qrImages[room.id]).toBe(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
     }
   });
@@ -78,7 +78,7 @@ describe("room QR printing authorization and selection", () => {
     vi.stubEnv("APP_PUBLIC_ORIGIN", "");
     listRooms.mockResolvedValue([ROOMS[0]]);
     const page = await RoomQrPrintPage({ searchParams: Promise.resolve({ all: "1" }) });
-    const svg = await QRCode.toString("http://localhost:3000/rooms/qr/ROOM-0", { type: "svg", errorCorrectionLevel: "M", margin: 1, width: 768 });
+    const svg = await QRCode.toString("http://localhost:3000/rooms/qr/ROOM-0", { type: "svg", errorCorrectionLevel: "M", margin: 4, width: 768 });
     expect(page.props.qrImages[ROOMS[0].id]).toBe(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
   });
 
