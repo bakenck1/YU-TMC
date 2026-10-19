@@ -29,7 +29,7 @@ export default async function RoomQrPrintPage({ searchParams }: { searchParams: 
   // the shared request budget on large print sheets.
   const qrImages = Object.fromEntries(await Promise.all(rooms.map(async (room) => {
     const publicUrl = `${origin}/rooms/qr/${encodeURIComponent(room.qrCode)}`;
-    const svg = await QRCode.toString(publicUrl, { type: "svg", errorCorrectionLevel: "M", margin: 1, width: 768 });
+    const svg = await QRCode.toString(publicUrl, { type: "svg", errorCorrectionLevel: "M", margin: 4, width: 768 });
     return [room.id, `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`];
   })));
   return <RoomQrBatchPrintView rooms={rooms} buildings={buildings} qrImages={qrImages} />;

@@ -30,10 +30,11 @@ describe("adversarial typography print integration", () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it("decodes an actual generated label to the trusted HTTPS origin despite hostile forwarded headers", async () => {
+  it.each([150, 300])("decodes a 50 mm printed label at %i DPI to the trusted HTTPS origin despite hostile forwarded headers", async (dpi) => {
     const page = await RoomQrPrintPage({ searchParams: Promise.resolve({ all: "1" }) });
     const svg = Buffer.from(page.props.qrImages[room.id].split(",")[1], "base64");
-    const { data, info } = await sharp(svg).flatten({ background: "white" }).greyscale().raw().toBuffer({ resolveWithObject: true });
+    const pixels = Math.round(50 / 25.4 * dpi);
+    const { data, info } = await sharp(svg).resize(pixels, pixels).flatten({ background: "white" }).greyscale().raw().toBuffer({ resolveWithObject: true });
     const source = new RGBLuminanceSource(new Uint8ClampedArray(data), info.width, info.height);
     const decoded = new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(source)));
     expect(decoded.getText()).toBe(`https://inventory.yu.edu.kz/rooms/qr/${room.qrCode}`);
