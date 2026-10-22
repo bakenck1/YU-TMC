@@ -55,20 +55,21 @@ export function inventoryAuditSourceRanges(name: string, explicitNumber?: string
 /** Extra live-search tokens. Dates, dimensions, model fragments and range prefixes are not identities. */
 export function extractFormattedInventoryReferences(value: string): ExcelInventoryReference[] {
   const text = value.replace(AUDIT_DASHES, "-");
-  const pattern = /(?<![\p{L}\p{N}/.-])(?:№\s*)?(\d+(?:\s*[/.\-]\s*\d+|\s+\d+)*)(?![\p{L}\p{N}/.-])/giu;
+  const annotation = String.raw`(?:этаж|шт(?:ук)?|кг|мм|см|метр)(?![\p{L}\p{N}])`;
+  const date = String.raw`(?:\d{1,2}\.\d{1,2}\.\d{2}(?:\d{2})?|\d{4}[.-]\d{1,2}[.-]\d{1,2})(?![\p{L}\p{N}.])`;
+  const spacedDigits = String.raw`\s+(?!${date})\d+(?!\d|\s*${annotation})`;
+  const marker = String.raw`(?:№|инв(?:ентарный)?\.?(?:\s+номер)?\s*(?:№|No\.?|N\.?)?|No\.?|N\.?)`;
+  const pattern = new RegExp(String.raw`(?<![\p{L}\p{N}/.-])(?:${marker}\s*)?(\d+(?:\s*[/.\-]\s*\d+|${spacedDigits})*)(?![\p{L}\p{N}/.-]|\s*[/.\-]\s*\d|${spacedDigits})`, "giu");
   const result: ExcelInventoryReference[] = [];
   for (const match of text.matchAll(pattern)) {
     const token = match[1].trim();
-    const following = text.slice(match.index + match[0].length);
-    if (/^\s+\d/u.test(following)
-      && !/^\s+\d+\s*(?:шт(?:ук)?|кг|мм|см|метр)(?![\p{L}\p{N}])/iu.test(following)
-      && !/^\s+\d{1,2}\.\d{1,2}\.\d{2}(?:\d{2})?(?![\p{L}\p{N}.])/u.test(following)) continue;
+    const marked = match[0].length > match[1].length;
     const digits = inventoryAuditFormattedKey(token);
     if (!digits || digits.length < 5 || digits.length > 64) continue;
-    if (!match[0].startsWith("№") && /^\d+\.\d{1,2}$/u.test(token)) continue;
-    if (/^\d{1,2}\.\d{1,2}\.\d{2}(?:\d{2})?$/u.test(token) || /^\d{4}[.-]\d{1,2}[.-]\d{1,2}$/u.test(token)) continue;
+    if (!marked && /^\d+\.\d{1,2}$/u.test(token)) continue;
+    if (/^\d{1,2}[.-]\d{1,2}[.-]\d{2}(?:\d{2})?$/u.test(token) || /^\d{4}[.-]\d{1,2}[.-]\d{1,2}$/u.test(token)) continue;
     if (/^\s*[*xх×]/iu.test(text.slice(match.index + match[0].length)) || /[*xх×]\s*$/iu.test(text.slice(0, match.index))) continue;
-    result.push({ inventoryNumber: token, numberIsUnmarked: !match[0].startsWith("№") });
+    result.push({ inventoryNumber: token, numberIsUnmarked: !marked });
   }
   return result;
 }

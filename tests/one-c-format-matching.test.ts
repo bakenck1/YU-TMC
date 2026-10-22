@@ -32,6 +32,7 @@ test("all marked formatted identifiers must agree before OS or MP updates", () =
     ["Стол №1350.14445", card.inventoryNumber],
     ["Стол №1350.14444; №1350.14445", null],
     ["Стол №1350.14444; №13 50 / 14 445", null],
+    ["Стол №1350.14444; инв. 1350.14445", null],
   ] as const) {
     const source = asset(name, inventoryNumber);
     const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "MP", nomenclature: name, inventoryNumber: inventoryNumber ?? "", explicitInventoryNumber: inventoryNumber, endingBalance: "1" };
@@ -43,6 +44,20 @@ test("all marked formatted identifiers must agree before OS or MP updates", () =
       assert.equal(plan.rows[0].eligible, false);
       assert.equal(plan.rows[0].reason, "identity_conflict");
     }
+  }
+});
+
+test("quantity, floor and date annotations are not appended to complete dotted numbers", () => {
+  for (const suffix of ["1 шт", "1шт", "2 этаж", "22.10.2026", "2026-10-22"]) {
+    const source = asset(`Стол №1350.14444 ${suffix}`);
+    assert.deepEqual(extractFormattedInventoryReferences(source.name), [{ inventoryNumber: "1350.14444", numberIsUnmarked: false }]);
+    const other = { ...card, id: "other", inventoryNumber: "1350/144441" };
+    const audit = buildInventorySourceAudit([card, other], [{ externalId: "asset", asset: source }], [], [], options);
+    assert.equal(classifyOneCAudit(audit.rows).get(card.id)?.category, "fixedAssets");
+    assert.equal(classifyOneCAudit(audit.rows).get(other.id)?.category, "missing");
+    const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [card, other].map(item => ({ ...item, itemSection: "general" })), { allowDescriptionIdentity: true, formattedNumbers: true });
+    assert.equal(plan.rows[0].eligible, true);
+    assert.equal(plan.rows[1].eligible, false);
   }
 });
 
@@ -75,10 +90,17 @@ test("MP balances may split the quantity supporting a short range across owners"
 });
 
 test("dates, model fragments and dimension fragments are not independent inventory tokens", () => {
-  for (const name of ["Цена 123.45 KZT", "Стол 2026.10.22", "Стол 10.12.25", "Стол 1500*1500*500", "Принтер HP14444"]) {
+  for (const name of ["Цена 123.45 KZT", "Стол 2026.10.22", "Стол 10.12.25", "Стол 22-10-2026", "Стол 1500*1500*500", "Принтер HP14444"]) {
     assert.deepEqual(extractFormattedInventoryReferences(name), []);
   }
   assert.equal(extractFormattedInventoryReferences("Принтер 1350/14444 99A").some(ref => ref.inventoryNumber === card.inventoryNumber), false);
+});
+
+test("an unmarked calendar date cannot confirm a card or authorize updates", () => {
+  const item = { ...card, inventoryNumber: "22102026" };
+  const audit = buildInventorySourceAudit([item], [{ externalId: "asset", asset: asset("Стол 22-10-2026") }], [], [], options);
+  assert.equal(classifyOneCAudit(audit.rows).get(item.id)?.category, "missing");
+  assert.equal(buildInventoryAuditEnrichmentPlan(audit.rows, [{ ...item, itemSection: "general" }], { allowDescriptionIdentity: true, formattedNumbers: true }).counts.ready, 0);
 });
 
 test("temporary unmatched cards have a separate total and do not inflate missing", () => {
