@@ -127,7 +127,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
       sourceCodes: codes.get(row.id) ?? [],
     })), registry.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] })),
-    materials.rows, links.rows.map(row => ({ externalId: String(row.external_id), itemId: String(row.item_id) })), { descriptionBarcodes: true });
+    materials.rows, links.rows.map(row => ({ externalId: String(row.external_id), itemId: String(row.item_id) })), { descriptionBarcodes: true, formattedNumbers: true });
     // Inspect all balances of each candidate, so a conflicting MOL/account row
     // cannot disappear merely because its number did not match the site card.
     const balances = new Map<string, ExcelSourceRow[]>();
@@ -147,7 +147,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
       status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
-    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p

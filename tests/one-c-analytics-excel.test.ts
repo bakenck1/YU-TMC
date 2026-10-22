@@ -57,12 +57,12 @@ test("five ordered full lists preserve IDs and balances, count confirmed cards o
   assert.equal(temporary.getCell("G6").value, "Найдено");
   assert.equal(temporary.getCell("G7").value, "Не найдено");
   const missing = workbook.getWorksheet("Не найдено в 1С")!;
-  assert.equal(missing.rowCount, 6);
-  assert.equal(missing.getCell("B6").value, "missing");
-  assert.equal(missing.getCell("C6").value, '\'=HYPERLINK("bad")');
-  // Every active card appears in the third or fifth sheet, including ambiguous identities.
-  const exportedIds = [found, missing].flatMap(sheet => Array.from({ length: sheet.rowCount - 5 }, (_, index) => sheet.getCell(`B${index + 6}`).value));
-  assert.deepEqual(exportedIds.sort(), snapshot().rows.map(row => row.itemId).sort());
+  assert.equal(missing.rowCount, 5);
+  assert.equal(temporary.getCell("B7").value, "missing");
+  assert.equal(temporary.getCell("C7").value, '\'=HYPERLINK("bad")');
+  // The three Inventory sheets cover all cards; unmatched temporary cards are never listed as missing.
+  const exportedIds = [found, missing, temporary].flatMap(sheet => Array.from({ length: sheet.rowCount - 5 }, (_, index) => sheet.getCell(`B${index + 6}`).value));
+  assert.deepEqual([...new Set(exportedIds)].sort(), snapshot().rows.map(row => row.itemId).sort());
   for (const sheet of workbook.worksheets) {
     assert.ok(sheet.autoFilter);
     assert.equal(sheet.views[0].state, "frozen");
@@ -88,7 +88,7 @@ test("partial sources explicitly scope missing results and exports do not stop a
   data.analytics.assets.total = data.assets.length;
   const workbook = await read({ ...data, materials: { ...data.materials, batchId: null }, materialRecords: [] });
   const missing = workbook.getWorksheet("Не найдено в 1С")!;
-  assert.equal(missing.rowCount, 156);
+  assert.equal(missing.rowCount, 155);
   assert.equal(workbook.getWorksheet("ОС")!.rowCount, 158);
   assert.equal(workbook.getWorksheet("ОС")!.getCell("B158").value, "000149");
   assert.match(String(missing.getCell("A4").value), /Сверка только по ОС/);

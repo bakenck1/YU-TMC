@@ -1,5 +1,6 @@
 import type { AuditMatch } from "@/lib/inventory-source-audit";
-import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem, type InventoryAuditEnrichmentReason } from "@/lib/inventory-audit-enrichment";
+import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains } from "@/lib/inventory-audit-numbers";
+import { parseCode39ScanInput } from "@/lib/domain/code39";
 
 export type OneCAuditPresence = {
   fixedAssets: boolean;
@@ -7,22 +8,28 @@ export type OneCAuditPresence = {
   category: "fixedAssets" | "materials" | "both" | "possible" | "missing";
 };
 
-/** Presence needs a unique complete identifier; update-only name constraints do not deny presence. */
+/** Existence is established by a complete identifier; choosing an update source is a separate operation. */
 export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneCAuditPresence> {
-  const items: InventoryAuditEnrichmentItem[] = rows.map(row => ({
-    id: row.itemId, name: row.itemName, inventoryNumber: row.siteNumber,
-    officialBarcodes: row.siteBarcodes.filter(barcode => barcode.kind === "official").map(barcode => barcode.value),
-    oneCCode: null, version: row.itemVersion, itemSection: "general",
-  }));
-  // Check each registry independently: OS update priority must not hide an MP identity conflict.
-  // Keep all cards in each cohort, so one source reused across cards remains unconfirmed.
-  const options = { allowDescriptionIdentity: true, includeIt: true };
-  const assets = buildInventoryAuditEnrichmentPlan(rows.map(row => ({ ...row, excel: [] })), items, options);
-  const materials = buildInventoryAuditEnrichmentPlan(rows.map(row => ({ ...row, oneC: [] })), items, options);
-  const confirmed = (reason: InventoryAuditEnrichmentReason) => reason === "confirmed" || reason === "unchanged" || reason === "name_invalid";
-  return new Map(rows.map((row, index) => {
-    const fixedAssets = confirmed(assets.rows[index].reason);
-    const material = confirmed(materials.rows[index].reason);
+  const decode = (value: string | null | undefined) => {
+    if (!value) return null;
+    const parsed = parseCode39ScanInput(value);
+    const result = parsed.ok ? parsed.fallbackKey ? null : parsed.inventoryNumber : value;
+    return result && !/^(?:TMP-|YUI-)/iu.test(result) ? result : null;
+  };
+  return new Map(rows.map(row => {
+    const anchors = [decode(row.siteNumber), ...row.siteBarcodes.filter(entry => entry.kind === "official").map(entry => decode(entry.value))].filter((value): value is string => Boolean(value));
+    const matches = (name: string, number?: string | null, barcode?: string | null, quantity?: number) => {
+      const references = [...extractExcelInventoryReferences(name).map(ref => ref.sourceInventoryNumber ?? ref.inventoryNumber),
+        ...extractFormattedInventoryReferences(name).map(ref => ref.inventoryNumber), ...extractSourceBarcodeNumbers(name)];
+      const claims = [decode(number), decode(barcode), ...references].filter((value): value is string => Boolean(value));
+      return claims.some(claim => anchors.some(anchor => inventoryAuditNumbersEqual(anchor, claim)))
+        || inventoryAuditSourceRanges(name, number, quantity).some(range => anchors.some(anchor => inventoryAuditRangeContains(anchor, range)));
+    };
+    const fixedAssets = row.oneC.some(entry => matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
+    const quantities = new Map<string, number>();
+    for (const entry of row.excel) if (entry.oneCCode) quantities.set(entry.oneCCode, (quantities.get(entry.oneCCode) ?? 0) + Number(entry.endingBalance ?? 0));
+    const material = row.excel.some(entry => matches(entry.nomenclature, entry.explicitInventoryNumber ?? (entry.sourceKind === "materials_api" ? null : entry.sourceInventoryNumber ?? entry.inventoryNumber), entry.barcode,
+      entry.oneCCode ? quantities.get(entry.oneCCode) : Number(entry.endingBalance ?? 0)));
     const category = fixedAssets && material ? "both" : fixedAssets ? "fixedAssets" : material ? "materials"
       : row.oneC.length || row.excel.length ? "possible" : "missing";
     return [row.itemId, { fixedAssets, materials: material, category }];
@@ -31,7 +38,7 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
 
 /** Categories partition Inventory cards; temporary numbers are an independent attribute. */
 export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], materialKeys: string[]) {
-  const counts = { fixedAssets: 0, materials: 0, both: 0, possible: 0, missing: 0, temporary: 0 };
+  const counts = { fixedAssets: 0, materials: 0, both: 0, possible: 0, missing: 0, temporary: 0, temporaryUnmatched: 0 };
   const seenAssets = new Set<string>();
   const seenMaterials = new Set<string>();
   const presence = classifyOneCAudit(rows);
@@ -39,7 +46,9 @@ export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], mater
     if (row.numberKind === "temporary") counts.temporary++;
     for (const asset of row.oneC) seenAssets.add(asset.externalId);
     for (const material of row.excel) if (material.sourceKey) seenMaterials.add(material.sourceKey);
-    counts[presence.get(row.itemId)!.category]++;
+    const category = presence.get(row.itemId)!.category;
+    if (category === "missing" && row.numberKind === "temporary") counts.temporaryUnmatched++;
+    else counts[category]++;
   }
   return {
     ...counts, total: rows.length,
@@ -51,8 +60,8 @@ export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], mater
 
 export type OneCAnalytics = {
   calculatedAt: string;
-  /** Current active scope: accepted OS, positive MP balances, active nonarchived cards. */
+  /** Stock totals are active; presence is checked across all OS records and nonarchived cards. */
   assets: { total: number; active: number; retired: number; other: number; receivedAt: string | null };
   inventory: { total: number; active: number; quantity: number };
-  reconciliation: ReturnType<typeof summarizeOneCAudit>;
+  reconciliation: Omit<ReturnType<typeof summarizeOneCAudit>, "temporaryUnmatched"> & { temporaryUnmatched?: number };
 };

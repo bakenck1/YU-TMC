@@ -17,7 +17,7 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("integration overview", () => {
-  it("keeps full-registry updates only in materials and opens current active OS", async () => {
+  it("provides the same full-registry updates in OS and MP with a single review block", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} batches={batches} />);
@@ -26,7 +26,8 @@ describe("integration overview", () => {
     const navigation = within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" }));
     fireEvent.click(navigation.getByRole("button", { name: "ОС" }));
     expect(screen.getByRole("heading", { name: "Основные средства" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Обновление карточек из 1С" })).toBeNull();
+    expect(screen.getAllByRole("heading", { name: "Обновление карточек из 1С" })).toHaveLength(1);
+    expect((screen.getByRole("button", { name: "Проверить изменения" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText("Требует проверки")).toBeNull();
     expect(screen.queryByText("Получена")).toBeNull();
     await screen.findByText("Нет основных средств на учёте");

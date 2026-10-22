@@ -35,9 +35,10 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const categories = [
     { label: "ОС", value: counts.fixedAssets, color: "bg-blue-600" },
     { label: "Материальный предмет", value: counts.materials + counts.both, color: "bg-emerald-500" },
-    { label: "Совпадение не подтверждено", value: counts.possible, color: "bg-amber-400" },
+    { label: "Нужно сверить номер", value: counts.possible, color: "bg-amber-400" },
+    { label: "Временные без совпадения", value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
     { label: "Не найдено в 1С", value: counts.missing, color: "bg-slate-300" },
-  ];
+  ].filter(entry => entry.value > 0);
   async function downloadExcel() {
     setExporting(true);
     setExportError("");
@@ -86,7 +87,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
       <section aria-label="Наша база" className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-900">Наша база</h2><span className="text-xs text-slate-500">{number(analytics.inventory.active)} активных карточек</span></div>
         <div className="grid grid-cols-2 gap-5 lg:grid-cols-5">
-          <Metric label="Активные карточки" value={analytics.inventory.total} />
+          <Metric label="Карточки" value={analytics.inventory.total} />
           <Metric label="Количество единиц" value={analytics.inventory.quantity} />
           <Metric label="Найдено в 1С" value={hasSources ? found : null} result="matched" />
           <Metric label="Не найдено в 1С" value={hasSources ? counts.missing : null} result="missing" />
@@ -95,7 +96,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
       </section>
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Сверка с 1С</h2><p className="mt-1 text-xs text-slate-500">Активные карточки нашей базы</p></div><div className="text-right"><p className="text-2xl font-semibold text-emerald-700">{hasSources ? `${number(percent)}%` : "—"}</p><p className="text-xs text-slate-500">найдено</p></div></div>
+          <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Сверка с 1С</h2><p className="mt-1 text-xs text-slate-500">Все карточки без архива · весь реестр 1С</p></div><div className="text-right"><p className="text-2xl font-semibold text-emerald-700">{hasSources ? `${number(percent)}%` : "—"}</p><p className="text-xs text-slate-500">найдено</p></div></div>
           {hasSources ? <>
             <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
             <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
@@ -103,15 +104,16 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">Нет данных для сверки</div>}
         </section>
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-900">Требует внимания</h2>
-          <Attention title="Временные номера" value={counts.temporary} detail="Могут быть и среди найденных, и среди ненайденных." />
-          <Attention title="Совпадение не подтверждено" value={hasSources ? counts.possible : null} detail="Есть похожие записи, но номер или штрихкод не определяет товар однозначно." />
+          <Attention title="Временные номера" value={counts.temporary} detail={`Без совпадения: ${number(counts.temporaryUnmatched ?? 0)}. В показатель «Не найдено» не входят.`} />
+          {counts.possible > 0 ? <Attention title="Нужно сверить номер" value={hasSources ? counts.possible : null} detail="Проверьте полный номер или штрихкод в найденных вариантах." /> : null}
           <Attention title="ОС без совпадения в нашей базе" value={hasAssets ? counts.assetsWithoutCandidate : null} detail="ОС на учёте" />
           <Attention title="МП без совпадения в нашей базе" value={hasMaterials ? counts.materialBalancesWithoutCandidate : null} detail="Строки остатков с наличием" />
         </section>
       </div>
     </div> : null}
+    {tab !== "overview" ? <InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /> : null}
     {tab === "assets" ? <OneCFixedAssetRegistryPanel key={analytics.calculatedAt} /> : null}
-    {tab === "materials" ? <div className="space-y-6"><InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /><MaterialRegistryPanel key={materials.sha256} source={materials} /></div> : null}
+    {tab === "materials" ? <MaterialRegistryPanel key={materials.sha256} source={materials} /> : null}
   </div>;
 }
 

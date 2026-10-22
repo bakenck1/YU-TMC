@@ -173,7 +173,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(second.analytics.reconciliation.materialBalancesWithoutCandidate).toBe(2);
   });
 
-  it("uses only active OS, positive MP balances and active cards in both analytics and workbook", async () => {
+  it("keeps active stock totals but reconciles all OS and all nonarchived cards", async () => {
     const f = await seed();
     await save([base, { ...base, code: "ZERO", quantity: "0" }, { ...base, code: "NEGATIVE", quantity: "-1" }]);
     const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
@@ -186,8 +186,9 @@ describe("live materials API replaces Excel as audit input", () => {
     const snapshot = await getOneCAnalyticsSnapshot(pool);
     expect(snapshot.analytics.assets).toMatchObject({ total: 1, active: 1, retired: 0, other: 0 });
     expect(snapshot.materials).toMatchObject({ materialCount: 1, rowCount: 1, positiveRows: 1, nonPositiveRows: 0 });
-    expect(snapshot.analytics.inventory).toEqual({ total: 1, active: 1, quantity: 1 });
-    expect(snapshot.analytics.reconciliation).toMatchObject({ total: 1, materials: 1, fixedAssets: 0, possible: 0 });
+    expect(snapshot.analytics.inventory).toEqual({ total: 2, active: 1, quantity: 10 });
+    expect(snapshot.analytics.reconciliation).toMatchObject({ total: 2, materials: 0, fixedAssets: 1, both: 1, possible: 0 });
+    expect(snapshot.registryAssets).toHaveLength(3);
     const materialPage = await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool);
     expect(materialPage.total).toBe(snapshot.materials.rowCount);
     expect(materialPage.data).toHaveLength(1);
@@ -201,9 +202,31 @@ describe("live materials API replaces Excel as audit input", () => {
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     expect(workbook.getWorksheet("ОС")!.rowCount).toBe(6);
     expect(workbook.getWorksheet("МП")!.rowCount).toBe(6);
-    expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(6);
-    expect(workbook.getWorksheet("Совпадения 1С")!.getCell("B6").value).toBe(f.itemId);
-    expect(workbook.getWorksheet("Совпадения 1С")!.getCell("Q6").value).toBe(100);
+    const found = workbook.getWorksheet("Совпадения 1С")!;
+    expect(found.rowCount).toBe(7);
+    const foundRow = [found.getRow(6), found.getRow(7)].find(row => row.getCell(2).value === f.itemId)!;
+    expect(foundRow.getCell(17).value).toBe(100);
+    expect(foundRow.getCell(21).value).toContain("Снято с учёта");
+  });
+
+  it("updates a uniquely identified MP despite spaces and punctuation, and keeps unmatched temporary cards separate", async () => {
+    const f = await seed();
+    await save([{ ...base, inventoryNumber: "1350 14444", name: "Принтер №1350.14444" }]);
+    const tempId = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,'Временный предмет',1,250,room_id,'temporary','TMP-2026-FORMAT','TMP-2026-FORMAT',created_by,updated_by from yu_inventory.items where id=$2`, [tempId, f.itemId]);
+    const overview = await getOneCAnalyticsSnapshot(pool);
+    expect(overview.analytics.reconciliation).toMatchObject({ total: 2, materials: 1, missing: 0, temporary: 1, temporaryUnmatched: 1 });
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ eligible: true, nextName: "Принтер №1350.14444", price: { nextUnitPrice: "9100.00" } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Принтер №1350.14444", unit_price: "9100.00" });
+    const bytes = await exportOneCAnalyticsExcel(overview);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    expect(workbook.getWorksheet("Не найдено в 1С")!.rowCount).toBe(5);
+    expect(workbook.getWorksheet("Временные")!.getCell("B6").value).toBe(tempId);
   });
 
   it("assigns only the two allowed people across OS and MP, with complete owner history and replay", async () => {
@@ -361,7 +384,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query("update yu_inventory.items set inventory_number_kind='temporary' where id=$1", [f.itemId]);
     const result = await getOneCAnalytics(pool);
     expect(result.materials.batchId).toBeNull();
-    expect(result.analytics.reconciliation).toMatchObject({ total: 1, missing: 1, temporary: 1 });
+    expect(result.analytics.reconciliation).toMatchObject({ total: 1, missing: 0, temporary: 1, temporaryUnmatched: 1 });
   });
 
   it("creates dry-run without Excel and keeps all MOL balances, source fields and fingerprints", async () => {
