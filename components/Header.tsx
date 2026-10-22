@@ -25,6 +25,7 @@ const SECTION_TITLES: Record<string, TranslationKey> = {
   "/inventory/inspections": "nav.inspections",
   "/locations": "nav.locations",
   "/analytics": "nav.analytics",
+  "/integrations/1c": "nav.oneC",
   "/users": "nav.users",
   "/settings": "nav.settings",
   "/profile": "nav.profile",

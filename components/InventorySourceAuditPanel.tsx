@@ -13,7 +13,7 @@ export type AuditPage = { run: {
   material_source?: MaterialRegistryMetadata | null; inventory?: InventoryAuditInventoryState;
 }; data: AuditMatch[]; page: number; pageSize: number; total: number };
 
-type Props = { batchId: string; audit: AuditPage; busy: boolean; onLoad(page: number, filters: { search?: string; result?: string; source?: string; pageSize?: number }): void };
+type Props = { batchId: string; audit: AuditPage; busy: boolean; showEnrichment?: boolean; onLoad(page: number, filters: { search?: string; result?: string; source?: string; pageSize?: number }): void };
 const sourceLabel = (value: AuditMatch["source"]) => value === "1c+excel" ? "ОС + Материалы" : value === "1c" ? "ОС" : value === "excel" ? "Материалы" : "—";
 const evidenceLabel = (value: string) => ({
   guid: "связь GUID", code: "код 1С", inventory_number: "номер сайта", barcode: "штрихкод",
@@ -23,7 +23,7 @@ const evidenceLabel = (value: string) => ({
   number_spaces: "номер без пробелов — проверить",
 } as Record<string, string>)[value] ?? value;
 
-export default function InventorySourceAuditPanel({ batchId, audit, busy, onLoad }: Props) {
+export default function InventorySourceAuditPanel({ batchId, audit, busy, showEnrichment = true, onLoad }: Props) {
   const [search, setSearch] = useState("");
   const [result, setResult] = useState("");
   const [source, setSource] = useState("");
@@ -32,6 +32,10 @@ export default function InventorySourceAuditPanel({ batchId, audit, busy, onLoad
   const counts = audit.run.counts, inventory = audit.run.inventory;
   const liveApi = audit.run.material_source?.kind === "materials_api";
   const outdated = !liveApi || audit.run.algorithm_version !== String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION);
+  if (!liveApi) return <section aria-label="Сводка по всем ТМЦ" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+    <p role="alert">Историческая сводка использовала Excel и не участвует в текущей аналитике. Запустите dry-run заново: сверка возьмёт ОС и МП только из полученных реестров 1С.</p>
+    {showEnrichment ? <InventoryAuditEnrichment key={audit.run.id} batchId={batchId} runId={audit.run.id} blocked onApplied={() => onLoad(audit.page, filters)} /> : null}
+  </section>;
   return <section className="space-y-3" aria-label="Сводка по всем ТМЦ">
     {outdated ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Историческая сводка: источник материалов — прежний Excel или версия поиска устарела. Запустите dry-run заново для сверки с API 1С. Применение старых предложений заблокировано.</p> : null}
     {inventory?.stale ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Данные после сверки изменились: добавлено {inventory.added}, удалено {inventory.removed}, изменено {inventory.changed}.{inventory.linksChanged ? " Изменились связи карточек с ОС." : ""}{inventory.materialSourceChanged ? " Изменился источник материалов 1С." : ""} Запустите dry-run заново.</p> : null}
@@ -44,7 +48,7 @@ export default function InventorySourceAuditPanel({ batchId, audit, busy, onLoad
     <p className="text-xs text-zinc-600">{counts.oneCOnly} + {counts.excelOnly} + {counts.both} + {counts.missing} = {counts.total}. Временные номера ({counts.temporary}) входят в ненайденные ({counts.missing}); возможные ({counts.possible ?? 0}) — в найденные и требуют проверки.</p>
     {inventory ? <div className="text-xs text-zinc-600"><p>Сейчас на сайте: {inventory.currentTotal} карточек, активных: {inventory.currentActive}. Сводка включает все неархивные карточки независимо от статуса.</p><p>Количество единиц: {inventory.currentQuantity}, в активных карточках: {inventory.currentActiveQuantity}. Одна карточка может содержать несколько единиц.</p></div> : null}
     <p className="break-all text-xs text-zinc-500">Партия ОС: {audit.run.batch_id}, версия {audit.run.batch_version}. SHA-256 реестра ОС: <code>{audit.run.one_c_registry_sha256}</code>. SHA-256 {liveApi ? "материалов API 1С" : "исторического Excel"}: <code>{audit.run.sha256}</code>. Запуск: {new Date(audit.run.run_at).toLocaleString("ru-RU")}</p>
-    <InventoryAuditEnrichment key={audit.run.id} batchId={batchId} runId={audit.run.id} blocked={busy || outdated || !!inventory?.stale} onApplied={() => onLoad(audit.page, filters)} />
+    {showEnrichment ? <InventoryAuditEnrichment key={audit.run.id} batchId={batchId} runId={audit.run.id} blocked={busy || outdated || !!inventory?.stale} onApplied={() => onLoad(audit.page, filters)} /> : null}
     <div className="overflow-hidden rounded-2xl border bg-white">
       <form onSubmit={event => { event.preventDefault(); onLoad(1, filters); }} className="flex flex-wrap gap-2 border-b p-3">
         <input aria-label="Поиск ТМЦ в сводке" value={search} onChange={event => setSearch(event.target.value)} placeholder="Название, номер, штрихкод, код 1С или МОЛ" className="min-w-60 rounded-lg border px-3 py-2 text-sm" />
@@ -65,7 +69,7 @@ export default function InventorySourceAuditPanel({ batchId, audit, busy, onLoad
   </section>;
 }
 
-function MaterialEvidence({ entry }: { entry: ExcelSourceRow }) {
+export function MaterialEvidence({ entry }: { entry: ExcelSourceRow }) {
   const api = entry.sourceKind === "materials_api";
   return <div><div>{entry.nomenclature}</div><div>Код 1С: {entry.oneCCode ?? "—"}{entry.materialGuid ? ` · GUID: ${entry.materialGuid}` : ""}</div><div>Номер: {entry.matchedInventoryNumber ?? entry.inventoryNumber ?? "—"}</div>
     <div>Найдено по: {entry.matchedBy?.map(evidenceLabel).join(", ") || "—"}</div>

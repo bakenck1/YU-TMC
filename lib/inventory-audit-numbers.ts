@@ -1,4 +1,4 @@
-import { inventoryNumberComparisonKey } from "@/lib/domain/code39";
+import { inventoryNumberComparisonKey, parseCode39ScanInput } from "@/lib/domain/code39";
 
 export type ExcelInventoryReference = { inventoryNumber: string; sourceInventoryNumber?: string; numberIsUnmarked?: boolean };
 
@@ -76,4 +76,17 @@ export function extractExcelInventoryReference(value: string): ExcelInventoryRef
 
 export function extractExcelInventoryNumber(value: string): string | null {
   return extractExcelInventoryReference(value)?.inventoryNumber ?? null;
+}
+
+/** Whole barcode payloads embedded in a source name; never take a substring. */
+export function extractSourceBarcodeNumbers(value: string): string[] {
+  const tokens = [
+    ...value.matchAll(/\*([0-9A-Z./+%$ -]{1,128})\*/giu),
+    ...value.matchAll(/(?<![\p{L}\p{N}/-])(YUB-[0-9A-Z]+(?:[./-][0-9A-Z]+)*)(?![\p{L}\p{N}/-])/giu),
+    ...value.matchAll(/(?:штрих\s*код|barcode)\s*[:№=]?\s*([0-9A-Z]+(?:[./-][0-9A-Z]+)*)(?![\p{L}\p{N}/-])/giu),
+  ];
+  return [...new Set(tokens.flatMap(match => {
+    const parsed = parseCode39ScanInput(match[1]);
+    return parsed.ok && !parsed.fallbackKey && !/^TMP-/iu.test(parsed.inventoryNumber) ? [parsed.inventoryNumber] : [];
+  }))];
 }
