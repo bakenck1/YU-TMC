@@ -32,14 +32,15 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   const missing = hasSources ? data.rows.filter(row => !row.oneC.length && !row.excel.length && row.numberKind !== "temporary") : [];
   const inventory = new Map(data.inventory.map(item => [item.id, item]));
   const assetById = new Map((data.registryAssets ?? data.assets).map(row => [row.externalId, row.asset]));
+  const materialByKey = new Map(data.materialRecords.map(row => [row.key, row.material]));
   const time = new Date(data.analytics.calculatedAt).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" });
-  const summary = `Всего в 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} активных позиций · ОС: ${hasAssets ? data.analytics.assets.total : "нет данных"} · МП: ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} карточек, ${data.analytics.inventory.quantity} единиц`;
+  const summary = `Активные позиции 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} = ОС ${hasAssets ? data.analytics.assets.total : "нет данных"} + МП ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} карточек (${data.analytics.inventory.active} активных), ${data.analytics.inventory.quantity} единиц`;
   const availability = !hasSources ? "Нет данных ОС и МП для сверки. Карточки не объявлены ненайденными."
     : !complete ? `Сверка только по ${hasAssets ? "ОС" : "МП"}; ${hasAssets ? "МП" : "ОС"}: нет данных. Ненайденные — в доступном разделе.`
-      : "Сверка по всем записям ОС и МП. Временные карточки без совпадений находятся только на листе «Временные».";
+      : "Для сверки взяты все статусы ОС и все карточки нашей базы, кроме архива. Временные есть на отдельном листе и могут также быть в «Совпадениях 1С».";
 
   function sheet(name: string, title: string, detail: string, headers: string[], widths: number[]) {
-    const result = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 5 }], properties: { defaultRowHeight: 30 } });
+    const result = workbook.addWorksheet(name, { views: [{ state: "frozen", xSplit: 3, ySplit: 5 }], properties: { defaultRowHeight: 30 } });
     result.columns = widths.map(width => ({ width }));
     for (const [index, value] of [title, detail, summary, `${time} (Казахстан). ${availability}`].entries()) {
       result.mergeCells(index + 1, 1, index + 1, headers.length);
@@ -54,7 +55,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
     result.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: headers.length } };
     return result;
   }
-  const assets = sheet("ОС", "Основные средства на учёте", hasAssets ? `${data.assets.length} активных позиций. Полный список ОС на учёте.` : "Нет данных ОС.",
+  const assets = sheet("ОС", "Основные средства на учёте", hasAssets ? `${data.assets.length} записей со статусом «Принято к учёту». Остальные статусы ОС участвуют в сверке карточек на третьем листе.` : "Нет данных ОС.",
     ["№", "Код 1С", "Наименование", "Инвентарный номер", "Штрихкод", "Количество", "Статус", "Ответственный", "Расположение", "GUID 1С", "Первоначальная стоимость, KZT", "Остаточная стоимость, KZT", "Категория 1С"],
     [8, 20, 55, 25, 25, 15, 25, 32, 30, 38, 26, 26, 30]);
   data.assets.forEach(({ externalId, asset }, index) => assets.addRow([
@@ -65,7 +66,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   assets.getColumn(11).numFmt = '#,##0.00';
   assets.getColumn(12).numFmt = '#,##0.00';
 
-  const materials = sheet("МП", "Материальный предмет с наличием", hasMaterials ? `${data.materials.materialCount} активных позиций · ${data.materialRecords.length} строк остатков с наличием. Один код может иметь несколько строк по складам и ответственным.` : "Нет данных МП.",
+  const materials = sheet("МП", "Материальные предметы с остатком", hasMaterials ? `${data.materials.materialCount} кодов МП с положительным остатком · ${data.materialRecords.length} строк остатков. Один код может повторяться по складам и ответственным; цена указана для каждой строки.` : "Нет данных МП.",
     ["№", "Код 1С", "Наименование", "Инвентарный номер", "Штрихкод", "Остаток", "Единица", "Счёт", "Склад", "Ответственный", "Код ответственного", "Учётная цена, KZT", "GUID 1С"],
     [8, 20, 55, 25, 25, 16, 14, 16, 30, 32, 22, 22, 38]);
   data.materialRecords.forEach(({ material }, index) => materials.addRow([
@@ -75,17 +76,24 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   ]));
   materials.getColumn(12).numFmt = '#,##0.00';
 
+  const sourcePrices = (values: (string | number | null | undefined)[]) => {
+    const amounts = values.filter(value => value !== null && value !== undefined && value !== "")
+      .map(value => Number(value)).filter(Number.isFinite);
+    const distinct = [...new Set(amounts)];
+    return distinct.length === 0 ? null : distinct.length === 1 ? distinct[0] : distinct.join("\n");
+  };
+
   function inventorySheet(name: string, title: string, rows: AuditMatch[], note: string) {
     const count = `${rows.length} карточек · ${rows.reduce((sum, row) => sum + (inventory.get(row.itemId)?.quantity ?? 0), 0)} единиц`;
     const result = sheet(name, title, `${hasSources || name === "Временные" ? count : "Сверка недоступна"}. ${note}`,
-      ["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП", "Статусы ОС в 1С"],
-      [8, 38, 55, 25, 20, 16, 30, 20, 20, 24, 55, 25, 24, 55, 25, 30, 24, 36, 36, 36, 30]);
+      ["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП", "Статусы ОС в 1С", "Первоначальная стоимость ОС, KZT", "Остаточная стоимость ОС, KZT", "Цены строк МП, KZT"],
+      [8, 38, 55, 25, 20, 16, 26, 20, 20, 24, 55, 25, 24, 55, 25, 30, 25, 36, 36, 36, 30, 27, 27, 24]);
     rows.forEach((row, index) => {
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
-      const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Совпадение не подтверждено" : "Найдено";
-      const registry = confirmed.category === "both" ? "ОС + МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП не подтверждено" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС не подтверждено" : ""}`
-        : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (не подтверждено)` : "";
+      const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Нужно сверить номер" : "Найдено";
+      const registry = confirmed.category === "both" ? "ОС + МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
+        : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (проверить номер)` : "";
       result.addRow([
         index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), row.numberKind === "temporary" ? "Временный" : "Постоянный",
         inventory.get(row.itemId)?.quantity ?? 0, status, registry,
@@ -97,13 +105,17 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
         joined(row.oneC.map(entry => assetById.get(entry.externalId)?.responsibleName)),
         joined(row.excel.map(entry => entry.responsibleName)),
         joined(row.oneC.map(entry => entry.status)),
+        sourcePrices(confirmed.fixedAssets ? row.oneC.map(entry => assetById.get(entry.externalId)?.initialCost) : []),
+        sourcePrices(confirmed.fixedAssets ? row.oneC.map(entry => assetById.get(entry.externalId)?.residualCost) : []),
+        sourcePrices(confirmed.materials ? row.excel.map(entry => entry.sourceKey ? materialByKey.get(entry.sourceKey)?.unitPrice : null) : []),
       ]);
     });
     result.getColumn(17).numFmt = '#,##0.00';
+    for (const column of [22, 23, 24]) result.getColumn(column).numFmt = '#,##0.00';
     return result;
   }
-  inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Совпадение не подтверждено: ${data.analytics.reconciliation.possible}. ОС: ${data.analytics.reconciliation.fixedAssets} · МП: ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Статус указан для каждой карточки.`);
-  inventorySheet("Временные", "Временные номера в нашей базе", temporary, "Все карточки с временным номером, независимо от результата сверки.");
+  inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Нужно сверить номер: ${data.analytics.reconciliation.possible}. Только ОС: ${data.analytics.reconciliation.fixedAssets} · МП (включая ОС + МП): ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Цены ОС и МП показаны отдельно от цены нашей базы.`);
+  inventorySheet("Временные", "Временные номера в нашей базе", temporary, "Все карточки с временным номером, включая найденные в 1С. Список может пересекаться с листом «Совпадения 1С».");
   inventorySheet("Не найдено в 1С", "Есть в нашей базе — не найдено в 1С", missing, "Постоянные номера без совпадений. Временные номера находятся на отдельном листе.");
   for (const worksheet of workbook.worksheets) finishSheet(worksheet);
   return new Uint8Array(await workbook.xlsx.writeBuffer());
@@ -120,7 +132,7 @@ function finishSheet(sheet: Worksheet) {
         lines = Math.max(lines, text.split("\n").reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / ((sheet.getColumn(column).width ?? 20) - 2))), 0));
         if (typeof cell.value === "number" && !cell.numFmt) cell.numFmt = '#,##0.###';
       });
-      row.height = Math.min(409, Math.max(30, lines * 16 + 8));
+      row.height = Math.min(120, Math.max(30, lines * 16 + 8));
       if (rowNumber % 2 === 0) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
     }
   });

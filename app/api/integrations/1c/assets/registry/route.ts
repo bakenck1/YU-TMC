@@ -14,9 +14,10 @@ export async function GET(request: Request) {
     const page = Number(params.get("page") ?? 1);
     const pageSize = Number(params.get("pageSize") ?? 50);
     const search = (params.get("search") ?? "").trim();
-    if (!Number.isSafeInteger(page) || page < 1 || page > 1_000_000 || ![50, 100].includes(pageSize) || search.length > 255) {
+    const scope = params.get("scope") ?? "active";
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1_000_000 || ![50, 100].includes(pageSize) || search.length > 255 || !["active", "all"].includes(scope)) {
       throw new ApplicationError("validation", "invalid_request");
     }
-    return Response.json(await getFixedAssetRegistryPage({ page, pageSize, search }), { headers });
+    return Response.json(await getFixedAssetRegistryPage({ page, pageSize, search, scope: scope as "active" | "all" }), { headers });
   } catch (error) { return applicationErrorResponse(error, headers); }
 }

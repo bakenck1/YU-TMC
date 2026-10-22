@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import OneCReconciliationManager from "@/components/OneCReconciliationManager";
 
+vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU" }) }));
+
 const BATCH_ID = "11111111-1111-4111-8111-111111111111";
 const currentBatch = { id: BATCH_ID, received_at: "2026-09-21T10:00:00Z", received_count: 1, state: "review_required", version: 1, source_filename: "full.xml", source_sha256: "c".repeat(64), request_id: "request-1" };
 

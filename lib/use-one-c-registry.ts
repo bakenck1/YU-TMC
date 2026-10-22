@@ -16,8 +16,9 @@ export function useOneCRegistry<T>(endpoint: string, revision?: string | null) {
     const requestId = ++generation.current;
     setBusy(true); setError(null);
     try {
+      const separator = endpoint.includes("?") ? "&" : "?";
       const params = new URLSearchParams({ page: String(number), pageSize: "50", search: searchValue.trim() });
-      const response = await fetch(`${endpoint}?${params}`, { credentials: "same-origin", cache: "no-store" });
+      const response = await fetch(`${endpoint}${separator}${params}`, { credentials: "same-origin", cache: "no-store" });
       if (!response.ok) throw new Error("registry_unavailable");
       const result = await response.json() as RegistryPage<T>;
       if (!Array.isArray(result.data) || !Number.isSafeInteger(result.total) || result.total < 0

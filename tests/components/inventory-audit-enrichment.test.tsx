@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import InventoryAuditEnrichment, { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
 
+const { appLanguage } = vi.hoisted(() => ({ appLanguage: { value: "ru" as "ru" | "kk" | "en" } }));
+vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: appLanguage.value, locale: appLanguage.value === "en" ? "en-US" : "ru-RU" }) }));
+
 const batchId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
 const plan = { runId, planHash: "a".repeat(64), counts: { ready: 1, unchanged: 0, skipped: 1 }, rows: [
@@ -13,9 +16,17 @@ const plan = { runId, planHash: "a".repeat(64), counts: { ready: 1, unchanged: 0
 const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); appLanguage.value = "ru"; });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("translates current-registry review and price status", async () => {
+    appLanguage.value = "en";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: { ...plan, runId: "current-registry", counts: { ready: 0, unchanged: 1, skipped: 0 }, rows: [{ ...plan.rows[0], changed: false, price: { currentUnitPrice: "100", nextUnitPrice: "100", changed: false, status: "missing" } }] } })));
+    render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+    expect(await screen.findByText("No price in 1C")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Update cards from 1C" })).toBeTruthy();
+  });
   it("shows the actual source name and structured number when an identity conflicts", async () => {
     const conflict = { ...plan.rows[0], eligible: false, changed: false, reason: "identity_conflict", siteNumber: "2411/0390",
       sourceDetails: [{ kind: "ОС", name: "Ноутбук Lenovo IdeaPad №2411/00390", inventoryNumber: "2411/0390", barcode: null }] };

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import OneCReconciliationManager from "@/components/OneCReconciliationManager";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit";
 
+vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU" }) }));
+
 const id = "11111111-1111-4111-8111-111111111111";
 const snapshot = (sha256: string) => ({ kind: "materials_api" as const, batchId: id, sha256, receivedAt: "2026-10-16T14:03:21Z", snapshotAt: "2026-10-16T14:03:08Z", rowCount: 5, materialCount: 3, positiveRows: 5, nonPositiveRows: 0 });
 const batch = (version: number) => ({ id, version, received_at: "2026-10-01T08:00:00Z",
