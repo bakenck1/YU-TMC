@@ -101,10 +101,10 @@ function sameOfficialSnapshot(left: readonly string[], right: readonly string[])
   return JSON.stringify(officialSnapshot(left)) === JSON.stringify(officialSnapshot(right));
 }
 
-function descriptionNumbers(value: string): string[] {
+function descriptionNumbers(value: string, formattedNumbers = false): string[] {
   // A model number in free text is not an identity claim. Explicit inventory
   // markers are checked, including their unabridged range/suffix evidence.
-  return extractExcelInventoryReferences(value).filter((reference) => !reference.numberIsUnmarked)
+  return [...extractExcelInventoryReferences(value), ...(formattedNumbers ? extractFormattedInventoryReferences(value) : [])].filter((reference) => !reference.numberIsUnmarked)
     .flatMap((reference) => [reference.inventoryNumber, reference.sourceInventoryNumber])
     .map(number).filter((value): value is string => Boolean(value));
 }
@@ -126,7 +126,7 @@ function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[],
   sourceBarcode?: string | null, descriptionBarcodes = false, structuredNumber?: string | null, formattedNumbers = false): "identity_missing" | "identity_conflict" | null {
   const anchor = identities[0];
   if (!anchor) return "identity_missing";
-  const claims = [...identities, ...descriptionNumbers(description), ...(descriptionBarcodes ? extractSourceBarcodeNumbers(description).map(number).filter((value): value is string => value !== null) : [])];
+  const claims = [...identities, ...descriptionNumbers(description, formattedNumbers), ...(descriptionBarcodes ? extractSourceBarcodeNumbers(description).map(number).filter((value): value is string => value !== null) : [])];
   const siteNumber = number(item.inventoryNumber);
   const officialBarcodes = item.officialBarcodes.map(barcode).filter((value): value is string => Boolean(value));
   const siteIdentities = [siteNumber, ...officialBarcodes].filter((value): value is string => Boolean(value));

@@ -27,6 +27,25 @@ test("formatted fields agree, but changed digits, zeros and complete suffixes st
   assert.equal(buildInventoryAuditEnrichmentPlan(audit.rows, [{ ...card, itemSection: "general" }], { allowDescriptionIdentity: true, formattedNumbers: true }).counts.ready, 1);
 });
 
+test("all marked formatted identifiers must agree before OS or MP updates", () => {
+  for (const [name, inventoryNumber] of [
+    ["Стол №1350.14445", card.inventoryNumber],
+    ["Стол №1350.14444; №1350.14445", null],
+    ["Стол №1350.14444; №13 50 / 14 445", null],
+  ] as const) {
+    const source = asset(name, inventoryNumber);
+    const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "MP", nomenclature: name, inventoryNumber: inventoryNumber ?? "", explicitInventoryNumber: inventoryNumber, endingBalance: "1" };
+    for (const audit of [
+      buildInventorySourceAudit([card], [{ externalId: "asset", asset: source }], [], [], options),
+      buildInventorySourceAudit([card], [], [material], [], options),
+    ]) {
+      const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [{ ...card, itemSection: "general", status: "active" }], { allowDescriptionIdentity: true, formattedNumbers: true });
+      assert.equal(plan.rows[0].eligible, false);
+      assert.equal(plan.rows[0].reason, "identity_conflict");
+    }
+  }
+});
+
 test("range members are found in MP without inventing or expanding range prefixes", () => {
   const cards = ["206/1832", "206/1835", "206/1837", "206/1838", "0206/1835"].map((number, index) => ({ ...card, id: `c${index}`, inventoryNumber: number }));
   const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "MP", nomenclature: "Холодильник №206/1832-1837", inventoryNumber: "", endingBalance: "4" };
