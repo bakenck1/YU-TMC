@@ -15,7 +15,9 @@ export async function GET(request: Request) {
     return new Response(Buffer.from(bytes), { headers: {
       ...headers,
       "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "content-disposition": `attachment; filename="1c-inventory-${snapshot.analytics.calculatedAt.slice(0, 10)}.xlsx"`,
+      "content-length": String(bytes.byteLength),
+      "x-content-type-options": "nosniff",
+      "content-disposition": `attachment; filename="1c-inventory-${snapshot.analytics.calculatedAt.replace(/[:.]/gu, "-")}.xlsx"`,
     } });
   } catch (error) { return applicationErrorResponse(error, headers); }
 }

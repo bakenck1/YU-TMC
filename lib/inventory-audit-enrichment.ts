@@ -12,6 +12,8 @@ export type InventoryAuditEnrichmentItem = {
   itemSection: string;
   archivedAt?: string | Date | null;
   quantity?: number;
+  unitPrice?: string;
+  status?: string;
 };
 
 export type InventoryAuditEnrichmentReason = "confirmed" | "unchanged" | "item_not_found" | "item_ineligible" | "item_changed" | "sources_missing" | "source_ambiguous" | "source_reused" | "code_missing" | "code_invalid" | "code_conflict" | "identity_conflict" | "identity_missing" | "name_invalid" | "shared_number_conflict";
@@ -34,6 +36,12 @@ export type InventoryAuditEnrichmentRow = {
   siteNumber?: string;
   identityEvidence?: string;
   searchText?: string;
+  sourceDetails?: Array<{ kind: "ОС" | "МП"; name: string; inventoryNumber: string | null; barcode: string | null }>;
+  price?: {
+    currentUnitPrice: string; nextUnitPrice: string; changed: boolean;
+    status: "ready" | "unchanged" | "missing" | "invalid" | "ambiguous" | "unconfirmed";
+    source?: "os_initial_cost" | "material_unit_price";
+  };
   responsibility?: {
     currentUserId: string | null; currentName: string | null; nextUserId: string | null; nextName: string | null;
     changed: boolean; status: "ready" | "unchanged" | "not_allowed" | "ambiguous" | "user_missing" | "user_ambiguous" | "pending_transfer" | "unavailable" | "unconfirmed";
@@ -172,6 +180,10 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       eligible: false, changed: false, reason: "sources_missing",
       ...(options.allowDescriptionIdentity ? {
         siteNumber: row.siteNumber,
+        sourceDetails: [...new Map([
+          ...row.oneC.map(entry => ({ kind: "ОС" as const, name: entry.name, inventoryNumber: entry.inventoryNumber, barcode: entry.barcode })),
+          ...row.excel.map(entry => ({ kind: "МП" as const, name: entry.nomenclature, inventoryNumber: entry.explicitInventoryNumber ?? null, barcode: entry.barcode ?? null })),
+        ].map(entry => [JSON.stringify(entry), entry])).values()],
         searchText: [row.siteNumber, ...row.siteBarcodes.map(entry => entry.value),
           ...row.oneC.flatMap(entry => [entry.name, entry.code, entry.inventoryNumber, entry.barcode]),
           ...row.excel.flatMap(entry => [entry.nomenclature, entry.oneCCode, entry.inventoryNumber, entry.barcode])].filter(Boolean).join("\n"),
@@ -183,7 +195,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       return result;
     };
     if (!item) return skip("item_not_found");
-    if (item.archivedAt || (item.itemSection !== "general" && !(options.includeIt && item.itemSection === "it"))) return skip("item_ineligible");
+    if (item.archivedAt || (item.status !== undefined && item.status !== "active") || (item.itemSection !== "general" && !(options.includeIt && item.itemSection === "it"))) return skip("item_ineligible");
     if (item.version !== row.itemVersion || item.name !== row.itemName
       || inventoryAuditNumberKey(item.inventoryNumber) !== inventoryAuditNumberKey(row.siteNumber)
       || !sameOfficialSnapshot(item.officialBarcodes, row.siteBarcodes.filter((entry) => entry.kind === "official").map((entry) => entry.value))) return skip("item_changed");

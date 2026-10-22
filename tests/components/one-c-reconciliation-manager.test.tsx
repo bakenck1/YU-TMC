@@ -127,15 +127,14 @@ describe("1C reconciliation manager", () => {
   it("replaces XLS upload with a read-only materials API registry", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [], page: 1, pageSize: 50, total: 14364 }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    render(<OneCReconciliationManager initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} initialMaterials={{
+    render(<OneCReconciliationManager showMaterials initialBatches={{ data: [], page: 1, pageSize: 50, total: 0 }} initialMaterials={{
       kind: "materials_api", batchId: BATCH_ID, sha256: "a".repeat(64), receivedAt: "2026-10-16T14:03:21Z", snapshotAt: "2026-10-16T14:03:08Z",
       rowCount: 14364, materialCount: 8882, positiveRows: 14000, nonPositiveRows: 364,
     }} />);
     expect(screen.queryByLabelText("Файл материальной ведомости XLS")).toBeNull();
     expect(screen.queryByRole("button", { name: "Загрузить Excel" })).toBeNull();
-    expect(screen.getByText("14364")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Найти предмет" }));
-    await screen.findByText("Найдено строк: 14364.");
+    await screen.findByText("14 364", { normalizer: value => value.replace(/\s/gu, " ") });
+    expect(screen.getByText("Только с положительным остатком")).toBeTruthy();
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/integrations/1c/materials/registry?");
     expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
   });

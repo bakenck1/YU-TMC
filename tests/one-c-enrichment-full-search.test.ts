@@ -82,3 +82,38 @@ test("responsibility-only changes count as ready once, and matching existing own
   assert.deepEqual(data.plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
   assert.equal(data.plan.rows[0].responsibility?.nextUserId, "bau");
 });
+
+test("explicit full 1C names map to their uniquely identified short site names", () => {
+  const users = [user("bau", "Бауыржан Тынымбаев"), user("ermek", "Нурмаганбет Ермек Талантович")];
+  assert.equal(responsibility("Тынымбаев Бауыржан Анесович", users).rows[0].responsibility?.nextUserId, "bau");
+  assert.equal(responsibility("Нұрмағанбет Ермек Талантұлы", users).rows[0].responsibility?.nextUserId, "ermek");
+  assert.equal(responsibility("Тынымбаев Бауыржан Анесович", [...users, user("namesake", "Тынымбаев Бауыржан Анесович")]).rows[0].responsibility?.status, "user_ambiguous");
+  assert.equal(responsibility("Тынымбаев Бауыржан", [user("other", "Бауыржан Другой")]).rows[0].responsibility?.changed, false);
+});
+
+test("contradictory zero padding in the 1C field and name cannot silently authorize a card update", () => {
+  const card = { ...item, inventoryNumber: "2411/0390", officialBarcodes: [] };
+  const source = { ...asset("Ноутбук Lenovo IdeaPad №2411/00390"), inventoryNumber: "2411/0390" };
+  const audit = buildInventorySourceAudit([card], [{ externalId: "asset", asset: source, origins: ["current_registry"] }], [], [], { descriptionBarcodes: true });
+  const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [{ ...card, itemSection: "general" }], { allowDescriptionIdentity: true });
+  assert.equal(plan.rows[0].reason, "identity_conflict");
+  assert.deepEqual(plan.rows[0].sourceDetails, [{ kind: "ОС", name: "Ноутбук Lenovo IdeaPad №2411/00390", inventoryNumber: "2411/0390", barcode: null }]);
+  assert.equal(plan.rows[0].eligible, false);
+  assert.equal(plan.counts.ready, 0);
+  addOneCResponsibilityProposals(plan, audit.rows, new Map([["asset", "Тынымбаев Бауыржан Анесович"]]), [user("bau", "Бауыржан Тынымбаев")],
+    [{ itemId: card.id, userId: null, name: null, pendingTransfer: false, unavailable: false }]);
+  assert.match(plan.rows[0].searchText!, /Тынымбаев Бауыржан Анесович/u);
+  assert.equal(plan.rows[0].responsibility?.changed, false);
+  assert.equal(plan.rows[0].responsibility?.status, "unconfirmed");
+});
+
+test("owners of conflicting MP candidates remain searchable without authorizing an assignment", () => {
+  const data = planFor("Принтер №1350/14444");
+  data.plan.rows[0].eligible = false;
+  data.plan.rows[0].changed = false;
+  data.plan.rows[0].reason = "identity_conflict";
+  data.evidence[0].excel = [{ rowNumber: 1, inventoryNumber: "different", nomenclature: "Другая запись", endingBalance: "1", responsibleName: "Нұрмағанбет Ермек Талантұлы" }];
+  addOneCResponsibilityProposals(data.plan, data.evidence, new Map(), people, [{ itemId: item.id, userId: null, name: null, pendingTransfer: false, unavailable: false }]);
+  assert.match(data.plan.rows[0].searchText!, /Нұрмағанбет Ермек Талантұлы/u);
+  assert.equal(data.plan.rows[0].responsibility?.changed, false);
+});

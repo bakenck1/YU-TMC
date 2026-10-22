@@ -56,7 +56,7 @@ export async function getMaterialRegistryMetadata(db: Database = getDatabasePool
 
 export async function getMaterialRegistryPage(query: { page: number; pageSize: number; search?: string }, db: Database = getDatabasePool()) {
   const values: unknown[] = [];
-  const where = ["i.superseded_at is null"];
+  const where = ["i.superseded_at is null", "(i.payload->>'quantity')::numeric > 0"];
   if (query.search) {
     values.push(`%${query.search.replace(/[\\%_]/gu, character => `\\${character}`)}%`);
     where.push(`(i.material_code ilike $1 escape '\\' or i.material_external_id::text ilike $1 escape '\\'

@@ -112,6 +112,7 @@ test("registry search uses bound parameters, escapes wildcards and returns total
   let parameters: unknown[] = [];
   const db = { query: async (sql: string, values: unknown[]) => {
     assert.ok(sql.includes("superseded_at is null"));
+    assert.ok(sql.includes("(i.payload->>'quantity')::numeric > 0"), "the displayed registry includes only positive balances");
     assert.ok(!sql.includes("attack%"));
     parameters = values;
     return { rows: [{ data: [], total: 123 }] };

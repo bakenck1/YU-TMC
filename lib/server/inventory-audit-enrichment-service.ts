@@ -13,6 +13,7 @@ import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
 import type { ExcelSourceRow } from "@/lib/inventory-source-audit";
 import { addOneCResponsibilityProposals, ONE_C_ALLOWED_RESPONSIBLES } from "@/lib/one-c-enrichment-responsibility";
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
+import { addOneCPriceProposals } from "@/lib/one-c-enrichment-price";
 import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 
 type ApplyInput = { runId: string; planHash: string };
@@ -60,10 +61,12 @@ export class InventoryAuditEnrichmentService {
       for (const row of plan.rows.filter((entry) => entry.eligible && entry.changed)) {
         const rename = row.nextName !== row.currentName;
         // A code-only change must not invoke the UPDATE OF name identity trigger.
-        const updated = await client.query(`update "yu_inventory"."items" set ${rename ? "name=$5," : ""}one_c_code=$3,
-          version=version+1,updated_at=now(),updated_by=$4
-          where id=$1 and version=$2 and archived_at is null ${batchId === null ? "" : "and item_section='general'"} returning id`,
-        [row.itemId, row.itemVersion, row.nextCode, actor.userId, ...(rename ? [row.nextName] : [])]);
+        const parameters: unknown[] = [row.itemId, row.itemVersion, row.nextCode, actor.userId];
+        const assignments = ["one_c_code=$3", "version=version+1", "updated_at=now()", "updated_by=$4"];
+        if (rename) { parameters.push(row.nextName); assignments.push(`name=$${parameters.length}`); }
+        if (batchId === null && row.price?.changed) { parameters.push(row.price.nextUnitPrice); assignments.push(`unit_price=$${parameters.length}`); }
+        const updated = await client.query(`update "yu_inventory"."items" set ${assignments.join(",")}
+          where id=$1 and version=$2 and archived_at is null ${batchId === null ? "and status='active'" : "and item_section='general'"} returning id`, parameters);
         if (updated.rowCount !== 1) throw stale();
         if (batchId === null && row.responsibility?.changed) {
           const repository = createPostgresInventoryResponsibilityRepositories(client).responsibility;
@@ -71,6 +74,10 @@ export class InventoryAuditEnrichmentService {
           const targetId = row.responsibility.nextUserId;
           if (!state || state.responsibleUserId !== row.responsibility.currentUserId || !targetId
             || state.itemStatus === "decommissioned" || await repository.findPendingTransfer(row.itemId)) throw stale();
+          const pendingTmc = await client.query(`select 1 from yu_inventory.tmc_transfer_request_items i
+            join yu_inventory.tmc_transfer_requests r on r.id=i.request_id
+            where i.item_id=$1 and i.result='pending' and r.status='pending' limit 1`, [row.itemId]);
+          if (pendingTmc.rowCount) throw stale();
           const target = await repository.findAuthorizationUserForUpdate(targetId);
           if (!target || !target.active || target.deletedAt || !isInventoryResponsibleRole(target.role)) throw stale();
           const occurredAt = new Date();
@@ -91,8 +98,8 @@ export class InventoryAuditEnrichmentService {
           (id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,before_values,after_values,metadata)
           values($1,$2,'admin','item',$3,'item.audit_enrichment',$4::jsonb,$5::jsonb,$6::jsonb)`,
         [randomUUID(), actor.userId, row.itemId,
-          JSON.stringify({ name: row.currentName, oneCCode: row.currentCode, version: row.itemVersion, ...(row.responsibility ? { responsibleUserId: row.responsibility.currentUserId } : {}) }),
-          JSON.stringify({ name: row.nextName, oneCCode: row.nextCode, version: row.itemVersion + 1, ...(row.responsibility ? { responsibleUserId: row.responsibility.nextUserId } : {}) }),
+          JSON.stringify({ name: row.currentName, oneCCode: row.currentCode, version: row.itemVersion, ...(row.price ? { unitPrice: row.price.currentUnitPrice } : {}), ...(row.responsibility ? { responsibleUserId: row.responsibility.currentUserId } : {}) }),
+          JSON.stringify({ name: row.nextName, oneCCode: row.nextCode, version: row.itemVersion + 1, ...(row.price ? { unitPrice: row.price.nextUnitPrice } : {}), ...(row.responsibility ? { responsibleUserId: row.responsibility.nextUserId } : {}) }),
           JSON.stringify({ source: "inventory_audit_enrichment", batchId, runId: plan.runId, planHash: plan.planHash,
             scope: batchId === null ? "current_registry" : "selected_batch",
             externalId: row.externalId, excelRowNumber: row.excelRowNumber,
@@ -103,18 +110,18 @@ export class InventoryAuditEnrichmentService {
 
   /** One live comparison across all OS and MP, independent of batch analysis/history. */
   private async currentPlan(client: PoolClient, lock = false) {
-    const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,
+    const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,i.status,i.unit_price,i.quantity,
       coalesce((select array_agg(b.original_value order by b.original_value) from yu_inventory.barcode_registry b
         where b.item_id=i.id and b.kind='official'),'{}') as barcodes,
       coalesce((select array_agg(g.barcode_value order by g.barcode_value) from yu_inventory.local_item_groups g
         where g.item_id=i.id and g.status='active'),'{}') as local_barcodes
       from yu_inventory.items i order by i.id ${lock ? "for update of i" : ""}`);
-    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox order by external_id`);
+    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox where payload->>'status' = 'Принято к учёту' order by external_id`);
     const materials = await readMaterialRegistry(client);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links order by external_id`);
     const codes = new Map<string, string[]>();
     for (const link of links.rows) if (link.source_code) codes.set(link.item_id, [...(codes.get(link.item_id) ?? []), link.source_code]);
-    const currentCards = cards.rows.filter(row => row.archived_at == null);
+    const currentCards = cards.rows.filter(row => row.archived_at == null && row.status === "active");
     const audit = buildInventorySourceAudit(currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, inventoryNumberKind: row.inventory_number_kind,
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
@@ -138,13 +145,20 @@ export class InventoryAuditEnrichmentService {
     const items: InventoryAuditEnrichmentItem[] = currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes,
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
+      status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
     const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p
       join yu_inventory.users u on u.id=p.responsible_user_id where p.ended_at is null order by p.id ${lock ? "for update of p" : ""}`);
-    const pending = await client.query(`select id,item_id,version from yu_inventory.transfers where status='pending_current_owner' order by id`);
+    const pending = await client.query(`select 'legacy' as source,id,item_id,version,null::uuid as request_id,null::integer as request_version
+      from yu_inventory.transfers where status='pending_current_owner'
+      union all
+      select 'tmc' as source,i.id,i.item_id,i.version,r.id as request_id,r.version as request_version
+      from yu_inventory.tmc_transfer_request_items i join yu_inventory.tmc_transfer_requests r on r.id=i.request_id
+      where i.result='pending' and r.status='pending'
+      order by source,id`);
     const byPeriod = new Map(periods.rows.map(row => [row.item_id, row]));
     const pendingIds = new Set(pending.rows.map(row => row.item_id));
     const status = await client.query(`select id,status from yu_inventory.items order by id`);
@@ -153,6 +167,7 @@ export class InventoryAuditEnrichmentService {
       users.rows.map(row => ({ id: String(row.id), fullName: String(row.full_name), role: row.role, active: row.is_active, deleted: row.deleted_at != null })),
       currentCards.map(row => ({ itemId: String(row.id), userId: byPeriod.get(row.id)?.responsible_user_id ?? null,
         name: byPeriod.get(row.id)?.full_name ?? null, pendingTransfer: pendingIds.has(row.id), unavailable: unavailable.has(row.id) })));
+    addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items);
     const runId = "current-registry";
     const planHash = createHash("sha256").update(JSON.stringify({
       scope: runId, algorithm: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION,
@@ -161,8 +176,8 @@ export class InventoryAuditEnrichmentService {
       responsibility: { users: users.rows, periods: periods.rows, pending: pending.rows, status: status.rows },
     })).digest("hex");
     return { runId, planHash, ...plan, allowedResponsibles: ONE_C_ALLOWED_RESPONSIBLES, sources: {
-      fixedAssets: registry.rows.length, materials: materials.metadata.materialCount,
-      materialBalances: materials.metadata.rowCount, cards: currentCards.length,
+      fixedAssets: registry.rows.length, materials: new Set(materials.rows.map(row => row.oneCCode)).size,
+      materialBalances: materials.rows.length, cards: currentCards.length,
     } };
   }
 
