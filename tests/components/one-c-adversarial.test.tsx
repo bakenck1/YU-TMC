@@ -28,7 +28,7 @@ async function open() {
   render(<OneCReconciliationManager initialBatches={{ data: [batch(1)], page: 1, pageSize: 50, total: 1 }} initialMaterials={snapshot("a".repeat(64))} />);
   fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
   await screen.findByText(/Партия ОС:.*версия 1/);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
 }
 
 describe("adversarial 1C analysis regressions", () => {
@@ -52,8 +52,8 @@ describe("adversarial 1C analysis regressions", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
     await waitFor(() => expect(screen.queryByText(/Точные совпадения с ТМЦ: 2/)).not.toBeNull());
     expect(screen.queryByRole("alert")?.textContent ?? "").not.toContain("Dry-run не выполнен");
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/analyze"))).toHaveLength(1);
@@ -69,7 +69,7 @@ describe("adversarial 1C analysis regressions", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     expect((await screen.findByRole("alert")).textContent).toContain("API 1С");
     expect(screen.getByText(/Партия ОС:.*версия 1/)).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/batches/${id}`))).toHaveLength(2);
@@ -116,7 +116,7 @@ describe("adversarial 1C analysis regressions", () => {
     }));
     await open();
     fireEvent.change(screen.getByRole("combobox", { name: "Источник сводки" }), { target: { value: "1c" } });
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     await screen.findByText(/Партия ОС:.*версия 2/);
     await act(async () => { oldAudit.resolve(response(audit(1))); await oldAudit.promise; });
     expect(screen.queryByText(/Партия ОС:.*версия 1/)).toBeNull();
@@ -164,7 +164,7 @@ describe("adversarial 1C analysis regressions", () => {
       return response(rows(version === 2 ? "Current matching item" : undefined));
     }));
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     fireEvent.click(screen.getByRole("button", { name: "Показать активные совпадения" }));
     version = 2;
     await act(async () => { post.resolve(response({ analysis: {} })); await post.promise; });

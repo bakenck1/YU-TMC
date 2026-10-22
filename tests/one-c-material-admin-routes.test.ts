@@ -13,6 +13,8 @@ function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (.
     "@/lib/server/http/error-response": { applicationErrorResponse },
     "@/lib/server/security/request-user": { requirePermission: authenticate },
     "@/lib/server/one-c-material-registry": { getMaterialRegistryPage: query, getMaterialRegistryMetadata: query },
+    "@/lib/server/one-c-analytics-service": { getOneCAnalyticsSnapshot: query },
+    "@/lib/server/excel/one-c-analytics-excel": { exportOneCAnalyticsExcel: async () => new Uint8Array([80, 75, 3, 4]) },
   };
   new Function("require", "exports", source)((id: string) => {
     assert.ok(id in deps, `Unexpected dependency: ${id}`);
@@ -28,6 +30,23 @@ test("material registry requires administrator permission before reading private
   assert.equal(response.status, 403);
   assert.equal(reads, 0);
   assert.match(response.headers.get("cache-control")!, /no-store/);
+});
+
+test("full analytics export checks permission before reading and returns a private XLSX attachment", async () => {
+  let reads = 0;
+  const query = async () => { reads++; return { analytics: { calculatedAt: "2026-10-22T05:00:00Z" } }; };
+  const request = new Request("https://inventory.example/api/integrations/1c/analytics/export");
+  const denied = loadRoute("app/api/integrations/1c/analytics/export/route.ts", async () => { throw new ApplicationError("forbidden", "forbidden"); }, query);
+  assert.equal((await denied.GET(request)).status, 403);
+  assert.equal(reads, 0);
+  const allowed = loadRoute("app/api/integrations/1c/analytics/export/route.ts", async () => ({}), query);
+  const response = await allowed.GET(request);
+  assert.equal(response.status, 200);
+  assert.equal(reads, 1);
+  assert.match(response.headers.get("cache-control")!, /no-store/);
+  assert.match(response.headers.get("content-type")!, /spreadsheetml.sheet/);
+  assert.equal(response.headers.get("content-disposition"), 'attachment; filename="1c-inventory-2026-10-22.xlsx"');
+  assert.equal((await response.arrayBuffer()).byteLength, 4);
 });
 
 test("material registry validates bounded pagination and search before passing parameters to its reader", async () => {

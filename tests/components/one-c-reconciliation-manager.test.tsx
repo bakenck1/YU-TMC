@@ -53,14 +53,14 @@ describe("1C reconciliation manager", () => {
     render(<OneCReconciliationManager initialBatches={{ data: [{ ...currentBatch, version: 1 }], page: 1, pageSize: 50, total: 1 }} />);
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByText(/Точные совпадения с ТМЦ: 11/);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     await screen.findByText(/Точные совпадения с ТМЦ: 12/);
     await waitFor(() => expect(screen.getByRole("button", { name: "Открыть сверку" }).hasAttribute("disabled")).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByText(/Точные совпадения с ТМЦ: 12/);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     await screen.findByText(/Точные совпадения с ТМЦ: 13/);
     expect(postedVersions).toEqual([11, 12]);
     expect(screen.queryByRole("alert")).toBeNull();
@@ -81,8 +81,8 @@ describe("1C reconciliation manager", () => {
     render(<OneCReconciliationManager initialBatches={{ data: [currentBatch], page: 1, pageSize: 50, total: 1 }} />);
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByRole("textbox", { name: "Поиск по строкам" });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("Партия изменилась"));
     await screen.findByText(/Точные совпадения с ТМЦ: 2/);
     expect(posts).toBe(1);
@@ -100,8 +100,8 @@ describe("1C reconciliation manager", () => {
     render(<OneCReconciliationManager initialBatches={{ data: [currentBatch], page: 1, pageSize: 50, total: 1 }} />);
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByRole("textbox", { name: "Поиск по строкам" });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Dry-run выполнен, но результаты не удалось загрузить. Откройте сверку заново.");
   });
 
@@ -119,8 +119,8 @@ describe("1C reconciliation manager", () => {
     render(<OneCReconciliationManager initialBatches={{ data: [currentBatch], page: 1, pageSize: 50, total: 1 }} />);
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByRole("textbox", { name: "Поиск по строкам" });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Запустить dry-run" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining(message));
   });
 
@@ -134,7 +134,7 @@ describe("1C reconciliation manager", () => {
     expect(screen.queryByLabelText("Файл материальной ведомости XLS")).toBeNull();
     expect(screen.queryByRole("button", { name: "Загрузить Excel" })).toBeNull();
     expect(screen.getByText("14364")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Показать материалы 1С" }));
+    fireEvent.click(screen.getByRole("button", { name: "Найти предмет" }));
     await screen.findByText("Найдено строк: 14364.");
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/integrations/1c/materials/registry?");
     expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
@@ -290,7 +290,7 @@ describe("1C reconciliation manager", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
     await screen.findByText("Наш моноблок");
-    fireEvent.click(screen.getByRole("button", { name: "Запустить dry-run" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     await screen.findByText(/Точные совпадения с ТМЦ: 1/);
     expect(screen.getByText(/Совпало: Код 1С, Инвентарный номер/)).toBeTruthy();
     expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("match=active");

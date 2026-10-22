@@ -8,7 +8,7 @@ import OneCDecommissionedAssetsView from "@/components/OneCDecommissionedAssetsV
 import DecommissionedRegistryTabs from "@/components/DecommissionedRegistryTabs";
 import SettingsIntegrationCard from "@/components/SettingsIntegrationCard";
 import InventorySourceAuditPanel from "@/components/InventorySourceAuditPanel";
-import MaterialSnapshotUploadPanel from "@/components/MaterialSnapshotUploadPanel";
+import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
 
 const meta = {
   title: "Integrations/1C Reconciliation",
@@ -24,9 +24,9 @@ export const Empty: Story = {
   },
 };
 
-export const MaterialUpload: Story = {
+export const MaterialRegistry: Story = {
   args: { initialBatches: { data: [], page: 1, pageSize: 50, total: 0 } },
-  render: () => <MaterialSnapshotUploadPanel initialSnapshot={null} onUploaded={() => undefined} />,
+  render: () => <MaterialRegistryPanel source={null} />,
 };
 
 export const InventoryAudit: Story = {

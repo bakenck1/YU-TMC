@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import InventoryAuditEnrichment from "@/components/InventoryAuditEnrichment";
+import InventoryAuditEnrichment, { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
 
 const batchId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
@@ -16,6 +16,56 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("searches beyond the rendered first 100 rows and shows limited responsibility proposals", async () => {
+    const rows = Array.from({ length: 151 }, (_, index) => ({ ...plan.rows[0], itemId: `item-${index}`, currentName: `Предмет ${index}`, nextName: `Новое название ${index}`, siteNumber: `1350/${index}`,
+      searchText: index === 150 ? "YUB-1350/99150" : "",
+      responsibility: { currentUserId: null, currentName: null, nextUserId: "person", nextName: "Бауыржан Анесович", changed: true, status: "ready" as const, sourceName: "Бауыржан Анесович" } }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: { ...plan, runId: "current-registry", counts: { ready: 151, unchanged: 0, skipped: 0 }, rows } })));
+    render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    await screen.findByRole("button", { name: "Применить 151 обновлений" });
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(101);
+    const search = screen.getByRole("textbox", { name: "Поиск по всем карточкам сверки" });
+    fireEvent.change(search, { target: { value: "YUB-1350/99150" } });
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Предмет 150" })).toBeTruthy();
+    expect(screen.getByText("Будет назначен")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Применить 151 обновлений" })).toBeTruthy();
+    fireEvent.change(search, { target: { value: "нет такого" } });
+    expect(screen.getByText("В этой группе нет карточек.")).toBeTruthy();
+  });
+  it("previews and applies the full OS and MP registry directly, without a batch or dry-run", async () => {
+    const currentPlan = { ...plan, runId: "current-registry", sources: { fixedAssets: 100, materials: 40, materialBalances: 55, cards: 2 },
+      rows: [{ ...plan.rows[0], nameSource: "materials_api" }, plan.rows[1]] };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: currentPlan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
+    const onApplied = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryCurrentEnrichment onApplied={onApplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    const apply = await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(fetcher.mock.calls[0][0]).toBe("/api/integrations/1c/enrichment");
+    expect(fetcher.mock.calls[0][1].method).toBe("GET");
+    expect(screen.getByText("ОС проверено")).toBeTruthy();
+    expect(screen.getByText("МП проверено")).toBeTruthy();
+    expect(screen.getByText("100")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("МП")).toBeTruthy();
+    fireEvent.click(apply);
+    expect((await screen.findByRole("status")).textContent).toBe("Обновлено карточек: 1. Без изменений: 0. Пропущено: 1.");
+    expect(fetcher.mock.calls[1][0]).toBe("/api/integrations/1c/enrichment");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ runId: "current-registry", planHash: plan.planHash });
+    expect(onApplied).toHaveBeenCalledOnce();
+  });
+
+  it("clears a stale full-registry plan instead of applying it again", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: { ...plan, runId: "current-registry" } }))
+      .mockResolvedValueOnce(reply({ error: "inventory_audit_enrichment_stale" }, 409));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Повторите проверку обновлений");
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+  });
   it("shows the chosen name source and the retained code when only a name is confirmed", async () => {
     const nameOnlyPlan = { ...plan, counts: { ready: 2, unchanged: 0, skipped: 0 }, rows: [
       { ...plan.rows[0], nameSource: "1c", codeStatus: "code_invalid", nextCode: "00009999" },

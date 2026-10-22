@@ -68,6 +68,7 @@ const ru = {
   "nav.inspections": "Проверки",
   "nav.locations": "Локации",
   "nav.analytics": "Аналитика",
+  "nav.oneC": "Интеграция 1С",
   "nav.users": "Пользователи",
   "nav.settings": "Настройки",
   "nav.profile": "Профиль",
@@ -1211,6 +1212,7 @@ export type TranslationParams = Record<string, string | number>;
 
 const kk: Record<TranslationKey, string> = {
   ...ru,
+  "nav.oneC": "1С интеграциясы",
   "nav.mobileItems": "ТМҚ",
   "nav.mobileScan": "Сканер",
   "nav.mobilePassports": "Паспорттар",
@@ -1955,6 +1957,7 @@ const kk: Record<TranslationKey, string> = {
 
 const en: Record<TranslationKey, string> = {
   ...ru,
+  "nav.oneC": "1C integration",
   "nav.mobileItems": "Items",
   "nav.mobileScan": "Scan QR",
   "nav.mobilePassports": "Passports",

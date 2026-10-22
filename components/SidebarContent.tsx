@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ClipboardCheck,
   ClipboardList,
+  Database,
   FileCheck,
   LayoutDashboard,
   LoaderCircle,
@@ -52,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/room-passports", labelKey: "passport.title", icon: FileCheck },
   { href: "/inventory/inspections", labelKey: "nav.inspections", icon: ClipboardCheck },
   { href: "/analytics", labelKey: "nav.analytics", icon: BarChart3 },
+  { href: "/integrations/1c", labelKey: "nav.oneC", icon: Database },
   { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];

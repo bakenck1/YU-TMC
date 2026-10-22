@@ -47,7 +47,7 @@ export async function readMaterialRegistry(db: Database = getDatabasePool()) {
     rowCount: stored.length, materialCount: new Set(stored.map(row => (row.payload as OneCMaterial).code)).size,
     positiveRows: rows.length, nonPositiveRows: stored.length - rows.length,
   };
-  return { metadata, rows };
+  return { metadata, rows, records: stored.map(row => ({ key: String(row.row_key), material: row.payload as OneCMaterial })) };
 }
 
 export async function getMaterialRegistryMetadata(db: Database = getDatabasePool()) {

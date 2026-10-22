@@ -49,6 +49,8 @@ describe("inventory audit counts and source explanations", () => {
   it("keeps old Excel evidence explicitly historical and cannot apply it as a current API audit", () => {
     render(<InventorySourceAuditPanel batchId="batch" audit={{ ...page, run: { ...page.run, material_source: null } }} busy={false} onLoad={vi.fn()} />);
     expect(screen.getByRole("alert").textContent).toContain("Историческая сводка");
-    expect(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }).hasAttribute("disabled")).toBe(true);
+    expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("1988")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });
