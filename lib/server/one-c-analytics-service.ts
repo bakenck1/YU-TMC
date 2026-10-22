@@ -28,7 +28,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id where p.item_id=i.id and p.ended_at is null) as responsible_name,
       coalesce((select array_agg(original_value) from yu_inventory.barcode_registry where item_id=i.id and kind='official'),'{}') as official_barcodes,
       coalesce((select array_agg(barcode_value) from yu_inventory.local_item_groups where item_id=i.id and status='active'),'{}') as local_barcodes
-      from yu_inventory.items i where archived_at is null and i.status='active' order by i.id`);
+      from yu_inventory.items i where archived_at is null order by i.id`);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links`);
     const clock = await client.query("select transaction_timestamp() as calculated_at");
     await client.query("commit");
@@ -40,16 +40,15 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.official_barcodes,
       localBarcodes: row.local_barcodes, sourceCodes: codes.get(row.id) ?? [],
     }));
-    const sourceAssets = assets.rows
-      .filter(row => (row.payload as OneCFixedAsset).status === "Принято к учёту")
-      .map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] }));
+    const registryAssets = assets.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] }));
+    const sourceAssets = registryAssets.filter(row => row.asset.status === "Принято к учёту");
     const materialRecords = materials.records.filter(row => Number(row.material.quantity) > 0);
     const activeMaterials = {
       ...materials.metadata, rowCount: materialRecords.length,
       materialCount: new Set(materialRecords.map(row => row.material.code)).size,
       positiveRows: materialRecords.length, nonPositiveRows: 0,
     };
-    const audit = buildInventorySourceAudit(auditItems, sourceAssets, materials.rows, links.rows.map(row => ({ externalId: row.external_id, itemId: row.item_id })), { descriptionBarcodes: true });
+    const audit = buildInventorySourceAudit(auditItems, registryAssets, materials.rows, links.rows.map(row => ({ externalId: row.external_id, itemId: row.item_id })), { descriptionBarcodes: true, formattedNumbers: true });
     const dates = assets.rows.map(row => new Date(row.last_seen_at ?? row.received_at).valueOf()).filter(Number.isFinite);
     const analytics: OneCAnalytics = {
       calculatedAt: new Date(clock.rows[0].calculated_at).toISOString(),
@@ -63,7 +62,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       responsibleName: row.responsible_name as string | null,
     }));
     return {
-      analytics, materials: activeMaterials, assets: sourceAssets, materialRecords,
+      analytics, materials: activeMaterials, assets: sourceAssets, registryAssets, materialRecords,
       rows: audit.rows,
       inventory,
     };

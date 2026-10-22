@@ -15,27 +15,28 @@ test("categories partition cards while temporary numbers remain independent", ()
     row({ itemId: "both", siteNumber: "TMP-1", siteBarcodes: [{ value: "3", kind: "official" }], oneC: [{ ...asset, externalId: "both-os", inventoryNumber: "3" }], excel: [{ ...material, rowNumber: 3, sourceKey: "both-mp", explicitInventoryNumber: "3", inventoryNumber: "3" }], numberKind: "temporary" }),
     row({ itemId: "weak", oneC: [{ ...asset, externalId: "weak", inventoryNumber: "1-2", matchedBy: ["number_suffix"] }] }), row({ itemId: "missing", result: "temporary", numberKind: "temporary" }),
   ], ["asset", "both-os", "weak", "unmatched", "unmatched"], ["balance", "balance2", "both-mp", "other"]);
-  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 1, temporary: 2, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
+  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 0, temporary: 2, temporaryUnmatched: 1, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
 });
 
-test("code-only candidates, contradicting full fields and multiple OS identities remain unconfirmed", () => {
+test("code alone does not prove presence, while a full identifier does not require choosing an update record", () => {
   const summary = summarizeOneCAudit([
     row({ itemId: "code", oneC: [{ ...asset, externalId: "code-only", inventoryNumber: null, matchedBy: ["code"] }] }),
     row({ itemId: "barcode-conflict", oneC: [{ ...asset, externalId: "contradiction", barcode: "999", matchedBy: ["inventory_number"] }] }),
     row({ itemId: "multiple", oneC: [{ ...asset, externalId: "a" }, { ...asset, externalId: "b" }] }),
     row({ itemId: "mp-code", excel: [{ ...material, inventoryNumber: "", explicitInventoryNumber: null, matchedBy: ["code"] }] }),
   ], [], []);
-  assert.equal(summary.possible, 4);
-  assert.equal(summary.fixedAssets + summary.materials + summary.both, 0);
+  assert.equal(summary.possible, 2);
+  assert.equal(summary.fixedAssets, 2);
 });
 
-test("source reuse across cards cannot inflate confirmed counts in either registry", () => {
+test("each card with the same complete number has a source record, without double-counting a card", () => {
   const presence = classifyOneCAudit([
     row({ itemId: "first", oneC: [asset], excel: [material] }),
     row({ itemId: "second", oneC: [asset], excel: [material] }),
   ]);
-  assert.equal(presence.get("first")!.category, "possible");
-  assert.equal(presence.get("second")!.category, "possible");
+  assert.equal(presence.get("first")!.category, "both");
+  assert.equal(presence.get("second")!.category, "both");
+  assert.equal(presence.size, 2);
 });
 
 test("exact complete identifiers in names confirm presence, independently of name update constraints", () => {
@@ -56,10 +57,10 @@ test("each registry is confirmed independently, so one valid source still establ
   assert.deepEqual(presence.get("mp-only"), { fixedAssets: false, materials: true, category: "materials" });
 });
 
-test("different material identities are review candidates rather than confirmed materials", () => {
+test("several materials with the same complete number establish presence but do not choose a price or owner", () => {
   const summary = summarizeOneCAudit([row({ excel: [material, { ...material, oneCCode: "m2", sourceKey: "another" }] })], [], ["balance", "another"]);
-  assert.equal(summary.possible, 1);
-  assert.equal(summary.materials, 0);
+  assert.equal(summary.possible, 0);
+  assert.equal(summary.materials, 1);
   assert.equal(summary.materialBalancesWithoutCandidate, 0);
 });
 

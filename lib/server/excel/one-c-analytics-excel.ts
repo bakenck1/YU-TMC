@@ -5,7 +5,8 @@ import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { classifyOneCAudit } from "@/lib/one-c-analytics";
 import type { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 
-type Snapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
+type FullSnapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
+type Snapshot = Omit<FullSnapshot, "registryAssets"> & { registryAssets?: FullSnapshot["registryAssets"] };
 const safeText = (value: unknown) => {
   const text = value == null ? "" : String(value);
   return /^[\s\uFEFF]*[=+@-]/u.test(text) ? `'${text}` : text;
@@ -28,14 +29,14 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   });
   const candidates = data.rows.filter(row => row.oneC.length || row.excel.length);
   const temporary = data.rows.filter(row => row.numberKind === "temporary");
-  const missing = hasSources ? data.rows.filter(row => !row.oneC.length && !row.excel.length) : [];
+  const missing = hasSources ? data.rows.filter(row => !row.oneC.length && !row.excel.length && row.numberKind !== "temporary") : [];
   const inventory = new Map(data.inventory.map(item => [item.id, item]));
-  const assetById = new Map(data.assets.map(row => [row.externalId, row.asset]));
+  const assetById = new Map((data.registryAssets ?? data.assets).map(row => [row.externalId, row.asset]));
   const time = new Date(data.analytics.calculatedAt).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" });
-  const summary = `Всего в 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} активных позиций · ОС: ${hasAssets ? data.analytics.assets.total : "нет данных"} · МП: ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} активных карточек, ${data.analytics.inventory.quantity} единиц`;
+  const summary = `Всего в 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} активных позиций · ОС: ${hasAssets ? data.analytics.assets.total : "нет данных"} · МП: ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} карточек, ${data.analytics.inventory.quantity} единиц`;
   const availability = !hasSources ? "Нет данных ОС и МП для сверки. Карточки не объявлены ненайденными."
     : !complete ? `Сверка только по ${hasAssets ? "ОС" : "МП"}; ${hasAssets ? "МП" : "ОС"}: нет данных. Ненайденные — в доступном разделе.`
-      : "Сверка по ОС и МП. Каждая карточка учитывается один раз; временные номера могут входить в найденные и ненайденные.";
+      : "Сверка по всем записям ОС и МП. Временные карточки без совпадений находятся только на листе «Временные».";
 
   function sheet(name: string, title: string, detail: string, headers: string[], widths: number[]) {
     const result = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 5 }], properties: { defaultRowHeight: 30 } });
@@ -77,8 +78,8 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   function inventorySheet(name: string, title: string, rows: AuditMatch[], note: string) {
     const count = `${rows.length} карточек · ${rows.reduce((sum, row) => sum + (inventory.get(row.itemId)?.quantity ?? 0), 0)} единиц`;
     const result = sheet(name, title, `${hasSources || name === "Временные" ? count : "Сверка недоступна"}. ${note}`,
-      ["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП"],
-      [8, 38, 55, 25, 20, 16, 30, 20, 20, 24, 55, 25, 24, 55, 25, 30, 24, 36, 36, 36]);
+      ["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП", "Статусы ОС в 1С"],
+      [8, 38, 55, 25, 20, 16, 30, 20, 20, 24, 55, 25, 24, 55, 25, 30, 24, 36, 36, 36, 30]);
     rows.forEach((row, index) => {
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
@@ -95,6 +96,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
         safeText(inventory.get(row.itemId)?.responsibleName),
         joined(row.oneC.map(entry => assetById.get(entry.externalId)?.responsibleName)),
         joined(row.excel.map(entry => entry.responsibleName)),
+        joined(row.oneC.map(entry => entry.status)),
       ]);
     });
     result.getColumn(17).numFmt = '#,##0.00';
@@ -102,7 +104,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   }
   inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Совпадение не подтверждено: ${data.analytics.reconciliation.possible}. ОС: ${data.analytics.reconciliation.fixedAssets} · МП: ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Статус указан для каждой карточки.`);
   inventorySheet("Временные", "Временные номера в нашей базе", temporary, "Все карточки с временным номером, независимо от результата сверки.");
-  inventorySheet("Не найдено в 1С", "Есть в нашей базе — не найдено в 1С", missing, "Карточки без совпадений. Возможные совпадения сюда не включены.");
+  inventorySheet("Не найдено в 1С", "Есть в нашей базе — не найдено в 1С", missing, "Постоянные номера без совпадений. Временные номера находятся на отдельном листе.");
   for (const worksheet of workbook.worksheets) finishSheet(worksheet);
   return new Uint8Array(await workbook.xlsx.writeBuffer());
 }

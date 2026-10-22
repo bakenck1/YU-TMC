@@ -4,7 +4,7 @@ import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { auditNeedsReview, isWeakEvidence } from "@/lib/inventory-source-audit-review";
 export { auditNeedsReview, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
 import { extractExcelInventoryReferences, inventoryAuditNumberKey, inventoryAuditSlashlessKey, inventoryAuditSpacelessKey, inventoryAuditSuffixStem, type ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
-import { extractSourceBarcodeNumbers } from "@/lib/inventory-audit-numbers";
+import { extractSourceBarcodeNumbers, extractFormattedInventoryReferences, inventoryAuditFormattedKey, inventoryAuditSourceRanges, inventoryAuditRangeContains } from "@/lib/inventory-audit-numbers";
 export { extractExcelInventoryNumber, extractExcelInventoryReference, extractExcelInventoryReferences } from "@/lib/inventory-audit-numbers";
 export type { ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 
@@ -22,7 +22,7 @@ export type ExcelSourceRow = ExcelInventoryReference & {
 export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
 export type AuditOneCRow = { externalId: string; asset: OneCFixedAsset; origins?: AuditOneCOrigin[]; batchMatchedItemId?: string | null; reviewState?: string | null };
-export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
+export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
 export type AuditCounts = { total: number; oneCOnly: number; excelOnly: number; both: number; missing: number; temporary: number; possible?: number };
 
 function barcodeNumber(value: string): string | null {
@@ -79,24 +79,31 @@ function nameScore(left: string, right: string): number {
   return 0.7 * dice(a, b) + 0.3 * dice(trigrams(a), trigrams(b));
 }
 
-export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
+export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
   type IndexedExcel = { row: ExcelSourceRow; reference: ExcelInventoryReference; number: string };
   const excelByNumber = new Map<string, IndexedExcel[]>();
   const excelByNumberWithoutSlash = new Map<string, IndexedExcel[]>();
   const excelBySpacelessNumber = new Map<string, IndexedExcel[]>();
   const excelBySuffixStem = new Map<string, IndexedExcel[]>();
+  const excelByFormattedNumber = new Map<string, IndexedExcel[]>();
   const apiByCode = new Map<string, ExcelSourceRow[]>();
   const apiByBarcode = new Map<string, ExcelSourceRow[]>();
+  const materialQuantities = new Map<string, number>();
+  for (const row of excelRows) if (row.oneCCode) materialQuantities.set(row.oneCCode, (materialQuantities.get(row.oneCCode) ?? 0) + Number(row.endingBalance ?? 0));
+  const materialRanges = options.formattedNumbers ? excelRows.flatMap(row => inventoryAuditSourceRanges(row.nomenclature, row.explicitInventoryNumber,
+    row.oneCCode ? materialQuantities.get(row.oneCCode) : Number(row.endingBalance ?? 0)).map(range => ({ row, range }))) : [];
   for (const row of excelRows) {
     if (row.sourceKind === "materials_api") {
       if (row.oneCCode) apiByCode.set(row.oneCCode, [...(apiByCode.get(row.oneCCode) ?? []), row]);
       const parsed = row.barcode ? parseCode39ScanInput(row.barcode) : null;
       if (parsed?.ok) apiByBarcode.set(parsed.value, [...(apiByBarcode.get(parsed.value) ?? []), row]);
     }
-    for (const reference of [...(row.inventoryReferences ?? [row]), ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(row.nomenclature).map((inventoryNumber): ExcelInventoryReference => ({ inventoryNumber, numberIsUnmarked: true })) : [])]) {
+    for (const reference of [...(row.inventoryReferences ?? [row]), ...(options.formattedNumbers ? extractFormattedInventoryReferences(row.nomenclature) : []), ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(row.nomenclature).map((inventoryNumber): ExcelInventoryReference => ({ inventoryNumber, numberIsUnmarked: true })) : [])]) {
       for (const number of new Set([reference.inventoryNumber, reference.sourceInventoryNumber].filter((value): value is string => Boolean(value)))) {
         const entry = { row, reference: { inventoryNumber: reference.inventoryNumber, sourceInventoryNumber: reference.sourceInventoryNumber, numberIsUnmarked: reference.numberIsUnmarked }, number };
         const key = inventoryAuditNumberKey(number);
+        const formattedKey = options.formattedNumbers ? inventoryAuditFormattedKey(reference.sourceInventoryNumber ?? number) : null;
+        if (formattedKey) excelByFormattedNumber.set(formattedKey, [...(excelByFormattedNumber.get(formattedKey) ?? []), entry]);
         const exactRows = excelByNumber.get(key) ?? [];
         exactRows.push(entry);
         excelByNumber.set(key, exactRows);
@@ -128,11 +135,14 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   const ownersByNumberWithoutSlash = new Map<string, { itemId: string; exactKey: string }[]>();
   const ownersBySpacelessNumber = new Map<string, { itemId: string; exactKey: string }[]>();
   const ownersByNumber = new Map<string, string[]>();
+  const ownersByFormattedNumber = new Map<string, string[]>();
   const ownersBySuffixStem = new Map<string, string[]>();
   for (const item of items) {
     const siteNumbers = [item.inventoryNumber, ...[...item.officialBarcodes, ...(item.localBarcodes ?? [])].map(barcodeNumber).filter((value): value is string => Boolean(value))];
     for (const number of siteNumbers) {
       const exactKey = inventoryAuditNumberKey(number);
+      const formattedKey = options.formattedNumbers ? inventoryAuditFormattedKey(number) : null;
+      if (formattedKey) ownersByFormattedNumber.set(formattedKey, [...(ownersByFormattedNumber.get(formattedKey) ?? []), item.id]);
       const relaxedKey = numberWithoutSlashKey(number);
       const owners = ownersByNumberWithoutSlash.get(relaxedKey) ?? [];
       owners.push({ itemId: item.id, exactKey });
@@ -166,7 +176,8 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     ))];
     const descriptionNumbers = [...extractExcelInventoryReferences(asset.name).flatMap((reference) =>
       [reference.inventoryNumber, reference.sourceInventoryNumber].filter((value): value is string => Boolean(value))),
-      ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(asset.name) : [])];
+      ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(asset.name) : []),
+      ...(options.formattedNumbers ? extractFormattedInventoryReferences(asset.name).map(ref => ref.inventoryNumber) : [])];
     const descriptionIds = [...new Set(descriptionNumbers.flatMap((number) =>
       (ownersByNumberWithoutSlash.get(numberWithoutSlashKey(number)) ?? []).map((owner) => owner.itemId),
     ))];
@@ -178,7 +189,14 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       const key = spacelessIndexKey(number);
       return key ? (ownersBySpacelessNumber.get(key) ?? []).filter((owner) => differsBySpacedNumberFormat(owner.exactKey, number)).map((owner) => owner.itemId) : [];
     }))];
-    for (const id of [...numberFormatIds, ...numberWithoutSlashIds, ...descriptionIds, ...numberSuffixIds, ...numberSpacesIds]) ids.add(id);
+    const formattedIds = options.formattedNumbers ? [...new Set([...sourceNumbers, ...descriptionNumbers].flatMap(number => {
+      const key = inventoryAuditFormattedKey(number);
+      return key ? ownersByFormattedNumber.get(key) ?? [] : [];
+    }))] : [];
+    if (options.formattedNumbers) for (const range of inventoryAuditSourceRanges(asset.name, asset.inventoryNumber, asset.quantity)) {
+      for (const [key, owners] of ownersByFormattedNumber) if (inventoryAuditRangeContains(key, range)) formattedIds.push(...owners);
+    }
+    for (const id of [...numberFormatIds, ...numberWithoutSlashIds, ...descriptionIds, ...numberSuffixIds, ...numberSpacesIds, ...formattedIds]) ids.add(id);
     for (const id of ids) {
       const item = itemById.get(id);
       if (!item) continue;
@@ -200,9 +218,10 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
         ...(descriptionIds.includes(id) ? ["number_in_description" as const] : []),
         ...(numberSuffixIds.includes(id) ? ["number_suffix" as const] : []),
         ...(numberSpacesIds.includes(id) ? ["number_spaces" as const] : []),
+        ...(formattedIds.includes(id) ? ["number_format" as const] : []),
         ...(batchMatchedItemId === id && !matches.inventoryItemIds.includes(id) && !matches.codeItemIds.includes(id) && !matches.barcodeItemIds.includes(id) && linked !== id && !matchedBarcodes.length ? ["batch_analysis" as const] : []),
       ];
-      oneCByItem.set(id, [...(oneCByItem.get(id) ?? []), { externalId, code: asset.code, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode, name: asset.name, status: asset.status ?? "", reviewState: reviewState ?? null, origins, matchedBy, matchedBarcodes }]);
+      oneCByItem.set(id, [...(oneCByItem.get(id) ?? []), { externalId, code: asset.code, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode, name: asset.name, status: asset.status ?? "", ...(options.formattedNumbers ? { quantity: asset.quantity } : {}), reviewState: reviewState ?? null, origins, matchedBy, matchedBarcodes }]);
     }
   }
   const counts: AuditCounts = { total: items.length, oneCOnly: 0, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 0 };
@@ -219,6 +238,10 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       }
     }
     const excelCandidates = [...keys].flatMap(([key, evidence]) => [
+      ...materialRanges.filter(entry => inventoryAuditRangeContains(key, entry.range))
+        .map(({ row }): ExcelSourceRow => ({ ...row, matchedBy: ["number_in_description"], matchedBarcodes: evidence.barcodes })),
+      ...(options.formattedNumbers ? excelByFormattedNumber.get(inventoryAuditFormattedKey(key) ?? "") ?? [] : [])
+        .map(({ row, reference, number }): ExcelSourceRow => ({ ...row, matchedInventoryNumber: number, matchedReference: reference, matchedBy: ["number_spaces"], matchedBarcodes: evidence.barcodes })),
       ...(excelByNumber.get(key) ?? []).map(({ row, reference, number }): ExcelSourceRow => ({
         ...row, matchedInventoryNumber: number, matchedReference: reference, matchedBy: reference.numberIsUnmarked ? ["number_in_description"] : [
           ...(evidence.siteNumber ? ["site_number" as const] : []),

@@ -1,5 +1,5 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { extractExcelInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumberKey, inventoryAuditSpacelessKey } from "@/lib/inventory-audit-numbers";
+import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumberKey, inventoryAuditSpacelessKey, inventoryAuditNumbersEqual } from "@/lib/inventory-audit-numbers";
 import type { AuditMatch, ExcelSourceRow } from "@/lib/inventory-source-audit";
 
 export type InventoryAuditEnrichmentItem = {
@@ -123,7 +123,7 @@ function own(map: Map<string, Set<string>>, key: string, itemId: string): void {
 }
 
 function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[], description: string,
-  sourceBarcode?: string | null, descriptionBarcodes = false, structuredNumber?: string | null): "identity_missing" | "identity_conflict" | null {
+  sourceBarcode?: string | null, descriptionBarcodes = false, structuredNumber?: string | null, formattedNumbers = false): "identity_missing" | "identity_conflict" | null {
   const anchor = identities[0];
   if (!anchor) return "identity_missing";
   const claims = [...identities, ...descriptionNumbers(description), ...(descriptionBarcodes ? extractSourceBarcodeNumbers(description).map(number).filter((value): value is string => value !== null) : [])];
@@ -131,15 +131,16 @@ function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[],
   const officialBarcodes = item.officialBarcodes.map(barcode).filter((value): value is string => Boolean(value));
   const siteIdentities = [siteNumber, ...officialBarcodes].filter((value): value is string => Boolean(value));
   if (descriptionBarcodes) {
+    const equal = formattedNumbers ? inventoryAuditNumbersEqual : agrees;
     // An official barcode may be independent of the inventory number. Match
     // each supplied identifier to its own domain instead of equating both.
     const sourceNumber = number(structuredNumber);
-    if (structuredNumber?.trim() && (!sourceNumber || (siteNumber ? !agrees(sourceNumber, siteNumber) : !officialBarcodes.some(value => agrees(sourceNumber, value))))) return "identity_conflict";
+    if (structuredNumber?.trim() && (!sourceNumber || (siteNumber ? !equal(sourceNumber, siteNumber) : !officialBarcodes.some(value => equal(sourceNumber, value))))) return "identity_conflict";
     if (sourceBarcode?.trim()) {
       const sourceValue = barcode(sourceBarcode);
-      if (!sourceValue || !officialBarcodes.includes(sourceValue)) return "identity_conflict";
+      if (!sourceValue || !officialBarcodes.some(value => equal(value, sourceValue))) return "identity_conflict";
     }
-    return claims.every(claim => (siteNumber !== null && agrees(claim, siteNumber)) || officialBarcodes.includes(claim))
+    return claims.every(claim => (siteNumber !== null && equal(claim, siteNumber)) || officialBarcodes.some(value => equal(value, claim)))
       ? null : "identity_conflict";
   }
   if (!allAgree(claims, anchor) || !siteIdentities.some((identity) => allAgree([...claims, identity], anchor))
@@ -151,16 +152,17 @@ function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[],
   return null;
 }
 
-function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: string): string[] {
+function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: string, formattedNumbers = false): string[] {
   const anchors = [number(item.inventoryNumber), ...item.officialBarcodes.map(barcode)].filter((value): value is string => Boolean(value));
   return [...new Set([
     ...extractExcelInventoryReferences(description).map(ref => number(ref.sourceInventoryNumber ?? ref.inventoryNumber)),
     ...extractSourceBarcodeNumbers(description).map(number),
-  ].filter((value): value is string => value !== null && anchors.includes(value)))];
+    ...(formattedNumbers ? extractFormattedInventoryReferences(description).map(ref => number(ref.inventoryNumber)) : []),
+  ].filter((value): value is string => value !== null && anchors.some(anchor => formattedNumbers ? inventoryAuditNumbersEqual(anchor, value) : anchor === value)))];
 }
 
 /** Plans existing-card updates without mutating either live data or saved evidence. */
-export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean } = {}): InventoryAuditEnrichmentPlan {
+export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean } = {}): InventoryAuditEnrichmentPlan {
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const oneCOwners = new Map<string, Set<string>>();
   const excelOwners = new Map<string, Set<string>>();
@@ -222,8 +224,8 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       if (!source.externalId) return skip("source_ambiguous");
       if ((oneCOwners.get(source.externalId)?.size ?? 0) > 1) return skip("source_reused");
       let identities = [number(source.inventoryNumber), barcode(source.barcode)].filter((value): value is string => Boolean(value));
-      if (!identities.length && options.allowDescriptionIdentity && !source.inventoryNumber?.trim() && !source.barcode?.trim()) identities = descriptionIdentity(item, source.name);
-      const issue = identityIssue(item, identities, source.name, source.barcode, options.allowDescriptionIdentity, source.inventoryNumber);
+      if (!identities.length && options.allowDescriptionIdentity && !source.inventoryNumber?.trim() && !source.barcode?.trim()) identities = descriptionIdentity(item, source.name, options.formattedNumbers);
+      const issue = identityIssue(item, identities, source.name, source.barcode, options.allowDescriptionIdentity, source.inventoryNumber, options.formattedNumbers);
       if (issue) return skip(issue);
       name = source.name.trim();
     } else {
@@ -243,8 +245,8 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       let identities = excel.sourceKind === "materials_api"
         ? [number(excel.explicitInventoryNumber), barcode(excel.barcode)].filter((value): value is string => Boolean(value))
         : excelNumbers(excel);
-      if (!identities.length && options.allowDescriptionIdentity && !excel.explicitInventoryNumber?.trim() && !excel.barcode?.trim()) identities = descriptionIdentity(item, excel.nomenclature);
-      const issue = identityIssue(item, identities, excel.nomenclature, excel.sourceKind === "materials_api" ? excel.barcode : null, options.allowDescriptionIdentity, excel.explicitInventoryNumber);
+      if (!identities.length && options.allowDescriptionIdentity && !excel.explicitInventoryNumber?.trim() && !excel.barcode?.trim()) identities = descriptionIdentity(item, excel.nomenclature, options.formattedNumbers);
+      const issue = identityIssue(item, identities, excel.nomenclature, excel.sourceKind === "materials_api" ? excel.barcode : null, options.allowDescriptionIdentity, excel.explicitInventoryNumber, options.formattedNumbers);
       if (issue) return skip(issue);
       name = excel.nomenclature.trim();
     }
@@ -261,7 +263,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     result.excelRowNumber = excel?.rowNumber;
     if (options.allowDescriptionIdentity) {
       result.siteNumber = item.inventoryNumber;
-      result.identityEvidence = source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name).join(", ");
+      result.identityEvidence = source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
     }
     result.nextName = name;
     result.nextCode = nextCode;

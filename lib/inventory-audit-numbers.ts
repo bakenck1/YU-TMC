@@ -14,6 +14,65 @@ export function inventoryAuditSlashlessKey(value: string): string {
   return inventoryAuditNumberKey(value).replaceAll("/", "");
 }
 
+/** All digits of a complete numeric identifier, with presentation separators removed. */
+export function inventoryAuditFormattedKey(value: string): string | null {
+  const key = inventoryAuditNumberKey(value);
+  return /^\d+(?:[\s/.-]+\d+)*$/u.test(key) ? key.replace(/[\s/.-]/gu, "") : null;
+}
+
+export function inventoryAuditNumbersEqual(left: string, right: string): boolean {
+  if (inventoryAuditNumberKey(left) === inventoryAuditNumberKey(right)) return true;
+  const a = inventoryAuditFormattedKey(left), b = inventoryAuditFormattedKey(right);
+  return a !== null && b !== null && a === b;
+}
+
+/** Explicit inventory ranges retain their full prefix and zero padding. Never expand them. */
+export function inventoryAuditRange(value: string, quantity?: number) {
+  const match = inventoryAuditNumberKey(value).replace(/\s/gu, "").match(/^(\d{1,8})([/-])(\d{1,14})-(\d{1,14})$/u);
+  if (!match || match[4].length > match[3].length) return null;
+  const first = match[3], last = first.slice(0, first.length - match[4].length) + match[4];
+  const start = BigInt(first), end = BigInt(last), size = end - start + BigInt(1);
+  if (size < BigInt(2) || size > BigInt(10_000)) return null;
+  // A short trailing suffix may be a separate identifier. It denotes a range
+  // only when the source quantity explicitly supports the entire span.
+  if (match[4].length < first.length && quantity !== Number(size)) return null;
+  return { prefix: match[1], width: first.length, start, end };
+}
+
+export function inventoryAuditRangeContains(value: string, range: NonNullable<ReturnType<typeof inventoryAuditRange>>) {
+  const key = inventoryAuditFormattedKey(value);
+  if (!key || key.length !== range.prefix.length + range.width || !key.startsWith(range.prefix)) return false;
+  const number = BigInt(key.slice(range.prefix.length));
+  return number >= range.start && number <= range.end;
+}
+
+export function inventoryAuditSourceRanges(name: string, explicitNumber?: string | null, quantity?: number) {
+  return [explicitNumber, ...extractExcelInventoryReferences(name).filter(ref => !ref.numberIsUnmarked).map(ref => ref.sourceInventoryNumber ?? ref.inventoryNumber)]
+    .filter((value): value is string => Boolean(value)).map(value => inventoryAuditRange(value, quantity))
+    .filter((range): range is NonNullable<typeof range> => range !== null);
+}
+
+/** Extra live-search tokens. Dates, dimensions, model fragments and range prefixes are not identities. */
+export function extractFormattedInventoryReferences(value: string): ExcelInventoryReference[] {
+  const text = value.replace(AUDIT_DASHES, "-");
+  const pattern = /(?<![\p{L}\p{N}/.-])(?:№\s*)?(\d+(?:\s*[/.\-]\s*\d+|\s+\d+)*)(?![\p{L}\p{N}/.-])/giu;
+  const result: ExcelInventoryReference[] = [];
+  for (const match of text.matchAll(pattern)) {
+    const token = match[1].trim();
+    const following = text.slice(match.index + match[0].length);
+    if (/^\s+\d/u.test(following)
+      && !/^\s+\d+\s*(?:шт(?:ук)?|кг|мм|см|метр)(?![\p{L}\p{N}])/iu.test(following)
+      && !/^\s+\d{1,2}\.\d{1,2}\.\d{2}(?:\d{2})?(?![\p{L}\p{N}.])/u.test(following)) continue;
+    const digits = inventoryAuditFormattedKey(token);
+    if (!digits || digits.length < 5 || digits.length > 64) continue;
+    if (!match[0].startsWith("№") && /^\d+\.\d{1,2}$/u.test(token)) continue;
+    if (/^\d{1,2}\.\d{1,2}\.\d{2}(?:\d{2})?$/u.test(token) || /^\d{4}[.-]\d{1,2}[.-]\d{1,2}$/u.test(token)) continue;
+    if (/^\s*[*xх×]/iu.test(text.slice(match.index + match[0].length)) || /[*xх×]\s*$/iu.test(text.slice(0, match.index))) continue;
+    result.push({ inventoryNumber: token, numberIsUnmarked: !match[0].startsWith("№") });
+  }
+  return result;
+}
+
 /** A complete numeric identity with only its internal whitespace removed. */
 export function inventoryAuditSpacelessKey(value: string): string | null {
   const key = inventoryAuditNumberKey(value);
