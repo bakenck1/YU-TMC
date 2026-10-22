@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import InventorySourceAuditPanel, { type AuditPage } from "@/components/InventorySourceAuditPanel";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
 
+vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU" }) }));
+
 const page: AuditPage = {
   run: { id: "audit", batch_id: "batch", batch_version: 12, algorithm_version: String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION),
     one_c_registry_sha256: "c".repeat(64), sha256: "a".repeat(64), run_at: "2026-10-05T04:17:11Z",

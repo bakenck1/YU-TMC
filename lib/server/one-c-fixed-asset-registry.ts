@@ -3,13 +3,13 @@ import "server-only";
 import type { Pool, PoolClient } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
 
-/** The current registry, never a historical import batch. Only assets still on balance. */
+/** The current registry, never a historical import batch. */
 export async function getFixedAssetRegistryPage(
-  query: { page: number; pageSize: number; search?: string },
+  query: { page: number; pageSize: number; search?: string; scope?: "active" | "all" },
   db: Pick<Pool, "query"> | PoolClient = getDatabasePool(),
 ) {
   const values: unknown[] = [];
-  const where = ["i.payload->>'status' = 'Принято к учёту'"];
+  const where = query.scope === "all" ? ["true"] : ["i.payload->>'status' = 'Принято к учёту'"];
   if (query.search) {
     values.push(`%${query.search.replace(/[\\%_]/gu, character => `\\${character}`)}%`);
     where.push(`(i.payload->>'name' ilike $1 escape '\\' or i.payload->>'code' ilike $1 escape '\\'

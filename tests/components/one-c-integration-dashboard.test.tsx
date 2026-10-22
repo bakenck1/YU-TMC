@@ -4,7 +4,8 @@ import OneCIntegrationDashboard from "@/components/OneCIntegrationDashboard";
 import type { OneCAnalytics } from "@/lib/one-c-analytics";
 import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-audit";
 
-const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+const { refresh, appLanguage } = vi.hoisted(() => ({ refresh: vi.fn(), appLanguage: { value: "ru" as "ru" | "kk" | "en" } }));
+vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: appLanguage.value, locale: appLanguage.value === "en" ? "en-US" : "ru-RU" }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 const analytics: OneCAnalytics = {
   calculatedAt: "2026-10-22T05:00:00Z",
@@ -14,9 +15,19 @@ const analytics: OneCAnalytics = {
 };
 const materials: MaterialRegistryMetadata = { kind: "materials_api", batchId: null, receivedAt: null, snapshotAt: null, sha256: "empty", rowCount: 0, materialCount: 0, positiveRows: 0, nonPositiveRows: 0 };
 const batches = { data: [], page: 1, pageSize: 50, total: 0 };
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("renders the 1C overview in Kazakh and English", () => {
+    appLanguage.value = "kk";
+    const view = render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    expect(screen.getByRole("heading", { name: "1С интеграциясы" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Excel жүктеу · 5 парақ" })).toBeTruthy();
+    appLanguage.value = "en";
+    view.rerender(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    expect(screen.getByRole("heading", { name: "1C integration" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download Excel · 5 sheets" })).toBeTruthy();
+  });
   it("provides the same full-registry updates in OS and MP with a single review block", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);

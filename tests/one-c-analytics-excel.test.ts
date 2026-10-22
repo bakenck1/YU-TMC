@@ -23,8 +23,8 @@ function snapshot() {
     analytics: { calculatedAt: "2026-10-22T05:00:00Z", assets: { total: 3, active: 3, retired: 0, other: 0, receivedAt: "2026-10-22T05:00:00Z" }, inventory: { total: 5, active: 5, quantity: 10 }, reconciliation: summarizeOneCAudit(rows, ["os1", "os2", "weak-os"], ["mp1", "mp2", "mp3"]) },
     materials: { kind: "materials_api" as const, batchId: "b", receivedAt: null, snapshotAt: null, sha256: "test", rowCount: 3, materialCount: 2, positiveRows: 3, nonPositiveRows: 0 },
     rows, inventory: rows.map(item => ({ id: item.itemId, quantity: 2, status: "active", oneCCode: null, unitPrice: "123.45", responsibleName: "Ответственный Inventory" })),
-    assets: rows.flatMap(row => row.oneC.map(source => ({ externalId: source.externalId, origins: ["current_registry" as const], asset: { externalId: source.externalId, code: source.code, inventoryNumber: source.inventoryNumber, name: source.name, barcode: source.barcode, category: null, location: null, status: source.status, responsibleName: null, responsibleExternalId: null, quantity: 1, residualCost: null, acceptedAt: null, updatedAt: null } }))),
-    materialRecords: [{ key: "mp1", material: { ...mp, inventoryNumber: "0000456" } }, { key: "mp2", material: { ...mp, inventoryNumber: "0000456", quantity: "1", warehouseCode: "002" } }, { key: "mp3", material: { ...mp, code: "00003", inventoryNumber: "0000789", quantity: "1" } }],
+    assets: rows.flatMap(row => row.oneC.map(source => ({ externalId: source.externalId, origins: ["current_registry" as const], asset: { externalId: source.externalId, code: source.code, inventoryNumber: source.inventoryNumber, name: source.name, barcode: source.barcode, category: null, location: null, status: source.status, responsibleName: null, responsibleExternalId: null, quantity: 1, initialCost: "900.5", residualCost: "450.25", acceptedAt: null, updatedAt: null } }))),
+    materialRecords: [{ key: "mp1", material: { ...mp, inventoryNumber: "0000456" } }, { key: "mp2", material: { ...mp, inventoryNumber: "0000456", quantity: "1", warehouseCode: "002", unitPrice: "101.25" } }, { key: "mp3", material: { ...mp, code: "00003", inventoryNumber: "0000789", quantity: "1" } }],
   };
 }
 async function read(data: Parameters<typeof exportOneCAnalyticsExcel>[0]) {
@@ -43,15 +43,21 @@ test("five ordered full lists preserve IDs and balances, count confirmed cards o
   assert.equal(materials.rowCount, 8); // Every positive balance, not distinct-code or paginated rows.
   assert.equal(materials.getCell("F6").value, 2.5);
   assert.equal(materials.getCell("L6").value, 100.25);
-  assert.match(String(materials.getCell("A3").value), /Всего в 1С: 5 активных позиций/);
+  assert.match(String(materials.getCell("A3").value), /Активные позиции 1С: 5 = ОС 3 \+ МП 2/);
+  assert.match(String(materials.getCell("A2").value), /2 кодов МП.*3 строк остатков/);
   const found = workbook.getWorksheet("Совпадения 1С")!;
   assert.equal(found.rowCount, 9);
-  assert.match(String(found.getCell("A2").value), /Найдено: 3\. Совпадение не подтверждено: 1/);
-  assert.equal(found.getCell("G9").value, "Совпадение не подтверждено");
+  assert.match(String(found.getCell("A2").value), /Найдено: 3\. Нужно сверить номер: 1/);
+  assert.equal(found.getCell("G9").value, "Нужно сверить номер");
   assert.equal(found.getCell("B9").value, "weak");
   assert.equal(found.getCell("H8").value, "ОС + МП");
   assert.equal(found.getCell("Q6").value, 123.45);
   assert.equal(found.getCell("R6").value, "Ответственный Inventory");
+  assert.equal(found.getCell("V6").value, 900.5);
+  assert.equal(found.getCell("W6").value, 450.25);
+  assert.equal(found.getCell("X7").value, "100.25\n101.25");
+  assert.equal(found.getCell("V9").value, null); // An unconfirmed candidate must not supply a price.
+  assert.equal(found.getCell("X9").value, null);
   const temporary = workbook.getWorksheet("Временные")!;
   assert.equal(temporary.rowCount, 7);
   assert.equal(temporary.getCell("G6").value, "Найдено");
@@ -66,6 +72,7 @@ test("five ordered full lists preserve IDs and balances, count confirmed cards o
   for (const sheet of workbook.worksheets) {
     assert.ok(sheet.autoFilter);
     assert.equal(sheet.views[0].state, "frozen");
+    assert.equal(sheet.views[0].xSplit, 3);
     sheet.eachRow(row => row.eachCell(cell => assert.equal(cell.formula, undefined)));
   }
 });
@@ -106,5 +113,5 @@ test("the MP sheet includes every current balance beyond the registry page size"
   assert.equal(sheet.rowCount, 158);
   assert.equal(sheet.getCell("B158").value, "M149");
   assert.equal(sheet.getCell("J158").value, "Ответственный 149");
-  assert.match(String(sheet.getCell("A2").value), /152 активных позиций · 153 строк/);
+  assert.match(String(sheet.getCell("A2").value), /152 кодов МП с положительным остатком · 153 строк/);
 });
