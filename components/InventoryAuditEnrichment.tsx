@@ -10,9 +10,9 @@ type Props = { batchId: string; runId: string; blocked: boolean; currentRegistry
 
 const blockedMessage = "Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите сверку заново.";
 
-export function EnrichmentDescription() {
+export function EnrichmentDescription({ currentRegistry = false }: { currentRegistry?: boolean }) {
   return <>
-    <div className="flex flex-wrap items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700"><Sparkles aria-hidden="true" className="h-5 w-5" /></span><div><h3 className="font-semibold text-slate-900">Названия и коды 1С в карточках ТМЦ</h3><p className="mt-0.5 text-xs text-teal-700">Общий список · основные средства и материальные предметы</p></div></div>
+    <div className="flex flex-wrap items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700"><Sparkles aria-hidden="true" className="h-5 w-5" /></span><div><h3 className="font-semibold text-slate-900">{currentRegistry ? "Обновление карточек из 1С" : "Названия и коды 1С в карточках ТМЦ"}</h3><p className="mt-0.5 text-xs text-teal-700">{currentRegistry ? "Название · код · цена · ответственный" : "Общий список · основные средства и материальные предметы"}</p></div></div>
   </>;
 }
 
@@ -107,16 +107,17 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
   const visibleRows = currentRegistry ? filteredRows.slice(0, visibleLimit) : filteredRows;
 
   return <section className="space-y-4 rounded-2xl border border-teal-200/70 bg-gradient-to-br from-white via-teal-50/60 to-sky-50/60 p-5 shadow-sm shadow-teal-900/5 sm:p-6" aria-label="Обновление названий и кодов 1С">
-    <EnrichmentDescription />
+    <EnrichmentDescription currentRegistry={currentRegistry} />
     {blocked ? <p className="text-sm text-amber-800">{blockedMessage}</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
     <div className="flex flex-wrap gap-2">
-      <button disabled={busy || blocked || uncertain} onClick={() => void perform(false)} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800 disabled:opacity-50"><RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Проверка…" : "Проверить обновления названий и кодов"}</button>
+      <button disabled={busy || blocked || uncertain} onClick={() => void perform(false)} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800 disabled:opacity-50"><RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Проверка…" : currentRegistry ? "Проверить изменения" : "Проверить обновления названий и кодов"}</button>
       {plan?.counts.ready ? <button disabled={busy || blocked} onClick={() => void perform(true)} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50">{uncertain ? "Проверить результат обновления" : `Применить ${plan.counts.ready} обновлений`}</button> : null}
     </div>
     {!plan ? <p className="flex items-center gap-1.5 text-xs text-slate-500"><ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal-600" />Сначала просмотр изменений, затем применение.</p> : null}
     {plan ? <><p className="text-sm">Можно обновить: {plan.counts.ready}. Без изменений: {plan.counts.unchanged}. Пропущено: {plan.counts.skipped}.</p>
+      {currentRegistry ? <div className="flex flex-wrap gap-3 text-sm text-teal-800"><span>Изменение цены: {plan.rows.filter(row => row.eligible && row.price?.changed).length}</span><span>Изменение ответственного: {plan.rows.filter(row => row.eligible && row.responsibility?.changed).length}</span></div> : null}
       {plan.sources ? <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">{[["ОС проверено", plan.sources.fixedAssets], ["МП проверено", plan.sources.materials], ["Карточек проверено", plan.sources.cards], ["Готово к обновлению", plan.counts.ready]].map(([label, value]) => <div key={label} className="rounded-xl border border-white/80 bg-white/80 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold text-slate-900">{value}</p></div>)}</div> : null}
       {reasonCounts.length ? <ul aria-label="Причины пропуска" className="space-y-1 text-sm text-zinc-600">{reasonCounts.map(([key, reason]) => <li key={key}>{reason.label}: <span className="font-medium text-zinc-900">{reason.count}</span></li>)}</ul> : null}
       <details open={currentRegistry || undefined}><summary className="cursor-pointer text-sm font-medium text-teal-800">Показать изменения и причины пропуска</summary>
@@ -129,13 +130,28 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
           {reasonCounts.length ? <optgroup label="Причины пропуска">{reasonCounts.map(([key, reason]) => <option key={key} value={`reason:${key}`}>{reason.label} ({reason.count})</option>)}</optgroup> : null}
         </select>
         {currentRegistry ? <p className="mt-2 text-xs text-slate-500">Показано {visibleRows.length} из {filteredRows.length}. Поиск выполняется по всему списку выбранной группы.</p> : null}
-        <div className="mt-3 max-h-[32rem] overflow-auto rounded-xl border border-teal-100 bg-white/90"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-slate-600"><tr>{["ТМЦ", "Новое название", "Источник названия и кода", "Код 1С после обновления", "Результат", ...(currentRegistry ? ["Ответственный"] : [])].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible ? row.nameSource === "materials_api" ? "МП" : row.nameSource === "excel" ? "Excel" : currentRegistry ? "ОС" : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">Совпало: {row.identityEvidence}</p> : null}</td><td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">Было: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">Код сохранён без изменения: {reasonLabel({ ...row, reason: row.codeStatus }, currentRegistry)}</p> : null}</td><td className="p-3">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row, currentRegistry)}</td>{currentRegistry ? <td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td> : null}</tr>)}
-            {!visibleRows.length ? <tr><td colSpan={currentRegistry ? 6 : 5} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
+        <div className="mt-3 max-h-[32rem] overflow-auto rounded-xl border border-teal-100 bg-white/90"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-slate-600"><tr>{["ТМЦ", "Новое название", "Источник названия и кода", "Код 1С после обновления", "Результат", ...(currentRegistry ? ["Ответственный", "Цена за единицу, ₸"] : [])].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible ? row.nameSource === "materials_api" ? "МП" : row.nameSource === "excel" ? "Excel" : currentRegistry ? "ОС" : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">Совпало: {row.identityEvidence}</p> : null}</td><td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">Было: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">Код сохранён без изменения: {reasonLabel({ ...row, reason: row.codeStatus }, currentRegistry)}</p> : null}</td><td className="p-3">{row.eligible ? row.changed ? "Готово к обновлению" : "Без изменений" : reasonLabel(row, currentRegistry)}{currentRegistry && !row.eligible ? <SourceIdentityDetails row={row} /> : null}</td>{currentRegistry ? <><td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td><td className="min-w-48 p-3"><PricePreview row={row} /></td></> : null}</tr>)}
+            {!visibleRows.length ? <tr><td colSpan={currentRegistry ? 7 : 5} className="p-3 text-zinc-500">В этой группе нет карточек.</td></tr> : null}
           </tbody></table></div>
         {currentRegistry && visibleRows.length < filteredRows.length ? <button type="button" onClick={() => setVisibleLimit(value => value + 100)} className="mt-3 rounded-xl border border-teal-200 bg-white px-4 py-2 text-sm text-teal-800">Показать ещё 100</button> : null}
       </details></> : null}
   </section>;
+}
+
+export function SourceIdentityDetails({ row }: { row: InventoryAuditEnrichmentRow }) {
+  if (!row.sourceDetails?.length) return null;
+  return <details className="mt-2 min-w-64 text-xs text-slate-600"><summary className="cursor-pointer text-teal-800">Сравнить номера и названия</summary><div className="mt-2 space-y-3">{row.sourceDetails.map((source, index) => <div key={index}><p className="font-medium">{source.kind}: {source.name}</p><p className="mt-1">Номер в поле 1С: <span className="font-mono">{source.inventoryNumber ?? "—"}</span></p><p>Штрихкод: <span className="font-mono">{source.barcode ?? "—"}</span></p></div>)}</div></details>;
+}
+
+export function PricePreview({ row }: { row: InventoryAuditEnrichmentRow }) {
+  const price = row.price;
+  if (!price) return <>Без изменений</>;
+  const format = (value: string) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(value));
+  const labels = { ready: "Будет обновлена", unchanged: "Без изменений", missing: "В 1С цена не указана", invalid: "В 1С некорректная цена", ambiguous: "В 1С нет однозначной цены за единицу", unconfirmed: "Нет подтверждённого совпадения" };
+  return <><p className={price.changed ? "font-medium text-teal-800" : "text-slate-600"}>{format(price.nextUnitPrice)} ₸</p>
+    {price.changed ? <p className="mt-1 text-xs text-slate-500">Было: {format(price.currentUnitPrice)} ₸</p> : null}
+    <p className="mt-1 text-xs text-slate-500">{labels[price.status]}</p></>;
 }
 
 export function ResponsibilityPreview({ row }: { row: InventoryAuditEnrichmentRow }) {
@@ -173,7 +189,7 @@ function legacyReasonLabel(row: InventoryAuditEnrichmentRow) {
     sources_missing: "Нет подтверждения в источниках — проверьте полные номера", code_missing: "Код не указан в выбранной записи источника",
     code_invalid: "Код выбранной записи не подходит для сохранения",
     code_conflict: "Коды источников или карточки не совпадают — проверьте значения",
-    source_ambiguous: "Найдено несколько вариантов — проверьте записи источников", identity_conflict: "Номера или штрихкоды не совпадают — проверьте полные значения",
+    source_ambiguous: "Найдено несколько вариантов — проверьте записи источников", identity_conflict: "Номер или штрихкод в карточке, полях и названии 1С различается — обновление пропущено",
     item_ineligible: "Карточка архивирована или относится к разделу IT", name_invalid: "Название не подходит для сохранения",
     item_changed: "Карточка изменена после сверки", source_reused: "Запись источника соответствует нескольким карточкам",
     item_not_found: "Карточка больше не существует", identity_missing: "Полный номер или официальный штрихкод не подтверждены",

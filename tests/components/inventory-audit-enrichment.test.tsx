@@ -16,13 +16,47 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("shows the actual source name and structured number when an identity conflicts", async () => {
+    const conflict = { ...plan.rows[0], eligible: false, changed: false, reason: "identity_conflict", siteNumber: "2411/0390",
+      sourceDetails: [{ kind: "ОС", name: "Ноутбук Lenovo IdeaPad №2411/00390", inventoryNumber: "2411/0390", barcode: null }] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: { ...plan, runId: "current-registry", counts: { ready: 0, unchanged: 0, skipped: 1 }, rows: [conflict] } })));
+    render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    await screen.findByText("Сравнить номера и названия");
+    expect(screen.getByText("ОС: Ноутбук Lenovo IdeaPad №2411/00390")).toBeTruthy();
+    expect(screen.getAllByText("2411/0390")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+  });
+  it("shows the reviewed price and responsible person before applying a price-only update", async () => {
+    const pricePlan = { ...plan, runId: "current-registry", counts: { ready: 1, unchanged: 0, skipped: 0 }, rows: [{ ...plan.rows[0],
+      price: { currentUnitPrice: "100.00", nextUnitPrice: "9100.50", changed: true, status: "ready" },
+      responsibility: { currentUserId: null, currentName: null, nextUserId: "owner", nextName: "Бауыржан Тынымбаев", changed: true, status: "ready", sourceName: "Тынымбаев Бауыржан Анесович" },
+    }] };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: pricePlan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 0 } }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    const apply = await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(screen.getByText("Изменение цены: 1")).toBeTruthy();
+    expect(screen.getByText("Изменение ответственного: 1")).toBeTruthy();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByRole("columnheader", { name: "Цена за единицу, ₸" })).toBeTruthy();
+    expect(table.getByText(/9\s100,5 ₸/u)).toBeTruthy();
+    expect(table.getByText("Было: 100 ₸")).toBeTruthy();
+    expect(table.getByText("Бауыржан Тынымбаев")).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledOnce();
+    fireEvent.click(apply);
+    await screen.findByRole("status");
+    expect(fetcher.mock.calls[1][1].method).toBe("POST");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ runId: "current-registry", planHash: plan.planHash });
+  });
   it("searches beyond the rendered first 100 rows and shows limited responsibility proposals", async () => {
     const rows = Array.from({ length: 151 }, (_, index) => ({ ...plan.rows[0], itemId: `item-${index}`, currentName: `Предмет ${index}`, nextName: `Новое название ${index}`, siteNumber: `1350/${index}`,
       searchText: index === 150 ? "YUB-1350/99150" : "",
       responsibility: { currentUserId: null, currentName: null, nextUserId: "person", nextName: "Бауыржан Анесович", changed: true, status: "ready" as const, sourceName: "Бауыржан Анесович" } }));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: { ...plan, runId: "current-registry", counts: { ready: 151, unchanged: 0, skipped: 0 }, rows } })));
     render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
     await screen.findByRole("button", { name: "Применить 151 обновлений" });
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(101);
     const search = screen.getByRole("textbox", { name: "Поиск по всем карточкам сверки" });
@@ -41,7 +75,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
     const onApplied = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     render(<InventoryCurrentEnrichment onApplied={onApplied} />);
-    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
     const apply = await screen.findByRole("button", { name: "Применить 1 обновлений" });
     expect(fetcher.mock.calls[0][0]).toBe("/api/integrations/1c/enrichment");
     expect(fetcher.mock.calls[0][1].method).toBe("GET");
@@ -61,7 +95,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
       .mockResolvedValueOnce(reply({ error: "inventory_audit_enrichment_stale" }, 409));
     vi.stubGlobal("fetch", fetcher);
     render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Проверить обновления названий и кодов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
     fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Повторите проверку обновлений");
     expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();

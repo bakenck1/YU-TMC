@@ -178,7 +178,7 @@ describe("building room navigation", () => {
     expect(secondFloor?.open).toBe(true);
     expect(kWing?.open).toBe(true);
     expect(within(kWing!).getByText(designation)).toBeTruthy();
-    expect(scroll).toHaveBeenCalled();
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
     fireEvent.click(kWing!.querySelector("summary")!);
     expect(kWing?.open).toBe(false);
     fireEvent.click(kWing!.querySelector("summary")!);

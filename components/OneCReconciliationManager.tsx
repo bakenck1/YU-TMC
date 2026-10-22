@@ -15,7 +15,7 @@ type Reason = "guid" | "code" | "inventory_number" | "barcode";
 type Candidate = { id: string; name: string; inventoryNumber: string; oneCCode: string | null; status: string; version: number; matchedBy: Reason[] };
 type RowFilters = { pageSize?: number; reviewState?: string; proposedAction?: string; match?: "" | "active" | "missing"; search?: string };
 
-export default function OneCReconciliationManager({ initialBatches, initialMaterials, showMaterials = true, showEnrichment = true }: { initialBatches: Page; initialMaterials?: MaterialRegistryMetadata | null; showMaterials?: boolean; showEnrichment?: boolean }) {
+export default function OneCReconciliationManager({ initialBatches, initialMaterials, showMaterials = false, showEnrichment = true }: { initialBatches: Page; initialMaterials?: MaterialRegistryMetadata | null; showMaterials?: boolean; showEnrichment?: boolean }) {
   const [selected, setSelected] = useState<Row | null>(null);
   const [batches, setBatches] = useState(initialBatches.data);
   const [rows, setRows] = useState<Page | null>(null);
