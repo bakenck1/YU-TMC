@@ -45,6 +45,12 @@ const ITEM: InventoryItem = {
 };
 
 describe("ItemsTable 1C code column", () => {
+  it("shows the marked name number instead of a temporary number on desktop and mobile", () => {
+    render(<ItemsTable items={[{ ...ITEM, name: "Кабина №2417/0315 от 08.08.2025", inventoryNumber: "TMP-2026-2327E74FEEDF5F4B9C08" }]} />);
+    expect(within(screen.getByRole("table")).getByRole("cell", {name:"2417/0315"})).toBeTruthy();
+    expect(within(screen.getByRole("article")).getByText("2417/0315", {exact:true})).toBeTruthy();
+    expect(screen.queryByText(/^TMP-/)).toBeNull();
+  });
   it.each([
     ["Монитор SAMSUNG №1350/15721", "1350/15721"],
     ["Системный блок", "24130548"],
