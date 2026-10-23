@@ -16,3 +16,14 @@ test('models, dates, unmarked numbers, conflicting identifiers and ranges cannot
     assert.equal(inventoryNumberLabel({...item,name}), item.inventoryNumber, name);
   }
 });
+
+test('all reported No, unmarked slash and absent-number examples resolve identically', () => {
+  for (const [name, expected] of [
+    ['стол прист д/ перег.No125/00134 02.04.10 канцелярия', '125/00134'],
+    ['Кронштейн ONKRON стойка черный No1350/15814 от 26.03.24', '1350/15814'],
+    ['Кронштейн ONKRON стойка черная 1350/15814 от 26.03.24', '1350/15814'],
+    ['диван офисный 3-х местный №1350/15892 от 16.08.24', '1350/15892'],
+  ]) for (const inventoryNumber of [item.inventoryNumber, '', '-']) {
+    assert.equal(inventoryNumberLabel({name,inventoryNumber}), expected, name);
+  }
+});

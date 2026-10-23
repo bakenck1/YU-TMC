@@ -84,20 +84,23 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   };
 
   function inventorySheet(name: string, title: string, rows: AuditMatch[], note: string) {
+    // Keep the saved code visible on the temporary sheet even without any source match.
+    const columns = <T,>(values: T[]): T[] => name === "Временные"
+      ? [values[0], values[8], ...values.slice(1, 8), ...values.slice(9)] : values;
     const count = `${rows.length} карточек · ${rows.reduce((sum, row) => sum + (inventory.get(row.itemId)?.quantity ?? 0), 0)} единиц`;
     const result = sheet(name, title, `${hasSources || name === "Временные" ? count : "Сверка недоступна"}. ${note}`,
-      ["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП", "Статусы ОС в 1С", "Первоначальная стоимость ОС, KZT", "Остаточная стоимость ОС, KZT", "Цены строк МП, KZT"],
-      [8, 38, 55, 25, 20, 16, 26, 20, 20, 24, 55, 25, 24, 55, 25, 30, 25, 36, 36, 36, 30, 27, 27, 24]);
+      columns(["№", "ID карточки", "Наименование в нашей базе", "Номер в нашей базе", "Тип номера", "Количество", "Результат сверки", "Раздел 1С", "Код 1С в нашей базе", "Коды ОС", "Наименования ОС", "Номера ОС", "Коды МП", "Наименования МП", "Номера МП", "Штрихкоды нашей базы", "Цена в нашей базе, KZT", "Ответственный в нашей базе", "Ответственные ОС", "Ответственные МП", "Статусы ОС в 1С", "Первоначальная стоимость ОС, KZT", "Остаточная стоимость ОС, KZT", "Цены строк МП, KZT"]),
+      columns([8, 38, 55, 25, 20, 16, 26, 20, 20, 24, 55, 25, 24, 55, 25, 30, 25, 36, 36, 36, 30, 27, 27, 24]));
     rows.forEach((row, index) => {
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
       const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Нужно сверить номер" : "Найдено";
       const registry = confirmed.category === "both" ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
         : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (проверить номер)` : "";
-      result.addRow([
+      result.addRow(columns<unknown>([
         index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), row.numberKind === "temporary" ? "Временный" : "Постоянный",
         inventory.get(row.itemId)?.quantity ?? 0, status, registry,
-        safeText(inventory.get(row.itemId)?.oneCCode), joined(row.oneC.map(entry => entry.code)), joined(row.oneC.map(entry => entry.name)), joined(row.oneC.map(entry => entry.inventoryNumber)),
+        safeText(inventory.get(row.itemId)?.oneCCode ?? row.siteOneCCode), joined(row.oneC.map(entry => entry.code)), joined(row.oneC.map(entry => entry.name)), joined(row.oneC.map(entry => entry.inventoryNumber)),
         joined(row.excel.map(entry => entry.oneCCode)), joined(row.excel.map(entry => entry.nomenclature)), joined(row.excel.map(entry => entry.matchedInventoryNumber ?? entry.inventoryNumber)),
         joined(row.siteBarcodes.map(barcode => barcode.value)),
         inventory.get(row.itemId)?.unitPrice == null ? null : Number(inventory.get(row.itemId)!.unitPrice),
@@ -108,7 +111,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
         sourcePrices(confirmed.fixedAssets ? row.oneC.map(entry => assetById.get(entry.externalId)?.initialCost) : []),
         sourcePrices(confirmed.fixedAssets ? row.oneC.map(entry => assetById.get(entry.externalId)?.residualCost) : []),
         sourcePrices(confirmed.materials ? row.excel.map(entry => entry.sourceKey ? materialByKey.get(entry.sourceKey)?.unitPrice : null) : []),
-      ]);
+      ]));
     });
     result.getColumn(17).numFmt = '#,##0.00';
     for (const column of [22, 23, 24]) result.getColumn(column).numFmt = '#,##0.00';
