@@ -91,8 +91,8 @@ test("Excel shows a code-matched temporary card as found in MP on both Inventory
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   for (const name of ["Совпадения 1С", "Временные"]) {
-    assert.equal(workbook.getWorksheet(name)!.getCell("G6").value, "Найдено");
-    assert.equal(workbook.getWorksheet(name)!.getCell("H6").value, "МП");
+    assert.equal(workbook.getWorksheet(name)!.getCell(name === "Временные" ? "H6" : "G6").value, "Найдено");
+    assert.equal(workbook.getWorksheet(name)!.getCell(name === "Временные" ? "I6" : "H6").value, "МП");
   }
   assert.equal(workbook.getWorksheet("Не найдено в 1С")!.rowCount, 5);
 });

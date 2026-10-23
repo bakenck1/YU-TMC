@@ -311,7 +311,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const workbook = new Workbook();
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     expect(workbook.getWorksheet("Не найдено в 1С")!.rowCount).toBe(5);
-    expect(workbook.getWorksheet("Временные")!.getCell("B6").value).toBe(tempId);
+    expect(workbook.getWorksheet("Временные")!.getCell("C6").value).toBe(tempId);
   });
 
   it("assigns only the two allowed people across OS and MP, with complete owner history and replay", async () => {
