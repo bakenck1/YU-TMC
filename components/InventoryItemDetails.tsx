@@ -1,5 +1,7 @@
 "use client";
 
+import { inventoryNumberLabel } from "@/lib/inventory-number-label";
+
 import {
   useEffect,
   useRef,
@@ -1193,7 +1195,7 @@ export default function InventoryItemDetails({
                 <QrCode className="h-[86.4px] w-[86.4px] text-zinc-600" strokeWidth={1.5} />
               )}
               {item.itemSection !== "it" ? <p className="mt-1 max-w-[190px] break-all font-mono text-sm font-medium text-zinc-700">
-                {item.inventoryNumber}
+                {localBarcodeInfo ? item.inventoryNumber : inventoryNumberLabel(item)}
               </p> : null}
               <button
                 type="button"
@@ -1212,6 +1214,7 @@ export default function InventoryItemDetails({
           </div>
 
           <dl className="mt-8 divide-y divide-black/10 text-sm">
+            {item.itemSection !== "it" && !localBarcodeInfo ? <InventoryOverviewRow label={t("items.inventoryNumber")} value={inventoryNumberLabel(item) ?? t("common.notSpecified")} /> : null}
             <InventoryOverviewRow label={t("items.type")} value={item.itemSection === "it" ? t(item.itType === "camera" ? "it.typeCamera" : "it.typeWifi") : isInventoryItemCategory(item.category ?? item.itemType) ? t(inventoryItemCategoryTranslationKey((item.category ?? item.itemType) as InventoryItemCategory)) : item.category ?? item.itemType} />
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />

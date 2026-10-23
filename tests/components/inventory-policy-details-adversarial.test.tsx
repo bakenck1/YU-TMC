@@ -16,9 +16,18 @@ vi.mock("@/components/InventoryItemComments", () => ({ default: () => null }));
 vi.mock("@/components/LocalBarcodeDistributionPanel", () => ({ default: () => null }));
 vi.mock("@/components/TmcUserPicker", () => ({ default: () => null }));
 const ITEM: InventoryItemDto = { id: "10000000-0000-4000-8000-000000000001", name: "Old equipment", description: "Keep", itemSection: "general", itemType: "Старое лабораторное оборудование", category: "Старое лабораторное оборудование", brand: null, model: null, quantity: 1, unitPrice: 5, inventoryNumber: "INV-OLD", inventoryNumberKind: "official", room: { id: "10000000-0000-4000-8000-000000000002", designation: "101", floorNumber: 1, buildingId: "10000000-0000-4000-8000-000000000003", buildingName: "Main" }, status: "active", responsible: { id: "10000000-0000-4000-8000-000000000004", name: "Owner" }, qrCode: null, photoUrl: null, version: 1, createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z", archivedAt: null };
-function view(role: UserRole = "warehouse", editing = false, item = ITEM) { return render(<InventoryItemDetails initialItem={item} canEditContent={role === "admin" || role === "warehouse"} canSendToService={false} requiresServicePhoto={false} canManageCode={false} operations={[]} initialComments={[]} canComment={false} canManageProtected={false} rooms={[]} initialComponents={[]} canManageComponents={false} actorId={ITEM.id} actorRole={role} hideComposition initialEditing={editing} />); }
+function view(role: UserRole = "warehouse", editing = false, item = ITEM, manageCode = false) { return render(<InventoryItemDetails initialItem={item} canEditContent={role === "admin" || role === "warehouse"} canSendToService={false} requiresServicePhoto={false} canManageCode={manageCode} operations={[]} initialComments={[]} canComment={false} canManageProtected={false} rooms={[]} initialComponents={[]} canManageComponents={false} actorId={ITEM.id} actorRole={role} hideComposition initialEditing={editing} />); }
 afterEach(() => vi.unstubAllGlobals());
 describe("adversarial legacy category and role repair UI", () => {
+  it.each([
+    ["Кабина акустическая №2417/0315 от 08.08.2025", "2417/0315"],
+    ["стол прист д/ перег.No125/00134 02.04.10 канцелярия", "125/00134"],
+    ["Кронштейн стойка черная 1350/15814 от 26.03.24", "1350/15814"],
+  ])("shows the same resolved inventory number inside the card: %s", (name, number) => {
+    view("warehouse", false, {...ITEM, name, inventoryNumber:"TMP-2026-1234567890", inventoryNumberKind:"temporary"}, true);
+    expect(screen.getAllByText(number, {exact:true})).toHaveLength(2);
+    expect(screen.queryByText("TMP-2026-1234567890", {exact:true})).toBeNull();
+  });
   it("renders the old category and never replaces its text with electronics", () => {
     view(); expect(screen.getAllByText(ITEM.itemType).length).toBeGreaterThan(0); expect(screen.queryByText("common.electronics")).toBeNull();
   });
