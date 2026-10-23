@@ -116,7 +116,7 @@ export class InventoryAuditEnrichmentService {
       coalesce((select array_agg(g.barcode_value order by g.barcode_value) from yu_inventory.local_item_groups g
         where g.item_id=i.id and g.status='active'),'{}') as local_barcodes
       from yu_inventory.items i order by i.id ${lock ? "for update of i" : ""}`);
-    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox where payload->>'status' = 'Принято к учёту' order by external_id`);
+    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox order by external_id`);
     const materials = await readMaterialRegistry(client);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links order by external_id`);
     const codes = new Map<string, string[]>();
@@ -147,7 +147,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
       status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
-    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowTemporaryMaterialCode: true });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowTemporaryMaterialCode: true, allowTemporaryAssetCode: true });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p

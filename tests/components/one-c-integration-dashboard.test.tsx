@@ -18,6 +18,12 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("keeps OS, MP and presence in both registers in separate reconciliation rows", () => {
+    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    expect(screen.getByText("Найдено в ОС и МП").closest("li")?.textContent).toContain("1");
+    const materialsRow = screen.getAllByText("Материальный предмет").map(element => element.closest("li")).find(Boolean);
+    expect(materialsRow?.textContent).toBe("Материальный предмет1");
+  });
   it("renders the 1C overview in Kazakh and English", () => {
     appLanguage.value = "kk";
     const view = render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);

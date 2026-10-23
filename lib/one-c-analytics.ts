@@ -1,5 +1,5 @@
 import type { AuditMatch } from "@/lib/inventory-source-audit";
-import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains } from "@/lib/inventory-audit-numbers";
+import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { exactMaterialCode, isTemporaryOneCCard } from "@/lib/one-c-material-code";
 
@@ -18,7 +18,7 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
     return result && !/^(?:TMP-|YUI-)/iu.test(result) ? result : null;
   };
   return new Map(rows.map(row => {
-    const anchors = [decode(row.siteNumber), ...row.siteBarcodes.filter(entry => entry.kind === "official").map(entry => decode(entry.value))].filter((value): value is string => Boolean(value));
+    const anchors = [decode(row.siteNumber), ...row.siteBarcodes.map(entry => decode(entry.value)), ...inventoryAuditItemNameNumbers(row.itemName).map(decode)].filter((value): value is string => Boolean(value));
     const matches = (name: string, number?: string | null, barcode?: string | null, quantity?: number) => {
       const references = [...extractExcelInventoryReferences(name).map(ref => ref.sourceInventoryNumber ?? ref.inventoryNumber),
         ...extractFormattedInventoryReferences(name).map(ref => ref.inventoryNumber), ...extractSourceBarcodeNumbers(name)];
@@ -26,10 +26,11 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
       return claims.some(claim => anchors.some(anchor => inventoryAuditNumbersEqual(anchor, claim)))
         || inventoryAuditSourceRanges(name, number, quantity).some(range => anchors.some(anchor => inventoryAuditRangeContains(anchor, range)));
     };
-    const fixedAssets = row.oneC.some(entry => matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
+    const temporaryCode = isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(row.siteOneCCode) : null;
+    const fixedAssets = row.oneC.some(entry => (temporaryCode !== null && exactMaterialCode(entry.code) === temporaryCode) || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
     const quantities = new Map<string, number>();
     for (const entry of row.excel) if (entry.oneCCode) quantities.set(entry.oneCCode, (quantities.get(entry.oneCCode) ?? 0) + Number(entry.endingBalance ?? 0));
-    const materialCode = isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(row.siteOneCCode) : null;
+    const materialCode = temporaryCode;
     const codeMatched = materialCode !== null && row.excel.some(entry => entry.sourceKind === "materials_api" && exactMaterialCode(entry.oneCCode) === materialCode && Number(entry.endingBalance) > 0);
     const material = codeMatched || row.excel.some(entry => matches(entry.nomenclature, entry.explicitInventoryNumber ?? (entry.sourceKind === "materials_api" ? null : entry.sourceInventoryNumber ?? entry.inventoryNumber), entry.barcode,
       entry.oneCCode ? quantities.get(entry.oneCCode) : Number(entry.endingBalance ?? 0)));
