@@ -1,6 +1,7 @@
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import type { InventoryAuditEnrichmentItem, InventoryAuditEnrichmentPlan } from "@/lib/inventory-audit-enrichment";
 import type { AuditMatch } from "@/lib/inventory-source-audit";
+import { exactMaterialCode } from "@/lib/one-c-material-code";
 
 /** Exact cents within items.numeric(14,2); missing or excessive precision is never rounded. */
 export function enrichmentMoney(value: unknown): string | null {
@@ -30,7 +31,7 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
       claims = [source.initialCost];
     } else if (row.nameSource === "materials_api") {
       row.price.source = "material_unit_price";
-      claims = (match?.excel ?? []).filter(entry => entry.sourceKind === "materials_api").map(entry => entry.unitPrice);
+      claims = (match?.excel ?? []).filter(entry => entry.sourceKind === "materials_api" && (row.identityMethod !== "material_code" || exactMaterialCode(entry.oneCCode) === exactMaterialCode(row.nextCode))).map(entry => entry.unitPrice);
     } else continue;
     if (!claims.length || claims.some(value => value == null || value === "")) { row.price.status = "missing"; continue; }
     const prices = claims.map(enrichmentMoney);

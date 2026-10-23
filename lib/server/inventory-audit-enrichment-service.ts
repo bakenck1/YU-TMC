@@ -147,7 +147,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
       status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
-    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowTemporaryMaterialCode: true });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p
