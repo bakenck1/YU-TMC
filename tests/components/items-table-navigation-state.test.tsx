@@ -44,7 +44,34 @@ describe("ItemsTable navigation state", () => {
   beforeEach(() => {
     routerPush.mockReset();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/items?page=3");
+  });
+
+  it("restores the shell scroll position after opening a row and returning to the same list", async () => {
+    const scrollTo = vi.fn();
+    const renderList = () => render(<main><ItemsTable items={ITEMS} stateUrlPath="/items" initialViewState={parseInventoryTableViewState(new URLSearchParams(window.location.search))} /></main>);
+    const first = renderList();
+    const main = first.container.querySelector("main")!;
+    main.scrollTop = 640;
+    const link = screen.getAllByRole("link", {name: /Item 21/})[0]!;
+    fireEvent.click(link);
+    first.unmount();
+    const second = renderList();
+    second.container.querySelector("main")!.scrollTo = scrollTo;
+    const windowScroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({top:640, behavior:"instant"}));
+    expect(window.sessionStorage.getItem("yu-inventory:list-return:v1")).toBeNull();
+    windowScroll.mockRestore();
+  });
+
+  it("does not restore scroll into a different filtered list", async () => {
+    window.sessionStorage.setItem("yu-inventory:list-return:v1", JSON.stringify({href:"/items?q=other",top:640,id:ITEMS[0]!.id}));
+    const scrollTo = vi.fn();
+    const view = render(<main><ItemsTable items={ITEMS} stateUrlPath="/items" /></main>);
+    view.container.querySelector("main")!.scrollTo = scrollTo;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it("restores typed filters and page 3 after leaving an item", async () => {
