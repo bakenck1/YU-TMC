@@ -45,6 +45,19 @@ const ITEM: InventoryItem = {
 };
 
 describe("ItemsTable 1C code column", () => {
+  it.each([
+    ["Монитор SAMSUNG №1350/15721", "1350/15721"],
+    ["Системный блок", "24130548"],
+    ["Предмет без официального номера", "TMP-2026-000001"],
+    ["Длинный номер", "INV-12345678901234567890"],
+  ])("shows the saved number for %s in both table and mobile cards", (name, inventoryNumber) => {
+    render(<ItemsTable items={[{ ...ITEM, name, inventoryNumber }]} />);
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("cell", { name: inventoryNumber })).toBeTruthy();
+    expect(within(screen.getByRole("article")).getByText(inventoryNumber, { exact: true })).toBeTruthy();
+    expect(screen.queryByText(/^YUI-/)).toBeNull();
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/items");

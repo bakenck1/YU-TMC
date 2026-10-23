@@ -35,8 +35,6 @@ import InventoryThumbnail from "./InventoryThumbnail";
 import InventoryVisibleStatus from "./InventoryVisibleStatus";
 import InventorySummaryAccordions from "./InventorySummaryAccordions";
 import { isInventoryTransferAllowed } from "@/lib/inventory-transfer-eligibility";
-import { code39PayloadForItem } from "@/lib/domain/code39";
-import { needsUniqueItemBarcode } from "@/lib/inventory-number-pair-policy";
 import {
   inventoryItemCategoryTranslationKey,
 } from "@/lib/inventory-categories";
@@ -104,7 +102,7 @@ function itemHref(item: InventoryItem, returnHref?: string) {
 
 const COLUMN_LABEL_KEYS = {
   photo: "items.photo",
-  qrCode: "items.qrCode",
+  qrCode: "items.inventoryNumber",
   name: "items.name",
   oneCCode: "items.oneCCode",
   itemType: "items.type",
@@ -139,14 +137,8 @@ function categoryLabel(
   return category;
 }
 
-function barcodeValue(item: InventoryItem) {
-  if (item.localGroupId) return item.inventoryNumber;
-  if (isTemporaryBarcode(item.inventoryNumber)) return null;
-  return code39PayloadForItem(
-    item.inventoryNumber,
-    item.id,
-    needsUniqueItemBarcode(item.name),
-  );
+function inventoryNumberLabel(item: InventoryItem) {
+  return item.inventoryNumber?.trim() || null;
 }
 
 function isTemporaryBarcode(value: string) {
@@ -965,7 +957,7 @@ export default function ItemsTable({
             <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-zinc-400">
               <th className="w-16 px-2 py-2 text-center"><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-checked={someVisibleSelected && !allVisibleSelected ? "mixed" : allVisibleSelected} aria-label={t("items.selectAll")} className="h-6 w-6 cursor-pointer accent-emerald-600" /></label></th>
               {visibleColumns.photo ? <th className="px-3 py-4 font-medium">{t("items.photo")}</th> : null}
-              {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.qrCode")}</th> : null}
+              {visibleColumns.qrCode ? <th className="px-3 py-4 font-medium">{t("items.inventoryNumber")}</th> : null}
               {visibleColumns.name ? <th className="px-3 py-4 font-medium">{t("items.name")}</th> : null}
               {visibleColumns.oneCCode ? <th className="px-3 py-4 font-medium">{t("items.oneCCode")}</th> : null}
               {visibleColumns.itemType ? <th className="px-3 py-4 font-medium">{t("items.type")}</th> : null}
@@ -992,7 +984,7 @@ export default function ItemsTable({
                 >
                   <td className="px-2 py-2 text-center" onClick={(event) => event.stopPropagation()}><label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl hover:bg-zinc-50"><input type="checkbox" disabled={!canSelectItem(item)} checked={selected.has(item.id)} onChange={() => toggleItem(item.id)} aria-label={t("items.selectOne", { name: item.name })} title={!canSelectItem(item) ? t("tmc.issue.decommissionedBlocked") : undefined} className="h-6 w-6 cursor-pointer accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40" /></label></td>
                   {visibleColumns.photo ? <td className="px-3 py-4"><InventoryThumbnail photo={item.photo} /></td> : null}
-                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{barcodeValue(item) ?? t("items.barcodeMissing")}</td> : null}
+                  {visibleColumns.qrCode ? <td className="px-3 py-4 text-zinc-500">{inventoryNumberLabel(item) ?? t("items.barcodeMissing")}</td> : null}
                   {visibleColumns.name ? <td className="max-w-[220px] px-3 py-4 font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link>{issueMode && !canSelectItem(item) ? <p className="mt-1 text-xs font-medium text-red-700">{t("tmc.issue.decommissionedBlocked")}</p> : null}</td> : null}
                   {visibleColumns.oneCCode ? <td className="whitespace-nowrap px-3 py-4 font-mono text-zinc-600">{item.oneCCode || "—"}</td> : null}
                   {visibleColumns.itemType ? <td className="px-3 py-4 font-medium text-zinc-800">{categoryLabel(item.category, t)}</td> : null}
@@ -1050,7 +1042,7 @@ export default function ItemsTable({
                   {issueMode || visibleColumns.name ? <p className="font-medium text-zinc-800"><Link href={itemHref(item, listHref)} aria-label={itemLinkLabel(item)} onClick={(event) => event.stopPropagation()} className="rounded-sm hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{item.name}</Link></p> : null}
                   {visibleColumns.itemType ? <p className="mt-1 text-xs text-zinc-500">{categoryLabel(item.category, t)}</p> : null}
                   {visibleColumns.brandModel ? <p className="mt-1 text-xs text-zinc-500">{item.brandModel ?? "—"}</p> : null}
-                  {issueMode || visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{barcodeValue(item) ?? t("items.barcodeMissing")}</p> : null}
+                  {issueMode || visibleColumns.qrCode ? <p className="mt-1 text-xs text-zinc-400">{inventoryNumberLabel(item) ?? t("items.barcodeMissing")}</p> : null}
                   {issueMode ? <p className="mt-1 text-xs font-medium text-zinc-600">{item.inventoryNumber}</p> : null}
                   {visibleColumns.additionalInfo ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{item.additionalInfo ?? "вЂ”"}</p> : null}
                 </div>

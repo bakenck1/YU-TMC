@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("inventory list displays the same Code 39 payload as the printable barcode", () => {
-  const source = readFileSync(
-    new URL("../components/ItemsTable.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(
-    source,
-    /code39PayloadForItem\([\s\S]*?item\.inventoryNumber,[\s\S]*?item\.id,[\s\S]*?needsUniqueItemBarcode\(item\.name\)/,
-  );
+test("inventory list does not substitute a generated scan payload for the saved inventory number", () => {
+  const source = readFileSync(new URL("../components/ItemsTable.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /code39PayloadForItem|needsUniqueItemBarcode/);
   assert.doesNotMatch(source, /item\.qrCode \?\? item\.inventoryNumber/);
-  assert.doesNotMatch(source, /replace\(\/\\D\/g/);
 });
