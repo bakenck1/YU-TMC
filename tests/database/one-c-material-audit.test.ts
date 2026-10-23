@@ -77,6 +77,20 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
   });
 
+  it("confirms and updates temporary cards from their exact MP code without inventory identifiers", async () => {
+    const f = await seed();
+    await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-000001',inventory_number_key='tmp-2026-000001',one_c_code=$2 where id=$1`, [f.itemId, base.code]);
+    await save([{ ...base, name: "Материальный предмет", inventoryNumber: null, barcode: null }]);
+    const before = await getOneCAnalytics(pool);
+    expect(before.analytics.reconciliation).toMatchObject({ materials: 1, temporary: 1, temporaryUnmatched: 0 });
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ eligible: true, identityMethod: "material_code", nameSource: "materials_api", nextName: "Материальный предмет", price: { nextUnitPrice: "9100.00", changed: true }, responsibility: { changed: false } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,one_c_code,unit_price,inventory_number_kind from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Материальный предмет", one_c_code: base.code, unit_price: "9100.00", inventory_number_kind: "temporary" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
+
   it("rejects whole-registry changes after preview, including source-only changes", async () => {
     const f = await seed();
     await save([base]);

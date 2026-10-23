@@ -1,6 +1,7 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumberKey, inventoryAuditSpacelessKey, inventoryAuditNumbersEqual, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import type { AuditMatch, ExcelSourceRow } from "@/lib/inventory-source-audit";
+import { exactMaterialCode, isTemporaryOneCCard } from "@/lib/one-c-material-code";
 
 export type InventoryAuditEnrichmentItem = {
   id: string;
@@ -36,6 +37,7 @@ export type InventoryAuditEnrichmentRow = {
   excelRowNumber?: number;
   siteNumber?: string;
   identityEvidence?: string;
+  identityMethod?: "material_code";
   searchText?: string;
   sourceDetails?: Array<{ kind: "ОС" | "МП"; name: string; inventoryNumber: string | null; barcode: string | null }>;
   price?: {
@@ -165,7 +167,7 @@ function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: st
 }
 
 /** Plans existing-card updates without mutating either live data or saved evidence. */
-export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean } = {}): InventoryAuditEnrichmentPlan {
+export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean; allowTemporaryMaterialCode?: boolean } = {}): InventoryAuditEnrichmentPlan {
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const oneCOwners = new Map<string, Set<string>>();
   const excelOwners = new Map<string, Set<string>>();
@@ -206,7 +208,12 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       || !sameOfficialSnapshot(item.officialBarcodes, row.siteBarcodes.filter((entry) => entry.kind === "official").map((entry) => entry.value))) return skip("item_changed");
     if (auditRowCount.get(item.id) !== 1) return skip("source_ambiguous");
     if (options.formattedNumbers && !sameOfficialSnapshot(item.localBarcodes ?? [], row.siteBarcodes.filter(entry => entry.kind === "local").map(entry => entry.value))) return skip("item_changed");
-    const oneC = row.oneC.filter((entry) => Array.isArray(entry.origins)
+    const materialCode = options.allowTemporaryMaterialCode && isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(item.oneCCode) : null;
+    const codeMaterials = materialCode ? row.excel.filter(entry => entry.sourceKind === "materials_api" && exactMaterialCode(entry.oneCCode) === materialCode && Number(entry.endingBalance) > 0) : [];
+    const useMaterialCode = codeMaterials.length > 0;
+    if (useMaterialCode && exactMaterialCode(row.siteOneCCode) !== materialCode) return skip("item_changed");
+    const materialEvidence = useMaterialCode ? codeMaterials : row.excel;
+    const oneC = (useMaterialCode ? [] : row.oneC).filter((entry) => Array.isArray(entry.origins)
       && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
     if (!oneC.length && !row.excel.length) {
       result.missingSources = ["1c", "excel"];
@@ -234,24 +241,24 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       name = source.name.trim();
     } else {
       // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
-      const materialRows = row.excel.filter(entry => entry.sourceKind === "materials_api");
+      const materialRows = materialEvidence.filter(entry => entry.sourceKind === "materials_api");
       // Repeated MOL/account balances are one nomenclature, but names/codes/number claims must agree.
-      if (materialRows.length && materialRows.length === row.excel.length) {
+      if (materialRows.length && materialRows.length === materialEvidence.length) {
         const signatures = new Set(materialRows.map(entry => JSON.stringify([
           entry.materialGuid ?? null, entry.oneCCode ?? null, entry.nomenclature,
-          [...new Set(excelNumbers(entry))].sort(), entry.barcode ?? null,
+          ...(useMaterialCode ? [] : [[...new Set(excelNumbers(entry))].sort(), entry.barcode ?? null]),
         ])));
         if (signatures.size !== 1) return skip("source_ambiguous");
-      } else if (row.excel.length !== 1) return skip("source_ambiguous");
-      excel = row.excel[0];
+      } else if (materialEvidence.length !== 1) return skip("source_ambiguous");
+      excel = materialEvidence[0];
       if (!Number.isSafeInteger(excel.rowNumber) || excel.rowNumber < 1) return skip("source_ambiguous");
-      if (row.excel.some(entry => (excelOwners.get(String(entry.rowNumber))?.size ?? 0) > 1)) return skip("source_reused");
+      if (!useMaterialCode && materialEvidence.some(entry => (excelOwners.get(String(entry.rowNumber))?.size ?? 0) > 1)) return skip("source_reused");
       let identities = excel.sourceKind === "materials_api"
         ? [number(excel.explicitInventoryNumber), barcode(excel.barcode)].filter((value): value is string => Boolean(value))
         : excelNumbers(excel);
       if (!identities.length && options.allowDescriptionIdentity && !excel.explicitInventoryNumber?.trim() && !excel.barcode?.trim()) identities = descriptionIdentity(item, excel.nomenclature, options.formattedNumbers);
       const issue = identityIssue(item, identities, excel.nomenclature, excel.sourceKind === "materials_api" ? excel.barcode : null, options.allowDescriptionIdentity, excel.explicitInventoryNumber, options.formattedNumbers);
-      if (issue) return skip(issue);
+      if (issue && !useMaterialCode) return skip(issue);
       name = excel.nomenclature.trim();
     }
     if (!name || [...name].length > 160 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(name)) return skip("name_invalid");
@@ -265,9 +272,10 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     result.codeStatus = codeStatus;
     result.externalId = source?.externalId;
     result.excelRowNumber = excel?.rowNumber;
+    if (useMaterialCode) result.identityMethod = "material_code";
     if (options.allowDescriptionIdentity) {
       result.siteNumber = item.inventoryNumber;
-      result.identityEvidence = source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
+      result.identityEvidence = useMaterialCode ? `1C: ${materialCode}` : source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
     }
     result.nextName = name;
     result.nextCode = nextCode;

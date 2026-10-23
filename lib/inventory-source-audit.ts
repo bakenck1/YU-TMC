@@ -22,7 +22,7 @@ export type ExcelSourceRow = ExcelInventoryReference & {
 export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
 export type AuditOneCRow = { externalId: string; asset: OneCFixedAsset; origins?: AuditOneCOrigin[]; batchMatchedItemId?: string | null; reviewState?: string | null };
-export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
+export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteOneCCode?: string | null; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
 export type AuditCounts = { total: number; oneCOnly: number; excelOnly: number; both: number; missing: number; temporary: number; possible?: number };
 
 function barcodeNumber(value: string): string | null {
@@ -288,7 +288,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     else counts.missing++;
     const temporary = item.inventoryNumberKind === "temporary" || /^TMP-/i.test(item.inventoryNumber);
     if (!source && temporary) counts.temporary++;
-    const result: AuditMatch = { itemId: item.id, itemName: item.name, siteNumber: item.inventoryNumber, siteBarcodes: [...item.officialBarcodes.map((value) => ({ value, kind: "official" as const })), ...(item.localBarcodes ?? []).map((value) => ({ value, kind: "local" as const }))], numberKind: item.inventoryNumberKind, itemVersion: item.version, result: source ? "matched" : temporary ? "temporary" : "missing", source, oneC, excel };
+    const result: AuditMatch = { itemId: item.id, itemName: item.name, siteNumber: item.inventoryNumber, siteOneCCode: item.oneCCode, siteBarcodes: [...item.officialBarcodes.map((value) => ({ value, kind: "official" as const })), ...(item.localBarcodes ?? []).map((value) => ({ value, kind: "local" as const }))], numberKind: item.inventoryNumberKind, itemVersion: item.version, result: source ? "matched" : temporary ? "temporary" : "missing", source, oneC, excel };
     if (auditNeedsReview(result)) counts.possible = (counts.possible ?? 0) + 1;
     return result;
   }).sort((a, b) => a.itemId.localeCompare(b.itemId));
