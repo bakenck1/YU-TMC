@@ -48,7 +48,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       materialCount: new Set(materialRecords.map(row => row.material.code)).size,
       positiveRows: materialRecords.length, nonPositiveRows: 0,
     };
-    const audit = buildInventorySourceAudit(auditItems, registryAssets, materials.rows, links.rows.map(row => ({ externalId: row.external_id, itemId: row.item_id })), { descriptionBarcodes: true, formattedNumbers: true });
+    const audit = buildInventorySourceAudit(auditItems, registryAssets, materials.rows, links.rows.map(row => ({ externalId: row.external_id, itemId: row.item_id })), { descriptionBarcodes: true, formattedNumbers: true, exactNames: true });
     const dates = assets.rows.map(row => new Date(row.last_seen_at ?? row.received_at).valueOf()).filter(Number.isFinite);
     const analytics: OneCAnalytics = {
       calculatedAt: new Date(clock.rows[0].calculated_at).toISOString(),

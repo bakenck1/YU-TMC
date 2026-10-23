@@ -40,7 +40,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
   });
   it("shows the reviewed price and responsible person before applying a price-only update", async () => {
     const pricePlan = { ...plan, runId: "current-registry", counts: { ready: 1, unchanged: 0, skipped: 0 }, rows: [{ ...plan.rows[0],
-      price: { currentUnitPrice: "100.00", nextUnitPrice: "9100.50", changed: true, status: "ready" },
+      price: { currentUnitPrice: "100.00", nextUnitPrice: "9100.50", changed: true, status: "ready", source: "material_unit_price" },
       responsibility: { currentUserId: null, currentName: null, nextUserId: "owner", nextName: "Бауыржан Тынымбаев", changed: true, status: "ready", sourceName: "Тынымбаев Бауыржан Анесович" },
     }] };
     const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: pricePlan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 0 } }));
@@ -54,6 +54,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
     expect(table.getByRole("columnheader", { name: "Цена за единицу, ₸" })).toBeTruthy();
     expect(table.getByText(/9\s100,5 ₸/u)).toBeTruthy();
     expect(table.getByText("Было: 100 ₸")).toBeTruthy();
+    expect(table.getByText("МП · цена за единицу")).toBeTruthy();
     expect(table.getByText("Бауыржан Тынымбаев")).toBeTruthy();
     expect(fetcher).toHaveBeenCalledOnce();
     fireEvent.click(apply);

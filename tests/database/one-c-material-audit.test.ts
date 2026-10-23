@@ -65,6 +65,45 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await service.previewCurrent(f.actor)).counts).toEqual({ ready: 0, unchanged: 2, skipped: 0 });
   });
 
+  it("applies a matched MP price even when the name and code come from OS without an initial cost", async () => {
+    const f = await seed();
+    const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...source, inventoryNumber: base.inventoryNumber }], metadata());
+    await save([base]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ nameSource: "1c", nextName: source.name, price: { source: "material_unit_price", nextUnitPrice: "9100.00", changed: true } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,one_c_code,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: source.name, one_c_code: source.code, unit_price: "9100.00" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
+
+  it("writes only price when OS and MP share a permanent card's code and the available price agrees", async () => {
+    const f = await seed();
+    await pool.query(`update yu_inventory.items set one_c_code='OTHER' where id=$1`, [f.itemId]);
+    await save([{ ...base, code: "OTHER", name: "Материал", inventoryNumber: null }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(preview.rows[0]).toMatchObject({ eligible: true, nextName: "Наше название", nextCode: "OTHER", price: { source: "material_unit_price", nextUnitPrice: "9100.00" } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,one_c_code,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Наше название", one_c_code: "OTHER", unit_price: "9100.00" });
+    expect((await pool.query(`select metadata->'price' as price from yu_inventory.audit_records where action='item.audit_enrichment' and subject_id=$1`, [f.itemId])).rows[0].price).toMatchObject({ source: "material_unit_price", sourceMaterialCode: "OTHER", nextUnitPrice: "9100.00" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
+
+  it("finds a unique full material name and applies its price without renaming or assigning an owner", async () => {
+    const f = await seed();
+    await pool.query('update yu_inventory.items set name=$2 where id=$1', [f.itemId, "Unique printer"]);
+    await save([{ ...base, name: "UNIQUE  printer", inventoryNumber: null }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ eligible: true, nextName: "Unique printer", nextCode: null, price: { nextUnitPrice: "9100.00" }, responsibility: { changed: false } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,one_c_code,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Unique printer", one_c_code: null, unit_price: "9100.00" });
+    expect((await getOneCAnalytics(pool)).analytics.reconciliation.materials).toBe(1);
+  });
+
   it("writes the reported cabinet code and price when its identifier is in the site name", async () => {
     const f = await seed();
     await pool.query('update yu_inventory.items set name=$2 where id=$1', [f.itemId, "шкаф-купе д/документов No1350*16355 от 09.10.2024"]);
@@ -124,12 +163,12 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await pool.query('select name,one_c_code from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Изменено вручную", one_c_code: null });
   });
 
-  it("checks conflicting unmatched balances of a material and skips unsafe whole-registry proposals", async () => {
+  it("preserves conflicting material metadata while allowing a unanimous price for the identified code", async () => {
     const f = await seed();
     await save([base, { ...base, responsibleCode: "002", name: "Другой предмет", inventoryNumber: "1350/55555" }]);
     const preview = await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor);
-    expect(preview.counts).toEqual({ ready: 0, unchanged: 0, skipped: 1 });
-    expect(preview.rows[0].reason).toBe("source_ambiguous");
+    expect(preview.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(preview.rows[0]).toMatchObject({ nextName: "Наше название", nextCode: null, price: { changed: true, nextUnitPrice: "9100.00" }, responsibility: { changed: false } });
   });
 
   it("previews and applies exact unit prices with audit, while stale site prices cannot be overwritten", async () => {

@@ -103,7 +103,7 @@ export class InventoryAuditEnrichmentService {
           JSON.stringify({ source: "inventory_audit_enrichment", batchId, runId: plan.runId, planHash: plan.planHash,
             scope: batchId === null ? "current_registry" : "selected_batch",
             externalId: row.externalId, excelRowNumber: row.excelRowNumber,
-            nameSource: row.nameSource, codeStatus: row.codeStatus, result })]);
+            nameSource: row.nameSource, codeStatus: row.codeStatus, price: row.price, result })]);
       }
       return result;
   }
@@ -127,7 +127,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
       sourceCodes: codes.get(row.id) ?? [],
     })), registry.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] })),
-    materials.rows, links.rows.map(row => ({ externalId: String(row.external_id), itemId: String(row.item_id) })), { descriptionBarcodes: true, formattedNumbers: true });
+    materials.rows, links.rows.map(row => ({ externalId: String(row.external_id), itemId: String(row.item_id) })), { descriptionBarcodes: true, formattedNumbers: true, exactNames: true });
     // Inspect all balances of each candidate, so a conflicting MOL/account row
     // cannot disappear merely because its number did not match the site card.
     const balances = new Map<string, ExcelSourceRow[]>();
@@ -147,7 +147,7 @@ export class InventoryAuditEnrichmentService {
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
       status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
-    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowTemporaryMaterialCode: true, allowTemporaryAssetCode: true });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p
@@ -167,7 +167,7 @@ export class InventoryAuditEnrichmentService {
       users.rows.map(row => ({ id: String(row.id), fullName: String(row.full_name), role: row.role, active: row.is_active, deleted: row.deleted_at != null })),
       currentCards.map(row => ({ itemId: String(row.id), userId: byPeriod.get(row.id)?.responsible_user_id ?? null,
         name: byPeriod.get(row.id)?.full_name ?? null, pendingTransfer: pendingIds.has(row.id), unavailable: unavailable.has(row.id) })));
-    addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items);
+    addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true });
     const runId = "current-registry";
     const planHash = createHash("sha256").update(JSON.stringify({
       scope: runId, algorithm: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION,
