@@ -21,6 +21,6 @@ test("shows the inventory number below the QR code only for general inventory", 
 
   assert.match(
     source,
-    /\{item\.itemSection !== "it" \? <p className="mt-1 max-w-\[190px\] break-all font-mono text-sm font-medium text-zinc-700">\s*\{item\.inventoryNumber\}\s*<\/p> : null\}\s*<button/,
+    /\{item\.itemSection !== "it" \? <p className="mt-1 max-w-\[190px\] break-all font-mono text-sm font-medium text-zinc-700">\s*\{localBarcodeInfo \? item\.inventoryNumber : inventoryNumberLabel\(item\)\}\s*<\/p> : null\}\s*<button/,
   );
 });
