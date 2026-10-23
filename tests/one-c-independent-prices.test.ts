@@ -121,3 +121,18 @@ test("price recovery cannot revive stale cards, and all balances of the selected
   addOneCPriceProposals(plan, evidence, new Map(), [card], { independentSources: true });
   assert.equal(plan.rows[0].price?.status, "ambiguous");
 });
+
+test("batch code lookup updates all matching official and temporary cards across OS and MP", () => {
+  const cards = [0, 1, 2, 3].map(index => ({ ...card, id: `batch-${index}`, oneCCode: `00000${index}`, inventoryNumber: index % 2 ? `TMP-2026-00000${index}` : `999/${index}`, inventoryNumberKind: index % 2 ? 'temporary' : 'official' }));
+  const assets = cards.slice(0, 2).map((item, index) => ({ ...asset, externalId: `os-${index}`, code: item.oneCCode, initialCost: 100 + index }));
+  const materials = cards.slice(2).map((item, index) => ({ ...material, sourceKey: `mp-${index}`, rowNumber: index + 1, oneCCode: item.oneCCode, unitPrice: String(200 + index) }));
+  const audit = buildInventorySourceAudit(cards, assets.map(asset => ({externalId: asset.externalId, asset})), materials, [], options);
+  const plan = buildInventoryAuditEnrichmentPlan(audit.rows, cards, options);
+  addOneCPriceProposals(plan, audit.rows, new Map(assets.map(asset => [asset.externalId, asset])), cards, { independentSources: true });
+  assert.equal(plan.counts.ready, 4);
+  for (let index = 0; index < 4; index++) {
+    assert.equal(plan.rows[index].nextCode, cards[index].oneCCode);
+    assert.equal(plan.rows[index].price?.nextUnitPrice, ['100.00','101.00','200.00','201.00'][index]);
+    assert.equal(plan.rows[index].nameSource, index < 2 ? '1c' : 'materials_api');
+  }
+});
