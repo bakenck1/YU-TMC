@@ -534,7 +534,7 @@ export default function ItemsTable({
     const nextUrl = `${listHref}${window.location.hash}`;
     const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== currentUrl) {
-      window.history.replaceState(window.history.state, "", nextUrl);
+      window.history.replaceState(null, "", nextUrl);
     }
   }, [listHref, stateUrlPath]);
 
