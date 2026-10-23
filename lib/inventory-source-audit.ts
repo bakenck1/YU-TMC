@@ -1,4 +1,6 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
+import { oneCSourceNameKey, oneCNameCanIdentify } from "@/lib/one-c-source-name";
+import { exactMaterialCode } from "@/lib/one-c-material-code";
 import { createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { auditNeedsReview, isWeakEvidence } from "@/lib/inventory-source-audit-review";
@@ -17,12 +19,12 @@ export type ExcelSourceRow = ExcelInventoryReference & {
   warehouseCode?: string | null; responsibleName?: string | null; responsibleCode?: string | null;
   unitPrice?: string | null; unit?: string | null;
   inventoryReferences?: ExcelInventoryReference[]; matchedInventoryNumber?: string; matchedReference?: ExcelInventoryReference;
-  matchedBy?: ("code" | "site_number" | "barcode" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[];
+  matchedBy?: ("code" | "site_number" | "barcode" | "exact_name" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[];
 };
 export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
 export type AuditOneCRow = { externalId: string; asset: OneCFixedAsset; origins?: AuditOneCOrigin[]; batchMatchedItemId?: string | null; reviewState?: string | null };
-export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteOneCCode?: string | null; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
+export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteOneCCode?: string | null; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "exact_name" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
 export type AuditCounts = { total: number; oneCOnly: number; excelOnly: number; both: number; missing: number; temporary: number; possible?: number };
 
 function barcodeNumber(value: string): string | null {
@@ -80,7 +82,15 @@ function nameScore(left: string, right: string): number {
   return 0.7 * dice(a, b) + 0.3 * dice(trigrams(a), trigrams(b));
 }
 
-export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
+export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean; exactNames?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
+  const nameOwners = new Map<string, string[]>();
+  const assetNames = new Map<string, Set<string>>();
+  const materialNames = new Map<string, ExcelSourceRow[]>();
+  if (options.exactNames) {
+    for (const item of items) { const key = oneCSourceNameKey(item.name); if (key) nameOwners.set(key, [...(nameOwners.get(key) ?? []), item.id]); }
+    for (const row of oneCRows) { const key = oneCSourceNameKey(row.asset.name); if (key) assetNames.set(key, new Set([...(assetNames.get(key) ?? []), row.externalId])); }
+    for (const row of excelRows) { const key = oneCSourceNameKey(row.nomenclature); if (key && row.sourceKind === "materials_api" && Number(row.endingBalance) > 0) materialNames.set(key, [...(materialNames.get(key) ?? []), row]); }
+  }
   type IndexedExcel = { row: ExcelSourceRow; reference: ExcelInventoryReference; number: string };
   const excelByNumber = new Map<string, IndexedExcel[]>();
   const excelByNumberWithoutSlash = new Map<string, IndexedExcel[]>();
@@ -95,7 +105,8 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     row.oneCCode ? materialQuantities.get(row.oneCCode) : Number(row.endingBalance ?? 0)).map(range => ({ row, range }))) : [];
   for (const row of excelRows) {
     if (row.sourceKind === "materials_api") {
-      if (row.oneCCode) apiByCode.set(row.oneCCode, [...(apiByCode.get(row.oneCCode) ?? []), row]);
+      const code = exactMaterialCode(row.oneCCode);
+      if (code) apiByCode.set(code, [...(apiByCode.get(code) ?? []), row]);
       const parsed = row.barcode ? parseCode39ScanInput(row.barcode) : null;
       if (parsed?.ok) apiByBarcode.set(parsed.value, [...(apiByBarcode.get(parsed.value) ?? []), row]);
     }
@@ -160,6 +171,10 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     const origins: AuditOneCOrigin[] = sourceOrigins ?? ["current_registry"];
     const matches = matchOneCFixedAssetIdentifiers(asset, { items: candidates, index: identifierIndex, linkedItemId: linkByExternalId.get(externalId) });
     const ids = new Set([...matches.inventoryItemIds, ...matches.codeItemIds, ...matches.barcodeItemIds]);
+    const nameKey = oneCSourceNameKey(asset.name);
+    const nameIds = options.exactNames && nameKey && assetNames.get(nameKey)?.size === 1
+      ? (nameOwners.get(nameKey) ?? []).filter(id => oneCNameCanIdentify(itemById.get(id)!, asset.name, asset.inventoryNumber, asset.barcode)) : [];
+    for (const id of nameIds) ids.add(id);
     const linked = linkByExternalId.get(externalId);
     if (linked) ids.add(linked);
     if (origins.includes("selected_batch") && batchMatchedItemId) ids.add(batchMatchedItemId);
@@ -213,6 +228,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       const matchedBy: AuditMatch["oneC"][number]["matchedBy"] = [
         ...(linked === id ? ["guid" as const] : []),
         ...(matches.codeItemIds.includes(id) ? ["code" as const] : []),
+        ...(nameIds.includes(id) ? ["exact_name" as const] : []),
         ...(matches.inventoryItemIds.includes(id) ? ["inventory_number" as const] : []),
         ...(matches.barcodeItemIds.includes(id) || exactBarcodes.length ? ["barcode" as const] : []),
         ...(numberFormatIds.includes(id) && !matches.inventoryItemIds.includes(id) && !matches.barcodeItemIds.includes(id) && !exactBarcodes.length ? ["number_format" as const] : []),
@@ -261,7 +277,12 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
         .map(({ row, reference, number }): ExcelSourceRow => ({ ...row, matchedInventoryNumber: number, matchedReference: reference, matchedBy: ["number_suffix"], matchedBarcodes: evidence.barcodes })),
     ]);
     // Codes are exact text, not numeric values; OS link codes are not material identities.
-    if (item.oneCCode) for (const row of apiByCode.get(item.oneCCode) ?? []) excelCandidates.push({ ...row, matchedBy: ["code"] });
+    const savedCode = exactMaterialCode(item.oneCCode);
+    if (savedCode) for (const row of apiByCode.get(savedCode) ?? []) excelCandidates.push({ ...row, matchedBy: ["code"] });
+    const byName = materialNames.get(oneCSourceNameKey(item.name) ?? "") ?? [];
+    if (byName.length && byName.every(row => row.oneCCode) && new Set(byName.map(row => row.materialGuid ?? row.oneCCode)).size === 1) {
+      for (const row of byName) if (oneCNameCanIdentify(item, row.nomenclature, row.explicitInventoryNumber, row.barcode)) excelCandidates.push({ ...row, matchedBy: ["exact_name"] });
+    }
     for (const value of [...item.officialBarcodes, ...(item.localBarcodes ?? [])]) {
       const parsed = parseCode39ScanInput(value);
       if (parsed.ok) for (const row of apiByBarcode.get(parsed.value) ?? []) excelCandidates.push({ ...row, matchedBy: ["barcode"], matchedBarcodes: [value] });

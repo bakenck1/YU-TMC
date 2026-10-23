@@ -1,7 +1,7 @@
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { exactMaterialCode, isTemporaryOneCCard } from "@/lib/one-c-material-code";
+import { exactMaterialCode } from "@/lib/one-c-material-code";
 
 export type OneCAuditPresence = {
   fixedAssets: boolean;
@@ -26,12 +26,12 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
       return claims.some(claim => anchors.some(anchor => inventoryAuditNumbersEqual(anchor, claim)))
         || inventoryAuditSourceRanges(name, number, quantity).some(range => anchors.some(anchor => inventoryAuditRangeContains(anchor, range)));
     };
-    const temporaryCode = isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(row.siteOneCCode) : null;
-    const fixedAssets = row.oneC.some(entry => (temporaryCode !== null && exactMaterialCode(entry.code) === temporaryCode) || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
+    const sourceCode = exactMaterialCode(row.siteOneCCode);
+    const fixedAssets = row.oneC.some(entry => (sourceCode !== null && exactMaterialCode(entry.code) === sourceCode) || entry.matchedBy.includes("exact_name") || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
     const quantities = new Map<string, number>();
     for (const entry of row.excel) if (entry.oneCCode) quantities.set(entry.oneCCode, (quantities.get(entry.oneCCode) ?? 0) + Number(entry.endingBalance ?? 0));
-    const materialCode = temporaryCode;
-    const codeMatched = materialCode !== null && row.excel.some(entry => entry.sourceKind === "materials_api" && exactMaterialCode(entry.oneCCode) === materialCode && Number(entry.endingBalance) > 0);
+    const materialCode = sourceCode;
+    const codeMatched = row.excel.some(entry => entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && ((materialCode !== null && exactMaterialCode(entry.oneCCode) === materialCode) || entry.matchedBy?.includes("exact_name")));
     const material = codeMatched || row.excel.some(entry => matches(entry.nomenclature, entry.explicitInventoryNumber ?? (entry.sourceKind === "materials_api" ? null : entry.sourceInventoryNumber ?? entry.inventoryNumber), entry.barcode,
       entry.oneCCode ? quantities.get(entry.oneCCode) : Number(entry.endingBalance ?? 0)));
     const category = fixedAssets && material ? "both" : fixedAssets ? "fixedAssets" : material ? "materials"
