@@ -92,7 +92,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
       const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Нужно сверить номер" : "Найдено";
-      const registry = confirmed.category === "both" ? "ОС + МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
+      const registry = confirmed.category === "both" ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
         : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (проверить номер)` : "";
       result.addRow([
         index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), row.numberKind === "temporary" ? "Временный" : "Постоянный",
@@ -114,7 +114,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
     for (const column of [22, 23, 24]) result.getColumn(column).numFmt = '#,##0.00';
     return result;
   }
-  inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Нужно сверить номер: ${data.analytics.reconciliation.possible}. Только ОС: ${data.analytics.reconciliation.fixedAssets} · МП (включая ОС + МП): ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Цены ОС и МП показаны отдельно от цены нашей базы.`);
+  inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Нужно сверить номер: ${data.analytics.reconciliation.possible}. ОС: ${data.analytics.reconciliation.fixedAssets} · МП: ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Цены ОС и МП показаны отдельно от цены нашей базы.`);
   inventorySheet("Временные", "Временные номера в нашей базе", temporary, "Все карточки с временным номером, включая найденные в 1С. Список может пересекаться с листом «Совпадения 1С».");
   inventorySheet("Не найдено в 1С", "Есть в нашей базе — не найдено в 1С", missing, "Постоянные номера без совпадений. Временные номера находятся на отдельном листе.");
   for (const worksheet of workbook.worksheets) finishSheet(worksheet);

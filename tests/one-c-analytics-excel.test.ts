@@ -50,7 +50,9 @@ test("five ordered full lists preserve IDs and balances, count confirmed cards o
   assert.match(String(found.getCell("A2").value), /Найдено: 3\. Нужно сверить номер: 1/);
   assert.equal(found.getCell("G9").value, "Нужно сверить номер");
   assert.equal(found.getCell("B9").value, "weak");
-  assert.equal(found.getCell("H8").value, "ОС + МП");
+  assert.equal(found.getCell("H8").value, "МП");
+  assert.match(String(found.getCell("A2").value), /ОС: 1 · МП: 2/);
+  assert.equal(workbook.getWorksheet("Временные")!.getCell("H6").value, "МП");
   assert.equal(found.getCell("Q6").value, 123.45);
   assert.equal(found.getCell("R6").value, "Ответственный Inventory");
   assert.equal(found.getCell("V6").value, 900.5);
