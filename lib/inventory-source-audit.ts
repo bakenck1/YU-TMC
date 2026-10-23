@@ -4,7 +4,7 @@ import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { auditNeedsReview, isWeakEvidence } from "@/lib/inventory-source-audit-review";
 export { auditNeedsReview, INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
 import { extractExcelInventoryReferences, inventoryAuditNumberKey, inventoryAuditSlashlessKey, inventoryAuditSpacelessKey, inventoryAuditSuffixStem, type ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
-import { extractSourceBarcodeNumbers, extractFormattedInventoryReferences, inventoryAuditFormattedKey, inventoryAuditSourceRanges, inventoryAuditRangeContains } from "@/lib/inventory-audit-numbers";
+import { extractSourceBarcodeNumbers, extractFormattedInventoryReferences, inventoryAuditFormattedKey, inventoryAuditSourceRanges, inventoryAuditRangeContains, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 export { extractExcelInventoryNumber, extractExcelInventoryReference, extractExcelInventoryReferences } from "@/lib/inventory-audit-numbers";
 export type { ExcelInventoryReference } from "@/lib/inventory-audit-numbers";
 
@@ -28,6 +28,7 @@ export type AuditCounts = { total: number; oneCOnly: number; excelOnly: number; 
 function barcodeNumber(value: string): string | null {
   const parsed = parseCode39ScanInput(value);
   if (parsed.ok) return parsed.fallbackKey ? null : parsed.inventoryNumber;
+  if (inventoryAuditFormattedKey(value)) return value;
   const withoutMarker = parseCode39ScanInput(inventoryAuditNumberKey(value));
   return withoutMarker.ok && !withoutMarker.fallbackKey ? withoutMarker.inventoryNumber : null;
 }
@@ -98,7 +99,8 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       const parsed = row.barcode ? parseCode39ScanInput(row.barcode) : null;
       if (parsed?.ok) apiByBarcode.set(parsed.value, [...(apiByBarcode.get(parsed.value) ?? []), row]);
     }
-    for (const reference of [...(row.inventoryReferences ?? [row]), ...(options.formattedNumbers ? extractFormattedInventoryReferences(row.nomenclature) : []), ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(row.nomenclature).map((inventoryNumber): ExcelInventoryReference => ({ inventoryNumber, numberIsUnmarked: true })) : [])]) {
+    const numericBarcode = options.formattedNumbers && row.barcode ? barcodeNumber(row.barcode) : null;
+    for (const reference of [...(row.inventoryReferences ?? [row]), ...(numericBarcode ? [{ inventoryNumber: numericBarcode }] : []), ...(options.formattedNumbers ? extractFormattedInventoryReferences(row.nomenclature) : []), ...(options.descriptionBarcodes ? extractSourceBarcodeNumbers(row.nomenclature).map((inventoryNumber): ExcelInventoryReference => ({ inventoryNumber, numberIsUnmarked: true })) : [])]) {
       for (const number of new Set([reference.inventoryNumber, reference.sourceInventoryNumber].filter((value): value is string => Boolean(value)))) {
         const entry = { row, reference: { inventoryNumber: reference.inventoryNumber, sourceInventoryNumber: reference.sourceInventoryNumber, numberIsUnmarked: reference.numberIsUnmarked }, number };
         const key = inventoryAuditNumberKey(number);
@@ -138,7 +140,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   const ownersByFormattedNumber = new Map<string, string[]>();
   const ownersBySuffixStem = new Map<string, string[]>();
   for (const item of items) {
-    const siteNumbers = [item.inventoryNumber, ...[...item.officialBarcodes, ...(item.localBarcodes ?? [])].map(barcodeNumber).filter((value): value is string => Boolean(value))];
+    const siteNumbers = [item.inventoryNumber, ...(options.formattedNumbers ? inventoryAuditItemNameNumbers(item.name) : []), ...[...item.officialBarcodes, ...(item.localBarcodes ?? [])].map(barcodeNumber).filter((value): value is string => Boolean(value))];
     for (const number of siteNumbers) {
       const exactKey = inventoryAuditNumberKey(number);
       const formattedKey = options.formattedNumbers ? inventoryAuditFormattedKey(number) : null;
@@ -228,6 +230,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
   const rows = items.map((item): AuditMatch => {
     const keys = new Map<string, { siteNumber: boolean; barcodes: string[] }>();
     if (item.inventoryNumber) keys.set(inventoryAuditNumberKey(item.inventoryNumber), { siteNumber: true, barcodes: [] });
+    if (options.formattedNumbers) for (const number of inventoryAuditItemNameNumbers(item.name)) keys.set(inventoryAuditNumberKey(number), { siteNumber: true, barcodes: [] });
     for (const barcode of [...item.officialBarcodes, ...(item.localBarcodes ?? [])]) {
       const number = barcodeNumber(barcode);
       if (number) {

@@ -143,7 +143,7 @@ export class InventoryAuditEnrichmentService {
       return { ...row, excel };
     });
     const items: InventoryAuditEnrichmentItem[] = currentCards.map(row => ({
-      id: row.id, name: row.name, inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes,
+      id: row.id, name: row.name, inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
       status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
     }));
