@@ -98,6 +98,13 @@ const SAFE_ATTRIBUTE_STRINGS: Readonly<Record<string, ReadonlySet<string>>> = {
 const SAFE_NUMBER_ATTRIBUTES = new Set(["attempts", "failed", "total", "claimed", "completed", "retried", "deadLettered", "statusCode"]);
 const requestContext = new AsyncLocalStorage<{ requestId: string; route: string }>();
 
+/** Generated UUIDs must survive the same privacy filter applied to log events. */
+export function createServerRequestId(generate: () => string = randomUUID): string {
+  // Only the final UUID segment can contain 12 consecutive decimal digits.
+  // Replace one hex digit in that rare case, retaining a valid opaque UUID.
+  return generate().replace(/\d{12}/g, digits => `a${digits.slice(1)}`);
+}
+
 export function emitStructuredEvent(
   input: Omit<StructuredLogEvent, "timestamp" | "deploymentId" | "attributes"> & {
     timestamp?: string;
@@ -111,7 +118,7 @@ export function emitStructuredEvent(
     timestamp: safeTimestamp(input.timestamp, options.now?.() ?? new Date()),
     level: input.level,
     event: safeIdentifier(input.event, SAFE_EVENT, "observability.invalid_event"),
-    requestId: safeIdentifier(input.requestId, SAFE_ID, randomUUID()),
+    requestId: safeIdentifier(input.requestId, SAFE_ID, createServerRequestId()),
     route: safeRoute(input.route),
     status: safeStatus(input.status),
     duration: safeDuration(input.duration),
@@ -207,7 +214,7 @@ export function emitLegacyUsage(input: LegacyUsageInput, options: LegacyUsageOpt
   return emitStructuredEvent({
     level: input.outcome === "failed" ? "error" : "info",
     event: "legacy.usage",
-    requestId: options.requestId ?? requestContext.getStore()?.requestId ?? randomUUID(),
+    requestId: options.requestId ?? requestContext.getStore()?.requestId ?? createServerRequestId(),
     route: `command:${input.compatibilityId.toLowerCase()}`,
     status: input.outcome === "failed" ? 500 : 200,
     duration: options.duration ?? 0,
@@ -226,7 +233,7 @@ export function createStructuredWorkerLogger(route: `worker:${string}`, options:
       emitStructuredEvent({
         level: "error",
         event,
-        requestId: typeof context.requestId === "string" ? context.requestId : randomUUID(),
+        requestId: typeof context.requestId === "string" ? context.requestId : createServerRequestId(),
         route,
         status: 500,
         duration: 0,
@@ -239,7 +246,7 @@ export function createStructuredWorkerLogger(route: `worker:${string}`, options:
 
 export function requestIdFor(request: Request, trustForwarded = configuredProxyTrust()): string {
   const forwarded = request.headers.get("x-request-id");
-  return trustForwarded && forwarded && safeIdentifier(forwarded, SAFE_ID, "") ? forwarded : randomUUID();
+  return trustForwarded && forwarded && safeIdentifier(forwarded, SAFE_ID, "") ? forwarded : createServerRequestId();
 }
 
 export function currentRequestId(): string | null {
