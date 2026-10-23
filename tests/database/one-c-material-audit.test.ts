@@ -65,6 +65,18 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await service.previewCurrent(f.actor)).counts).toEqual({ ready: 0, unchanged: 2, skipped: 0 });
   });
 
+  it("writes the reported cabinet code and price when its identifier is in the site name", async () => {
+    const f = await seed();
+    await pool.query('update yu_inventory.items set name=$2 where id=$1', [f.itemId, "шкаф-купе д/документов No1350*16355 от 09.10.2024"]);
+    await save([{ ...base, code: "00000013205", name: "шкаф-купе д/документов №1350/16355 от 09.10.2024", inventoryNumber: null, unitPrice: "86955", quantity: "1" }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ eligible: true, nextCode: "00000013205", price: { changed: true, nextUnitPrice: "86955.00" } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select one_c_code,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ one_c_code: "00000013205", unit_price: "86955.00" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
+
   it("rejects whole-registry changes after preview, including source-only changes", async () => {
     const f = await seed();
     await save([base]);

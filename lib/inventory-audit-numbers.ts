@@ -4,7 +4,7 @@ export type ExcelInventoryReference = { inventoryNumber: string; sourceInventory
 
 const AUDIT_DASHES = /[\u2010-\u2015\u2212]/gu;
 
-// These relaxed rules belong to the read-only audit, not to 1C publication.
+// Comparison-only normalization; stored identifiers and 1C publication stay unchanged.
 export function inventoryAuditNumberKey(value: string): string {
   const number = value.trim().replace(/^(?:№|(?:инв(?:ентарный)?\.?(?:\s+номер)?\s*(?:№|No\.?|N\.?)?|No\.?|N\.?))\s*(?=\d)/iu, "");
   return inventoryNumberComparisonKey(number).replace(AUDIT_DASHES, "-").replace(/\s*([/-])\s*/gu, "$1");
@@ -16,8 +16,8 @@ export function inventoryAuditSlashlessKey(value: string): string {
 
 /** All digits of a complete numeric identifier, with presentation separators removed. */
 export function inventoryAuditFormattedKey(value: string): string | null {
-  const key = inventoryAuditNumberKey(value);
-  return /^\d+(?:[\s/.-]+\d+)*$/u.test(key) ? key.replace(/[\s/.-]/gu, "") : null;
+  const key = inventoryAuditNumberKey(value).replace(/^\*(.+)\*$/u, "$1");
+  return /^\d+(?:[\s/.*_:\\·-]+\d+)*$/u.test(key) ? key.replace(/[\s/.*_:\\·-]/gu, "") : null;
 }
 
 export function inventoryAuditNumbersEqual(left: string, right: string): boolean {
@@ -61,6 +61,15 @@ export function extractFormattedInventoryReferences(value: string): ExcelInvento
   const marker = String.raw`(?:№|инв(?:ентарный)?\.?(?:\s+номер)?\s*(?:№|No\.?|N\.?)?|No\.?|N\.?)`;
   const pattern = new RegExp(String.raw`(?<![\p{L}\p{N}/.-])(?:${marker}\s*)?(\d+(?:\s*[/.\-]\s*\d+|${spacedDigits})*)(?![\p{L}\p{N}/.-]|\s*[/.\-]\s*\d|${spacedDigits})`, "giu");
   const result: ExcelInventoryReference[] = [];
+  // Unusual separators are accepted only in an explicitly marked number;
+  // a product dimension such as 1500*1500*500 remains ordinary text.
+  const special = new RegExp(String.raw`(?<![\p{L}\p{N}])(?:${marker})\s*\*?(\d+(?:\s*[/.*_:\\\-·]\s*\d+)+)\*?(?![\p{L}\p{N}/.*_:\\\-·])`, "giu");
+  for (const match of text.matchAll(special)) {
+    const token = match[1].trim();
+    if (!/[*_:\\·]/u.test(token) && !match[0].includes("*")) continue;
+    const digits = inventoryAuditFormattedKey(token);
+    if (digits && digits.length >= 5 && digits.length <= 64 && !/^\d{1,2}[.-]\d{1,2}[.-]\d{2}(?:\d{2})?$/u.test(token)) result.push({ inventoryNumber: token, numberIsUnmarked: false });
+  }
   for (const match of text.matchAll(pattern)) {
     const token = match[1].trim();
     const marked = match[0].length > match[1].length;
@@ -71,7 +80,15 @@ export function extractFormattedInventoryReferences(value: string): ExcelInvento
     if (/^\s*[*xх×]/iu.test(text.slice(match.index + match[0].length)) || /[*xх×]\s*$/iu.test(text.slice(0, match.index))) continue;
     result.push({ inventoryNumber: token, numberIsUnmarked: !marked });
   }
-  return result;
+  return [...new Map(result.map(ref => [JSON.stringify(ref), ref])).values()];
+}
+
+/** Inventory markers, full slash/hyphen numbers and barcode payloads in an item name. */
+export function inventoryAuditItemNameNumbers(name: string): string[] {
+  return [...new Set([
+    ...extractFormattedInventoryReferences(name).filter(ref => !ref.numberIsUnmarked || /^\d{2,}[/-]\d{3,}$/u.test(ref.inventoryNumber)).map(ref => ref.inventoryNumber),
+    ...extractSourceBarcodeNumbers(name),
+  ])];
 }
 
 /** A complete numeric identity with only its internal whitespace removed. */
@@ -102,7 +119,7 @@ export function extractExcelInventoryReferences(value: string): ExcelInventoryRe
   // A following digit fragment remains part of the token even if a suffix or
   // decimal point prevents accepting it. Dates and explicit units end it.
   const adjacentNumericPart = String.raw`\s+(?!${date})[0-9]+(?![0-9]|\s+${annotation})`;
-  const markedPattern = new RegExp(String.raw`(?:№|(?<![\p{L}\p{N}])(?:инв(?:ентарный)?\.?(?:\s+номер)?\s*(?:№|No\.?|N\.?)?|No\.?|N\.?))\s*([0-9]+(?:\s*[/-]\s*[0-9]+|${spacedDigits})*)(?![\p{L}\p{N}/-]|\.\d|\s*[/-]\s*\d|${adjacentNumericPart})`, "giu");
+  const markedPattern = new RegExp(String.raw`(?:№|(?<![\p{L}\p{N}])(?:инв(?:ентарный)?\.?(?:\s+номер)?\s*(?:№|No\.?|N\.?)?|No\.?|N\.?))\s*([0-9]+(?:\s*[/*_:\\·-]\s*[0-9]+|${spacedDigits})*)(?![\p{L}\p{N}/*_:\\·-]|\.\d|\s*[/*_:\\·-]\s*\d|${adjacentNumericPart})`, "giu");
   const marked = [...searchValue.matchAll(markedPattern)];
   const references = marked.map((match) => reference(value.slice(match.index + match[0].length - match[1].length, match.index + match[0].length), false));
   // A plain number can be an inventory number or a model. Keep it as reviewable evidence.

@@ -72,7 +72,7 @@ test(hasMatch ? "dry-run finds an active item by 1C code and writes row results 
   assert.equal(savedSummary?.activeMatched, hasMatch ? 1 : 0);
   assert.equal(savedSummary?.missingInventory, hasMatch ? 0 : 1);
   assert.deepEqual((savedSummary?.inventoryAudit as Record<string, unknown>)?.counts, { total: 1, oneCOnly: hasMatch ? 1 : 0, excelOnly: 0, both: 0, missing: hasMatch ? 0 : 1, temporary: 0, possible: 0 });
-  assert.equal((savedSummary?.inventoryAudit as Record<string, unknown>)?.algorithmVersion, 8);
+  assert.equal((savedSummary?.inventoryAudit as Record<string, unknown>)?.algorithmVersion, 9);
   assert.equal(plan.link, hasMatch ? 1 : 0);
 });
 }

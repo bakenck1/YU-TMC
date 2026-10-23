@@ -1,5 +1,5 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumberKey, inventoryAuditSpacelessKey, inventoryAuditNumbersEqual } from "@/lib/inventory-audit-numbers";
+import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumberKey, inventoryAuditSpacelessKey, inventoryAuditNumbersEqual, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import type { AuditMatch, ExcelSourceRow } from "@/lib/inventory-source-audit";
 
 export type InventoryAuditEnrichmentItem = {
@@ -7,6 +7,7 @@ export type InventoryAuditEnrichmentItem = {
   name: string;
   inventoryNumber: string;
   officialBarcodes: readonly string[];
+  localBarcodes?: readonly string[];
   oneCCode: string | null;
   version: number;
   itemSection: string;
@@ -128,19 +129,21 @@ function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[],
   if (!anchor) return "identity_missing";
   const claims = [...identities, ...descriptionNumbers(description, formattedNumbers), ...(descriptionBarcodes ? extractSourceBarcodeNumbers(description).map(number).filter((value): value is string => value !== null) : [])];
   const siteNumber = number(item.inventoryNumber);
-  const officialBarcodes = item.officialBarcodes.map(barcode).filter((value): value is string => Boolean(value));
+  const officialBarcodes = [...item.officialBarcodes, ...(formattedNumbers ? item.localBarcodes ?? [] : [])].map(barcode).filter((value): value is string => Boolean(value));
+  const nameNumbers = formattedNumbers ? inventoryAuditItemNameNumbers(item.name).map(number).filter((value): value is string => value !== null) : [];
   const siteIdentities = [siteNumber, ...officialBarcodes].filter((value): value is string => Boolean(value));
   if (descriptionBarcodes) {
     const equal = formattedNumbers ? inventoryAuditNumbersEqual : agrees;
-    // An official barcode may be independent of the inventory number. Match
-    // each supplied identifier to its own domain instead of equating both.
+    // A source identifier may match the site's number, a barcode or a number
+    // in its name. Every additional source claim must still identify this card.
     const sourceNumber = number(structuredNumber);
-    if (structuredNumber?.trim() && (!sourceNumber || (siteNumber ? !equal(sourceNumber, siteNumber) : !officialBarcodes.some(value => equal(sourceNumber, value))))) return "identity_conflict";
+    const siteAnchors = [siteNumber, ...officialBarcodes, ...nameNumbers].filter((value): value is string => value !== null);
+    if (structuredNumber?.trim() && (!sourceNumber || !siteAnchors.some(value => equal(sourceNumber, value)))) return "identity_conflict";
     if (sourceBarcode?.trim()) {
       const sourceValue = barcode(sourceBarcode);
-      if (!sourceValue || !officialBarcodes.some(value => equal(value, sourceValue))) return "identity_conflict";
+      if (!sourceValue || !siteAnchors.some(value => equal(value, sourceValue))) return "identity_conflict";
     }
-    return claims.every(claim => (siteNumber !== null && equal(claim, siteNumber)) || officialBarcodes.some(value => equal(value, claim)))
+    return claims.every(claim => siteAnchors.some(value => equal(value, claim)))
       ? null : "identity_conflict";
   }
   if (!allAgree(claims, anchor) || !siteIdentities.some((identity) => allAgree([...claims, identity], anchor))
@@ -153,7 +156,7 @@ function identityIssue(item: InventoryAuditEnrichmentItem, identities: string[],
 }
 
 function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: string, formattedNumbers = false): string[] {
-  const anchors = [number(item.inventoryNumber), ...item.officialBarcodes.map(barcode)].filter((value): value is string => Boolean(value));
+  const anchors = [number(item.inventoryNumber), ...item.officialBarcodes.map(barcode), ...(formattedNumbers ? [...(item.localBarcodes ?? []).map(barcode), ...inventoryAuditItemNameNumbers(item.name).map(number)] : [])].filter((value): value is string => Boolean(value));
   return [...new Set([
     ...extractExcelInventoryReferences(description).map(ref => number(ref.sourceInventoryNumber ?? ref.inventoryNumber)),
     ...extractSourceBarcodeNumbers(description).map(number),
@@ -202,6 +205,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       || inventoryAuditNumberKey(item.inventoryNumber) !== inventoryAuditNumberKey(row.siteNumber)
       || !sameOfficialSnapshot(item.officialBarcodes, row.siteBarcodes.filter((entry) => entry.kind === "official").map((entry) => entry.value))) return skip("item_changed");
     if (auditRowCount.get(item.id) !== 1) return skip("source_ambiguous");
+    if (options.formattedNumbers && !sameOfficialSnapshot(item.localBarcodes ?? [], row.siteBarcodes.filter(entry => entry.kind === "local").map(entry => entry.value))) return skip("item_changed");
     const oneC = row.oneC.filter((entry) => Array.isArray(entry.origins)
       && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
     if (!oneC.length && !row.excel.length) {

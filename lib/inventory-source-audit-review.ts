@@ -1,7 +1,7 @@
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 
 // Shared by the review UI and server audit without loading the server matcher.
-export const INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION = 8;
+export const INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION = 9;
 
 export function auditNeedsReview(row: AuditMatch): boolean {
   // Several balances of one material are expected; different material identities are not.
