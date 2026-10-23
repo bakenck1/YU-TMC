@@ -91,6 +91,26 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
   });
 
+  it("checks all temporary cards against OS and MP and applies each register's own name and price", async () => {
+    const f = await seed();
+    const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...source, initialCost: 50000, status: "Снято с учёта" }], metadata());
+    await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-000001',inventory_number_key='tmp-2026-000001',one_c_code='OTHER' where id=$1`, [f.itemId]);
+    const mpId = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,one_c_code,created_by,updated_by)
+      select $1,'Наш МП',1,0,room_id,'temporary','TMP-2026-000002','tmp-2026-000002',$3,created_by,updated_by from yu_inventory.items where id=$2`, [mpId, f.itemId, base.code]);
+    await save([{ ...base, name: "Название МП", inventoryNumber: null, barcode: null }]);
+    expect((await getOneCAnalytics(pool)).analytics.reconciliation).toMatchObject({ fixedAssets: 1, materials: 1, both: 0, temporary: 2, temporaryUnmatched: 0 });
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ identityMethod: "asset_code", nextName: source.name, price: { nextUnitPrice: "50000.00" } });
+    expect(preview.rows.find(row => row.itemId === mpId)).toMatchObject({ identityMethod: "material_code", nextName: "Название МП", price: { nextUnitPrice: "9100.00" } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(2);
+    expect((await pool.query('select name,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: source.name, unit_price: "50000.00" });
+    expect((await pool.query('select name,unit_price from yu_inventory.items where id=$1', [mpId])).rows[0]).toEqual({ name: "Название МП", unit_price: "9100.00" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
+
   it("rejects whole-registry changes after preview, including source-only changes", async () => {
     const f = await seed();
     await save([base]);
@@ -165,13 +185,13 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(aggregate.rows[0].price).toMatchObject({ status: "ambiguous", changed: false, nextUnitPrice: "56789.12" });
   });
 
-  it("only active cards and accepted OS enter current proposals", async () => {
+  it("only active cards enter proposals while the whole current OS register is searched", async () => {
     const f = await seed();
     await save([base]);
     await pool.query(`update yu_inventory.one_c_fixed_asset_inbox set payload=jsonb_set(payload,'{status}','"Снято с учёта"'::jsonb)`);
     await pool.query(`update yu_inventory.items set status='maintenance' where id=$1`, [f.itemId]);
     const preview = await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor);
-    expect(preview.sources.fixedAssets).toBe(0);
+    expect(preview.sources.fixedAssets).toBe(1);
     expect(preview.sources.cards).toBe(0);
     expect(preview.rows).toHaveLength(0);
   });

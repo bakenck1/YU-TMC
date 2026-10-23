@@ -4,6 +4,7 @@ import { buildInventorySourceAudit, type AuditItem, type ExcelSourceRow } from "
 import { buildInventoryAuditEnrichmentPlan } from "../lib/inventory-audit-enrichment";
 import { addOneCPriceProposals } from "../lib/one-c-enrichment-price";
 import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
+import { classifyOneCAudit } from "../lib/one-c-analytics";
 
 const options = { descriptionBarcodes: true, formattedNumbers: true, allowDescriptionIdentity: true, includeIt: true };
 const card: AuditItem & { itemSection: string; unitPrice: string; status: string } = { id: "cabinet", name: "шкаф-купе д/документов No1350/16355 от 09.10.2024", inventoryNumber: "1350/16355", inventoryNumberKind: "official", oneCCode: null, officialBarcodes: [], sourceCodes: [], version: 1, itemSection: "general", unitPrice: "0", status: "active" };
@@ -16,6 +17,7 @@ for (const section of ["os", "mp"] as const) {
       const item = { ...card, inventoryNumber: "TMP-2026-000001", inventoryNumberKind: "temporary", name: `Шкаф инв. №${identifier} от 09.10.2024` };
       const audit = buildInventorySourceAudit([item], section === "os" ? [{ externalId: "os", asset: os }] : [], section === "mp" ? [material] : [], [], options);
       const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [item], options);
+      assert.equal(classifyOneCAudit(audit.rows).get(item.id)?.category, section === "os" ? "fixedAssets" : "materials");
       addOneCPriceProposals(plan, audit.rows, new Map([["os", os]]), [item]);
       assert.equal(plan.rows[0].eligible, true, JSON.stringify(plan.rows[0]));
       assert.equal(plan.rows[0].nextCode, "00000013205");

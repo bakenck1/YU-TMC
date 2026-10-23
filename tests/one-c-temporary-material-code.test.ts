@@ -67,7 +67,7 @@ test("temporary material-code proposals ignore unrelated OS and MP number candid
   assert.equal(plan.rows[0].nameSource, "materials_api");
   assert.equal(plan.rows[0].nextName, material.nomenclature);
   assert.equal(plan.rows[0].price?.nextUnitPrice, "1234.50");
-  assert.equal(classifyOneCAudit(audit.rows).get("temp")?.category, "materials");
+  assert.equal(classifyOneCAudit(audit.rows).get("temp")?.category, "both");
 });
 
 test("zero balance and legacy Excel are not evidence of the current material-code stock", () => {

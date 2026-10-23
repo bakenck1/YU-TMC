@@ -37,7 +37,7 @@ export type InventoryAuditEnrichmentRow = {
   excelRowNumber?: number;
   siteNumber?: string;
   identityEvidence?: string;
-  identityMethod?: "material_code";
+  identityMethod?: "material_code" | "asset_code";
   searchText?: string;
   sourceDetails?: Array<{ kind: "ОС" | "МП"; name: string; inventoryNumber: string | null; barcode: string | null }>;
   price?: {
@@ -167,7 +167,7 @@ function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: st
 }
 
 /** Plans existing-card updates without mutating either live data or saved evidence. */
-export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean; allowTemporaryMaterialCode?: boolean } = {}): InventoryAuditEnrichmentPlan {
+export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean; allowTemporaryMaterialCode?: boolean; allowTemporaryAssetCode?: boolean } = {}): InventoryAuditEnrichmentPlan {
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const oneCOwners = new Map<string, Set<string>>();
   const excelOwners = new Map<string, Set<string>>();
@@ -208,12 +208,17 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       || !sameOfficialSnapshot(item.officialBarcodes, row.siteBarcodes.filter((entry) => entry.kind === "official").map((entry) => entry.value))) return skip("item_changed");
     if (auditRowCount.get(item.id) !== 1) return skip("source_ambiguous");
     if (options.formattedNumbers && !sameOfficialSnapshot(item.localBarcodes ?? [], row.siteBarcodes.filter(entry => entry.kind === "local").map(entry => entry.value))) return skip("item_changed");
-    const materialCode = options.allowTemporaryMaterialCode && isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(item.oneCCode) : null;
-    const codeMaterials = materialCode ? row.excel.filter(entry => entry.sourceKind === "materials_api" && exactMaterialCode(entry.oneCCode) === materialCode && Number(entry.endingBalance) > 0) : [];
+    const materialCode = (options.allowTemporaryMaterialCode || options.allowTemporaryAssetCode) && isTemporaryOneCCard(row.numberKind, row.siteNumber) ? exactMaterialCode(item.oneCCode) : null;
+    const codeMaterials = materialCode && options.allowTemporaryMaterialCode ? row.excel.filter(entry => entry.sourceKind === "materials_api" && exactMaterialCode(entry.oneCCode) === materialCode && Number(entry.endingBalance) > 0) : [];
+    const codeAssets = materialCode && options.allowTemporaryAssetCode ? row.oneC.filter(entry => exactMaterialCode(entry.code) === materialCode && entry.origins?.some(origin => origin === "current_registry" || origin === "selected_batch")) : [];
     const useMaterialCode = codeMaterials.length > 0;
-    if (useMaterialCode && exactMaterialCode(row.siteOneCCode) !== materialCode) return skip("item_changed");
+    const useAssetCode = codeAssets.length > 0;
+    if ((useMaterialCode || useAssetCode) && exactMaterialCode(row.siteOneCCode) !== materialCode) return skip("item_changed");
+    // The two registers may reuse a code for different property. Presence in
+    // both is reported, but updates must not silently pick one register.
+    if (useMaterialCode && useAssetCode) return skip("source_ambiguous");
     const materialEvidence = useMaterialCode ? codeMaterials : row.excel;
-    const oneC = (useMaterialCode ? [] : row.oneC).filter((entry) => Array.isArray(entry.origins)
+    const oneC = (useAssetCode ? codeAssets : useMaterialCode ? [] : row.oneC).filter((entry) => Array.isArray(entry.origins)
       && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
     if (!oneC.length && !row.excel.length) {
       result.missingSources = ["1c", "excel"];
@@ -233,11 +238,11 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     let name: string;
     if (source) {
       if (!source.externalId) return skip("source_ambiguous");
-      if ((oneCOwners.get(source.externalId)?.size ?? 0) > 1) return skip("source_reused");
+      if (!useAssetCode && (oneCOwners.get(source.externalId)?.size ?? 0) > 1) return skip("source_reused");
       let identities = [number(source.inventoryNumber), barcode(source.barcode)].filter((value): value is string => Boolean(value));
       if (!identities.length && options.allowDescriptionIdentity && !source.inventoryNumber?.trim() && !source.barcode?.trim()) identities = descriptionIdentity(item, source.name, options.formattedNumbers);
       const issue = identityIssue(item, identities, source.name, source.barcode, options.allowDescriptionIdentity, source.inventoryNumber, options.formattedNumbers);
-      if (issue) return skip(issue);
+      if (issue && !useAssetCode) return skip(issue);
       name = source.name.trim();
     } else {
       // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
@@ -273,9 +278,10 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     result.externalId = source?.externalId;
     result.excelRowNumber = excel?.rowNumber;
     if (useMaterialCode) result.identityMethod = "material_code";
+    if (useAssetCode) result.identityMethod = "asset_code";
     if (options.allowDescriptionIdentity) {
       result.siteNumber = item.inventoryNumber;
-      result.identityEvidence = useMaterialCode ? `1C: ${materialCode}` : source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
+      result.identityEvidence = useMaterialCode || useAssetCode ? `1C: ${materialCode}` : source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
     }
     result.nextName = name;
     result.nextCode = nextCode;

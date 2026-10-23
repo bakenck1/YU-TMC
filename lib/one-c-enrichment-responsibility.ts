@@ -38,7 +38,7 @@ export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPla
     // prevent assigning them or changing any card field.
     row.searchText = [row.searchText, ...(match?.oneC ?? []).map(entry => osNames.get(entry.externalId)),
       ...(match?.excel ?? []).map(entry => entry.responsibleName)].filter(Boolean).join("\n");
-    if (!row.eligible || row.identityMethod === "material_code") continue;
+    if (!row.eligible || row.identityMethod === "material_code" || row.identityMethod === "asset_code") continue;
     const claims = row.nameSource === "1c" ? (match?.oneC ?? []).map(entry => osNames.get(entry.externalId) ?? "")
       : (match?.excel ?? []).map(entry => entry.responsibleName ?? "");
     // Empty or differing MOLs across balance rows cannot authorize moving the whole card.
