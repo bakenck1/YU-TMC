@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createStructuredWorkerLogger,
+  createServerRequestId,
   emitLegacyUsage,
   emitStructuredEvent,
   observeHttpRequest,
@@ -170,6 +171,20 @@ test("worker logger keeps correlation and aggregate counts but drops entity iden
   assert.equal(output.events[0]?.route, "worker:tmc-push");
   assert.deepEqual(output.events[0]?.attributes, { statusCode: 503, attempts: 3 });
   assert.doesNotMatch(JSON.stringify(output.events), /8b88ac18|subscription-secret|user-secret/);
+});
+
+test("server-generated UUIDs with a decimal-only tail keep one correlation ID through privacy filtering", async () => {
+  const generated = createServerRequestId(() => "388832b2-e8b4-4bee-95bd-268527911563");
+  assert.match(generated, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.doesNotMatch(generated, /\d{12}/);
+  const output = capture();
+  const response = await observeHttpRequest(new Request("https://inventory.example/api/inventory/transfers", { headers: { "x-request-id": generated } }), "/api/inventory/transfers", () => {
+    emitLegacyUsage({ compatibilityId: "LEGACY-TRANSFER-ROUTES", variant: "collection.get", outcome: "accepted" }, { sink: output.sink });
+    return Response.json({ ok: true });
+  }, { sink: output.sink, trustForwardedRequestId: true });
+  assert.equal(response.headers.get("x-request-id"), generated);
+  assert.equal(output.events.length, 2);
+  assert.ok(output.events.every(event => event.requestId === generated));
 });
 
 test("legacy events inside a request reuse the server correlation ID", async () => {
