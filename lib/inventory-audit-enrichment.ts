@@ -246,12 +246,13 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     if (source) {
       if (!source.externalId) return skip("source_ambiguous");
       const byName = nameCanIdentifyPrice(source.name, source.matchedBy.includes("exact_name"));
-      if (!useAssetCode && !byName && (oneCOwners.get(source.externalId)?.size ?? 0) > 1) return skip("source_reused");
+      const reused = (oneCOwners.get(source.externalId)?.size ?? 0) > 1;
+      if (!useAssetCode && !byName && reused) return skip("source_reused");
       let identities = [number(source.inventoryNumber), barcode(source.barcode)].filter((value): value is string => Boolean(value));
       if (!identities.length && options.allowDescriptionIdentity && !source.inventoryNumber?.trim() && !source.barcode?.trim()) identities = descriptionIdentity(item, source.name, options.formattedNumbers);
       const issue = identityIssue(item, identities, source.name, source.barcode, options.allowDescriptionIdentity, source.inventoryNumber, options.formattedNumbers);
       if (issue && !useAssetCode && !(byName && (issue === "identity_missing" || !hasSiteIdentity))) return skip(issue);
-      codeOnlyIdentity = Boolean(issue && useAssetCode);
+      codeOnlyIdentity = Boolean(useAssetCode && (issue || reused));
       name = source.name.trim();
     } else {
       // Absence permits fallback; unsafe or ambiguous 1C evidence never does.
@@ -277,10 +278,11 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       }) ?? materialEvidence[0] : materialEvidence[0];
       if (!Number.isSafeInteger(excel.rowNumber) || excel.rowNumber < 1) return skip("source_ambiguous");
       const byName = nameCanIdentifyPrice(excel.nomenclature, Boolean(excel.matchedBy?.includes("exact_name")));
-      if (!useMaterialCode && !byName && materialEvidence.some(entry => (excelOwners.get(String(entry.rowNumber))?.size ?? 0) > 1)) return skip("source_reused");
+      const reused = materialEvidence.some(entry => (excelOwners.get(String(entry.rowNumber))?.size ?? 0) > 1);
+      if (!useMaterialCode && !byName && reused) return skip("source_reused");
       const issue = materialIdentityIssue(excel);
       if (issue && !useMaterialCode && !(byName && (issue === "identity_missing" || !hasSiteIdentity))) return skip(issue);
-      codeOnlyIdentity = Boolean(issue && useMaterialCode);
+      codeOnlyIdentity = Boolean(useMaterialCode && (issue || reused));
       name = excel.nomenclature.trim();
     }
     if (!name || [...name].length > 160 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(name)) {

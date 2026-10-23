@@ -5,6 +5,7 @@ import { buildInventorySourceAudit, type ExcelSourceRow } from "../lib/inventory
 import { buildInventoryAuditEnrichmentPlan } from "../lib/inventory-audit-enrichment";
 import { addOneCPriceProposals } from "../lib/one-c-enrichment-price";
 import { classifyOneCAudit } from "../lib/one-c-analytics";
+import { addOneCResponsibilityProposals } from "../lib/one-c-enrichment-responsibility";
 
 const card = { id: "card", name: "Наш товар", inventoryNumber: "011-00134", inventoryNumberKind: "official", oneCCode: null as string | null, officialBarcodes: [] as string[], sourceCodes: [], version: 1, itemSection: "general", status: "active", unitPrice: "0" };
 const asset: OneCFixedAsset = { externalId: "os", code: "000003966", name: "Процессор 3.1 инв№011-00134", inventoryNumber: "011 00134", barcode: null, quantity: 1, initialCost: null, residualCost: 0, status: "Снято с учёта", category: null, location: null, responsibleName: null, responsibleExternalId: null, acceptedAt: null, updatedAt: null };
@@ -43,6 +44,14 @@ test("permanent cards can use an exact 1C code in either register", () => {
     assert.equal(row.price?.nextUnitPrice, section === "os" ? "50000.00" : "27440.00");
     assert.equal(classifyOneCAudit(audit.rows).get(item.id)?.category, section === "os" ? "fixedAssets" : "materials");
   }
+});
+
+test("a shared metadata code cannot authorize assigning one source's owner to several physical cards", () => {
+  const cards = [card, { ...card, id: "second" }].map(item => ({ ...item, oneCCode: material.oneCCode! }));
+  const audit = buildInventorySourceAudit(cards, [], [{ ...material, responsibleName: "Бауыржан Анесович" }], [], options);
+  const plan = buildInventoryAuditEnrichmentPlan(audit.rows, cards, options);
+  addOneCResponsibilityProposals(plan, audit.rows, new Map(), [{ id: "owner", fullName: "Бауыржан Анесович", active: true, deleted: false, role: "employee" }], cards.map(item => ({ itemId: item.id, userId: null, name: null, pendingTransfer: false, unavailable: false })));
+  assert.ok(plan.rows.every(row => row.identityMethod === "material_code" && !row.responsibility?.changed));
 });
 
 test("formatted barcodes and complete numbers in names recover prices in either register", () => {
