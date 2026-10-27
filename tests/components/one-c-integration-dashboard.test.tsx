@@ -18,6 +18,33 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("explains the 946 total and shows only the 742 unmatched temporary cards as needing attention", () => {
+    render(<OneCIntegrationDashboard analytics={{...analytics, inventory:{total:2566, active:2559,quantity:6050}, reconciliation:{...analytics.reconciliation,total:2566,fixedAssets:1116,materials:573,both:0,possible:0,missing:135,temporary:946,temporaryFound:204,temporaryPossible:0,temporaryUnmatched:742}}} materials={materials} />);
+    const metric = screen.getByRole("heading", {name:"Всего временных номеров"}).parentElement!;
+    expect(metric.textContent).toContain("946");
+    expect(metric.textContent).toContain("Из них найдено в 1С: 204 · Без совпадения: 742");
+    const attention = screen.getByRole("heading", {name:"Временные без совпадения"}).parentElement!;
+    expect(attention.textContent).toContain("742");
+    expect(attention.textContent).not.toContain("946");
+  });
+  it("shows temporary candidates separately and does not call them found", () => {
+    render(<OneCIntegrationDashboard analytics={{...analytics,reconciliation:{...analytics.reconciliation,temporary:3,temporaryFound:1,temporaryPossible:1,temporaryUnmatched:1}}} materials={materials} />);
+    expect(screen.getByText("Из них найдено в 1С: 1 · Без совпадения: 1 · Нужно сверить номер: 1")).toBeTruthy();
+  });
+  it.each([
+    ["kk", "Оның ішінде 1С-тен табылды: 1 · Сәйкестігі жоқ: 1"],
+    ["en", "Of these, found in 1C: 1 · Unmatched: 1"],
+  ] as const)("localizes the temporary breakdown in %s", (language, text) => {
+    appLanguage.value = language;
+    render(<OneCIntegrationDashboard analytics={{...analytics,reconciliation:{...analytics.reconciliation,temporary:2,temporaryFound:1,temporaryPossible:0,temporaryUnmatched:1}}} materials={materials} />);
+    expect(screen.getByText(text)).toBeTruthy();
+  });
+  it("does not claim zero unmatched temporary cards when sources are unavailable", () => {
+    render(<OneCIntegrationDashboard analytics={{...analytics,assets:{...analytics.assets,receivedAt:null}}} materials={materials} />);
+    const attention = screen.getByRole("heading", {name:"Временные без совпадения"}).parentElement!;
+    expect(attention.textContent).toContain("—");
+    expect(screen.queryByText(/Из них найдено в 1С:/)).toBeNull();
+  });
   it("groups cards found in both registers under materials without changing the found total", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     expect(screen.queryByText("Найдено в ОС и МП")).toBeNull();

@@ -15,7 +15,7 @@ test("categories partition cards while temporary numbers remain independent", ()
     row({ itemId: "both", siteNumber: "TMP-1", siteBarcodes: [{ value: "3", kind: "official" }], oneC: [{ ...asset, externalId: "both-os", inventoryNumber: "3" }], excel: [{ ...material, rowNumber: 3, sourceKey: "both-mp", explicitInventoryNumber: "3", inventoryNumber: "3" }], numberKind: "temporary" }),
     row({ itemId: "weak", oneC: [{ ...asset, externalId: "weak", inventoryNumber: "1-2", matchedBy: ["number_suffix"] }] }), row({ itemId: "missing", result: "temporary", numberKind: "temporary" }),
   ], ["asset", "both-os", "weak", "unmatched", "unmatched"], ["balance", "balance2", "both-mp", "other"]);
-  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 0, temporary: 2, temporaryUnmatched: 1, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
+  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 0, temporary: 2, temporaryUnmatched: 1, temporaryFound: 1, temporaryPossible: 0, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
 });
 
 test("code alone does not prove presence, while a full identifier does not require choosing an update record", () => {
@@ -70,4 +70,34 @@ test("empty input is finite and the new page retains the existing integration pe
   for (const role of ["employee", "warehouse", "typography", "passport_author", "passport_reviewer"]) {
     assert.equal(canAccessPath(role, "/integrations/1c"), canAccessPath(role, "/settings/integrations/1c"));
   }
+});
+
+test("temporary total partitions into found, possible and unmatched without double counting both registries", () => {
+  const counts = summarizeOneCAudit([
+    row({itemId:'both', numberKind:'temporary', siteOneCCode:'1', oneC:[asset], excel:[{...material, oneCCode:'1'}]}),
+    row({itemId:'possible', numberKind:'temporary', siteNumber:'TMP-2', oneC:[{...asset, inventoryNumber:'99'}]}),
+    row({itemId:'missing', numberKind:'temporary', siteNumber:'TMP-3'}),
+  ], [], []);
+  assert.equal(counts.temporary, 3);
+  assert.equal(counts.temporaryFound, 1);
+  assert.equal(counts.temporaryPossible, 1);
+  assert.equal(counts.temporaryUnmatched, 1);
+  assert.equal(counts.temporary, counts.temporaryFound + counts.temporaryPossible + counts.temporaryUnmatched);
+});
+
+test("screenshot counts distinguish all 946 temporary cards from 742 unmatched cards", () => {
+  const rows = [
+    ...Array.from({length:1116}, (_,i) => row({itemId:`os-${i}`, oneC:[asset], numberKind:i < 204 ? 'temporary' : 'official'})),
+    ...Array.from({length:573}, (_,i) => row({itemId:`mp-${i}`, excel:[material]})),
+    ...Array.from({length:742}, (_,i) => row({itemId:`temp-${i}`, numberKind:'temporary'})),
+    ...Array.from({length:135}, (_,i) => row({itemId:`missing-${i}`})),
+  ];
+  const c = summarizeOneCAudit(rows, [], []);
+  assert.equal(c.total, 2566);
+  assert.equal(c.temporary, 946);
+  assert.equal(c.temporaryFound, 204);
+  assert.equal(c.temporaryUnmatched, 742);
+  assert.equal(c.fixedAssets + c.materials + c.both, 1689);
+  assert.equal(c.missing, 135);
+  assert.equal(c.fixedAssets+c.materials+c.both+c.possible+c.missing+c.temporaryUnmatched,c.total);
 });
