@@ -42,7 +42,7 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
 
 /** Categories partition Inventory cards; temporary numbers are an independent attribute. */
 export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], materialKeys: string[]) {
-  const counts = { fixedAssets: 0, materials: 0, both: 0, possible: 0, missing: 0, temporary: 0, temporaryUnmatched: 0 };
+  const counts = { fixedAssets: 0, materials: 0, both: 0, possible: 0, missing: 0, temporary: 0, temporaryUnmatched: 0, temporaryFound: 0, temporaryPossible: 0 };
   const seenAssets = new Set<string>();
   const seenMaterials = new Set<string>();
   const presence = classifyOneCAudit(rows);
@@ -51,6 +51,10 @@ export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], mater
     for (const asset of row.oneC) seenAssets.add(asset.externalId);
     for (const material of row.excel) if (material.sourceKey) seenMaterials.add(material.sourceKey);
     const category = presence.get(row.itemId)!.category;
+    if (row.numberKind === "temporary") {
+      if (category === "possible") counts.temporaryPossible++;
+      else if (category !== "missing") counts.temporaryFound++;
+    }
     if (category === "missing" && row.numberKind === "temporary") counts.temporaryUnmatched++;
     else counts[category]++;
   }
@@ -67,5 +71,5 @@ export type OneCAnalytics = {
   /** Stock totals are active; presence is checked across all OS records and nonarchived cards. */
   assets: { total: number; active: number; retired: number; other: number; receivedAt: string | null };
   inventory: { total: number; active: number; quantity: number };
-  reconciliation: Omit<ReturnType<typeof summarizeOneCAudit>, "temporaryUnmatched"> & { temporaryUnmatched?: number };
+  reconciliation: Omit<ReturnType<typeof summarizeOneCAudit>, "temporaryUnmatched" | "temporaryFound" | "temporaryPossible"> & { temporaryUnmatched?: number; temporaryFound?: number; temporaryPossible?: number };
 };

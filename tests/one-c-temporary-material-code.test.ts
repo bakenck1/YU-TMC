@@ -22,7 +22,7 @@ test("exact material code confirms a temporary card and proposes its name and pr
   const { audit, plan } = review();
   assert.equal(audit.rows[0].siteOneCCode, "00000123");
   assert.equal(classifyOneCAudit(audit.rows).get("temp")?.category, "materials");
-  assert.deepEqual(summarizeOneCAudit(audit.rows, [], ["mp"]), { total: 1, fixedAssets: 0, materials: 1, both: 0, possible: 0, missing: 0, temporary: 1, temporaryUnmatched: 0, assetsWithoutCandidate: 0, materialBalancesWithoutCandidate: 0 });
+  assert.deepEqual(summarizeOneCAudit(audit.rows, [], ["mp"]), { total: 1, fixedAssets: 0, materials: 1, both: 0, possible: 0, missing: 0, temporary: 1, temporaryUnmatched: 0, temporaryFound: 1, temporaryPossible: 0, assetsWithoutCandidate: 0, materialBalancesWithoutCandidate: 0 });
   assert.equal(plan.rows[0].eligible, true);
   assert.equal(plan.rows[0].identityMethod, "material_code");
   assert.equal(plan.rows[0].nextName, material.nomenclature);

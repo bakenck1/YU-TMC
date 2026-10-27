@@ -121,7 +121,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-000001',inventory_number_key='tmp-2026-000001',one_c_code=$2 where id=$1`, [f.itemId, base.code]);
     await save([{ ...base, name: "Материальный предмет", inventoryNumber: null, barcode: null }]);
     const before = await getOneCAnalytics(pool);
-    expect(before.analytics.reconciliation).toMatchObject({ materials: 1, temporary: 1, temporaryUnmatched: 0 });
+    expect(before.analytics.reconciliation).toMatchObject({ materials: 1, temporary: 1, temporaryUnmatched: 0, temporaryFound: 1, temporaryPossible: 0 });
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ eligible: true, identityMethod: "material_code", nameSource: "materials_api", nextName: "Материальный предмет", price: { nextUnitPrice: "9100.00", changed: true }, responsibility: { changed: false } });
@@ -139,7 +139,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,one_c_code,created_by,updated_by)
       select $1,'Наш МП',1,0,room_id,'temporary','TMP-2026-000002','tmp-2026-000002',$3,created_by,updated_by from yu_inventory.items where id=$2`, [mpId, f.itemId, base.code]);
     await save([{ ...base, name: "Название МП", inventoryNumber: null, barcode: null }]);
-    expect((await getOneCAnalytics(pool)).analytics.reconciliation).toMatchObject({ fixedAssets: 1, materials: 1, both: 0, temporary: 2, temporaryUnmatched: 0 });
+    expect((await getOneCAnalytics(pool)).analytics.reconciliation).toMatchObject({ fixedAssets: 1, materials: 1, both: 0, temporary: 2, temporaryUnmatched: 0, temporaryFound: 2, temporaryPossible: 0 });
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ identityMethod: "asset_code", nextName: source.name, price: { nextUnitPrice: "50000.00" } });
@@ -301,7 +301,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
       select $1,'Временный предмет',1,250,room_id,'temporary','TMP-2026-FORMAT','TMP-2026-FORMAT',created_by,updated_by from yu_inventory.items where id=$2`, [tempId, f.itemId]);
     const overview = await getOneCAnalyticsSnapshot(pool);
-    expect(overview.analytics.reconciliation).toMatchObject({ total: 2, materials: 1, missing: 0, temporary: 1, temporaryUnmatched: 1 });
+    expect(overview.analytics.reconciliation).toMatchObject({ total: 2, materials: 1, missing: 0, temporary: 1, temporaryUnmatched: 1, temporaryFound: 0, temporaryPossible: 0 });
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ eligible: true, nextName: "Принтер №1350.14444", price: { nextUnitPrice: "9100.00" } });
@@ -469,7 +469,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query("update yu_inventory.items set inventory_number_kind='temporary' where id=$1", [f.itemId]);
     const result = await getOneCAnalytics(pool);
     expect(result.materials.batchId).toBeNull();
-    expect(result.analytics.reconciliation).toMatchObject({ total: 1, missing: 0, temporary: 1, temporaryUnmatched: 1 });
+    expect(result.analytics.reconciliation).toMatchObject({ total: 1, missing: 0, temporary: 1, temporaryUnmatched: 1, temporaryFound: 0, temporaryPossible: 0 });
   });
 
   it("creates dry-run without Excel and keeps all MOL balances, source fields and fingerprints", async () => {
