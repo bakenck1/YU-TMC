@@ -18,17 +18,31 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
-  it("opens the actual matched MP cards from the reconciliation count and exposes the shared update action", async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "matched", group: "materials", name: "Товар по коду ОС", inventoryNumber: "TMP-2026-123", oneCCode: "0000123", sourceCodes: ["0000123"], responsibleName: "Иванов Иван", oneCUnitPrice: "50000.00", currentUnitPrice: "0", source: "ОС" }], total: 519, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
+  it("shows matched temporary cards directly inside the materials tab alongside the original registry", async () => {
+    const fetcher = vi.fn(async (input: string) => new Response(JSON.stringify({ data: input.includes("/analytics/matched") ? [{ id: "female", group: "materials", name: "Манекен женский", inventoryNumber: "TMP-2026-TEST", oneCCode: "00000012626", sourceCodes: ["00000012626"], responsibleName: "Сотрудник", oneCUnitPrice: "29000.00", currentUnitPrice: "29000.00", source: "ОС" }] : [], total: input.includes("/analytics/matched") ? 1 : 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);
-    render(<OneCIntegrationDashboard analytics={{ ...analytics, reconciliation: { ...analytics.reconciliation, materials: 519, both: 0 } }} materials={materials} />);
-    fireEvent.click(screen.getByRole("button", { name: "Материальный предмет: 519" }));
+    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" })).getByRole("button", { name: "Материальный предмет" }));
     const list = await screen.findByRole("region", { name: "Найденные карточки: Материальный предмет" });
-    expect(await within(list).findByRole("link", { name: "Товар по коду ОС" })).toBeTruthy();
-    expect(within(list).getByText("0000123")).toBeTruthy();
-    expect(within(list).getByRole("heading").textContent).toBe("Материальный предмет · 519");
-    expect(screen.getByRole("button", { name: "Проверить изменения" })).toBeTruthy();
-    expect(fetcher.mock.calls[0][0]).toContain("/analytics/matched?group=materials");
+    expect(await within(list).findByRole("link", { name: "Манекен женский" })).toBeTruthy();
+    expect(within(list).getByText("00000012626")).toBeTruthy();
+    expect(fetcher.mock.calls.some(([url]) => url.includes("/analytics/matched?group=materials"))).toBe(true);
+    expect(fetcher.mock.calls.some(([url]) => url.includes("/materials/registry"))).toBe(true);
+  });
+  it("keeps reconciliation counts static without opening matched cards or updates", () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    const rows = screen.getAllByRole("listitem");
+    for (const label of ["ОС", "Материальный предмет"]) {
+      const row = rows.find(row => within(row).queryByText(label));
+      expect(row).toBeTruthy();
+      expect(within(row!).queryByRole("button")).toBeNull();
+      fireEvent.click(within(row!).getByText(label));
+    }
+    expect(screen.queryByRole("region", { name: "Найденные карточки: Материальный предмет" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Обновление карточек из 1С" })).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
   });
   it("shows only the unmatched temporary count with no breakdown or total", () => {
     render(<OneCIntegrationDashboard analytics={{...analytics, inventory:{total:2566, active:2559,quantity:6050}, reconciliation:{...analytics.reconciliation,total:2566,fixedAssets:1116,materials:573,both:0,possible:0,missing:135,temporary:946,temporaryFound:204,temporaryPossible:0,temporaryUnmatched:742}}} materials={materials} />);
