@@ -5,6 +5,7 @@ import { exportOneCAnalyticsExcel } from "../lib/server/excel/one-c-analytics-ex
 import { summarizeOneCAudit } from "../lib/one-c-analytics";
 import type { AuditMatch } from "../lib/inventory-source-audit";
 import type { OneCMaterial } from "../lib/contracts/one-c-materials";
+import { workbookCell as cell, workbookColumn as column, workbookRow as findRow } from "./helpers/one-c-workbook";
 
 const asset: AuditMatch["oneC"][number] = { externalId: "os1", name: "Стол", inventoryNumber: "0000123", code: "00001", barcode: null, status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["inventory_number"], matchedBarcodes: [] };
 const material: AuditMatch["excel"][number] = { sourceKind: "materials_api", sourceKey: "mp1", oneCCode: "00002", rowNumber: 1, nomenclature: "Стол", inventoryNumber: "0000456", explicitInventoryNumber: "0000456", endingBalance: "2", matchedBy: ["site_number"] };
@@ -34,47 +35,53 @@ async function read(data: Parameters<typeof exportOneCAnalyticsExcel>[0]) {
   return workbook;
 }
 
-test("five ordered full lists preserve IDs and balances, count confirmed cards once, and overlap temporary correctly", async () => {
+test("six ordered full lists preserve IDs and balances, count confirmed cards once, and overlap temporary correctly", async () => {
   const workbook = await read(snapshot());
-  assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["ОС", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С"]);
-  assert.equal(workbook.getWorksheet("ОС")!.getCell("B6").value, "00001");
-  assert.equal(workbook.getWorksheet("ОС")!.getCell("D6").value, "0000123");
+  assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["ОС", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
+  assert.equal(cell(workbook.getWorksheet("ОС")!, "Код 1С").value, "00001");
+  assert.equal(cell(workbook.getWorksheet("ОС")!, "Инвентарный номер").value, "0000123");
   const materials = workbook.getWorksheet("МП")!;
   assert.equal(materials.rowCount, 8); // Every positive balance, not distinct-code or paginated rows.
-  assert.equal(materials.getCell("F6").value, 2.5);
-  assert.equal(materials.getCell("L6").value, 100.25);
+  const firstMaterial = findRow(materials, "00002", "Код 1С").number;
+  assert.equal(cell(materials, "Остаток", firstMaterial).value, 1);
+  assert.equal(cell(materials, "Учётная цена, KZT", firstMaterial).value, 101.25);
   assert.match(String(materials.getCell("A3").value), /Активные позиции 1С: 5 = ОС 3 \+ МП 2/);
   assert.match(String(materials.getCell("A2").value), /2 кодов МП.*3 строк остатков/);
   const found = workbook.getWorksheet("Совпадения 1С")!;
   assert.equal(found.rowCount, 9);
   assert.match(String(found.getCell("A2").value), /Найдено: 3\. Нужно сверить номер: 1/);
-  assert.equal(found.getCell("G9").value, "Нужно сверить номер");
-  assert.equal(found.getCell("B9").value, "weak");
-  assert.equal(found.getCell("H8").value, "МП");
+  const weak = findRow(found, "weak").number;
+  assert.equal(cell(found, "Результат сверки", weak).value, "Нужно сверить номер");
+  assert.equal(cell(found, "Раздел 1С", findRow(found, "both").number).value, "МП");
   assert.match(String(found.getCell("A2").value), /ОС: 1 · МП: 2/);
-  assert.equal(workbook.getWorksheet("Временные")!.getCell("I6").value, "МП");
-  assert.equal(found.getCell("Q6").value, 123.45);
-  assert.equal(found.getCell("R6").value, "Ответственный Inventory");
-  assert.equal(found.getCell("V6").value, 900.5);
-  assert.equal(found.getCell("W6").value, 450.25);
-  assert.equal(found.getCell("X7").value, "100.25\n101.25");
-  assert.equal(found.getCell("V9").value, null); // An unconfirmed candidate must not supply a price.
-  assert.equal(found.getCell("X9").value, null);
+  const osRow = findRow(found, "os").number;
+  assert.equal(cell(found, "Цена в нашей базе, KZT", osRow).value, 123.45);
+  assert.equal(cell(found, "Ответственный в нашей базе", osRow).value, "Ответственный Inventory");
+  assert.equal(cell(found, "Первоначальная стоимость ОС, KZT", osRow).value, 900.5);
+  assert.equal(cell(found, "Остаточная стоимость ОС, KZT", osRow).value, 450.25);
+  assert.equal(cell(found, "Цены строк МП, KZT", findRow(found, "mp").number).value, "100.25\n101.25");
+  assert.equal(cell(found, "Первоначальная стоимость ОС, KZT", weak).value, null);
+  assert.equal(cell(found, "Цены строк МП, KZT", weak).value, null);
   const temporary = workbook.getWorksheet("Временные")!;
   assert.equal(temporary.rowCount, 7);
-  assert.equal(temporary.getCell("H6").value, "Найдено");
-  assert.equal(temporary.getCell("H7").value, "Не найдено");
+  assert.equal(cell(temporary, "Результат сверки", findRow(temporary, "both").number).value, "Найдено");
+  assert.equal(cell(temporary, "Раздел 1С", findRow(temporary, "both").number).value, "МП");
+  const absentRow = findRow(temporary, "missing").number;
+  assert.equal(cell(temporary, "Результат сверки", absentRow).value, "Не найдено");
   const missing = workbook.getWorksheet("Не найдено в 1С")!;
   assert.equal(missing.rowCount, 5);
-  assert.equal(temporary.getCell("C7").value, "missing");
-  assert.equal(temporary.getCell("D7").value, '\'=HYPERLINK("bad")');
+  assert.equal(cell(temporary, "Наименование в нашей базе", absentRow).value, '\'=HYPERLINK("bad")');
   // The three Inventory sheets cover all cards; unmatched temporary cards are never listed as missing.
-  const exportedIds = [found, missing, temporary].flatMap(sheet => Array.from({ length: sheet.rowCount - 5 }, (_, index) => sheet.getCell(`${sheet.name === "Временные" ? "C" : "B"}${index + 6}`).value));
+  const exportedIds = [found, missing, temporary].flatMap(sheet => Array.from({ length: sheet.rowCount - 5 }, (_, index) => cell(sheet, "ID карточки", index + 6).value));
   assert.deepEqual([...new Set(exportedIds)].sort(), snapshot().rows.map(row => row.itemId).sort());
   for (const sheet of workbook.worksheets) {
     assert.ok(sheet.autoFilter);
     assert.equal(sheet.views[0].state, "frozen");
     assert.equal(sheet.views[0].xSplit, 3);
+    assert.match(String(sheet.getCell("A5").value), /^Ответственный/u);
+    assert.match(String(sheet.getCell("B5").value), /стоимость|[Цц]ена/u);
+    assert.match(String(sheet.getCell("C5").value), /^Наименование/u);
+    assert.match(String(sheet.getCell("D5").value), /^Код 1С/u);
     sheet.eachRow(row => row.eachCell(cell => assert.equal(cell.formula, undefined)));
   }
 });
@@ -86,7 +93,8 @@ test("unavailable sources do not turn local cards into false missing records; te
   assert.equal(workbook.getWorksheet("Совпадения 1С")!.rowCount, 5);
   assert.equal(workbook.getWorksheet("Не найдено в 1С")!.rowCount, 5);
   assert.equal(workbook.getWorksheet("Временные")!.rowCount, 7);
-  assert.equal(workbook.getWorksheet("Временные")!.getCell("H6").value, "Нет данных для сверки");
+  assert.equal(cell(workbook.getWorksheet("Временные")!, "Результат сверки").value, "Нет данных для сверки");
+  assert.equal(workbook.getWorksheet("Добавить в базу")!.rowCount, 5);
   assert.match(String(workbook.getWorksheet("Не найдено в 1С")!.getCell("A4").value), /Нет данных ОС и МП/);
 });
 
@@ -99,7 +107,7 @@ test("partial sources explicitly scope missing results and exports do not stop a
   const missing = workbook.getWorksheet("Не найдено в 1С")!;
   assert.equal(missing.rowCount, 155);
   assert.equal(workbook.getWorksheet("ОС")!.rowCount, 158);
-  assert.equal(workbook.getWorksheet("ОС")!.getCell("B158").value, "000149");
+  assert.ok(findRow(workbook.getWorksheet("ОС")!, "000149", "Код 1С"));
   assert.match(String(missing.getCell("A4").value), /Сверка только по ОС/);
 });
 
@@ -113,24 +121,83 @@ test("the MP sheet includes every current balance beyond the registry page size"
   const workbook = await read(data);
   const sheet = workbook.getWorksheet("МП")!;
   assert.equal(sheet.rowCount, 158);
-  assert.equal(sheet.getCell("B158").value, "M149");
-  assert.equal(sheet.getCell("J158").value, "Ответственный 149");
+  const extra = findRow(sheet, "M149", "Код 1С").number;
+  assert.equal(cell(sheet, "Ответственный", extra).value, "Ответственный 149");
   assert.match(String(sheet.getCell("A2").value), /152 кодов МП с положительным остатком · 153 строк/);
 });
 
-test("temporary sheet puts saved 1C codes first as text, including unmatched cards", async () => {
+test("temporary sheet keeps saved 1C codes beside owner, price and name as text, including unmatched cards", async () => {
   const data = snapshot();
   data.inventory.find(item => item.id === 'both')!.oneCCode = '00000011188';
   data.inventory.find(item => item.id === 'missing')!.oneCCode = '000009149';
   const book = await read(data);
   const sheet = book.getWorksheet('Временные')!;
-  assert.equal(sheet.getCell('B5').value, 'Код 1С в нашей базе');
-  assert.equal(sheet.getCell('B6').value, '00000011188');
-  assert.equal(sheet.getCell('B7').value, '000009149');
-  assert.equal(sheet.getCell('C7').value, 'missing');
-  assert.equal(sheet.getCell('H7').value, 'Не найдено');
-  assert.equal(sheet.getCell('J7').value, '');
+  assert.equal(column(sheet, 'Код 1С в нашей базе'), 4);
+  assert.equal(cell(sheet, 'Код 1С в нашей базе', findRow(sheet, 'both').number).value, '00000011188');
+  const absentRow = findRow(sheet, 'missing').number;
+  assert.equal(cell(sheet, 'Код 1С в нашей базе', absentRow).value, '000009149');
+  assert.equal(cell(sheet, 'Результат сверки', absentRow).value, 'Не найдено');
+  assert.equal(cell(sheet, 'Коды ОС', absentRow).value, '');
   data.inventory.find(item => item.id === 'missing')!.oneCCode = null;
   const absent = await read(data);
-  assert.equal(absent.getWorksheet('Временные')!.getCell('B7').value, '');
+  const missingSheet = absent.getWorksheet('Временные')!;
+  assert.equal(cell(missingSheet, 'Код 1С в нашей базе', findRow(missingSheet, 'missing').number).value, '');
+});
+
+test("add-to-database sheet includes every absent active source, preserves balances and excludes even weak candidates", async () => {
+  const data = snapshot();
+  data.assets.push(
+    { ...data.assets[0], externalId: "absent-os", asset: { ...data.assets[0].asset, externalId: "absent-os", code: "00000099", name: "Новое ОС", responsibleName: "Алия Иванова", initialCost: "900.50" } },
+    { ...data.assets[0], externalId: "aggregate-os", asset: { ...data.assets[0].asset, externalId: "aggregate-os", code: "00000100", name: "Групповое ОС", responsibleName: "Алия Иванова", quantity: 2, initialCost: "5000" } },
+  );
+  data.materialRecords.push(
+    { key: "absent-mp-1", material: { ...mp, code: "00000088", name: "Новый МП", responsibleName: "Борис Иванов", quantity: "2.5", unitPrice: "200" } },
+    { key: "absent-mp-2", material: { ...mp, code: "00000088", name: "Новый МП", responsibleName: "Борис Иванов", warehouseCode: "002", quantity: "1", unitPrice: "300" } },
+  );
+  const book = await read(data);
+  const sheet = book.getWorksheet("Добавить в базу")!;
+  assert.equal(sheet.rowCount, 9);
+  assert.match(String(sheet.getCell("A2").value), /2 ОС · 2 строк остатков МП/u);
+  assert.equal(cell(sheet, "Код 1С").value, "00000099");
+  assert.equal(cell(sheet, "Цена за единицу, KZT").value, 900.5);
+  const aggregate = findRow(sheet, "00000100", "Код 1С").number;
+  assert.equal(cell(sheet, "Цена за единицу, KZT", aggregate).value, null);
+  assert.equal(cell(sheet, "Первоначальная стоимость ОС, KZT", aggregate).value, 5000);
+  assert.equal(cell(sheet, "Цена за единицу, KZT", 8).value, 300);
+  assert.equal(cell(sheet, "Цена за единицу, KZT", 9).value, 200);
+  assert.equal(cell(sheet, "Количество", 9).value, 2.5);
+  assert.equal(cell(sheet, "Код 1С", 9).value, "00000088");
+  assert.equal(cell(sheet, "№", 9).value, 4);
+  assert.equal(sheet.getCell("B8").numFmt, '#,##0.00');
+  assert.deepEqual(Array.from({ length: 4 }, (_, index) => cell(sheet, "Ключ строки 1С", index + 6).value), ["absent-os", "aggregate-os", "absent-mp-2", "absent-mp-1"]);
+});
+
+test("all sheets group owners then descending prices, retain zero prices and put unassigned records last", async () => {
+  const data = snapshot();
+  data.materialRecords = [
+    { key: "unassigned", material: { ...mp, code: "001", responsibleName: null, unitPrice: "999999" } },
+    { key: "low", material: { ...mp, code: "002", responsibleName: "Алия Иванова", unitPrice: "0" } },
+    { key: "high", material: { ...mp, code: "003", responsibleName: "Алия Иванова", unitPrice: "300.25" } },
+    { key: "middle", material: { ...mp, code: "004", responsibleName: "Алия Иванова", unitPrice: "100" } },
+    { key: "other", material: { ...mp, code: "005", responsibleName: "Борис Иванов", unitPrice: "900" } },
+  ];
+  const book = await read(data);
+  for (const name of ["МП", "Добавить в базу"]) {
+    const sheet = book.getWorksheet(name)!;
+    assert.deepEqual(Array.from({ length: 5 }, (_, index) => cell(sheet, "Код 1С", index + 6).value), ["003", "004", "002", "005", "001"]);
+    assert.equal(sheet.getCell("B8").value, 0);
+    assert.equal(sheet.getCell("B6").numFmt, '#,##0.00');
+    assert.equal(sheet.getCell("D6").type, 3); // Text, preserving leading zeroes.
+    assert.equal(sheet.getCell("B6").font.bold, true);
+  }
+});
+
+test("absent source export has no page limit and includes only available registers", async () => {
+  const data = snapshot();
+  data.materialRecords.push(...Array.from({ length: 155 }, (_, index) => ({ key: `absent-${index}`, material: { ...mp, code: `0000${index}` } })));
+  const book = await read({ ...data, assets: [], analytics: { ...data.analytics, assets: { ...data.analytics.assets, receivedAt: null } } });
+  const sheet = book.getWorksheet("Добавить в базу")!;
+  assert.equal(sheet.rowCount, 160);
+  assert.ok(findRow(sheet, "0000154", "Код 1С"));
+  assert.equal(cell(sheet, "Раздел 1С").value, "МП");
 });

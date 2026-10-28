@@ -1,6 +1,7 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { oneCSourceNameKey, oneCNameCanIdentify } from "@/lib/one-c-source-name";
+import { oneCSourceNameKey, oneCNameCanIdentify, oneCNameOwnerCanIdentify, selectOneCNameOwnerSource } from "@/lib/one-c-source-name";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
+import { classifyOneCAudit } from "@/lib/one-c-analytics";
 import { createOneCIdentifierIndex, matchOneCFixedAssetIdentifiers } from "@/lib/one-c-reconciliation";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { auditNeedsReview, isWeakEvidence } from "@/lib/inventory-source-audit-review";
@@ -19,12 +20,12 @@ export type ExcelSourceRow = ExcelInventoryReference & {
   warehouseCode?: string | null; responsibleName?: string | null; responsibleCode?: string | null;
   unitPrice?: string | null; unit?: string | null;
   inventoryReferences?: ExcelInventoryReference[]; matchedInventoryNumber?: string; matchedReference?: ExcelInventoryReference;
-  matchedBy?: ("code" | "site_number" | "barcode" | "exact_name" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[];
+  matchedBy?: ("code" | "site_number" | "barcode" | "exact_name" | "name_owner" | "number_without_slash" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes?: string[];
 };
-export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
+export type AuditItem = { id: string; name: string; inventoryNumber: string; inventoryNumberKind: string; oneCCode: string | null; responsibleName?: string | null; officialBarcodes: string[]; localBarcodes?: string[]; sourceCodes: string[]; version: number };
 export type AuditOneCOrigin = "selected_batch" | "current_registry";
 export type AuditOneCRow = { externalId: string; asset: OneCFixedAsset; origins?: AuditOneCOrigin[]; batchMatchedItemId?: string | null; reviewState?: string | null };
-export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteOneCCode?: string | null; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; status: string; quantity?: number; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "exact_name" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
+export type AuditMatch = { itemId: string; itemName: string; siteNumber: string; siteOneCCode?: string | null; siteResponsibleName?: string | null; siteBarcodes: { value: string; kind: "official" | "local" }[]; numberKind: string; itemVersion: number; result: "matched" | "missing" | "temporary"; source: "1c" | "excel" | "1c+excel" | null; oneC: { externalId: string; code: string | null; inventoryNumber: string | null; barcode: string | null; name: string; responsibleName?: string | null; status: string; quantity?: number; initialCost?: number | null; reviewState?: string | null; origins: AuditOneCOrigin[]; matchedBy: ("guid" | "code" | "inventory_number" | "barcode" | "exact_name" | "name_owner" | "batch_analysis" | "number_without_slash" | "number_format" | "number_in_description" | "number_suffix" | "number_spaces")[]; matchedBarcodes: string[] }[]; excel: ExcelSourceRow[] };
 export type AuditCounts = { total: number; oneCOnly: number; excelOnly: number; both: number; missing: number; temporary: number; possible?: number };
 
 function barcodeNumber(value: string): string | null {
@@ -131,6 +132,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
       }
     }
   }
+  const assetsByExternalId = new Map(oneCRows.map(row => [row.externalId, row.asset]));
   const oneCByItem = new Map<string, AuditMatch["oneC"]>();
   const linkByExternalId = new Map(links.map((link) => [link.externalId, link.itemId]));
   const candidates = items.map((item) => ({ id: item.id, inventoryNumber: item.inventoryNumber, oneCCode: item.oneCCode, sourceCodes: item.sourceCodes, officialBarcodes: item.officialBarcodes }));
@@ -174,7 +176,9 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     const nameKey = oneCSourceNameKey(asset.name);
     const nameIds = options.exactNames && nameKey && assetNames.get(nameKey)?.size === 1
       ? (nameOwners.get(nameKey) ?? []).filter(id => oneCNameCanIdentify(itemById.get(id)!, asset.name, asset.inventoryNumber, asset.barcode)) : [];
-    for (const id of nameIds) ids.add(id);
+    const nameOwnerIds = options.exactNames && nameKey
+      ? (nameOwners.get(nameKey) ?? []).filter(id => oneCNameOwnerCanIdentify(itemById.get(id)!, asset.name, asset.responsibleName)) : [];
+    for (const id of [...nameIds, ...nameOwnerIds]) ids.add(id);
     const linked = linkByExternalId.get(externalId);
     if (linked) ids.add(linked);
     if (origins.includes("selected_batch") && batchMatchedItemId) ids.add(batchMatchedItemId);
@@ -229,6 +233,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
         ...(linked === id ? ["guid" as const] : []),
         ...(matches.codeItemIds.includes(id) ? ["code" as const] : []),
         ...(nameIds.includes(id) ? ["exact_name" as const] : []),
+        ...(nameOwnerIds.includes(id) ? ["name_owner" as const] : []),
         ...(matches.inventoryItemIds.includes(id) ? ["inventory_number" as const] : []),
         ...(matches.barcodeItemIds.includes(id) || exactBarcodes.length ? ["barcode" as const] : []),
         ...(numberFormatIds.includes(id) && !matches.inventoryItemIds.includes(id) && !matches.barcodeItemIds.includes(id) && !exactBarcodes.length ? ["number_format" as const] : []),
@@ -239,7 +244,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
         ...(formattedIds.includes(id) ? ["number_format" as const] : []),
         ...(batchMatchedItemId === id && !matches.inventoryItemIds.includes(id) && !matches.codeItemIds.includes(id) && !matches.barcodeItemIds.includes(id) && linked !== id && !matchedBarcodes.length ? ["batch_analysis" as const] : []),
       ];
-      oneCByItem.set(id, [...(oneCByItem.get(id) ?? []), { externalId, code: asset.code, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode, name: asset.name, status: asset.status ?? "", ...(options.formattedNumbers ? { quantity: asset.quantity } : {}), reviewState: reviewState ?? null, origins, matchedBy, matchedBarcodes }]);
+      oneCByItem.set(id, [...(oneCByItem.get(id) ?? []), { externalId, code: asset.code, inventoryNumber: asset.inventoryNumber, barcode: asset.barcode, name: asset.name, responsibleName: asset.responsibleName, status: asset.status ?? "", quantity: asset.quantity, initialCost: asset.initialCost ?? null, reviewState: reviewState ?? null, origins, matchedBy, matchedBarcodes }]);
     }
   }
   const counts: AuditCounts = { total: items.length, oneCOnly: 0, excelOnly: 0, both: 0, missing: 0, temporary: 0, possible: 0 };
@@ -283,6 +288,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     if (byName.length && byName.every(row => row.oneCCode) && new Set(byName.map(row => row.materialGuid ?? row.oneCCode)).size === 1) {
       for (const row of byName) if (oneCNameCanIdentify(item, row.nomenclature, row.explicitInventoryNumber, row.barcode)) excelCandidates.push({ ...row, matchedBy: ["exact_name"] });
     }
+    for (const row of byName) if (oneCNameOwnerCanIdentify(item, row.nomenclature, row.responsibleName)) excelCandidates.push({ ...row, matchedBy: ["name_owner"] });
     for (const value of [...item.officialBarcodes, ...(item.localBarcodes ?? [])]) {
       const parsed = parseCode39ScanInput(value);
       if (parsed.ok) for (const row of apiByBarcode.get(parsed.value) ?? []) excelCandidates.push({ ...row, matchedBy: ["barcode"], matchedBarcodes: [value] });
@@ -297,11 +303,41 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
         existing.matchedBarcodes = [...new Set([...(existing.matchedBarcodes ?? []), ...(row.matchedBarcodes ?? [])])];
       }
     }
-    const excel = [...uniqueExcelRows.values()];
-    const oneC = (oneCByItem.get(item.id) ?? []).sort((a, b) =>
+    let excel = [...uniqueExcelRows.values()];
+    let oneC = (oneCByItem.get(item.id) ?? []).sort((a, b) =>
       nameScore(item.name, b.name) - nameScore(item.name, a.name)
       || Number(a.matchedBy.every(isWeakEvidence)) - Number(b.matchedBy.every(isWeakEvidence))
       || a.externalId.localeCompare(b.externalId) || a.origins.join().localeCompare(b.origins.join()));
+    // Full identifiers outrank the temporary name+owner fallback across both registers.
+    const identifierPresence = classifyOneCAudit([{ itemId: item.id, itemName: item.name, siteNumber: item.inventoryNumber, siteOneCCode: item.oneCCode,
+      siteBarcodes: [...item.officialBarcodes, ...(item.localBarcodes ?? [])].map(value => ({ value, kind: "official" as const })),
+      numberKind: item.inventoryNumberKind, itemVersion: item.version, result: "matched", source: null, oneC, excel,
+      // Omit owner identity so this pass verifies only existing identifiers.
+    }]).get(item.id)!;
+    const identifierFound = identifierPresence.fixedAssets || identifierPresence.materials;
+    type NameOwnerChoice = { kind: "1c"; entry: AuditMatch["oneC"][number] } | { kind: "excel"; entry: ExcelSourceRow };
+    const choices: NameOwnerChoice[] = [
+      ...oneC.filter(entry => entry.matchedBy.includes("name_owner")).map(entry => ({ kind: "1c" as const, entry })),
+      ...excel.filter(entry => entry.matchedBy?.includes("name_owner")).map(entry => ({ kind: "excel" as const, entry })),
+    ];
+    const selected = identifierFound ? undefined : selectOneCNameOwnerSource(choices, choice => {
+      if (choice.kind === "excel") return { active: Number(choice.entry.endingBalance) > 0, unitPrice: choice.entry.unitPrice, code: choice.entry.oneCCode, guid: choice.entry.materialGuid, key: `mp:${choice.entry.sourceKey ?? choice.entry.rowNumber}` };
+      const asset = assetsByExternalId.get(choice.entry.externalId);
+      return { active: /^(?:active|\u043f\u0440\u0438\u043d\u044f\u0442[\u043e\u0430]? \u043a \u0443\u0447[\u0435\u0451]\u0442\u0443)$/iu.test(choice.entry.status.trim()), unitPrice: asset?.quantity === 1 ? asset.initialCost : null, code: choice.entry.code, guid: choice.entry.externalId, key: `os:${choice.entry.externalId}` };
+    });
+    const sameMaterial = (entry: ExcelSourceRow, chosen: ExcelSourceRow) => chosen.materialGuid
+      ? entry.materialGuid === chosen.materialGuid
+      : chosen.oneCCode ? exactMaterialCode(entry.oneCCode) === exactMaterialCode(chosen.oneCCode) : entry.rowNumber === chosen.rowNumber;
+    oneC = oneC.flatMap(entry => {
+      if (!entry.matchedBy.includes("name_owner") || selected?.kind === "1c" && selected.entry.externalId === entry.externalId) return [entry];
+      const matchedBy = entry.matchedBy.filter(reason => reason !== "name_owner");
+      return matchedBy.length ? [{ ...entry, matchedBy }] : [];
+    });
+    excel = excel.flatMap(entry => {
+      if (!entry.matchedBy?.includes("name_owner") || selected?.kind === "excel" && sameMaterial(entry, selected.entry)) return [entry];
+      const matchedBy = entry.matchedBy.filter(reason => reason !== "name_owner");
+      return matchedBy.length ? [{ ...entry, matchedBy }] : [];
+    });
     const source = oneC.length && excel.length ? "1c+excel" : oneC.length ? "1c" : excel.length ? "excel" : null;
     if (source === "1c+excel") counts.both++;
     else if (source === "1c") counts.oneCOnly++;
@@ -309,7 +345,7 @@ export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOne
     else counts.missing++;
     const temporary = item.inventoryNumberKind === "temporary" || /^TMP-/i.test(item.inventoryNumber);
     if (!source && temporary) counts.temporary++;
-    const result: AuditMatch = { itemId: item.id, itemName: item.name, siteNumber: item.inventoryNumber, siteOneCCode: item.oneCCode, siteBarcodes: [...item.officialBarcodes.map((value) => ({ value, kind: "official" as const })), ...(item.localBarcodes ?? []).map((value) => ({ value, kind: "local" as const }))], numberKind: item.inventoryNumberKind, itemVersion: item.version, result: source ? "matched" : temporary ? "temporary" : "missing", source, oneC, excel };
+    const result: AuditMatch = { itemId: item.id, itemName: item.name, siteNumber: item.inventoryNumber, siteOneCCode: item.oneCCode, siteResponsibleName: item.responsibleName ?? null, siteBarcodes: [...item.officialBarcodes.map((value) => ({ value, kind: "official" as const })), ...(item.localBarcodes ?? []).map((value) => ({ value, kind: "local" as const }))], numberKind: item.inventoryNumberKind, itemVersion: item.version, result: source ? "matched" : temporary ? "temporary" : "missing", source, oneC, excel };
     if (auditNeedsReview(result)) counts.possible = (counts.possible ?? 0) + 1;
     return result;
   }).sort((a, b) => a.itemId.localeCompare(b.itemId));

@@ -86,6 +86,9 @@ export function extractFormattedInventoryReferences(value: string): ExcelInvento
 /** Inventory markers, full slash/hyphen numbers and barcode payloads in an item name. */
 export function inventoryAuditItemNameNumbers(name: string): string[] {
   return [...new Set([
+    ...extractExcelInventoryReferences(name)
+      .filter(ref => !ref.numberIsUnmarked && (inventoryAuditFormattedKey(ref.sourceInventoryNumber ?? ref.inventoryNumber)?.length ?? 0) >= 5)
+      .map(ref => ref.sourceInventoryNumber ?? ref.inventoryNumber),
     ...extractFormattedInventoryReferences(name).filter(ref => !ref.numberIsUnmarked || /^\d{2,}[/-]\d{3,}$/u.test(ref.inventoryNumber)).map(ref => ref.inventoryNumber),
     ...extractSourceBarcodeNumbers(name),
   ])];
@@ -158,11 +161,16 @@ export function extractExcelInventoryNumber(value: string): string | null {
 /** Whole barcode payloads embedded in a source name; never take a substring. */
 export function extractSourceBarcodeNumbers(value: string): string[] {
   const tokens = [
-    ...value.matchAll(/\*([0-9A-Z./+%$ -]{1,128})\*/giu),
+    // Code 39 start/stop markers must delimit a whole token. In 800*400*2000,
+    // *400* is a dimension fragment, not a barcode. Likewise reject ABC*123*DEF.
+    ...value.matchAll(/(?<![\p{L}\p{N}*/._:\\·+%$\-])\*([0-9A-Z./+%$ -]{1,128})\*(?![\p{L}\p{N}*/._:\\·+%$\-])/giu),
     ...value.matchAll(/(?<![\p{L}\p{N}/-])(YUB-[0-9A-Z]+(?:[./-][0-9A-Z]+)*)(?![\p{L}\p{N}/-])/giu),
     ...value.matchAll(/(?:штрих\s*код|barcode)\s*[:№=]?\s*([0-9A-Z]+(?:[./-][0-9A-Z]+)*)(?![\p{L}\p{N}/-])/giu),
   ];
   return [...new Set(tokens.flatMap(match => {
+    if (match[0].startsWith("*") && /^\s*\d+\s*$/u.test(match[1])
+      && /\d\s*$/u.test(value.slice(0, match.index))
+      && /^\s*\d/u.test(value.slice(match.index + match[0].length))) return [];
     const parsed = parseCode39ScanInput(match[1]);
     return parsed.ok && !parsed.fallbackKey && !/^TMP-/iu.test(parsed.inventoryNumber) ? [parsed.inventoryNumber] : [];
   }))];

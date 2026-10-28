@@ -2,6 +2,7 @@ import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
+import { oneCNameOwnerCanIdentify } from "@/lib/one-c-source-name";
 
 export type OneCAuditPresence = {
   fixedAssets: boolean;
@@ -9,7 +10,7 @@ export type OneCAuditPresence = {
   category: "fixedAssets" | "materials" | "both" | "possible" | "missing";
 };
 
-/** Existence is established by a complete identifier; choosing an update source is a separate operation. */
+/** Existence requires a complete identifier or verified temporary-card name+owner evidence. */
 export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneCAuditPresence> {
   const decode = (value: string | null | undefined) => {
     if (!value) return null;
@@ -27,13 +28,16 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
         || inventoryAuditSourceRanges(name, number, quantity).some(range => anchors.some(anchor => inventoryAuditRangeContains(anchor, range)));
     };
     const sourceCode = exactMaterialCode(row.siteOneCCode);
-    const fixedAssets = row.oneC.some(entry => (sourceCode !== null && exactMaterialCode(entry.code) === sourceCode) || entry.matchedBy.includes("exact_name") || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity));
+    const ownerMatches = (name: string, responsibleName?: string | null) => oneCNameOwnerCanIdentify({ name: row.itemName, inventoryNumber: row.siteNumber, inventoryNumberKind: row.numberKind, responsibleName: row.siteResponsibleName, oneCCode: row.siteOneCCode }, name, responsibleName);
+    const fixedAssets = row.oneC.some(entry => (sourceCode !== null && exactMaterialCode(entry.code) === sourceCode) || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity)
+      || entry.matchedBy.includes("name_owner") && ownerMatches(entry.name, entry.responsibleName));
     const quantities = new Map<string, number>();
     for (const entry of row.excel) if (entry.oneCCode) quantities.set(entry.oneCCode, (quantities.get(entry.oneCCode) ?? 0) + Number(entry.endingBalance ?? 0));
     const materialCode = sourceCode;
-    const codeMatched = row.excel.some(entry => entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && ((materialCode !== null && exactMaterialCode(entry.oneCCode) === materialCode) || entry.matchedBy?.includes("exact_name")));
+    const codeMatched = row.excel.some(entry => entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && materialCode !== null && exactMaterialCode(entry.oneCCode) === materialCode);
     const material = codeMatched || row.excel.some(entry => matches(entry.nomenclature, entry.explicitInventoryNumber ?? (entry.sourceKind === "materials_api" ? null : entry.sourceInventoryNumber ?? entry.inventoryNumber), entry.barcode,
-      entry.oneCCode ? quantities.get(entry.oneCCode) : Number(entry.endingBalance ?? 0)));
+      entry.oneCCode ? quantities.get(entry.oneCCode) : Number(entry.endingBalance ?? 0))
+      || entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && entry.matchedBy?.includes("name_owner") && ownerMatches(entry.nomenclature, entry.responsibleName));
     const category = fixedAssets && material ? "both" : fixedAssets ? "fixedAssets" : material ? "materials"
       : row.oneC.length || row.excel.length ? "possible" : "missing";
     return [row.itemId, { fixedAssets, materials: material, category }];
