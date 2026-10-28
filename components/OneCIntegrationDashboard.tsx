@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, Download, RefreshCw } from "lucide-react";
 import OneCFixedAssetRegistryPanel from "@/components/OneCFixedAssetRegistryPanel";
 import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
+import OneCMatchedCards from "@/components/OneCMatchedCards";
 import { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { OneCAnalytics } from "@/lib/one-c-analytics";
@@ -29,6 +30,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const [refreshing, startRefresh] = useTransition();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [matchedGroup, setMatchedGroup] = useState<"assets" | "materials" | null>(null);
   const router = useRouter();
   const { language } = useAppSettings();
   const c = copy[language];
@@ -43,11 +45,11 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const percent = counts.total ? found / counts.total * 100 : 0;
   // Presence in both registers is displayed under materials and counted once.
   const categories = [
-    { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600" },
-    { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500" },
-    { label: c.checkNumber, value: counts.possible, color: "bg-amber-400" },
-    { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
-    { label: c.missing, value: counts.missing, color: "bg-slate-300" },
+    { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600", group: "assets" as const },
+    { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500", group: "materials" as const },
+    { label: c.checkNumber, value: counts.possible, color: "bg-amber-400", group: null },
+    { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300", group: null },
+    { label: c.missing, value: counts.missing, color: "bg-slate-300", group: null },
   ].filter(entry => entry.value > 0);
   async function downloadExcel() {
     setExporting(true);
@@ -109,7 +111,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">{c.reconciliation}</h2><p className="mt-1 text-xs text-slate-500">{c.scope}</p></div><div className="text-right"><p className="text-2xl font-semibold text-emerald-700">{hasSources ? `${number(percent)}%` : "—"}</p><p className="text-xs text-slate-500">{c.foundShort}</p></div></div>
           {hasSources ? <>
             <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
-            <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
+            <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="text-sm">{entry.group ? <button type="button" aria-label={`${entry.label}: ${number(entry.value)}`} aria-expanded={matchedGroup === entry.group} onClick={() => setMatchedGroup(entry.group)} className="flex w-full items-center justify-between gap-3 rounded-lg py-3 text-left hover:bg-emerald-50"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></button> : <div className="flex items-center justify-between gap-3 py-3"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></div>}</li>)}</ul>
             {!complete ? <p className="mt-3 text-xs text-slate-500">{c.partial}</p> : null}
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{c.noReconciliation}</div>}
         </section>
@@ -120,6 +122,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           <Attention title={c.materialsNoMatch} value={hasMaterials ? counts.materialBalancesWithoutCandidate : null} detail={c.positiveBalances} />
         </section>
       </div>
+      {matchedGroup ? <><InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /><OneCMatchedCards group={matchedGroup} revision={analytics.calculatedAt} /></> : null}
     </div> : null}
     {tab !== "overview" ? <InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /> : null}
     {tab === "assets" ? <OneCFixedAssetRegistryPanel key={analytics.calculatedAt} /> : null}

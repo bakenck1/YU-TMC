@@ -76,6 +76,30 @@ function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: Audi
   const mpPlan = buildInventoryAuditEnrichmentPlan(mpEvidence, items, matching);
   addOneCPriceProposals(osPlan, osEvidence, assets, items);
   addOneCPriceProposals(mpPlan, evidence, assets, items);
+  // Several OS GUIDs may share the saved nomenclature code. A unanimous known
+  // unit cost can update price alone without choosing an arbitrary name/GUID.
+  const savedItems = new Map(items.map(item => [item.id, item]));
+  for (const row of osPlan.rows) {
+    if (row.reason !== "source_ambiguous") continue;
+    const code = exactMaterialCode(savedItems.get(row.itemId)?.oneCCode);
+    const matches = osEvidence.filter(entry => entry.itemId === row.itemId);
+    if (matches.length !== 1) continue;
+    const match = matches[0];
+    if (!code || exactMaterialCode(match?.siteOneCCode) !== code) continue;
+    const sources = (match?.oneC ?? []).filter(entry => exactMaterialCode(entry.code) === code
+      && entry.origins.includes("current_registry"))
+      .map(entry => assets.get(entry.externalId)).filter((asset): asset is OneCFixedAsset => Boolean(asset && asset.quantity === 1 && exactMaterialCode(asset.code) === code));
+    const known = sources.filter(asset => asset.initialCost != null);
+    const costs = known.map(asset => enrichmentMoney(asset.initialCost));
+    if (!known.length || costs.some(cost => cost === null) || new Set(costs).size !== 1) continue;
+    const current = enrichmentMoney(savedItems.get(row.itemId)?.unitPrice) ?? "0.00";
+    row.eligible = true;
+    row.nextName = row.currentName;
+    row.nextCode = row.currentCode;
+    row.price = { currentUnitPrice: current, nextUnitPrice: costs[0]!, changed: current !== costs[0],
+      status: current !== costs[0] ? "ready" : "unchanged", source: "os_initial_cost",
+      sourceExternalId: known.map(asset => asset.externalId).sort()[0] };
+  }
   const os = new Map(osPlan.rows.map(row => [row.itemId, row]));
   const mp = new Map(mpPlan.rows.map(row => [row.itemId, row]));
   const byItem = new Map(items.map(item => [item.id, item]));
@@ -94,7 +118,7 @@ function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: Audi
     const ready = prices.filter(price => price.status === "ready" || price.status === "unchanged");
     const values = new Set(ready.map(price => price.nextUnitPrice));
     const match = byEvidence.get(row.itemId);
-    const conflictingOs = os.get(row.itemId)?.reason === "source_ambiguous" && match?.oneC.some(entry => {
+    const conflictingOs = !os.get(row.itemId)?.eligible && os.get(row.itemId)?.reason === "source_ambiguous" && match?.oneC.some(entry => {
       const asset = assets.get(entry.externalId);
       return asset?.quantity === 1 && enrichmentMoney(asset.initialCost) !== null
         && classifyOneCAudit([{ ...match, oneC: [entry], excel: [] }]).get(row.itemId)?.fixedAssets;

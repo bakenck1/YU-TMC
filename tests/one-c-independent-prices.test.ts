@@ -18,6 +18,31 @@ function review(item = card, os: OneCFixedAsset[] = [asset], mp: ExcelSourceRow[
   return { plan, audit, row: plan.rows[0] };
 }
 
+test("a saved code with several OS GUIDs can fill a unanimous known price without choosing a name", () => {
+  const item = { ...card, inventoryNumber: "TMP-2026-PRICE", inventoryNumberKind: "temporary", oneCCode: asset.code };
+  for (const secondPrice of [50000, null]) {
+    const { row, plan } = review(item, [{ ...asset, initialCost: 50000 }, { ...asset, externalId: "os2", name: "Другое имя", initialCost: secondPrice }], []);
+    assert.equal(row.eligible, true);
+    assert.equal(row.nextName, item.name);
+    assert.equal(row.nextCode, item.oneCCode);
+    assert.equal(row.price?.nextUnitPrice, "50000.00");
+    assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
+  }
+});
+
+test("code-price recovery rejects conflicting known costs, missing costs and aggregate OS amounts", () => {
+  const item = { ...card, oneCCode: asset.code };
+  for (const sources of [
+    [{ ...asset, initialCost: 50000 }, { ...asset, externalId: "os2", initialCost: 60000 }],
+    [{ ...asset, initialCost: null }, { ...asset, externalId: "os2", initialCost: null }],
+    [{ ...asset, quantity: 2, initialCost: 50000 }, { ...asset, externalId: "os2", quantity: 2, initialCost: 50000 }],
+  ]) {
+    const { row } = review(item, sources, []);
+    assert.equal(row.price?.changed, false);
+    assert.equal(row.price?.nextUnitPrice, "0.00");
+  }
+});
+
 test("missing OS initial cost does not hide the independently matched MP unit price", () => {
   const { row, plan } = review();
   assert.equal(row.nameSource, "1c");

@@ -41,7 +41,10 @@ test("six ordered full lists preserve IDs and balances, count confirmed cards on
   assert.equal(cell(workbook.getWorksheet("ОС")!, "Код 1С").value, "00001");
   assert.equal(cell(workbook.getWorksheet("ОС")!, "Инвентарный номер").value, "0000123");
   const materials = workbook.getWorksheet("МП")!;
-  assert.equal(materials.rowCount, 8); // Every positive balance, not distinct-code or paginated rows.
+  assert.equal(materials.rowCount, 10); // Three source balances, then two matched Inventory cards.
+  assert.equal(cell(materials, "Тип строки", 8).value, "Остаток 1С");
+  assert.equal(cell(materials, "Тип строки", 9).value, "Карточка нашей базы");
+  assert.deepEqual([cell(materials, "ID карточки", 9).value, cell(materials, "ID карточки", 10).value].sort(), ["both", "mp"]);
   const firstMaterial = findRow(materials, "00002", "Код 1С").number;
   assert.equal(cell(materials, "Остаток", firstMaterial).value, 1);
   assert.equal(cell(materials, "Учётная цена, KZT", firstMaterial).value, 101.25);
@@ -120,7 +123,7 @@ test("the MP sheet includes every current balance beyond the registry page size"
   data.materials.rowCount = data.materialRecords.length;
   const workbook = await read(data);
   const sheet = workbook.getWorksheet("МП")!;
-  assert.equal(sheet.rowCount, 158);
+  assert.equal(sheet.rowCount, 160);
   const extra = findRow(sheet, "M149", "Код 1С").number;
   assert.equal(cell(sheet, "Ответственный", extra).value, "Ответственный 149");
   assert.match(String(sheet.getCell("A2").value), /152 кодов МП с положительным остатком · 153 строк/);

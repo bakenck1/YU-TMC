@@ -8,7 +8,7 @@ import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
 
 type AnalyticsInventoryItem = {
   id: string; quantity: number; status: string; oneCCode: string | null;
-  unitPrice?: string | null; responsibleName?: string | null;
+  unitPrice?: string | null; responsibleName?: string | null; itemSection?: string;
 };
 
 export async function getOneCAnalytics(pool: Pick<Pool, "connect"> = getDatabasePool()) {
@@ -24,7 +24,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
     await client.query("begin isolation level repeatable read read only");
     const assets = await client.query(`select external_id,payload,last_seen_at,received_at from yu_inventory.one_c_fixed_asset_inbox order by external_id`);
     const materials = await readMaterialRegistry(client);
-    const items = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.status,i.quantity,i.unit_price,
+    const items = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.status,i.quantity,i.unit_price,i.item_section,
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id where p.item_id=i.id and p.ended_at is null) as responsible_name,
       coalesce((select array_agg(original_value) from yu_inventory.barcode_registry where item_id=i.id and kind='official'),'{}') as official_barcodes,
       coalesce((select array_agg(barcode_value) from yu_inventory.local_item_groups where item_id=i.id and status='active'),'{}') as local_barcodes
@@ -60,6 +60,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       id: String(row.id), quantity: Number(row.quantity), status: String(row.status),
       oneCCode: row.one_c_code as string | null, unitPrice: row.unit_price as string | null,
       responsibleName: row.responsible_name as string | null,
+      itemSection: row.item_section as string,
     }));
     return {
       analytics, materials: activeMaterials, assets: sourceAssets, registryAssets, materialRecords,

@@ -18,6 +18,18 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("opens the actual matched MP cards from the reconciliation count and exposes the shared update action", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "matched", group: "materials", name: "Товар по коду ОС", inventoryNumber: "TMP-2026-123", oneCCode: "0000123", sourceCodes: ["0000123"], responsibleName: "Иванов Иван", oneCUnitPrice: "50000.00", currentUnitPrice: "0", source: "ОС" }], total: 519, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<OneCIntegrationDashboard analytics={{ ...analytics, reconciliation: { ...analytics.reconciliation, materials: 519, both: 0 } }} materials={materials} />);
+    fireEvent.click(screen.getByRole("button", { name: "Материальный предмет: 519" }));
+    const list = await screen.findByRole("region", { name: "Найденные карточки: Материальный предмет" });
+    expect(await within(list).findByRole("link", { name: "Товар по коду ОС" })).toBeTruthy();
+    expect(within(list).getByText("0000123")).toBeTruthy();
+    expect(within(list).getByRole("heading").textContent).toBe("Материальный предмет · 519");
+    expect(screen.getByRole("button", { name: "Проверить изменения" })).toBeTruthy();
+    expect(fetcher.mock.calls[0][0]).toContain("/analytics/matched?group=materials");
+  });
   it("shows only the unmatched temporary count with no breakdown or total", () => {
     render(<OneCIntegrationDashboard analytics={{...analytics, inventory:{total:2566, active:2559,quantity:6050}, reconciliation:{...analytics.reconciliation,total:2566,fixedAssets:1116,materials:573,both:0,possible:0,missing:135,temporary:946,temporaryFound:204,temporaryPossible:0,temporaryUnmatched:742}}} materials={materials} />);
     const metric = screen.getByRole("heading", {name:"Всего временных номеров без совпадения"}).parentElement!;

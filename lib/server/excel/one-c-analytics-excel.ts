@@ -4,6 +4,7 @@ import { Workbook, type Worksheet } from "exceljs";
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { classifyOneCAudit, oneCAuditDisplayCategory } from "@/lib/one-c-analytics";
 import { isTemporaryOneCCard } from "@/lib/one-c-material-code";
+import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
 import type { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 
 type FullSnapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
@@ -39,6 +40,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   const inventory = new Map(data.inventory.map(item => [item.id, item]));
   const assetById = new Map((data.registryAssets ?? data.assets).map(row => [row.externalId, row.asset]));
   const materialByKey = new Map(data.materialRecords.map(row => [row.key, row.material]));
+  const matchedMaterials = getOneCMatchedCards(data).filter(card => card.group === "materials");
   const time = new Date(data.analytics.calculatedAt).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" });
   const summary = `Активные позиции 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} = ОС ${hasAssets ? data.analytics.assets.total : "нет данных"} + МП ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} карточек (${data.analytics.inventory.active} активных), ${data.analytics.inventory.quantity} единиц`;
   const availability = !hasSources ? "Нет данных ОС и МП для сверки. Карточки не объявлены ненайденными."
@@ -72,15 +74,23 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   assets.getColumn(11).numFmt = '#,##0.00';
   assets.getColumn(12).numFmt = '#,##0.00';
 
-  const materials = sheet("МП", "Материальные предметы с остатком", hasMaterials ? `${data.materials.materialCount} кодов МП с положительным остатком · ${data.materialRecords.length} строк остатков. Один код может повторяться по складам и ответственным; цена указана для каждой строки.` : "Нет данных МП.",
-    ["№", "Код 1С", "Наименование", "Инвентарный номер", "Штрихкод", "Остаток", "Единица", "Счёт", "Склад", "Ответственный", "Код ответственного", "Учётная цена, KZT", "GUID 1С"],
-    [8, 20, 55, 25, 25, 16, 14, 16, 30, 32, 22, 22, 38]);
+  const materials = sheet("МП", "Материальные предметы", `${hasMaterials ? `${data.materials.materialCount} кодов МП с положительным остатком · ${data.materialRecords.length} строк остатков.` : "Нет исходных остатков МП."} Ниже: ${matchedMaterials.length} найденных карточек нашей базы из группы МП.`,
+    ["№", "Код 1С", "Наименование", "Инвентарный номер", "Штрихкод", "Остаток", "Единица", "Счёт", "Склад", "Ответственный", "Код ответственного", "Учётная цена, KZT", "GUID 1С", "Тип строки", "ID карточки", "Цена в нашей базе, KZT", "Статус цены", "Источник совпадения"],
+    [8, 20, 55, 25, 25, 16, 14, 16, 30, 32, 22, 22, 38, 26, 38, 25, 25, 24]);
   data.materialRecords.forEach(({ material }, index) => materials.addRow([
     index + 1, safeText(material.code), safeText(material.name), safeText(material.inventoryNumber), safeText(material.barcode),
     Number(material.quantity), safeText(material.unit), safeText(material.accountCode), safeText(material.warehouseName ?? material.warehouseCode),
-    safeText(material.responsibleName), safeText(material.responsibleCode), material.unitPrice === null ? null : Number(material.unitPrice), safeText(material.externalId),
+    safeText(material.responsibleName), safeText(material.responsibleCode), amountCell(material.unitPrice), safeText(material.externalId), "Остаток 1С", "", null, "", "МП",
   ]));
   materials.getColumn(12).numFmt = '#,##0.00';
+  materials.getColumn(16).numFmt = '#,##0.00';
+  const matchedMaterialsStart = materials.rowCount + 1;
+  const priceStatus = { ready: "Готова к обновлению", unchanged: "Совпадает", missing: "В 1С нет цены", invalid: "Некорректная цена", ambiguous: "Цены различаются", unconfirmed: "Нет подтверждённой цены" };
+  matchedMaterials.forEach(card => materials.addRow([
+    0, safeText(card.oneCCode ?? card.sourceCodes.join("\n")), safeText(card.name), safeText(card.inventoryNumber), safeText(card.barcode),
+    card.quantity, "шт", "", "", safeText(card.responsibleName), "", amountCell(card.oneCUnitPrice), "", "Карточка нашей базы", safeText(card.id),
+    amountCell(card.currentUnitPrice), priceStatus[card.priceStatus], safeText(card.source),
+  ]));
 
   const sourcePrices = (values: (string | number | null | undefined)[]) => {
     const amounts = values.filter(value => value !== null && value !== undefined && value !== "")
@@ -149,14 +159,14 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   ]));
   for (const column of [2, 13, 14]) toAdd.getColumn(column).numFmt = '#,##0.00';
   for (const worksheet of workbook.worksheets) {
-    prioritizeOwnerAndPrice(worksheet);
+    prioritizeOwnerAndPrice(worksheet, worksheet === materials ? matchedMaterialsStart : undefined);
     finishSheet(worksheet);
   }
   return new Uint8Array(await workbook.xlsx.writeBuffer());
 }
 
 /** Consistent leading columns and owner groups, with the most valuable items first. */
-function prioritizeOwnerAndPrice(sheet: Worksheet) {
+function prioritizeOwnerAndPrice(sheet: Worksheet, appendedStart?: number) {
   const columns = Array.from({ length: sheet.columnCount }, (_, index) => ({
     index: index + 1, header: String(sheet.getCell(5, index + 1).value ?? ""),
     width: sheet.getColumn(index + 1).width, numFmt: sheet.getColumn(index + 1).numFmt || "General",
@@ -171,10 +181,12 @@ function prioritizeOwnerAndPrice(sheet: Worksheet) {
     columns.map(column => sheet.getCell(index + 6, column.index).value));
   const compare = (left: unknown, right: unknown) => String(left ?? "").localeCompare(String(right ?? ""), "ru", { numeric: true, sensitivity: "base" });
   const amount = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : -Infinity;
-  rows.sort((left, right) => Number(!left[owner.index - 1]) - Number(!right[owner.index - 1])
+  const compareRows = (left: typeof rows[number], right: typeof rows[number]) => Number(!left[owner.index - 1]) - Number(!right[owner.index - 1])
     || compare(left[owner.index - 1], right[owner.index - 1])
     || (amount(right[price.index - 1]) === amount(left[price.index - 1]) ? 0 : amount(right[price.index - 1]) > amount(left[price.index - 1]) ? 1 : -1)
-    || compare(left[name.index - 1], right[name.index - 1]) || compare(left[code.index - 1], right[code.index - 1]));
+    || compare(left[name.index - 1], right[name.index - 1]) || compare(left[code.index - 1], right[code.index - 1]);
+  const split = appendedStart === undefined ? rows.length : Math.max(0, appendedStart - 6);
+  rows.splice(0, rows.length, ...rows.slice(0, split).sort(compareRows), ...rows.slice(split).sort(compareRows));
   order.forEach((column, index) => {
     sheet.getColumn(index + 1).width = column.width;
     sheet.getColumn(index + 1).numFmt = column.numFmt;
