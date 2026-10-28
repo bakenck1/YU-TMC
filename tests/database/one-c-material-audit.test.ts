@@ -256,7 +256,17 @@ describe("live materials API replaces Excel as audit input", () => {
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,one_c_code,created_by,updated_by)
       select $1,'Наш МП',1,0,room_id,'temporary','TMP-2026-000002','tmp-2026-000002',$3,created_by,updated_by from yu_inventory.items where id=$2`, [mpId, f.itemId, base.code]);
     await save([{ ...base, name: "Название МП", inventoryNumber: null, barcode: null }]);
-    expect((await getOneCAnalytics(pool)).analytics.reconciliation).toMatchObject({ fixedAssets: 1, materials: 1, both: 0, temporary: 2, temporaryUnmatched: 0, temporaryFound: 2, temporaryPossible: 0 });
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.reconciliation).toMatchObject({ fixedAssets: 0, materials: 2, both: 0, temporary: 2, temporaryUnmatched: 0, temporaryFound: 2, temporaryPossible: 0 });
+    const bytes = await exportOneCAnalyticsExcel(snapshot);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    for (const name of ["Совпадения 1С", "Временные"]) {
+      const sheet = workbook.getWorksheet(name)!;
+      const osRow = workbookRow(sheet, f.itemId).number;
+      expect(workbookCell(sheet, "Раздел 1С", osRow).value).toBe("МП");
+      expect(workbookCell(sheet, "Первоначальная стоимость ОС, KZT", osRow).value).toBe(50000);
+    }
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ identityMethod: "asset_code", nextName: source.name, price: { nextUnitPrice: "50000.00" } });
