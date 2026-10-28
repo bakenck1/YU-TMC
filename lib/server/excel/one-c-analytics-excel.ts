@@ -2,7 +2,8 @@ import "server-only";
 
 import { Workbook, type Worksheet } from "exceljs";
 import type { AuditMatch } from "@/lib/inventory-source-audit";
-import { classifyOneCAudit } from "@/lib/one-c-analytics";
+import { classifyOneCAudit, oneCAuditDisplayCategory } from "@/lib/one-c-analytics";
+import { isTemporaryOneCCard } from "@/lib/one-c-material-code";
 import type { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 
 type FullSnapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
@@ -33,8 +34,8 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
     return confirmed.fixedAssets || confirmed.materials;
   });
   const candidates = data.rows.filter(row => row.oneC.length || row.excel.length);
-  const temporary = data.rows.filter(row => row.numberKind === "temporary");
-  const missing = hasSources ? data.rows.filter(row => !row.oneC.length && !row.excel.length && row.numberKind !== "temporary") : [];
+  const temporary = data.rows.filter(row => isTemporaryOneCCard(row.numberKind, row.siteNumber));
+  const missing = hasSources ? data.rows.filter(row => !row.oneC.length && !row.excel.length && !isTemporaryOneCCard(row.numberKind, row.siteNumber)) : [];
   const inventory = new Map(data.inventory.map(item => [item.id, item]));
   const assetById = new Map((data.registryAssets ?? data.assets).map(row => [row.externalId, row.asset]));
   const materialByKey = new Map(data.materialRecords.map(row => [row.key, row.material]));
@@ -100,10 +101,11 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
       const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Нужно сверить номер" : "Найдено";
-      const registry = confirmed.category === "both" ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
+      const displayCategory = oneCAuditDisplayCategory(row, confirmed);
+      const registry = confirmed.category === "both" || displayCategory === "materials" && confirmed.fixedAssets ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
         : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (проверить номер)` : "";
       result.addRow(columns<unknown>([
-        index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), row.numberKind === "temporary" ? "Временный" : "Постоянный",
+        index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), isTemporaryOneCCard(row.numberKind, row.siteNumber) ? "Временный" : "Постоянный",
         inventory.get(row.itemId)?.quantity ?? 0, status, registry,
         safeText(inventory.get(row.itemId)?.oneCCode ?? row.siteOneCCode), joined(row.oneC.map(entry => entry.code)), joined(row.oneC.map(entry => entry.name)), joined(row.oneC.map(entry => entry.inventoryNumber)),
         joined(row.excel.map(entry => entry.oneCCode)), joined(row.excel.map(entry => entry.nomenclature)), joined(row.excel.map(entry => entry.matchedInventoryNumber ?? entry.inventoryNumber)),

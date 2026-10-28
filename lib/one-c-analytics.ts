@@ -1,7 +1,7 @@
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { extractExcelInventoryReferences, extractFormattedInventoryReferences, extractSourceBarcodeNumbers, inventoryAuditNumbersEqual, inventoryAuditSourceRanges, inventoryAuditRangeContains, inventoryAuditItemNameNumbers } from "@/lib/inventory-audit-numbers";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
-import { exactMaterialCode } from "@/lib/one-c-material-code";
+import { exactMaterialCode, isTemporaryOneCCard } from "@/lib/one-c-material-code";
 import { oneCNameOwnerCanIdentify } from "@/lib/one-c-source-name";
 
 export type OneCAuditPresence = {
@@ -44,6 +44,15 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
   }));
 }
 
+/** User-facing group; a temporary card found by its saved code belongs to MP. */
+export function oneCAuditDisplayCategory(row: AuditMatch, presence: OneCAuditPresence): OneCAuditPresence["category"] {
+  const code = exactMaterialCode(row.siteOneCCode);
+  if (isTemporaryOneCCard(row.numberKind, row.siteNumber) && code !== null
+    && (row.oneC.some(entry => exactMaterialCode(entry.code) === code)
+      || row.excel.some(entry => entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && exactMaterialCode(entry.oneCCode) === code))) return "materials";
+  return presence.category;
+}
+
 /** Categories partition Inventory cards; temporary numbers are an independent attribute. */
 export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], materialKeys: string[]) {
   const counts = { fixedAssets: 0, materials: 0, both: 0, possible: 0, missing: 0, temporary: 0, temporaryUnmatched: 0, temporaryFound: 0, temporaryPossible: 0 };
@@ -51,15 +60,16 @@ export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], mater
   const seenMaterials = new Set<string>();
   const presence = classifyOneCAudit(rows);
   for (const row of rows) {
-    if (row.numberKind === "temporary") counts.temporary++;
+    const temporary = isTemporaryOneCCard(row.numberKind, row.siteNumber);
+    if (temporary) counts.temporary++;
     for (const asset of row.oneC) seenAssets.add(asset.externalId);
     for (const material of row.excel) if (material.sourceKey) seenMaterials.add(material.sourceKey);
-    const category = presence.get(row.itemId)!.category;
-    if (row.numberKind === "temporary") {
+    const category = oneCAuditDisplayCategory(row, presence.get(row.itemId)!);
+    if (temporary) {
       if (category === "possible") counts.temporaryPossible++;
       else if (category !== "missing") counts.temporaryFound++;
     }
-    if (category === "missing" && row.numberKind === "temporary") counts.temporaryUnmatched++;
+    if (category === "missing" && temporary) counts.temporaryUnmatched++;
     else counts[category]++;
   }
   return {
