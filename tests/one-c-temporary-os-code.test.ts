@@ -59,15 +59,15 @@ test("OS code match cannot invent initial cost from residual cost", () => {
   assert.equal(plan.rows[0].price?.nextUnitPrice, "0.00");
 });
 
-test("permanent code matches and temporary full-number-only matches retain the OS group", () => {
+test("permanent code matches stay OS while a verified temporary number-only match joins MP", () => {
   const items = [
     { ...card("permanent", asset.code!), inventoryNumber: "999/999", inventoryNumberKind: "official" },
     { ...card("number-only", ""), name: "Предмет №1350/12345" },
   ];
   const audit = buildInventorySourceAudit(items, [{ externalId: "os", asset: { ...asset, inventoryNumber: "135012345" } }], [], [], options);
   const counts = summarizeOneCAudit(audit.rows, ["os"], []);
-  assert.equal(counts.fixedAssets, 2);
-  assert.equal(counts.materials, 0);
+  assert.equal(counts.fixedAssets, 1);
+  assert.equal(counts.materials, 1);
   assert.equal(counts.temporaryFound, 1);
   assert.equal(counts.temporaryUnmatched, 0);
 });

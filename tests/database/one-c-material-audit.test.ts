@@ -206,7 +206,7 @@ describe("live materials API replaces Excel as audit input", () => {
     ], metadata());
     await save([{ ...base, name: "Стол офисный", code: "C-MP", inventoryNumber: null, responsibleName, unitPrice: "8100" }]);
     const snapshot = await getOneCAnalyticsSnapshot(pool);
-    expect(snapshot.analytics.reconciliation).toMatchObject({ fixedAssets: 1, materials: 0, temporaryFound: 1 });
+    expect(snapshot.analytics.reconciliation).toMatchObject({ fixedAssets: 0, materials: 1, temporaryFound: 1 });
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows[0]).toMatchObject({ identityMethod: "name_owner", nameSource: "1c", nextName: "СТОЛ ОФИСНЫЙ", nextCode: "A-OS", price: { source: "os_initial_cost", nextUnitPrice: "13750.00" }, responsibility: { changed: false } });
