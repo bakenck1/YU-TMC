@@ -43,6 +43,16 @@ test("code-price recovery rejects conflicting known costs, missing costs and agg
   }
 });
 
+test("an exact saved MP code and current full owner select that owner's price without borrowing another MOL's valuation", () => {
+  const item = { ...card, oneCCode: material.oneCCode!, responsibleName: "Иванов Иван Иванович" };
+  const own = { ...material, responsibleName: item.responsibleName, unitPrice: "15000" };
+  const foreign = { ...material, rowNumber: 2, sourceKey: "mp2", responsibleName: "Петров Петр Петрович", unitPrice: "20000" };
+  assert.equal(review(item, [], [own, foreign]).row.price?.nextUnitPrice, "15000.00");
+  const conflict = { ...own, rowNumber: 3, sourceKey: "mp3", unitPrice: "18000" };
+  assert.equal(review(item, [], [own, foreign, conflict]).row.price?.changed, false);
+  assert.equal(review({ ...item, responsibleName: "Нет такого сотрудника" }, [], [own, foreign]).row.price?.changed, false);
+});
+
 test("missing OS initial cost does not hide the independently matched MP unit price", () => {
   const { row, plan } = review();
   assert.equal(row.nameSource, "1c");
