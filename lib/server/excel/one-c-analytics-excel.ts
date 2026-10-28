@@ -2,7 +2,7 @@ import "server-only";
 
 import { Workbook, type Worksheet } from "exceljs";
 import type { AuditMatch } from "@/lib/inventory-source-audit";
-import { classifyOneCAudit } from "@/lib/one-c-analytics";
+import { classifyOneCAudit, oneCAuditDisplayCategory } from "@/lib/one-c-analytics";
 import type { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 
 type FullSnapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
@@ -100,7 +100,8 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
       const candidates = row.oneC.length || row.excel.length;
       const confirmed = presence.get(row.itemId)!;
       const status = !hasSources ? "Нет данных для сверки" : !candidates ? "Не найдено" : confirmed.category === "possible" ? "Нужно сверить номер" : "Найдено";
-      const registry = confirmed.category === "both" ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
+      const displayCategory = oneCAuditDisplayCategory(row, confirmed);
+      const registry = confirmed.category === "both" || displayCategory === "materials" && confirmed.fixedAssets ? "МП" : confirmed.fixedAssets ? `ОС${row.excel.length ? "; МП: проверить номер" : ""}` : confirmed.materials ? `МП${row.oneC.length ? "; ОС: проверить номер" : ""}`
         : candidates ? `${row.oneC.length && row.excel.length ? "ОС + МП" : row.oneC.length ? "ОС" : "МП"} (проверить номер)` : "";
       result.addRow(columns<unknown>([
         index + 1, safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), row.numberKind === "temporary" ? "Временный" : "Постоянный",
