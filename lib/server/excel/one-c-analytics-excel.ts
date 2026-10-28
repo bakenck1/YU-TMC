@@ -12,8 +12,13 @@ const safeText = (value: unknown) => {
   return /^[\s\uFEFF]*[=+@-]/u.test(text) ? `'${text}` : text;
 };
 const joined = (values: (string | null | undefined)[]) => safeText([...new Set(values.filter(Boolean))].join("\n"));
+const amountCell = (value: unknown): number | null => {
+  if ((typeof value !== "number" && typeof value !== "string") || String(value).trim() === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+};
 
-/** Five full lists, computed afresh; no saved dry-run or pagination limits. */
+/** Full lists and both directions of reconciliation from one current snapshot. */
 export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Array> {
   const workbook = new Workbook();
   workbook.creator = "YU Inventory";
@@ -61,7 +66,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   data.assets.forEach(({ externalId, asset }, index) => assets.addRow([
     index + 1, safeText(asset.code), safeText(asset.name), safeText(asset.inventoryNumber), safeText(asset.barcode), asset.quantity,
     safeText(asset.status), safeText(asset.responsibleName), safeText(asset.location), safeText(externalId),
-    asset.initialCost ?? null, asset.residualCost, safeText(asset.category),
+    amountCell(asset.initialCost), amountCell(asset.residualCost), safeText(asset.category),
   ]));
   assets.getColumn(11).numFmt = '#,##0.00';
   assets.getColumn(12).numFmt = '#,##0.00';
@@ -120,8 +125,64 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   inventorySheet("Совпадения 1С", "Сверка с 1С", hasSources ? candidates : [], `Найдено: ${found.length}. Нужно сверить номер: ${data.analytics.reconciliation.possible}. ОС: ${data.analytics.reconciliation.fixedAssets} · МП: ${data.analytics.reconciliation.materials + data.analytics.reconciliation.both}. Цены ОС и МП показаны отдельно от цены нашей базы.`);
   inventorySheet("Временные", "Временные номера в нашей базе", temporary, "Все карточки с временным номером, включая найденные в 1С. Список может пересекаться с листом «Совпадения 1С».");
   inventorySheet("Не найдено в 1С", "Есть в нашей базе — не найдено в 1С", missing, "Постоянные номера без совпадений. Временные номера находятся на отдельном листе.");
-  for (const worksheet of workbook.worksheets) finishSheet(worksheet);
+  // A weak candidate also prevents calling a source record wholly absent.
+  const seenAssets = new Set(data.rows.flatMap(row => row.oneC.map(entry => entry.externalId)));
+  const seenMaterials = new Set(data.rows.flatMap(row => row.excel.flatMap(entry => entry.sourceKey ? [entry.sourceKey] : [])));
+  const absentAssets = hasAssets ? data.assets.filter(row => !seenAssets.has(row.externalId)) : [];
+  const absentMaterials = hasMaterials ? data.materialRecords.filter(row => !seenMaterials.has(row.key)) : [];
+  const toAdd = sheet("Добавить в базу", "Есть в 1С — нет в нашей базе", `${absentAssets.length} ОС · ${absentMaterials.length} строк остатков МП. Без кандидата среди неархивных карточек. Проверьте перед добавлением; строки МП могут повторяться по складам и ответственным.`,
+    ["Ответственный", "Цена за единицу, KZT", "Наименование", "Код 1С", "Инвентарный номер", "Штрихкод", "Раздел 1С", "Количество", "Единица", "Расположение / склад", "Счёт", "Статус", "Первоначальная стоимость ОС, KZT", "Остаточная стоимость ОС, KZT", "GUID 1С", "Ключ строки 1С", "№"],
+    [36, 25, 55, 20, 25, 25, 16, 16, 14, 35, 18, 25, 28, 28, 38, 45, 8]);
+  absentAssets.forEach(({ externalId, asset }) => toAdd.addRow([
+    safeText(asset.responsibleName), asset.quantity === 1 ? amountCell(asset.initialCost) : null,
+    safeText(asset.name), safeText(asset.code), safeText(asset.inventoryNumber), safeText(asset.barcode), "ОС", asset.quantity, "шт",
+    safeText(asset.location), "", safeText(asset.status), amountCell(asset.initialCost), amountCell(asset.residualCost),
+    safeText(externalId), safeText(externalId), 0,
+  ]));
+  absentMaterials.forEach(({ key, material }) => toAdd.addRow([
+    safeText(material.responsibleName), material.unitPrice == null ? null : Number(material.unitPrice),
+    safeText(material.name), safeText(material.code), safeText(material.inventoryNumber), safeText(material.barcode), "МП",
+    Number(material.quantity), safeText(material.unit), safeText(material.warehouseName ?? material.warehouseCode),
+    safeText(material.accountCode), "Есть остаток", null, null, safeText(material.externalId), safeText(key), 0,
+  ]));
+  for (const column of [2, 13, 14]) toAdd.getColumn(column).numFmt = '#,##0.00';
+  for (const worksheet of workbook.worksheets) {
+    prioritizeOwnerAndPrice(worksheet);
+    finishSheet(worksheet);
+  }
   return new Uint8Array(await workbook.xlsx.writeBuffer());
+}
+
+/** Consistent leading columns and owner groups, with the most valuable items first. */
+function prioritizeOwnerAndPrice(sheet: Worksheet) {
+  const columns = Array.from({ length: sheet.columnCount }, (_, index) => ({
+    index: index + 1, header: String(sheet.getCell(5, index + 1).value ?? ""),
+    width: sheet.getColumn(index + 1).width, numFmt: sheet.getColumn(index + 1).numFmt || "General",
+  }));
+  const owner = columns.find(column => /^(?:Ответственный|Ответственный в нашей базе)$/u.test(column.header))!;
+  const price = columns.find(column => /^(?:Цена в нашей базе|Учётная цена|Цена за единицу|Первоначальная стоимость), KZT$/u.test(column.header))!;
+  const name = columns.find(column => /^(?:Наименование|Наименование в нашей базе)$/u.test(column.header))!;
+  const code = columns.find(column => /^(?:Код 1С|Код 1С в нашей базе)$/u.test(column.header))!;
+  const leading = [owner, price, name, code];
+  const order = [...leading, ...columns.filter(column => !leading.includes(column))];
+  const rows = Array.from({ length: Math.max(0, sheet.rowCount - 5) }, (_, index) =>
+    columns.map(column => sheet.getCell(index + 6, column.index).value));
+  const compare = (left: unknown, right: unknown) => String(left ?? "").localeCompare(String(right ?? ""), "ru", { numeric: true, sensitivity: "base" });
+  const amount = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : -Infinity;
+  rows.sort((left, right) => Number(!left[owner.index - 1]) - Number(!right[owner.index - 1])
+    || compare(left[owner.index - 1], right[owner.index - 1])
+    || (amount(right[price.index - 1]) === amount(left[price.index - 1]) ? 0 : amount(right[price.index - 1]) > amount(left[price.index - 1]) ? 1 : -1)
+    || compare(left[name.index - 1], right[name.index - 1]) || compare(left[code.index - 1], right[code.index - 1]));
+  order.forEach((column, index) => {
+    sheet.getColumn(index + 1).width = column.width;
+    sheet.getColumn(index + 1).numFmt = column.numFmt;
+    sheet.getCell(5, index + 1).value = column.header;
+    rows.forEach((values, rowIndex) => {
+      const cell = sheet.getCell(rowIndex + 6, index + 1);
+      cell.value = column.header === "№" ? rowIndex + 1 : values[column.index - 1];
+      cell.numFmt = column.numFmt;
+    });
+  });
 }
 
 function finishSheet(sheet: Worksheet) {
@@ -137,6 +198,7 @@ function finishSheet(sheet: Worksheet) {
       });
       row.height = Math.min(120, Math.max(30, lines * 16 + 8));
       if (rowNumber % 2 === 0) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+      row.getCell(2).font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF00695C" } };
     }
   });
   sheet.autoFilter = { from: { row: 5, column: 1 }, to: { row: Math.max(5, sheet.rowCount), column: sheet.columnCount } };

@@ -58,11 +58,11 @@ describe("integration overview", () => {
     appLanguage.value = "kk";
     const view = render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     expect(screen.getByRole("heading", { name: "1С интеграциясы" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Excel жүктеу · 5 парақ" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Excel жүктеу · 6 парақ" })).toBeTruthy();
     appLanguage.value = "en";
     view.rerender(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     expect(screen.getByRole("heading", { name: "1C integration" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Download Excel · 5 sheets" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download Excel · 6 sheets" })).toBeTruthy();
   });
   it("provides the same full-registry updates in OS and MP with a single review block", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
@@ -89,10 +89,10 @@ describe("integration overview", () => {
     const fetcher = vi.fn().mockResolvedValue(new Response("failed", { status: 500 }));
     vi.stubGlobal("fetch", fetcher);
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} batches={batches} />);
-    fireEvent.click(screen.getByRole("button", { name: "Скачать Excel · 5 листов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Скачать Excel · 6 листов" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Не удалось скачать Excel. Повторите попытку.");
     expect(fetcher).toHaveBeenCalledWith("/api/integrations/1c/analytics/export", { cache: "no-store" });
-    expect((screen.getByRole("button", { name: "Скачать Excel · 5 листов" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Скачать Excel · 6 листов" }) as HTMLButtonElement).disabled).toBe(false);
   });
   it.each([
     ["HTML вместо файла", "<html>login</html>", "text/html"],
@@ -100,7 +100,7 @@ describe("integration overview", () => {
   ])("rejects an invalid download: %s", async (_label, body, contentType) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { headers: { "content-type": contentType } })));
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
-    fireEvent.click(screen.getByRole("button", { name: "Скачать Excel · 5 листов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Скачать Excel · 6 листов" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Не удалось скачать Excel. Повторите попытку.");
   });
   it("identifies the local database and does not present absent OS as zero stock", () => {

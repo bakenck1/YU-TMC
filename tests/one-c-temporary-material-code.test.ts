@@ -7,6 +7,7 @@ import { addOneCResponsibilityProposals } from "../lib/one-c-enrichment-responsi
 import { classifyOneCAudit, summarizeOneCAudit } from "../lib/one-c-analytics";
 import { exportOneCAnalyticsExcel } from "../lib/server/excel/one-c-analytics-excel";
 import { Workbook } from "exceljs";
+import { workbookCell } from "./helpers/one-c-workbook";
 
 const item = { id: "temp", name: "Наше название", inventoryNumber: "TMP-2026-000001", inventoryNumberKind: "temporary", oneCCode: "00000123", officialBarcodes: [], sourceCodes: [], version: 1, itemSection: "general", status: "active", unitPrice: "0" };
 const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "00000123", nomenclature: "Материал 1С", inventoryNumber: "", explicitInventoryNumber: null, barcode: null, endingBalance: "3", unitPrice: "1234.50" };
@@ -91,8 +92,8 @@ test("Excel shows a code-matched temporary card as found in MP on both Inventory
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   for (const name of ["Совпадения 1С", "Временные"]) {
-    assert.equal(workbook.getWorksheet(name)!.getCell(name === "Временные" ? "H6" : "G6").value, "Найдено");
-    assert.equal(workbook.getWorksheet(name)!.getCell(name === "Временные" ? "I6" : "H6").value, "МП");
+    assert.equal(workbookCell(workbook.getWorksheet(name)!, "Результат сверки").value, "Найдено");
+    assert.equal(workbookCell(workbook.getWorksheet(name)!, "Раздел 1С").value, "МП");
   }
   assert.equal(workbook.getWorksheet("Не найдено в 1С")!.rowCount, 5);
 });

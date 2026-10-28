@@ -38,7 +38,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
     const auditItems: AuditItem[] = items.rows.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, inventoryNumberKind: row.inventory_number_kind,
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.official_barcodes,
-      localBarcodes: row.local_barcodes, sourceCodes: codes.get(row.id) ?? [],
+      localBarcodes: row.local_barcodes, sourceCodes: codes.get(row.id) ?? [], responsibleName: row.responsible_name,
     }));
     const registryAssets = assets.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] }));
     const sourceAssets = registryAssets.filter(row => row.asset.status === "Принято к учёту");

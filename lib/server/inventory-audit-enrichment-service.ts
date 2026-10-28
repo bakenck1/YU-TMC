@@ -111,6 +111,8 @@ export class InventoryAuditEnrichmentService {
   /** One live comparison across all OS and MP, independent of batch analysis/history. */
   private async currentPlan(client: PoolClient, lock = false) {
     const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,i.status,i.unit_price,i.quantity,
+      (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id
+        where p.item_id=i.id and p.ended_at is null) as responsible_name,
       coalesce((select array_agg(b.original_value order by b.original_value) from yu_inventory.barcode_registry b
         where b.item_id=i.id and b.kind='official'),'{}') as barcodes,
       coalesce((select array_agg(g.barcode_value order by g.barcode_value) from yu_inventory.local_item_groups g
@@ -125,7 +127,7 @@ export class InventoryAuditEnrichmentService {
     const audit = buildInventorySourceAudit(currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, inventoryNumberKind: row.inventory_number_kind,
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
-      sourceCodes: codes.get(row.id) ?? [],
+      sourceCodes: codes.get(row.id) ?? [], responsibleName: row.responsible_name,
     })), registry.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] })),
     materials.rows, links.rows.map(row => ({ externalId: String(row.external_id), itemId: String(row.item_id) })), { descriptionBarcodes: true, formattedNumbers: true, exactNames: true });
     // Inspect all balances of each candidate, so a conflicting MOL/account row
@@ -145,7 +147,7 @@ export class InventoryAuditEnrichmentService {
     const items: InventoryAuditEnrichmentItem[] = currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
-      status: row.status, unitPrice: row.unit_price, quantity: row.quantity,
+      status: row.status, unitPrice: row.unit_price, quantity: row.quantity, responsibleName: row.responsible_name,
     }));
     const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true });
     await this.checkSharedNumbers(client, plan);
@@ -223,7 +225,7 @@ export class InventoryAuditEnrichmentService {
           const copy = copies.get(source.externalId), key = `${origin}:${source.externalId}`;
           if (!copy || included.has(key)) continue;
           oneC.push({ externalId: source.externalId, code: copy.code, inventoryNumber: copy.inventoryNumber,
-            barcode: copy.barcode, name: copy.name, status: copy.status ?? "",
+            barcode: copy.barcode, name: copy.name, status: copy.status ?? "", responsibleName: copy.responsibleName, initialCost: copy.initialCost,
             origins: [origin], matchedBy: [], matchedBarcodes: [] });
           included.add(key);
         }

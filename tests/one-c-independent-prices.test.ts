@@ -63,13 +63,13 @@ test("formatted barcodes and complete numbers in names recover prices in either 
   }
 });
 
-test("only a unique complete name can supply a name-only price, with spacing ignored", () => {
+test("even a unique complete name cannot confirm a card or supply its price without an identifier", () => {
   const item = { ...card, inventoryNumber: "TMP-1", inventoryNumberKind: "temporary", name: "  UNIQUE   printer  " };
   const mp = { ...material, nomenclature: "Unique printer", explicitInventoryNumber: null };
   const { row, audit } = review(item, [], [mp]);
   assert.equal(row.nextName, item.name);
-  assert.equal(row.price?.nextUnitPrice, "27440.00");
-  assert.equal(classifyOneCAudit(audit.rows).get(item.id)?.category, "materials");
+  assert.equal(row.price?.nextUnitPrice, "0.00");
+  assert.equal(classifyOneCAudit(audit.rows).get(item.id)?.category, "missing");
   assert.equal(review(item, [], [mp, { ...mp, sourceKey: "other", rowNumber: 2, oneCCode: "different" }]).row.price?.changed, false);
   assert.equal(review({ ...item, name: "Unique printer XL" }, [], [mp]).row.price?.changed, false);
   assert.equal(review({ ...item, inventoryNumber: "999/999", inventoryNumberKind: "official" }, [], [{ ...mp, explicitInventoryNumber: "111/111", inventoryNumber: "111/111" }]).row.price?.changed, false);
@@ -101,9 +101,9 @@ test("an aggregate OS amount does not hide the independently identified MP unit 
   assert.equal(row.nextName, card.name);
 });
 
-test("unique OS names and MP codes with outer spaces are recognized without trimming any digits", () => {
+test("OS name-only prices are rejected while exact MP codes retain their leading digits", () => {
   const item = { ...card, name: "Unique device", inventoryNumber: "TMP-1", inventoryNumberKind: "temporary" };
-  assert.equal(review(item, [{ ...asset, name: "UNIQUE  device", inventoryNumber: null, initialCost: 1000 }], []).row.price?.nextUnitPrice, "1000.00");
+  assert.equal(review(item, [{ ...asset, name: "UNIQUE  device", inventoryNumber: null, initialCost: 1000 }], []).row.price?.nextUnitPrice, "0.00");
   const mp = { ...material, nomenclature: "Product", oneCCode: "0000123" };
   assert.equal(review({ ...card, oneCCode: " 0000123 ", inventoryNumber: "999/999" }, [], [mp]).row.price?.nextUnitPrice, "27440.00");
   assert.equal(review({ ...card, oneCCode: "123", inventoryNumber: "999/999" }, [], [mp]).row.price?.changed, false);

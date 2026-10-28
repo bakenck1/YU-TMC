@@ -3,6 +3,7 @@ import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem, t
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
 import { classifyOneCAudit } from "@/lib/one-c-analytics";
+import { oneCNameOwnerCanIdentify } from "@/lib/one-c-source-name";
 
 /** Exact cents within items.numeric(14,2); missing or excessive precision is never rounded. */
 export function enrichmentMoney(value: unknown): string | null {
@@ -27,9 +28,14 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
     row.price = { currentUnitPrice: current, nextUnitPrice: current, changed: false, status: "unconfirmed" };
     if (!row.eligible) continue;
     const match = matches.get(row.itemId);
+    const item = byItem.get(row.itemId);
+    const ownerIdentity = row.identityMethod === "name_owner";
+    const ownsSource = (name: string, responsibleName?: string | null) => Boolean(item && match
+      && oneCNameOwnerCanIdentify({ ...item, inventoryNumberKind: match.numberKind }, name, responsibleName));
     let claims: unknown[];
     if (row.nameSource === "1c") {
       const source = row.externalId ? assets.get(row.externalId) : undefined;
+      if (ownerIdentity && (!source || !ownsSource(source.name, source.responsibleName))) continue;
       row.price.source = "os_initial_cost";
       row.price.sourceExternalId = source?.externalId;
       // An aggregate asset cost cannot safely be interpreted as a unit price.
@@ -38,9 +44,11 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
     } else if (row.nameSource === "materials_api") {
       row.price.source = "material_unit_price";
       const selected = match?.excel.find(entry => entry.rowNumber === row.excelRowNumber);
+      if (ownerIdentity && (!selected || !ownsSource(selected.nomenclature, selected.responsibleName))) continue;
       const selectedCode = exactMaterialCode(selected?.oneCCode);
       row.price.sourceMaterialCode = selectedCode;
       claims = (match?.excel ?? []).filter(entry => entry.sourceKind === "materials_api"
+        && (!ownerIdentity || entry.materialGuid === selected?.materialGuid && ownsSource(entry.nomenclature, entry.responsibleName))
         && (selectedCode !== null ? exactMaterialCode(entry.oneCCode) === selectedCode
           : row.identityMethod !== "material_code" || exactMaterialCode(entry.oneCCode) === exactMaterialCode(row.nextCode))).map(entry => entry.unitPrice);
     } else continue;
@@ -72,7 +80,11 @@ function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: Audi
   const mp = new Map(mpPlan.rows.map(row => [row.itemId, row]));
   const byItem = new Map(items.map(item => [item.id, item]));
   const byEvidence = new Map(evidence.map(row => [row.itemId, row]));
+  // Keep the globally chosen source for name/owner matches, rather than choosing
+  // an independent price source from each register. Process them in one batch.
+  addOneCPriceProposals({ rows: plan.rows.filter(row => row.identityMethod === "name_owner"), counts: plan.counts }, evidence, assets, items);
   for (const row of plan.rows) {
+    if (row.identityMethod === "name_owner") continue;
     const current = enrichmentMoney(byItem.get(row.itemId)?.unitPrice) ?? "0.00";
     row.price = { currentUnitPrice: current, nextUnitPrice: current, changed: false, status: "unconfirmed" };
     // Never revive stale, inactive, or identity-trigger-rejected cards.
