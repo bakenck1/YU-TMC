@@ -3,6 +3,8 @@ import test from "node:test";
 import { classifyOneCAudit, summarizeOneCAudit } from "../lib/one-c-analytics";
 import type { AuditMatch } from "../lib/inventory-source-audit";
 import { canAccessPath } from "../lib/security/authorization";
+import { buildOneCReconciliationReport } from "../lib/one-c-reconciliation-report";
+import type { getOneCAnalyticsSnapshot } from "../lib/server/one-c-analytics-service";
 
 const row = (override: Partial<AuditMatch> = {}): AuditMatch => ({ itemId: "a", itemName: "Стол", siteNumber: "1", siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: null, oneC: [], excel: [], ...override });
 const asset: AuditMatch["oneC"][number] = { externalId: "asset", code: "1", inventoryNumber: "1", barcode: null, name: "Стол", status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["inventory_number"], matchedBarcodes: [] };
@@ -100,4 +102,42 @@ test("screenshot counts distinguish all 946 temporary cards from 742 unmatched c
   assert.equal(c.fixedAssets + c.materials + c.both, 1689);
   assert.equal(c.missing, 135);
   assert.equal(c.fixedAssets+c.materials+c.both+c.possible+c.missing+c.temporaryUnmatched,c.total);
+});
+
+test("521 MP cards already include 30 temporary matches; confirming 30 additional unmatched cards moves counts to 551 and 891", () => {
+  const rows = [
+    ...Array.from({ length: 889 }, (_, i) => row({ itemId: `os-${i}`, oneC: [asset] })),
+    ...Array.from({ length: 491 }, (_, i) => row({ itemId: `mp-${i}`, excel: [material] })),
+    ...Array.from({ length: 30 }, (_, i) => row({ itemId: `found-temp-${i}`, siteNumber: `TMP-FOUND-${i}`, numberKind: "temporary", siteOneCCode: "m1", excel: [material] })),
+    ...Array.from({ length: 921 }, (_, i) => row({ itemId: `missing-temp-${i}`, siteNumber: `TMP-MISSING-${i}`, numberKind: "temporary" })),
+    ...Array.from({ length: 220 }, (_, i) => row({ itemId: `missing-${i}` })),
+  ];
+  const snapshot = (auditRows: AuditMatch[]): Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>> => ({
+    rows: auditRows, assets: [], registryAssets: [], materialRecords: [],
+    inventory: auditRows.map(row => ({ id: row.itemId, oneCCode: row.siteOneCCode ?? null, status: "active", quantity: 1 })),
+    analytics: {
+      calculatedAt: "2026-10-28T00:00:00Z",
+      assets: { total: 0, active: 0, retired: 0, other: 0, receivedAt: null },
+      inventory: { total: auditRows.length, active: auditRows.length, quantity: auditRows.length },
+      reconciliation: summarizeOneCAudit(auditRows, [], []),
+    },
+    materials: { kind: "materials_api", batchId: null, receivedAt: null, snapshotAt: null, sha256: "test", rowCount: 0, materialCount: 0, positiveRows: 0, nonPositiveRows: 0 },
+  });
+  const before = buildOneCReconciliationReport(snapshot(rows));
+  assert.equal(before.verified, true);
+  assert.equal(before.counters.total, 2551);
+  assert.equal(before.counters.materials, 521);
+  assert.equal(before.counters.temporaryFound, 30);
+  assert.equal(before.counters.temporaryUnmatched, 921);
+  assert.equal(before.temporaryFoundCards.length, 30);
+  assert.ok(before.temporaryFoundCards.every(card => card.group === "materials"));
+
+  const newlyFound = new Set(Array.from({ length: 30 }, (_, i) => `missing-temp-${i}`));
+  const after = buildOneCReconciliationReport(snapshot(rows.map(row => newlyFound.has(row.itemId)
+    ? { ...row, siteOneCCode: "m1", excel: [material] } : row)));
+  assert.equal(after.verified, true);
+  assert.equal(after.counters.materials, 551);
+  assert.equal(after.counters.temporaryUnmatched, 891);
+  assert.equal(after.counters.temporaryFound, 60);
+  assert.equal(after.counters.total, 2551);
 });

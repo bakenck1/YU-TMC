@@ -50,7 +50,7 @@ describe("integration overview", () => {
     expect(metric.textContent).toBe("Всего временных номеров без совпадения742");
     expect(screen.queryByText("946")).toBeNull();
     expect(screen.queryByText(/Из них найдено в 1С:/)).toBeNull();
-    expect(screen.getByText(/Найденные карточки с временным номером уже учтены/).textContent).toContain("204");
+    expect(screen.queryByText(/Найденные карточки с временным номером уже учтены/)).toBeNull();
     const attention = screen.getByRole("heading", {name:"Временные без совпадения"}).parentElement!;
     expect(attention.textContent).toContain("742");
     expect(attention.textContent).not.toContain("946");

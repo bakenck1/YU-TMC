@@ -15,12 +15,6 @@ const number = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFracti
 const display = (value: number | null) => value === null ? "—" : number(value);
 const tabs = [{ id: "overview", label: "Аналитика" }, { id: "assets", label: "ОС" }, { id: "materials", label: "Материальный предмет" }] as const;
 
-const temporaryMatchesCopy = {
-  ru: "Найденные карточки с временным номером уже учтены в «Материальном предмете»",
-  kk: "Уақытша нөмірі бар табылған карточкалар «Материалдық заттар» бөлімінде есептелген",
-  en: "Matched cards with temporary numbers are included in Materials",
-} as const;
-
 const copy = {
   ru: { overview: "Аналитика", assets: "ОС", materials: "Материальный предмет", title: "Интеграция 1С", local: "Локально", download: "Скачать Excel · 6 листов", downloading: "Подготовка Excel…", downloadTitle: "6 листов: ОС, МП, найденные, временные, ненайденные, добавить в базу", downloadError: "Не удалось скачать Excel. Повторите попытку.", refresh: "Обновить", refreshing: "Обновление…", navigation: "Разделы интеграции 1С", composition: "Состав 1С", activeTotal: "Всего активных в 1С", noTotal: "Нет данных для общего итога", totalHint: "ОС на учёте + материальные предметы с наличием", assetsSubtitle: "Основные средства", onBooks: "На учёте", noData: "Нет данных", positiveRows: "строк остатков с наличием", ourDatabase: "Наша база", activeCards: "активных карточек", cards: "Карточки", units: "Количество единиц", found: "Найдено в 1С", missing: "Не найдено в 1С", temporary: "Всего временных номеров без совпадения", reconciliation: "Сверка с 1С", scope: "Все карточки без архива · весь реестр 1С", foundShort: "найдено", checkNumber: "Нужно сверить номер", temporaryUnmatched: "Временные без совпадения", partial: "Сверка доступна по одному разделу.", noReconciliation: "Нет данных для сверки", attention: "Требует внимания", unmatched: "Без совпадения", excluded: "В показатель «Не найдено» не входят.", checkNumberHint: "Проверьте полный номер или штрихкод в найденных вариантах.", assetsNoMatch: "ОС без совпадения в нашей базе", materialsNoMatch: "МП без совпадения в нашей базе", positiveBalances: "Строки остатков с наличием" },
   kk: { overview: "Талдау", assets: "НҚ", materials: "Материалдық заттар", title: "1С интеграциясы", local: "Жергілікті", download: "Excel жүктеу · 6 парақ", downloading: "Excel дайындалуда…", downloadTitle: "6 парақ: НҚ, материалдар, табылғандар, уақытша нөмірлер, табылмағандар, базаға қосу", downloadError: "Excel жүктелмеді. Қайта көріңіз.", refresh: "Жаңарту", refreshing: "Жаңартылуда…", navigation: "1С интеграциясының бөлімдері", composition: "1С құрамы", activeTotal: "1С-тегі белсенді позициялар", noTotal: "Жалпы санға дерек жоқ", totalHint: "Есептегі НҚ + қалдығы бар материалдық заттар", assetsSubtitle: "Негізгі құралдар", onBooks: "Есепте", noData: "Дерек жоқ", positiveRows: "қалдығы бар жол", ourDatabase: "Біздің база", activeCards: "белсенді карточка", cards: "Карточкалар", units: "Бірліктер саны", found: "1С-тен табылды", missing: "1С-тен табылмады", temporary: "Сәйкестігі жоқ уақытша нөмірлердің жалпы саны", reconciliation: "1С-пен салыстыру", scope: "Мұрағаттан тыс барлық карточка · 1С-тің толық тізімі", foundShort: "табылды", checkNumber: "Нөмірді тексеру керек", temporaryUnmatched: "Сәйкестігі жоқ уақытша нөмірлер", partial: "Тек бір бөлім бойынша салыстыруға болады.", noReconciliation: "Салыстыруға дерек жоқ", attention: "Назар аударыңыз", unmatched: "Сәйкестігі жоқ", excluded: "«Табылмады» санына кірмейді.", checkNumberHint: "Табылған нұсқалардағы толық нөмірді немесе штрихкодты тексеріңіз.", assetsNoMatch: "Біздің базада сәйкестігі жоқ НҚ", materialsNoMatch: "Біздің базада сәйкестігі жоқ материалдар", positiveBalances: "Қалдығы бар жолдар" },
@@ -40,7 +34,6 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const { language } = useAppSettings();
   const c = copy[language];
   const counts = analytics.reconciliation;
-  const temporaryFound = counts.temporaryFound ?? 0;
   const hasAssets = analytics.assets.receivedAt !== null;
   const hasMaterials = materials.batchId !== null;
   const hasSources = hasAssets || hasMaterials;
@@ -118,7 +111,6 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           {hasSources ? <>
             <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
             <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
-            {temporaryFound > 0 ? <p className="mt-3 text-xs text-emerald-700">{temporaryMatchesCopy[language]}: <span className="font-semibold tabular-nums">{number(temporaryFound)}</span>.</p> : null}
             {!complete ? <p className="mt-3 text-xs text-slate-500">{c.partial}</p> : null}
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{c.noReconciliation}</div>}
         </section>

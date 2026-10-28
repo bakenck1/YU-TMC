@@ -18,6 +18,7 @@ import { getOneCAnalytics, getOneCAnalyticsSnapshot } from "@/lib/server/one-c-a
 import { exportOneCAnalyticsExcel } from "@/lib/server/excel/one-c-analytics-excel";
 import { workbookCell, workbookRow } from "../helpers/one-c-workbook";
 import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
+import { buildOneCReconciliationReport } from "@/lib/one-c-reconciliation-report";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -79,6 +80,7 @@ describe("live materials API replaces Excel as audit input", () => {
     }
 
     const after = await getOneCAnalyticsSnapshot(pool);
+    expect(buildOneCReconciliationReport(after).verified).toBe(true);
     const matched = getOneCMatchedCards(after).filter(card => card.group === "materials");
     expect(after.analytics.reconciliation).toMatchObject({ total: 7, fixedAssets: 0, materials: 6, both: 0, temporaryFound: 6, temporaryUnmatched: 1 });
     expect(matched.map(card => card.id).sort()).toEqual([...ids].sort());

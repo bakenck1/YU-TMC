@@ -4,6 +4,7 @@ import type { OneCFixedAsset } from "../lib/contracts/one-c-fixed-assets";
 import { buildInventorySourceAudit } from "../lib/inventory-source-audit";
 import { summarizeOneCAudit } from "../lib/one-c-analytics";
 import { getOneCMatchedCards } from "../lib/one-c-matched-cards";
+import { buildOneCReconciliationReport } from "../lib/one-c-reconciliation-report";
 import { exportOneCAnalyticsExcel } from "../lib/server/excel/one-c-analytics-excel";
 import { Workbook } from "exceljs";
 import { workbookCell } from "./helpers/one-c-workbook";
@@ -25,7 +26,7 @@ function snapshot() {
   assets.push({ ...assets[0], externalId: "number-source", code: "NUMBER", name: "Предмет №1350/12345", inventoryNumber: "135012345" });
   const sources = assets.map(asset => ({ externalId: asset.externalId, asset, origins: ["current_registry" as const] }));
   const rows = buildInventorySourceAudit(cards, sources, [], [], { formattedNumbers: true, descriptionBarcodes: true, exactNames: true }).rows;
-  return { rows, inventory: cards, assets: sources,
+  return { rows, inventory: cards, assets: sources, registryAssets: sources,
     analytics: { calculatedAt: "2026-10-28T00:00:00Z", assets: { total: assets.length, active: assets.length, retired: 0, other: 0, receivedAt: "2026-10-28T00:00:00Z" }, inventory: { total: cards.length, active: cards.length, quantity: cards.reduce((sum, card) => sum + card.quantity, 0) }, reconciliation: summarizeOneCAudit(rows, assets.map(asset => asset.externalId), []) },
     materials: { kind: "materials_api" as const, batchId: null, receivedAt: null, snapshotAt: null, sha256: "empty", rowCount: 0, materialCount: 0, positiveRows: 0, nonPositiveRows: 0 }, materialRecords: [],
   };
@@ -41,6 +42,11 @@ test("all six confirmed temporary examples join MP individually; a missing no-co
   assert.equal(data.analytics.reconciliation.materials, 7);
   assert.equal(data.analytics.reconciliation.temporaryUnmatched, 1);
   assert.equal(data.inventory.find(card => card.id === "missing")?.oneCCode, null);
+  const report = buildOneCReconciliationReport(data, ["female", "missing", "absent"]);
+  assert.equal(report.verified, true);
+  assert.equal(report.temporaryFoundCards.length, 7);
+  assert.deepEqual(report.requestedCards.map(card => card.group), ["materials", "temporaryUnmatched", "not_in_snapshot"]);
+  assert.equal(buildOneCReconciliationReport({ ...data, analytics: { ...data.analytics, reconciliation: { ...data.analytics.reconciliation, materials: 8 } } }).verified, false);
 });
 
 test("the MP worksheet includes every matched temporary card exactly once", async () => {
