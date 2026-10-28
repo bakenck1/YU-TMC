@@ -5,7 +5,7 @@ import ts from "typescript";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
-function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (...args: unknown[]) => Promise<unknown> = async () => ({ data: [], total: 0 })) {
+function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (...args: unknown[]) => Promise<unknown> = async () => ({ data: [], total: 0 }), matched: () => unknown[] = () => []) {
   const source = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: Record<string, unknown> = {};
   const deps: Record<string, unknown> = {
@@ -14,6 +14,7 @@ function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (.
     "@/lib/server/security/request-user": { requirePermission: authenticate },
     "@/lib/server/one-c-material-registry": { getMaterialRegistryPage: query, getMaterialRegistryMetadata: query },
     "@/lib/server/one-c-analytics-service": { getOneCAnalyticsSnapshot: query },
+    "@/lib/one-c-matched-cards": { getOneCMatchedCards: matched },
     "@/lib/server/excel/one-c-analytics-excel": { exportOneCAnalyticsExcel: async () => new Uint8Array([80, 75, 3, 4]) },
   };
   new Function("require", "exports", source)((id: string) => {
@@ -22,6 +23,31 @@ function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (.
   }, exports);
   return exports as Record<"GET" | "POST", (request: Request) => Promise<Response>>;
 }
+
+test("matched-card list requires permission and validates query before reading inventory", async () => {
+  let reads = 0;
+  const query = async () => { reads++; return {}; };
+  const path = "app/api/integrations/1c/analytics/matched/route.ts";
+  const denied = loadRoute(path, async () => { throw new ApplicationError("forbidden", "forbidden"); }, query);
+  assert.equal((await denied.GET(new Request("https://inventory.example/api?group=materials"))).status, 403);
+  const allowed = loadRoute(path, async () => ({}), query);
+  for (const params of ["group=other", "page=0", "pageSize=500", "search=" + "x".repeat(256)]) {
+    assert.equal((await allowed.GET(new Request(`https://inventory.example/api?${params}`))).status, 400);
+  }
+  assert.equal(reads, 0);
+});
+
+test("matched list searches all cards before pagination and keeps OS-code cards in the MP group", async () => {
+  const cards = Array.from({ length: 120 }, (_, index) => ({ id: String(index), group: "materials", name: `Товар ${index}`, inventoryNumber: `TMP-${index}`, oneCCode: `0000${index}`, sourceCodes: [`0000${index}`], responsibleName: "Иванов Иван", barcode: index === 119 ? "1350 / 16355" : "", oneCUnitPrice: String(index), currentUnitPrice: "0", source: "ОС" }));
+  const route = loadRoute("app/api/integrations/1c/analytics/matched/route.ts", async () => ({}), async () => ({ analytics: { calculatedAt: "2026-10-28T00:00:00Z" } }), () => cards);
+  const response = await route.GET(new Request("https://inventory.example/api?group=materials&page=2&pageSize=50"));
+  const body = await response.json();
+  assert.equal(body.total, 120); assert.equal(body.data.length, 50);
+  assert.equal(body.data[0].id, "69");
+  assert.match(response.headers.get("cache-control")!, /no-store/);
+  const found = await (await route.GET(new Request("https://inventory.example/api?group=materials&search=1350-16355"))).json();
+  assert.equal(found.total, 1); assert.equal(found.data[0].id, "119");
+});
 
 test("material registry requires administrator permission before reading private source data", async () => {
   let reads = 0;

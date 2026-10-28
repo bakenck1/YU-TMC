@@ -17,6 +17,7 @@ import { Workbook } from "exceljs";
 import { getOneCAnalytics, getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 import { exportOneCAnalyticsExcel } from "@/lib/server/excel/one-c-analytics-excel";
 import { workbookCell, workbookRow } from "../helpers/one-c-workbook";
+import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -38,6 +39,29 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("lists and exports temporary OS code matches in MP and saves a unanimous price shared by several OS GUIDs", async () => {
+    const f = await seed();
+    await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-PRICE',inventory_number_key='tmp-2026-price',one_c_code='OTHER' where id=$1`, [f.itemId]);
+    const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...source, initialCost: 50000 }, { ...source, externalId: randomUUID(), name: "Другое ОС того же кода", initialCost: null }], metadata());
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    const list = getOneCMatchedCards(snapshot).filter(card => card.group === "materials");
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ id: f.itemId, oneCUnitPrice: "50000.00", currentUnitPrice: "100.00", source: "ОС" });
+    const bytes = await exportOneCAnalyticsExcel(snapshot);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const mp = workbook.getWorksheet("МП")!;
+    expect(workbookCell(mp, "ID карточки").value).toBe(f.itemId);
+    expect(workbookCell(mp, "Учётная цена, KZT").value).toBe(50000);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ eligible: true, nextName: "Наше название", price: { changed: true, nextUnitPrice: "50000.00" } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select name,one_c_code,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: "Наше название", one_c_code: "OTHER", unit_price: "50000.00" });
+    expect((await service.previewCurrent(f.actor)).counts.ready).toBe(0);
+  });
 
   it("reviews and updates all current OS and MP without any batch analysis, with atomic audit and replay", async () => {
     const f = await seed();
@@ -375,7 +399,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["ОС", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
-    expect(workbook.getWorksheet("МП")!.rowCount).toBe(7);
+    expect(workbook.getWorksheet("МП")!.rowCount).toBe(8);
     expect(workbookCell(workbook.getWorksheet("Совпадения 1С")!, "ID карточки").value).toBe(f.itemId);
     expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(6);
     expect(workbook.getWorksheet("Добавить в базу")!.rowCount).toBe(6);
@@ -419,7 +443,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     expect(workbook.getWorksheet("ОС")!.rowCount).toBe(6);
-    expect(workbook.getWorksheet("МП")!.rowCount).toBe(6);
+    expect(workbook.getWorksheet("МП")!.rowCount).toBe(7);
     const found = workbook.getWorksheet("Совпадения 1С")!;
     expect(found.rowCount).toBe(7);
     const foundRow = workbookRow(found, f.itemId).number;

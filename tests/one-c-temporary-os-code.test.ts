@@ -99,4 +99,10 @@ test("Excel groups a legacy TMP-number OS code match as found in MP and retains 
   }
   assert.equal(workbook.getWorksheet("Добавить в базу")!.rowCount, 5);
   assert.equal(workbook.getWorksheet("Не найдено в 1С")!.rowCount, 5);
+  const materials = workbook.getWorksheet("МП")!;
+  assert.equal(materials.rowCount, 6);
+  assert.equal(workbookCell(materials, "ID карточки").value, item.id);
+  assert.equal(workbookCell(materials, "Учётная цена, KZT").value, 50000);
+  assert.equal(workbookCell(materials, "Цена в нашей базе, KZT").value, 0);
+  assert.equal(workbookCell(materials, "Источник совпадения").value, "ОС");
 });
