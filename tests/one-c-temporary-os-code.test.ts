@@ -72,8 +72,8 @@ test("permanent code matches and temporary full-number-only matches retain the O
   assert.equal(counts.temporaryUnmatched, 0);
 });
 
-test("Excel groups a temporary OS code match as found in MP and retains the real OS code and price", async () => {
-  const item = card("os-code", asset.code!);
+test("Excel groups a legacy TMP-number OS code match as found in MP and retains the real OS code and price", async () => {
+  const item = { ...card("os-code", asset.code!), inventoryNumberKind: "official" };
   const sourceAssets = [{ externalId: asset.externalId, asset, origins: ["current_registry" as const] }];
   const audit = buildInventorySourceAudit([item], sourceAssets, [], [], options);
   const reconciliation = summarizeOneCAudit(audit.rows, [asset.externalId], []);
