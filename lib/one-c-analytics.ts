@@ -44,12 +44,9 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
   }));
 }
 
-/** User-facing group; a temporary card found by its saved code belongs to MP. */
+/** Every genuinely matched temporary Inventory card belongs to the MP display group. */
 export function oneCAuditDisplayCategory(row: AuditMatch, presence: OneCAuditPresence): OneCAuditPresence["category"] {
-  const code = exactMaterialCode(row.siteOneCCode);
-  if (isTemporaryOneCCard(row.numberKind, row.siteNumber) && code !== null
-    && (row.oneC.some(entry => exactMaterialCode(entry.code) === code)
-      || row.excel.some(entry => entry.sourceKind === "materials_api" && Number(entry.endingBalance) > 0 && exactMaterialCode(entry.oneCCode) === code))) return "materials";
+  if (isTemporaryOneCCard(row.numberKind, row.siteNumber) && (presence.fixedAssets || presence.materials)) return "materials";
   return presence.category;
 }
 

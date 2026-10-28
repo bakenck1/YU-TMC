@@ -15,7 +15,7 @@ test("categories partition cards while temporary numbers remain independent", ()
     row({ itemId: "both", siteNumber: "TMP-1", siteBarcodes: [{ value: "3", kind: "official" }], oneC: [{ ...asset, externalId: "both-os", inventoryNumber: "3" }], excel: [{ ...material, rowNumber: 3, sourceKey: "both-mp", explicitInventoryNumber: "3", inventoryNumber: "3" }], numberKind: "temporary" }),
     row({ itemId: "weak", oneC: [{ ...asset, externalId: "weak", inventoryNumber: "1-2", matchedBy: ["number_suffix"] }] }), row({ itemId: "missing", result: "temporary", numberKind: "temporary" }),
   ], ["asset", "both-os", "weak", "unmatched", "unmatched"], ["balance", "balance2", "both-mp", "other"]);
-  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 0, temporary: 2, temporaryUnmatched: 1, temporaryFound: 1, temporaryPossible: 0, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
+  assert.deepEqual(summary, { total: 5, fixedAssets: 1, materials: 2, both: 0, possible: 1, missing: 0, temporary: 2, temporaryUnmatched: 1, temporaryFound: 1, temporaryPossible: 0, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 1 });
 });
 
 test("code alone does not prove presence, while a full identifier does not require choosing an update record", () => {
