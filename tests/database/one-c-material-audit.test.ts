@@ -40,6 +40,22 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
+  it("saves the exact current MOL's MP price when the same code has a different price under another owner", async () => {
+    const f = await seed();
+    const responsibleName = "Иванов Иван Иванович";
+    const responsibleId = await addUser(responsibleName);
+    await pool.query(`update yu_inventory.items set one_c_code=$2 where id=$1`, [f.itemId, base.code]);
+    await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'admin_override',$4)`, [randomUUID(), f.itemId, responsibleId, f.actor.userId]);
+    await save([{ ...base, responsibleName, unitPrice: "15000" }, { ...base, responsibleCode: "002", responsibleName: "Петров Петр Петрович", unitPrice: "20000" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(getOneCMatchedCards(snapshot)[0]).toMatchObject({ id: f.itemId, oneCUnitPrice: "15000.00", currentUnitPrice: "100.00" });
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ price: { changed: true, nextUnitPrice: "15000.00" }, responsibility: { changed: false } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query('select unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0].unit_price).toBe("15000.00");
+  });
+
   it("lists and exports temporary OS code matches in MP and saves a unanimous price shared by several OS GUIDs", async () => {
     const f = await seed();
     await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-PRICE',inventory_number_key='tmp-2026-price',one_c_code='OTHER' where id=$1`, [f.itemId]);
