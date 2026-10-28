@@ -220,7 +220,8 @@ test -z "$(sudo -u yu-inventory git status --porcelain)"
 sudo -u yu-inventory git fetch origin
 sudo -u yu-inventory git switch master
 sudo -u yu-inventory git pull --ff-only origin master
-sudo -u yu-inventory git merge-base --is-ancestor a8ab1648f327cbd5e4926c462197880d8657b925 HEAD
+sudo -u yu-inventory git merge-base --is-ancestor 4d4c69abd4d287b2435700926db7533a9af7b5a0 HEAD
+sudo -u yu-inventory git log -1 --format='%h %cI %s'
 systemctl stop yu-inventory yu-inventory-push-worker
 node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
 trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
@@ -243,6 +244,7 @@ systemctl restart yu-inventory yu-inventory-push-worker
 systemctl is-active --quiet yu-inventory
 systemctl is-active --quiet yu-inventory-push-worker
 curl --fail --silent --show-error --max-time 15 --retry 10 --retry-delay 1 --retry-connrefused --retry-max-time 30 https://inventory.yu.edu.kz/login >/dev/null
+sudo -u yu-inventory git log -1 --format='Installed commit: %h %cI %s'
 DEPLOY
 ```
 
@@ -252,6 +254,9 @@ DEPLOY
 найденные карточки во вкладке «Материальный предмет». Карточки с одинаковым
 кодом 1С сохраняются отдельными строками; неподтверждённые временные карточки
 остаются без изменений. `git push` сам по себе сайт не обновляет.
+Надпись «hours ago» на GitHub показывает дату коммита. Она не подтверждает
+время развёртывания сайта. Сверяйте хеш `Installed commit` после успешной
+сборки, перезапуска сервисов и HTTP-проверки с текущей вершиной `master`.
 Отдельная проверка `curl --fail --max-time 15 http://wa.yu.edu.kz/health`
 показывает доступность шлюза, но готовность `otinish`
 проверяйте отдельно в его консоли: нужен статус READY. После обновления
