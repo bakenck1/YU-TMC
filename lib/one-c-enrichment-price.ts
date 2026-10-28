@@ -3,7 +3,7 @@ import { buildInventoryAuditEnrichmentPlan, type InventoryAuditEnrichmentItem, t
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
 import { classifyOneCAudit } from "@/lib/one-c-analytics";
-import { oneCNameOwnerCanIdentify } from "@/lib/one-c-source-name";
+import { oneCNameOwnerCanIdentify, oneCResponsibleNameKey } from "@/lib/one-c-source-name";
 
 /** Exact cents within items.numeric(14,2); missing or excessive precision is never rounded. */
 export function enrichmentMoney(value: unknown): string | null {
@@ -47,10 +47,16 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
       if (ownerIdentity && (!selected || !ownsSource(selected.nomenclature, selected.responsibleName))) continue;
       const selectedCode = exactMaterialCode(selected?.oneCCode);
       row.price.sourceMaterialCode = selectedCode;
-      claims = (match?.excel ?? []).filter(entry => entry.sourceKind === "materials_api"
+      const balances = (match?.excel ?? []).filter(entry => entry.sourceKind === "materials_api"
         && (!ownerIdentity || entry.materialGuid === selected?.materialGuid && ownsSource(entry.nomenclature, entry.responsibleName))
         && (selectedCode !== null ? exactMaterialCode(entry.oneCCode) === selectedCode
-          : row.identityMethod !== "material_code" || exactMaterialCode(entry.oneCCode) === exactMaterialCode(row.nextCode))).map(entry => entry.unitPrice);
+          : row.identityMethod !== "material_code" || exactMaterialCode(entry.oneCCode) === exactMaterialCode(row.nextCode)));
+      const owner = oneCResponsibleNameKey(item?.responsibleName);
+      const ownerBalances = owner && selectedCode !== null && exactMaterialCode(item?.oneCCode) === selectedCode
+        ? balances.filter(entry => oneCResponsibleNameKey(entry.responsibleName) === owner) : [];
+      // The same nomenclature can have different valuations for different MOLs.
+      // A saved code plus an exact current owner selects that owner's balances.
+      claims = (ownerBalances.length ? ownerBalances : balances).map(entry => entry.unitPrice);
     } else continue;
     if (!claims.length || claims.some(value => value == null || value === "")) { row.price.status = "missing"; continue; }
     const prices = claims.map(enrichmentMoney);
