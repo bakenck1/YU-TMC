@@ -40,6 +40,64 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
+  it.each(["OS", "MP"] as const)("moves all six code-confirmed temporary examples into MP after %s import and reduces unmatched without modifying cards", async (source) => {
+    const f = await seed();
+    const examples = [
+      ["00000012626", "манекен портновский женский от 10.12.24", 2, 29000],
+      ["00000012625", "манекен портновский мужской от 10.12.24", 2, 29000],
+      ["00000011482", "доска маркерная двухсторонная с подставкой от 04.07.24", 1, 28667],
+      ["00000011482", "доска маркерная двухсторонная с подставкой от 04.07.24", 1, 28667],
+      ["00000012056", "кресло офисное обивка из ткани от 05.09.24", 59, 15848],
+      ["00000011436", "стул школьный без обивки жесткий от 03.06.2024", 6, 8960],
+    ] as const;
+    const responsibleName = "Сотрудник проверки";
+    const responsibleId = await addUser(responsibleName);
+    const ids: string[] = [];
+    for (const [code, name, quantity, price] of examples) {
+      const id = randomUUID();
+      ids.push(id);
+      await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,one_c_code,created_by,updated_by)
+        select $1,$3,$4,$5,room_id,'temporary',$6::text,lower($6::text),$7,created_by,updated_by from yu_inventory.items where id=$2`,
+      [id, f.itemId, name, quantity, price, `TMP-2026-${id}`, code]);
+      await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'admin_override',$4)`,
+        [randomUUID(), id, responsibleId, f.actor.userId]);
+    }
+    await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-MISSING',inventory_number_key='tmp-2026-missing' where id=$1`, [f.itemId]);
+    const readCards = async () => (await pool.query(`select id,name,inventory_number,inventory_number_kind,one_c_code,quantity,unit_price,version from yu_inventory.items order by id`)).rows;
+    const original = await readCards();
+    const before = await getOneCAnalyticsSnapshot(pool);
+    expect(before.analytics.reconciliation).toMatchObject({ total: 7, materials: 0, temporaryFound: 0, temporaryUnmatched: 7 });
+
+    const unique = [...new Map(examples.map(example => [example[0], example])).values()];
+    if (source === "OS") {
+      const template = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch(unique.map(([code, name, , price]) => ({
+        ...template, externalId: randomUUID(), code, name, inventoryNumber: null, barcode: null, quantity: 1, initialCost: price, responsibleName,
+      })), metadata());
+    } else {
+      await save(unique.map(([code, name, , price]) => ({ ...base, code, name, inventoryNumber: null, unitPrice: String(price), responsibleName })));
+    }
+
+    const after = await getOneCAnalyticsSnapshot(pool);
+    const matched = getOneCMatchedCards(after).filter(card => card.group === "materials");
+    expect(after.analytics.reconciliation).toMatchObject({ total: 7, fixedAssets: 0, materials: 6, both: 0, temporaryFound: 6, temporaryUnmatched: 1 });
+    expect(matched.map(card => card.id).sort()).toEqual([...ids].sort());
+    expect(matched.filter(card => card.oneCCode === "00000011482")).toHaveLength(2);
+    for (const [index, [code, , quantity, price]] of examples.entries()) {
+      expect(matched.find(card => card.id === ids[index])).toMatchObject({ oneCCode: code, quantity, oneCUnitPrice: `${price}.00`, responsibleName });
+    }
+    expect(await readCards()).toEqual(original);
+    const bytes = await exportOneCAnalyticsExcel(after);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const mp = workbook.getWorksheet("МП")!;
+    expect(mp.rowCount).toBe(5 + after.materialRecords.length + matched.length);
+    for (const id of ids) expect(workbookRow(mp, id)).toBeTruthy();
+    const temporary = workbook.getWorksheet("Временные")!;
+    for (const id of ids) expect(workbookCell(temporary, "Результат сверки", workbookRow(temporary, id).number).value).toBe("Найдено");
+    expect(workbookCell(temporary, "Результат сверки", workbookRow(temporary, f.itemId).number).value).toBe("Не найдено");
+  });
+
   it("saves the exact current MOL's MP price when the same code has a different price under another owner", async () => {
     const f = await seed();
     const responsibleName = "Иванов Иван Иванович";

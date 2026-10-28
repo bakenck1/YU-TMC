@@ -202,8 +202,9 @@ DATABASE_TARGET=production
 есть на сервере, держите их согласованными с systemd-конфигурацией.
 Не коммитьте файлы с секретами.
 
-Изменения публикуются в `origin/codex/components-material-statement-code`.
-Для обновления непосредственно из этой ветки выполните весь блок ниже.
+Рабочий сайт обновляется из `origin/master`. Старые ветки `codex/*` могут
+не содержать исправлений, уже объединённых в `master`.
+Для обновления выполните весь блок ниже.
 Он проверяет результат резервного копирования и чистоту рабочей копии до
 остановки сервисов. При ошибке выполнение прекращается; после остановки
 сервисов сайт останется недоступен до устранения причины и успешного запуска:
@@ -217,9 +218,9 @@ test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" =
 cd /opt/yu-inventory/current
 test -z "$(sudo -u yu-inventory git status --porcelain)"
 sudo -u yu-inventory git fetch origin
-sudo -u yu-inventory git switch codex/components-material-statement-code
-sudo -u yu-inventory git pull --ff-only origin codex/components-material-statement-code
-sudo -u yu-inventory git merge-base --is-ancestor a6c425b HEAD
+sudo -u yu-inventory git switch master
+sudo -u yu-inventory git pull --ff-only origin master
+sudo -u yu-inventory git merge-base --is-ancestor a8ab1648f327cbd5e4926c462197880d8657b925 HEAD
 systemctl stop yu-inventory yu-inventory-push-worker
 node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
 trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
@@ -245,8 +246,12 @@ curl --fail --silent --show-error --max-time 15 --retry 10 --retry-delay 1 --ret
 DEPLOY
 ```
 
-Если эта ветка уже объединена в `master`, используйте `master` в командах
-`git switch` и `git pull`. `git push` сам по себе сайт не обновляет.
+Проверка `merge-base` подтверждает наличие исправления: найденные карточки с
+временным номером входят в МП и исключены из «Временных без совпадения».
+После сборки откройте `/integrations/1c`, нажмите «Обновить» и проверьте
+найденные карточки во вкладке «Материальный предмет». Карточки с одинаковым
+кодом 1С сохраняются отдельными строками; неподтверждённые временные карточки
+остаются без изменений. `git push` сам по себе сайт не обновляет.
 Отдельная проверка `curl --fail --max-time 15 http://wa.yu.edu.kz/health`
 показывает доступность шлюза, но готовность `otinish`
 проверяйте отдельно в его консоли: нужен статус READY. После обновления
