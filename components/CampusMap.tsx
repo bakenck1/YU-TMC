@@ -98,7 +98,7 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "dormitory-2",
+    id: "dormitory-1",
     wrap: "position:absolute;left:62.5%;top:560px;width:140px;height:130px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-56px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
@@ -171,7 +171,7 @@ const BUILDINGS: BuildingCfg[] = [
     ),
   },
   {
-    id: "dormitory-1",
+    id: "dormitory-2",
     wrap: "position:absolute;left:47.66%;top:550px;width:140px;height:130px;",
     hoverY: 5,
     labelCss: "position:absolute;left:50%;top:-56px;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#002060;font-weight:700;font-size:12px;padding:5px 11px;border-radius:9px;box-shadow:0 3px 9px rgba(20,40,25,.14);z-index:20;",
