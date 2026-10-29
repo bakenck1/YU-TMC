@@ -74,6 +74,13 @@ async function main() {
       [fixture.roomId, fixture.buildingId, fixture.adminId],
     );
     await client.query(
+      `insert into "yu_inventory"."qr_identifiers"
+         (id, original_value, canonical_key, format, target_kind, role, room_id, created_by)
+       values ('10000000-0000-4000-8000-000000000008', $1, $1,
+         'generated_v1', 'room', 'primary', $2, $3)`,
+      ["YUQ1:00000000000000000000000000", fixture.roomId, fixture.adminId],
+    );
+    await client.query(
       `insert into "yu_inventory"."items"
          (id, name, item_type, quantity, unit_price, room_id, inventory_number_kind,
           inventory_number, inventory_number_key, status, condition, connection_status,
