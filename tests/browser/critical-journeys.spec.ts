@@ -8,6 +8,33 @@ const recipientEmail = requiredEnvironment("BROWSER_SMOKE_RECIPIENT_EMAIL");
 const inventoryNumber = requiredEnvironment("BROWSER_SMOKE_INVENTORY_NUMBER");
 
 test.describe.serial("critical production journeys", () => {
+  test("room QR links and the mobile scanner open the cabinet", async ({ page }) => {
+    const qrPath = "/rooms/qr/YUQ1%3A00000000000000000000000000";
+    await page.goto(qrPath);
+    await expect(page).toHaveURL(/\/login\?returnTo=/);
+    await page.getByLabel("Email", { exact: true }).fill(adminEmail);
+    await page.getByLabel("Пароль", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Войти", exact: true }).click();
+    await expect(page).toHaveURL(new URL(qrPath, page.url()).href);
+    await expect(page.getByRole("heading", { name: "E2E-101", exact: true })).toBeVisible();
+    await expect(page.getByText("Browser Smoke Laptop", { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const path of [qrPath, qrPath.replace("%3A", ":")]) {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(200);
+      await expect(page.getByRole("heading", { name: "E2E-101", exact: true })).toBeVisible();
+      await page.reload();
+      await expect(page.getByText("Browser Smoke Laptop", { exact: true })).toBeVisible();
+    }
+    await page.goto("/scan");
+    await page.getByRole("button", { name: "Сканировать QR кабинета", exact: true }).click();
+    const scanner = page.getByRole("dialog");
+    await scanner.getByRole("textbox").fill(new URL(qrPath, page.url()).href);
+    await scanner.getByRole("button", { name: "Проверить", exact: true }).click();
+    await expect(page).toHaveURL(/\/rooms\/10000000-0000-4000-8000-000000000005\?returnTo=%2Fscan$/);
+    await expect(page.getByRole("heading", { name: "E2E-101", exact: true })).toBeVisible();
+  });
+
   test("login persists across refresh and logout revokes protected access", async ({ page }, testInfo) => {
     const evidence = captureSafeEvidence(page);
     try {

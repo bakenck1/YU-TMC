@@ -21,7 +21,15 @@ export default async function PublicRoomQrPage({
 }: {
   params: Promise<{ token: string }>;
 }) {
-  const { token } = await params;
+  const { token: encodedToken } = await params;
+  let token: string;
+  try {
+    // Next.js passes URL-encoded dynamic segment values to this page.
+    // Decode exactly once so the stored identifier and printed URL stay intact.
+    token = decodeURIComponent(encodedToken);
+  } catch {
+    notFound();
+  }
   const returnTo = `/rooms/qr/${encodeURIComponent(token)}`;
   let user: Awaited<ReturnType<typeof resolveCurrentUserToken>> | null = null;
   let room: RoomWorkspaceDto | PublicRoomDto;
@@ -35,7 +43,10 @@ export default async function PublicRoomQrPage({
       ? await getApplicationServices().rooms.findByQr(token, authorizationActor(user))
       : await getApplicationServices().rooms.findPublicByQr(token);
   } catch (error) {
-    if (error instanceof ApplicationError && error.kind === "not_found") notFound();
+    if (error instanceof ApplicationError && (
+      error.kind === "not_found" ||
+      (error.kind === "validation" && error.publicCode === "invalid_qr")
+    )) notFound();
     throw error;
   }
   return (
