@@ -37,6 +37,32 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     await resetSchemas(migrationConfig);
   });
 
+  it("bulk project flag persists for all selected items and rolls back a batch with an unavailable item", async () => {
+    const adminId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID());
+    await seedRoom(adminId, randomUUID(), roomId);
+    const actor = { userId: adminId, role: "admin" as const };
+    const service = createService(runtimeDatabase);
+    const first = await service.createItem({ name: "Project monitor", category: "components", roomId }, actor);
+    const second = await service.createItem({ name: "Project cable", category: "components", roomId }, actor);
+    const ids = [first.id, second.id];
+    expect(await service.bulkChangeProject(ids, true, actor)).toEqual(ids);
+    const marked = await database.query('select id, is_project, version, room_id, status from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    expect(marked.rows).toHaveLength(2);
+    for (const row of marked.rows) {
+      expect(row).toMatchObject({ is_project: true, room_id: roomId, status: "active" });
+    }
+    await expect(service.bulkChangeProject([first.id, randomUUID()], false, actor)).rejects.toThrow("item_not_found");
+    const afterFailure = await database.query('select id, is_project, version, room_id, status from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    expect(afterFailure.rows).toEqual(marked.rows);
+    expect(await service.bulkChangeProject(ids, false, actor)).toEqual(ids);
+    const unmarked = await database.query('select is_project from "yu_inventory"."items" where id = any($1::uuid[])', [ids]);
+    expect(unmarked.rows.every(row => row.is_project === false)).toBe(true);
+    const audits = await database.query('select action from "yu_inventory"."audit_records" where subject_id = any($1::uuid[]) and action = $2', [ids, "item.project_updated"]);
+    expect(audits.rows).toHaveLength(4);
+  });
+
   it("attack: two components with empty numbers insert and edit without duplicate or registry constraint failure", async () => {
     const adminId = randomUUID(); const employeeId = randomUUID(); const otherId = randomUUID(); const roomId = randomUUID();
     await seedUsers(adminId, employeeId, otherId); await seedRoom(adminId, randomUUID(), roomId);

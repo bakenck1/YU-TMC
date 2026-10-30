@@ -341,6 +341,13 @@ export interface InventoryItemRepository {
   updateItemContent(
     input: UpdateInventoryItemContentRecord,
   ): Promise<InventoryItemRecord | null>;
+  updateItemProject(input: {
+    id: string;
+    isProject: boolean;
+    actorId: string;
+    expectedVersion: number;
+    occurredAt: Date;
+  }): Promise<InventoryItemRecord | null>;
   updateItemCategory(
     input: UpdateInventoryItemCategoryRecord,
   ): Promise<InventoryItemRecord | null>;

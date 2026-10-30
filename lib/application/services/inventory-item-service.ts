@@ -881,6 +881,38 @@ export class InventoryItemService {
     }, { isolation: "serializable", maxAttempts: 3 });
   }
 
+  async bulkChangeProject(
+    itemIds: readonly string[],
+    isProject: unknown,
+    actor: AuthorizationActor,
+  ): Promise<string[]> {
+    requirePermission(actor, "inventory.item.bulk_manage");
+    const ids = normalizeBulkItemIds(itemIds);
+    const project = normalizeProjectFlag(isProject);
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      for (const id of ids) {
+        const current = await items.findItemById(id);
+        if (!current || (current.itemSection ?? "general") !== "general") {
+          throw new ApplicationError("not_found", "item_not_found");
+        }
+        if ((current.isProject ?? false) === project) continue;
+        const updated = await items.updateItemProject({
+          id, isProject: project, actorId: actor.userId,
+          expectedVersion: current.version, occurredAt,
+        });
+        if (!updated) throw versionConflict();
+        await items.appendAudit(createAudit({
+          id: this.ids.create(), actor, subjectId: id,
+          subjectRevision: updated.version, action: "item.project_updated",
+          beforeValues: { isProject: current.isProject ?? false },
+          afterValues: { isProject: updated.isProject ?? false }, occurredAt,
+        }));
+      }
+      return ids;
+    }, { isolation: "serializable", maxAttempts: 3 });
+  }
+
   async bulkChangeCategory(
     itemIds: readonly string[],
     category: unknown,

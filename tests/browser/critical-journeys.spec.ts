@@ -35,6 +35,32 @@ test.describe.serial("critical production journeys", () => {
     await expect(page.getByRole("heading", { name: "E2E-101", exact: true })).toBeVisible();
   });
 
+  test("admin applies and removes the project flag from the inventory actions menu", async ({ page }, testInfo) => {
+    const evidence = captureSafeEvidence(page);
+    try {
+      await login(page, adminEmail);
+      for (const isProject of [true, false]) {
+        await page.goto("/items");
+        await page.getByRole("checkbox", { name: "Выбрать Browser Smoke Laptop", exact: true }).check();
+        await page.getByRole("button", { name: "Действия", exact: true }).click();
+        await page.getByRole("menuitem", { name: "Проектный", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Проектный", exact: true });
+        await dialog.getByRole("checkbox", { name: "Проектный", exact: true }).setChecked(isProject);
+        const saved = page.waitForResponse(response => response.url().endsWith("/api/inventory/items/bulk-project") && response.request().method() === "PATCH");
+        await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+        const response = await saved;
+        expect(response.status()).toBe(200);
+        expect(await response.json()).toEqual({ updatedItemIds: ["10000000-0000-4000-8000-000000000006"] });
+        await expect(dialog).not.toBeVisible();
+        await page.reload();
+        const row = page.getByRole("row").filter({ hasText: "Browser Smoke Laptop" });
+        await expect(row.getByText("Проектный", { exact: true })).toHaveCount(isProject ? 1 : 0);
+      }
+    } finally {
+      await attachSafeEvidence(testInfo, evidence);
+    }
+  });
+
   test("login persists across refresh and logout revokes protected access", async ({ page }, testInfo) => {
     const evidence = captureSafeEvidence(page);
     try {

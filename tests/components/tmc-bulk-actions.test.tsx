@@ -149,6 +149,56 @@ describe("TmcBulkActions", () => {
     expect(screen.getByRole("menuitem", { name: "tmc.operation.issue" })).not.toBeNull();
   });
 
+  it.each([true, false])("sets project=%s for all selected items and refreshes the list", async (isProject) => {
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor" };
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ updatedItemIds: [ITEM.id, second.id] }) } as Response);
+    render(<TmcBulkActions items={[ITEM, second]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} onClear={onClear} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "status.project" }));
+    expect(screen.getByRole("dialog", { name: "status.project" })).not.toBeNull();
+    const checkbox = screen.getByRole("checkbox", { name: "status.project" }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    if (!isProject) fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inventory/items/bulk-project", expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ itemIds: [ITEM.id, second.id], isProject }),
+    }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    { ok: false, status: 409, body: { error: "version_conflict" } },
+    { ok: true, status: 200, body: { updatedItemIds: [] } },
+    { ok: true, status: 200, body: {} },
+  ])("preserves project selection when saving is not confirmed: $status / $body", async ({ ok, status, body }) => {
+    vi.mocked(fetch).mockResolvedValue({ ok, status, json: async () => body } as Response);
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} onClear={onClear} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "status.project" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("tmc.bulk.error"));
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "status.project" })).not.toBeNull();
+  });
+
+  it.each([
+    { actorRole: "employee" as const, itemSection: "general" as const, variant: "issue" as const },
+    { actorRole: "admin" as const, itemSection: "it" as const, variant: "transfer" as const },
+  ])("hides the project action for $actorRole / $itemSection", (props) => {
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} buildings={[]} rooms={[]} onComplete={vi.fn()} {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    expect(screen.queryByRole("menuitem", { name: "status.project" })).toBeNull();
+  });
+
   it("deletes selected items and refreshes the list", async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
     const onComplete = vi.fn();
