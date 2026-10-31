@@ -48,14 +48,14 @@ test("a full official barcode can differ from the inventory number, but cannot h
 });
 
 const user = (id: string, fullName: string): EnrichmentResponsibleUser => ({ id, fullName, role: "employee", active: true, deleted: false });
-const people = [user("bau", "Садыков Бауыржан Анесович"), user("ermek", "Нурмаганбет Ермек Талантович")];
+const people = [user("bau", "Тынымбаев Бауыржан Анесович"), user("ermek", "Нурмаганбет Ермек Талантович")];
 function responsibility(source: string, users = people, pendingTransfer = false) {
   const data = planFor("Принтер №1350/14444");
-  addOneCResponsibilityProposals(data.plan, data.evidence, new Map([["asset", source]]), users, [{ itemId: item.id, userId: "old", name: "Текущий сотрудник", pendingTransfer, unavailable: false }]);
+  addOneCResponsibilityProposals(data.plan, data.evidence, new Map([["asset", source]]), users, [{ itemId: item.id, userId: null, name: null, pendingTransfer, unavailable: false }]);
   return data.plan;
 }
-for (const source of ["Бауыржан Анесович", "Садыков Бауыржан Анесович", "  Талантович Нурмаганбет Ермек "]) {
-  test(`only an allowed uniquely identified person may be assigned: ${source}`, () => {
+for (const source of ["Бауыржан Анесович", "Тынымбаев Бауыржан Анесович", "  Талантович Нурмаганбет Ермек "]) {
+  test(`a full uniquely identified source person may fill a vacancy: ${source}`, () => {
     const p = responsibility(source).rows[0].responsibility!;
     assert.equal(p.changed, true);
     assert.equal(p.nextUserId, source.includes("Бауыржан") ? "bau" : "ermek");
@@ -65,12 +65,12 @@ for (const source of ["Другой сотрудник", "Бауыржан", "Е
   test(`other or incomplete names keep the current responsibility: ${source}`, () => {
     const p = responsibility(source).rows[0].responsibility!;
     assert.equal(p.changed, false);
-    assert.equal(p.nextUserId, "old");
+    assert.equal(p.nextUserId, null);
   });
 }
 test("missing, duplicate, inactive and pending-transfer identities never get assigned", () => {
   assert.equal(responsibility("Бауыржан Анесович", []).rows[0].responsibility?.status, "user_missing");
-  assert.equal(responsibility("Бауыржан Анесович", [...people, user("namesake", "Другой Бауыржан Анесович")]).rows[0].responsibility?.status, "user_ambiguous");
+  assert.equal(responsibility("Бауыржан Анесович", [...people, user("namesake", "Тынымбаев Бауыржан Анесович")]).rows[0].responsibility?.status, "user_ambiguous");
   assert.equal(responsibility("Бауыржан Анесович", [{ ...people[0], active: false }]).rows[0].responsibility?.status, "user_missing");
   assert.equal(responsibility("Бауыржан Анесович", people, true).rows[0].responsibility?.status, "pending_transfer");
 });
