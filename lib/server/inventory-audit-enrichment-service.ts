@@ -30,6 +30,19 @@ export class InventoryAuditEnrichmentService {
     return this.transaction(actor, false, (client) => this.currentPlan(client));
   }
 
+  previewMissingResponsibilities(actor: OneCAdminActor) {
+    return this.transaction(actor, false, (client) => this.currentPlan(client, false, true));
+  }
+
+  /** Maintenance command: verify the live sources and fill vacant assignments atomically. */
+  fillMissingResponsibilities(actor: OneCAdminActor) {
+    return this.transaction(actor, true, async (client) => {
+      const plan = await this.currentPlan(client, true, true);
+      const result = await this.writePlan(client, plan, actor, null);
+      return { ...result, responsibilityCounts: responsibilityCounts(plan) };
+    });
+  }
+
   applyCurrent(input: ApplyInput, actor: OneCAdminActor): Promise<ApplyResult> {
     return this.transaction(actor, true, async (client) => {
       const previous = await client.query(`select metadata->'result' as result from "yu_inventory"."audit_records"
@@ -87,7 +100,7 @@ export class InventoryAuditEnrichmentService {
           await repository.appendAudit({ id: randomUUID(), actorId: actor.userId, actorRole: actor.role,
             subjectKind: "responsibility", subjectId: row.itemId, subjectRevision: row.itemVersion + 1,
             action: "responsibility.admin_override", beforeValues: { responsibleUserId: state.responsibleUserId },
-            afterValues: { responsibleUserId: targetId, source: "admin_override", origin: "one_c_current_enrichment" },
+            afterValues: { responsibleUserId: targetId, source: "admin_override", origin: plan.runId === "current-registry-responsibilities" ? "one_c_responsibility_backfill" : "one_c_current_enrichment" },
             reason, isAdministrativeException: true, occurredAt });
         }
         await client.query(`insert into "yu_inventory"."audit_records"
@@ -105,7 +118,7 @@ export class InventoryAuditEnrichmentService {
   }
 
   /** One live comparison across all OS and MP, independent of batch analysis/history. */
-  private async currentPlan(client: PoolClient, lock = false) {
+  private async currentPlan(client: PoolClient, lock = false, responsibilityOnly = false) {
     const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,i.status,i.unit_price,i.quantity,
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id
         where p.item_id=i.id and p.ended_at is null) as responsible_name,
@@ -165,8 +178,21 @@ export class InventoryAuditEnrichmentService {
       users.rows.map(row => ({ id: String(row.id), fullName: String(row.full_name), role: row.role, active: row.is_active, deleted: row.deleted_at != null })),
       currentCards.map(row => ({ itemId: String(row.id), userId: byPeriod.get(row.id)?.responsible_user_id ?? null,
         name: byPeriod.get(row.id)?.full_name ?? null, pendingTransfer: pendingIds.has(row.id), unavailable: unavailable.has(row.id) })));
-    addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true });
-    const runId = "current-registry";
+    if (responsibilityOnly) {
+      plan.counts = { ready: 0, unchanged: 0, skipped: 0 };
+      for (const row of plan.rows) {
+        row.nextName = row.currentName;
+        row.nextCode = row.currentCode;
+        row.changed = row.responsibility?.changed === true;
+        row.eligible = row.changed || row.responsibility?.status === "unchanged";
+        if (row.changed) { row.reason = "confirmed"; plan.counts.ready++; }
+        else if (row.eligible) { row.reason = "unchanged"; plan.counts.unchanged++; }
+        else plan.counts.skipped++;
+      }
+    } else {
+      addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true });
+    }
+    const runId = responsibilityOnly ? "current-registry-responsibilities" : "current-registry";
     const planHash = createHash("sha256").update(JSON.stringify({
       scope: runId, algorithm: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION,
       registry: registry.rows, materialRegistrySha256: materials.metadata.sha256,
@@ -310,3 +336,12 @@ export class InventoryAuditEnrichmentService {
 }
 
 function stale() { return new ApplicationError("conflict", "inventory_audit_enrichment_stale"); }
+
+export function responsibilityCounts(plan: InventoryAuditEnrichmentPlan) {
+  const counts: Record<string, number> = {};
+  for (const row of plan.rows) {
+    const status = row.responsibility?.status ?? "unconfirmed";
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  return counts;
+}

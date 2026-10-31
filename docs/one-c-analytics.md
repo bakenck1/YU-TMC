@@ -210,6 +210,49 @@ dry-run при этом не изменяются. Источники — тек
 Проверки: `tests/one-c-enrichment-full-search.test.ts`, сценарии назначений и отката
 в `tests/database/one-c-material-audit.test.ts`.
 
+### Заполнение пустых назначений ответственных
+
+При сравнении полного ФИО отдельная служебная пометка `мол` или `(МОЛ)` в конце
+строки 1С, в том числе на следующей строке, не считается частью имени. Все остальные
+части ФИО должны совпасть с единственным активным аккаунтом с допустимой ролью.
+Одноимённые аккаунты, отсутствующие сотрудники и разные ответственные в подтверждённых
+источниках не разрешают назначение. Существующий ответственный сохраняется.
+
+Назначение проверяется отдельно от возможности переименования: слишком длинное
+название 1С, совместный номер монитора и системного блока или запрет переименования
+такой пары не мешают заполнить пустое назначение по подтверждённому полному номеру
+или коду. В этих случаях текущие название и код сохраняются. Изменившиеся,
+недопустимые карточки и конфликтующие идентификаторы по-прежнему блокируются.
+
+Для проверки всей базы без сохранения, в окружении приложения:
+
+```bash
+npm run db:fill-one-c-responsibles -- --target=production
+```
+
+Для немедленного заполнения по текущим реестрам ОС и МП:
+
+```bash
+npm run db:fill-one-c-responsibles -- --target=production --apply
+```
+
+Команда меняет только пустые назначения и версию карточки; названия, коды, цены,
+номера и помещения сохраняются. Источники, активность сотрудников и незавершённые
+передачи проверяются в транзакции. История ответственности и аудит сохраняются
+атомарно. Повторный запуск не создаёт дубли; после записи команда заново читает
+сохранённые назначения. Назначенные ТМЦ общего каталога появляются в списке сотрудника;
+права доступа к отдельному каталогу IT сохраняются.
+
+По умолчанию для аудита выбирается первый по ID активный администратор; его ID
+печатается в отчёте. Можно явно указать `--actor-id=<UUID>`. Происхождение операции
+в аудите ответственности — `one_c_responsibility_backfill`.
+JSON-отчёт содержит `checked`, `updated`, `remainingReady`, количество каждого
+статуса и `missingAccounts` с ФИО из 1С, для которых нет подходящего аккаунта.
+Команда не создаёт учётные записи из одного ФИО. `user_ambiguous`, `ambiguous` и
+`pending_transfer` требуют устранить соответствующую причину и повторить запуск.
+Если после записи появились новые готовые назначения из-за параллельного изменения
+источников, команда завершится ошибкой проверки; её можно повторить.
+
 Проверки: `tests/one-c-analytics.test.ts`,
 `tests/components/one-c-integration-dashboard.test.tsx`, сценарии аналитики в
 `tests/database/one-c-material-audit.test.ts`. В Storybook используются только
@@ -235,7 +278,7 @@ systemd-run --wait --pipe --collect \
   --working-directory=/opt/yu-inventory/current \
   --property=EnvironmentFile=/etc/yu-inventory/yu-inventory.env \
   --setenv=NODE_ENV=production \
-  /bin/bash -c 'set -euo pipefail; npm ci --include=dev; npm run db:migrate -- --target=production; npm run db:smoke -- --target=production; npm run build'
+  /bin/bash -c 'set -euo pipefail; npm ci --include=dev; npm run db:migrate -- --target=production; npm run db:smoke -- --target=production; npm run build; npm run db:fill-one-c-responsibles -- --target=production --apply'
 systemctl restart yu-inventory yu-inventory-push-worker
 systemctl is-active yu-inventory yu-inventory-push-worker
 DEPLOY
