@@ -311,8 +311,10 @@ systemd; секреты не выводятся и не копируются в 
   требуют проверки. Историческая метка `batch_analysis` сама по себе не является
   подтверждением.
 
-Во вкладке **Временные** администратор запускает проверку и видит наличие в 1С,
-предлагаемые код, название, цену и причину пропуска. Серверный scope
+В разделах **Основные средства** и **Материальный предмет** администратор запускает
+общую проверку карточек, включая временные, и видит предлагаемые код, название,
+цену и причину пропуска. Отдельной вкладки временных номеров в навигации нет.
+Для отдельной диагностики временных карточек доступны CLI и серверный scope
 `/api/integrations/1c/enrichment?scope=temporary` возвращает только активные
 временные карточки, пересчитывает счётчики и использует отдельный
 `runId=current-registry-temporary`. План другого scope не принимается. Хеш плана,
@@ -339,9 +341,15 @@ npm run db:reconcile-one-c-temporary -- --target=production --apply
 
 ```bash
 sudo bash <<'UPDATE'
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "Обновление остановлено на строке %s.\n" "$LINENO" >&2' ERR
 cd /opt/yu-inventory/current
-test -z "$(sudo -u yu-inventory git status --porcelain)"
+working_changes=$(sudo -u yu-inventory git status --porcelain)
+if [[ -n "$working_changes" ]]; then
+  echo 'Обновление не начато: на сервере есть локальные изменения.' >&2
+  sudo -u yu-inventory git status --short
+  exit 1
+fi
 sudo -u yu-inventory git fetch origin
 sudo -u yu-inventory git merge --ff-only origin/master
 bash deploy/update-one-c-temporary.sh
@@ -354,3 +362,18 @@ UPDATE
 из существующего `/etc/yu-inventory/yu-inventory.env`. При ошибке после остановки
 сервисов выполнение прекращается; нужно исправить причину и повторить запуск.
 Скрипт рассчитан на пути и сервисы из `deploy/README.md`.
+
+Если прежний блок сразу возвращал приглашение терминала без вывода Git и сборки,
+проверьте рабочую копию: `test -z "$(git status --porcelain)"` при наличии изменений
+молча завершал блок из-за `set -e`. Новый блок показывает список изменённых файлов
+до остановки сервисов. Для диагностики без изменения файлов выполните:
+
+```bash
+sudo -u yu-inventory git -C /opt/yu-inventory/current status --short
+sudo -u yu-inventory git -C /opt/yu-inventory/current log -1 --oneline
+sudo systemctl status yu-inventory --no-pager -l
+```
+
+Сначала сохраните и проверьте перечисленные изменения. Не применяйте `git reset
+--hard` или `git clean` для обхода проверки: среди локальных файлов могут быть
+нужные настройки или пользовательские изменения.

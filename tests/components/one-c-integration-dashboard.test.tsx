@@ -18,15 +18,6 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
-  it("opens the temporary-card review without loading the asset or material registry", () => {
-    const fetcher = vi.fn();
-    vi.stubGlobal("fetch", fetcher);
-    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" })).getByRole("button", { name: "Временные" }));
-    expect(screen.getByText(/Временный номер создаётся/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Проверить изменения" })).toBeTruthy();
-    expect(fetcher).not.toHaveBeenCalled();
-  });
   it("shows matched temporary cards directly inside the materials tab alongside the original registry", async () => {
     const fetcher = vi.fn(async (input: string) => new Response(JSON.stringify({ data: input.includes("/analytics/matched") ? [{ id: "female", group: "materials", name: "Манекен женский", inventoryNumber: "TMP-2026-TEST", oneCCode: "00000012626", sourceCodes: ["00000012626"], responsibleName: "Сотрудник", oneCUnitPrice: "29000.00", currentUnitPrice: "29000.00", source: "Основные средства" }] : [], total: input.includes("/analytics/matched") ? 1 : 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);
