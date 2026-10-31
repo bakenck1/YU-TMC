@@ -11,7 +11,7 @@ import { exportInventorySourceAudit } from "@/lib/server/inventory-source-audit-
 import type { OneCAdminActor } from "@/lib/server/http/one-c-reconciliation-admin-handler";
 import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
 import type { ExcelSourceRow } from "@/lib/inventory-source-audit";
-import { addOneCResponsibilityProposals, ONE_C_ALLOWED_RESPONSIBLES } from "@/lib/one-c-enrichment-responsibility";
+import { addOneCResponsibilityProposals } from "@/lib/one-c-enrichment-responsibility";
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
 import { addOneCPriceProposals } from "@/lib/one-c-enrichment-price";
 import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
@@ -72,7 +72,7 @@ export class InventoryAuditEnrichmentService {
           const repository = createPostgresInventoryResponsibilityRepositories(client).responsibility;
           const state = await repository.findItemStateForUpdate(row.itemId);
           const targetId = row.responsibility.nextUserId;
-          if (!state || state.responsibleUserId !== row.responsibility.currentUserId || !targetId
+          if (!state || state.responsibleUserId !== null || state.responsibilityPeriodId !== null || row.responsibility.currentUserId !== null || !targetId
             || state.itemStatus === "decommissioned" || await repository.findPendingTransfer(row.itemId)) throw stale();
           const pendingTmc = await client.query(`select 1 from yu_inventory.tmc_transfer_request_items i
             join yu_inventory.tmc_transfer_requests r on r.id=i.request_id
@@ -81,11 +81,7 @@ export class InventoryAuditEnrichmentService {
           const target = await repository.findAuthorizationUserForUpdate(targetId);
           if (!target || !target.active || target.deletedAt || !isInventoryResponsibleRole(target.role)) throw stale();
           const occurredAt = new Date();
-          const reason = "Сверка 1С: назначение разрешённого ответственного по подтверждённому номеру или штрихкоду";
-          if (state.responsibilityPeriodId && state.responsibleUserId) {
-            if (!await repository.closeResponsibility({ itemId: row.itemId, expectedResponsibilityPeriodId: state.responsibilityPeriodId,
-              expectedResponsibleUserId: state.responsibleUserId, endedBy: actor.userId, endedAt: occurredAt, endReason: reason })) throw stale();
-          }
+          const reason = "Сверка 1С: заполнение пустого назначения по подтверждённому номеру или коду 1С";
           await repository.insertResponsibility({ id: randomUUID(), itemId: row.itemId, responsibleUserId: targetId,
             source: "admin_override", startedBy: actor.userId, startedAt: occurredAt });
           await repository.appendAudit({ id: randomUUID(), actorId: actor.userId, actorRole: actor.role,
@@ -177,7 +173,7 @@ export class InventoryAuditEnrichmentService {
       materialBatchId: materials.metadata.batchId, cards: cards.rows, links: links.rows, rows: plan.rows,
       responsibility: { users: users.rows, periods: periods.rows, pending: pending.rows, status: status.rows },
     })).digest("hex");
-    return { runId, planHash, ...plan, allowedResponsibles: ONE_C_ALLOWED_RESPONSIBLES, sources: {
+    return { runId, planHash, ...plan, responsibilityPolicy: "fill_missing" as const, sources: {
       fixedAssets: registry.rows.length, materials: new Set(materials.rows.map(row => row.oneCCode)).size,
       materialBalances: materials.rows.length, cards: currentCards.length,
     } };

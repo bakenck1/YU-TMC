@@ -81,12 +81,12 @@ test("permanent cards can use an exact 1C code in either register", () => {
   }
 });
 
-test("a shared metadata code cannot authorize assigning one source's owner to several physical cards", () => {
+test("a saved code with a unanimous source owner fills each vacant card assignment", () => {
   const cards = [card, { ...card, id: "second" }].map(item => ({ ...item, oneCCode: material.oneCCode! }));
   const audit = buildInventorySourceAudit(cards, [], [{ ...material, responsibleName: "Бауыржан Анесович" }], [], options);
   const plan = buildInventoryAuditEnrichmentPlan(audit.rows, cards, options);
   addOneCResponsibilityProposals(plan, audit.rows, new Map(), [{ id: "owner", fullName: "Бауыржан Анесович", active: true, deleted: false, role: "employee" }], cards.map(item => ({ itemId: item.id, userId: null, name: null, pendingTransfer: false, unavailable: false })));
-  assert.ok(plan.rows.every(row => row.identityMethod === "material_code" && !row.responsibility?.changed));
+  assert.ok(plan.rows.every(row => row.identityMethod === "material_code" && row.responsibility?.changed));
 });
 
 test("formatted barcodes and complete numbers in names recover prices in either register", () => {
