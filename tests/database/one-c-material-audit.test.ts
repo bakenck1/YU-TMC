@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import type { Pool } from "pg";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
@@ -546,6 +547,96 @@ describe("live materials API replaces Excel as audit input", () => {
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     expect(workbook.getWorksheet("Не найдено в 1С")!.rowCount).toBe(5);
     expect(workbookCell(workbook.getWorksheet("Временные")!, "ID карточки").value).toBe(tempId);
+  });
+
+  it("runs the maintenance CLI as preview or apply and reports missing accounts without silently assigning them", async () => {
+    const f = await seed();
+    const recipient = await addUser("Иванов Иван Иванович");
+    await save([{ ...base, responsibleName: "Иванов Иван Иванович\nмол" }]);
+    const run = (...args: string[]) => spawnSync(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/db/fill-one-c-responsibles.ts", "--target=test", ...args], { encoding: "utf8", windowsHide: true });
+    const preview = run();
+    expect(preview.status, preview.stderr).toBe(0);
+    expect(JSON.parse(preview.stdout)).toMatchObject({ mode: "preview", actorId: f.actor.userId, checked: 1, updated: 0, remainingReady: 1 });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods`)).rows[0].count).toBe(0);
+    const denied = run("--apply", `--actor-id=${recipient}`);
+    expect(denied.status).toBe(1);
+    expect(denied.stderr).toContain("active_admin_required");
+    const applied = run("--apply", `--actor-id=${f.actor.userId}`);
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(JSON.parse(applied.stdout)).toMatchObject({ mode: "apply", updated: 1, remainingReady: 0, responsibilityCounts: { unchanged: 1 }, missingAccounts: [] });
+    const repeated = run("--apply");
+    expect(repeated.status, repeated.stderr).toBe(0);
+    expect(JSON.parse(repeated.stdout).updated).toBe(0);
+    await pool.query(`update yu_inventory.items set inventory_number='1350/55555',inventory_number_key='1350/55555' where id=$1`, [f.itemId]);
+    const unowned = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,'Предмет без аккаунта',1,100,room_id,'official','1350/14444','1350/14444',created_by,updated_by from yu_inventory.items where id=$2`, [unowned, f.itemId]);
+    await save([{ ...base, responsibleName: "Нет Такого Аккаунта\nмол" }], "2026-10-20T01:00:00Z");
+    const missing = run("--apply");
+    expect(missing.status, missing.stderr).toBe(0);
+    expect(JSON.parse(missing.stdout)).toMatchObject({ updated: 0, remainingReady: 0, responsibilityCounts: { unchanged: 1, user_missing: 1 }, missingAccounts: [{ sourceName: "Нет Такого Аккаунта\nмол", items: 1 }] });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods where item_id=$1`, [unowned])).rows[0].count).toBe(0);
+  });
+
+  it.each([["OS", "general"], ["MP", "general"], ["OS", "it"], ["MP", "it"]] as const)("backfills a %s MOL-labelled owner in %s by complete number without changing other card fields", async (source, section) => {
+    const f = await seed();
+    const name = "Мустапаева Сезим Нурахметовна";
+    const recipient = await addUser(name);
+    await pool.query(`update yu_inventory.items set name='Монитор',item_section=$2,inventory_number='2411/0725',inventory_number_key='2411/0725' where id=$1`, [f.itemId, section]);
+    if (source === "OS") {
+      const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, code: "000006283", inventoryNumber: "2411/0725", name: "Монитор 2411/0725 от 10.05.2023", responsibleName: name + "\nмол", initialCost: 50000 }], metadata());
+    } else {
+      await save([{ ...base, code: "000006283", inventoryNumber: "2411/0725", name: "Монитор 2411/0725 от 10.05.2023", responsibleName: name + " (МОЛ)" }]);
+    }
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewMissingResponsibilities(f.actor);
+    expect(preview.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(preview.rows[0]).toMatchObject({ nextName: "Монитор", nextCode: null, responsibility: { nextUserId: recipient } });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods`)).rows[0].count).toBe(0);
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 1 });
+    expect((await pool.query(`select name,one_c_code,unit_price,inventory_number,item_section,version from yu_inventory.items where id=$1`, [f.itemId])).rows[0])
+      .toEqual({ name: "Монитор", one_c_code: null, unit_price: "100.00", inventory_number: "2411/0725", item_section: section, version: 2 });
+    const repository = createPostgresInventoryItemRepositories(pool).items;
+    const visible = section === "general" ? await repository.listItemsAssignedTo(recipient) : await repository.listItItems();
+    expect(visible.find(item => item.id === f.itemId)).toMatchObject({ responsibleId: recipient, responsibleName: name });
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 0, unchanged: 1, responsibilityCounts: { unchanged: 1 } });
+    expect((await pool.query(`select responsible_user_id from yu_inventory.responsibility_periods where item_id=$1 and ended_at is null`, [f.itemId])).rows).toEqual([{ responsible_user_id: recipient }]);
+    expect((await pool.query(`select after_values->>'origin' as origin from yu_inventory.audit_records where subject_kind='responsibility'`)).rows).toEqual([{ origin: "one_c_responsibility_backfill" }]);
+  });
+
+  it("fills both vacant owners for a shared monitor/system number without renaming either card", async () => {
+    const f = await seed();
+    const recipient = await addUser("Сотрудник Полное Имя");
+    await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics' where id=$1`, [f.itemId]);
+    const second = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,'Системный блок','electronics',1,100,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by from yu_inventory.items where id=$2`, [second, f.itemId]);
+    const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, inventoryNumber: "1350/14444", name: "Монитор", responsibleName: "Сотрудник Полное Имя мол" }], metadata());
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.counts).toEqual({ ready: 2, unchanged: 0, skipped: 0 });
+    expect(preview.rows.every(row => row.nextName === row.currentName && row.nextCode === null && row.responsibility?.nextUserId === recipient)).toBe(true);
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(2);
+    expect((await createPostgresInventoryItemRepositories(pool).items.listItemsAssignedTo(recipient)).map(item => item.id).sort()).toEqual([f.itemId, second].sort());
+  });
+
+  it.each(["name_invalid", "shared_number_conflict"] as const)("keeps an independently confirmed owner when renaming is blocked by %s", async reason => {
+    const f = await seed();
+    const recipient = await addUser("Сотрудник Полное Имя");
+    if (reason === "shared_number_conflict") {
+      await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics' where id=$1`, [f.itemId]);
+      await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,archived_at,archived_by,created_by,updated_by)
+        select $1,'Системный блок','electronics',1,100,room_id,inventory_number_kind,inventory_number,inventory_number_key,now(),created_by,created_by,updated_by from yu_inventory.items where id=$2`, [randomUUID(), f.itemId]);
+    }
+    const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, inventoryNumber: "1350/14444", name: reason === "name_invalid" ? "Длинное название ".repeat(15) : "Стол", responsibleName: "Сотрудник Полное Имя\nМОЛ" }], metadata());
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ eligible: true, changed: true, nextName: reason === "name_invalid" ? "Наше название" : "Монитор", nextCode: null, responsibility: { status: "ready", nextUserId: recipient } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query(`select name,one_c_code from yu_inventory.items where id=$1`, [f.itemId])).rows[0]).toEqual({ name: preview.rows[0].currentName, one_c_code: null });
   });
 
   it("fills missing owners across OS and MP, preserving assigned cards and replaying safely", async () => {

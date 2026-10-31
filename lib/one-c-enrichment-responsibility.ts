@@ -6,7 +6,11 @@ import { classifyOneCAudit } from "@/lib/one-c-analytics";
 
 export type EnrichmentResponsibleUser = { id: string; fullName: string; role: UserRole; active: boolean; deleted: boolean };
 export type EnrichmentResponsibilityState = { itemId: string; userId: string | null; name: string | null; pendingTransfer: boolean; unavailable: boolean };
-const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase("ru-RU").replaceAll("ё", "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/u).sort().join(" ");
+// 1C may append the accounting role on a separate line. It is not part of a person's name.
+// Strip only a separate trailing marker; never remove arbitrary words or match partial names.
+const normalized = (value: string) => value.normalize("NFKC").trim()
+  .replace(/(?:[\s,;]+мол|\s*\(\s*мол\s*\))$/iu, "")
+  .toLocaleLowerCase("ru-RU").replaceAll("ё", "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/u).sort().join(" ");
 // Only established, explicit full-name spellings are interchangeable. Never match a subset of somebody's name.
 const aliases = new Map([
   [normalized("Бауыржан Анесович"), normalized("Тынымбаев Бауыржан Анесович")],
@@ -34,7 +38,11 @@ export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPla
     if (state?.userId) { proposal.status = "unchanged"; continue; }
     if (!state || state.unavailable) { proposal.status = "unavailable"; continue; }
     if (state.pendingTransfer) { proposal.status = "pending_transfer"; continue; }
-    const responsibilityOnly = !row.eligible && !row.changed && row.reason === "source_ambiguous";
+    // A source may safely identify the owner even when its name cannot be applied
+    // (too long, shared monitor/system number, or several unanimous source copies).
+    // Missing, changed and conflicting identities still cannot authorize an assignment.
+    const responsibilityOnly = !row.eligible && !row.changed
+      && ["source_ambiguous", "source_reused", "name_invalid", "shared_number_conflict"].includes(row.reason);
     if ((!row.eligible && !responsibilityOnly) || !match || row.identityMethod === "name_owner") continue;
     // Revalidate each source independently. Name/owner fallback alone cannot assign an unowned card.
     const confirmed = (oneC: AuditMatch["oneC"], excel: AuditMatch["excel"]) => {

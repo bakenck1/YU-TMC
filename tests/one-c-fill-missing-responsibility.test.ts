@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AuditMatch } from "../lib/inventory-source-audit";
-import type { InventoryAuditEnrichmentPlan } from "../lib/inventory-audit-enrichment";
+import type { InventoryAuditEnrichmentPlan, InventoryAuditEnrichmentReason } from "../lib/inventory-audit-enrichment";
 import { addOneCResponsibilityProposals, type EnrichmentResponsibleUser, type EnrichmentResponsibilityState } from "../lib/one-c-enrichment-responsibility";
 
 const owner = "Базарбаев Темурлан Аманжолович";
@@ -9,10 +9,10 @@ const user: EnrichmentResponsibleUser = { id: "person", fullName: owner, role: "
 const vacant: EnrichmentResponsibilityState = { itemId: "item", userId: null, name: null, pendingTransfer: false, unavailable: false };
 const os: AuditMatch["oneC"][number] = { externalId: "os", code: "000123", name: "Стол", inventoryNumber: "1350/12345", barcode: null, responsibleName: owner, status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["code"], matchedBarcodes: [] };
 const mp: AuditMatch["excel"][number] = { sourceKey: "mp", sourceKind: "materials_api", rowNumber: 1, nomenclature: "Стол", inventoryNumber: "", endingBalance: "1", oneCCode: "000123", responsibleName: owner, matchedBy: ["code"] };
-function proposal(options: { state?: Partial<EnrichmentResponsibilityState>; users?: EnrichmentResponsibleUser[]; source?: "os" | "mp" | "both"; code?: string | null; number?: string; ambiguous?: boolean; reason?: "source_ambiguous" | "source_reused" | "identity_conflict"; otherOwner?: string } = {}) {
+function proposal(options: { state?: Partial<EnrichmentResponsibilityState>; users?: EnrichmentResponsibleUser[]; source?: "os" | "mp" | "both"; code?: string | null; number?: string; ambiguous?: boolean; reason?: InventoryAuditEnrichmentReason; otherOwner?: string; sourceOwner?: string } = {}) {
   const plan: InventoryAuditEnrichmentPlan = { rows: [{ itemId: "item", itemVersion: 1, currentName: "Местное название", nextName: "Местное название", currentCode: "000123", nextCode: "000123", eligible: !options.ambiguous, changed: false, reason: options.ambiguous ? options.reason ?? "source_ambiguous" : "unchanged" }], counts: { ready: 0, unchanged: options.ambiguous ? 0 : 1, skipped: options.ambiguous ? 1 : 0 } };
-  const evidence: AuditMatch = { itemId: "item", itemName: "Стол", siteNumber: options.number ?? "TMP-2026-TEST", siteOneCCode: options.code === undefined ? "000123" : options.code, siteBarcodes: [], numberKind: "temporary", itemVersion: 1, result: "matched", source: null, oneC: options.source === "mp" ? [] : [os], excel: options.source === "mp" || options.source === "both" ? [{ ...mp, responsibleName: options.otherOwner ?? owner }] : [] };
-  addOneCResponsibilityProposals(plan, [evidence], new Map([["os", owner]]), options.users ?? [user], [{ ...vacant, ...options.state }]);
+  const evidence: AuditMatch = { itemId: "item", itemName: "Стол", siteNumber: options.number ?? "TMP-2026-TEST", siteOneCCode: options.code === undefined ? "000123" : options.code, siteBarcodes: [], numberKind: "temporary", itemVersion: 1, result: "matched", source: null, oneC: options.source === "mp" ? [] : [os], excel: options.source === "mp" || options.source === "both" ? [{ ...mp, responsibleName: options.otherOwner ?? options.sourceOwner ?? owner }] : [] };
+  addOneCResponsibilityProposals(plan, [evidence], new Map([["os", options.sourceOwner ?? owner]]), options.users ?? [user], [{ ...vacant, ...options.state }]);
   return plan;
 }
 for (const source of ["os", "mp", "both"] as const) {
@@ -41,7 +41,33 @@ test("ambiguous source names can supply a unanimous owner without renaming the c
   assert.equal(plan.rows[0].nextCode, plan.rows[0].currentCode);
   assert.equal(plan.rows[0].responsibility?.status, "ready");
   assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
-  for (const reason of ["source_reused", "identity_conflict"] as const) assert.equal(proposal({ ambiguous: true, reason }).rows[0].responsibility?.changed, false);
+});
+test("a unanimous confirmed owner is independent of name length, source reuse and shared-number rename restrictions", () => {
+  for (const reason of ["source_reused", "name_invalid", "shared_number_conflict"] as const) {
+    const plan = proposal({ ambiguous: true, reason });
+    assert.equal(plan.rows[0].responsibility?.status, "ready");
+    assert.equal(plan.rows[0].nextName, plan.rows[0].currentName);
+    assert.equal(plan.rows[0].nextCode, plan.rows[0].currentCode);
+    assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
+    assert.equal(proposal({ ambiguous: true, reason, code: null }).rows[0].responsibility?.changed, false);
+  }
+});
+test("changed, missing, ineligible or conflicting card identities cannot be revived", () => {
+  for (const reason of ["item_not_found", "item_changed", "item_ineligible", "identity_conflict", "identity_missing", "sources_missing"] as const) {
+    const plan = proposal({ ambiguous: true, reason });
+    assert.equal(plan.rows[0].responsibility?.changed, false);
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });
+  }
+});
+test("a separate trailing accounting MOL marker does not become part of the full name", () => {
+  for (const source of ["os", "mp", "both"] as const) for (const marker of [" мол", "\nмол", "\r\nМОЛ", " (МОЛ)", "( мол )", "; МОЛ", ", мол "]) {
+    assert.equal(proposal({ source, sourceOwner: owner + marker }).rows[0].responsibility?.status, "ready");
+  }
+  assert.equal(proposal({ sourceOwner: "Аманжолович Базарбаев Темурлан\nмол" }).rows[0].responsibility?.status, "ready");
+  assert.equal(proposal({ users: [user, { ...user, id: "duplicate", fullName: owner + " (МОЛ)" }] }).rows[0].responsibility?.status, "user_ambiguous");
+  for (const sourceOwner of [owner + "мол", owner + " другой сотрудник", "Базарбаев Темурлан мол", "мол"]) {
+    assert.equal(proposal({ sourceOwner }).rows[0].responsibility?.changed, false);
+  }
 });
 test("disagreeing source owners, pending transfers, unavailable cards and duplicate accounts remain unchanged", () => {
   assert.equal(proposal({ source: "both", otherOwner: "Иной человек" }).rows[0].responsibility?.status, "ambiguous");
