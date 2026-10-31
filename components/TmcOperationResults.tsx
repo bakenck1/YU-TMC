@@ -29,7 +29,7 @@ export default function TmcOperationResults({ items, outcomes, requestId }: TmcO
             <span className={outcome.outcome === "problem" ? "text-rose-700" : "text-emerald-700"}>
               {outcome.outcome === "problem"
                 ? t(`tmc.problem.${outcome.problem}` as TranslationKey)
-                : t("tmc.bulk.success")}
+                : t(outcome.outcome === "included" ? "tmc.bulk.requestSent" : "tmc.bulk.success")}
             </span>
           </li>
         ))}

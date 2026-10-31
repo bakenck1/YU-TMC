@@ -273,7 +273,7 @@ describe("TmcBulkActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" }));
-    expect(screen.getByText("tmc.bulk.assignmentExplanation")).not.toBeNull();
+    expect(screen.getByText(/tmc\.bulk\.assignmentExplanation/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: `tmc.bulk.removeItem:${JSON.stringify({ name: ITEM.name })}` }));
     expect(screen.queryByText(ITEM.name)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
@@ -284,56 +284,92 @@ describe("TmcBulkActions", () => {
     expect(JSON.parse(String(init.body)).itemIds).toEqual([second.id]);
   });
 
-  it("asks for quantity for a grouped item and shows its generated barcode", async () => {
-    const groupedItem = {
-      ...ITEM,
-      name: "Chair",
-      inventoryNumber: "4897/4897",
-      quantity: 5,
-    };
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(groupedDistributionResponse())
-      .mockResolvedValueOnce(groupedTransferResponse());
+  it("assigns mixed quantities to the responsible person without splitting the original items", async () => {
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Chair", quantity: 5 };
+    vi.mocked(fetch).mockResolvedValue(assignmentResponse([ITEM, second]));
     const onComplete = vi.fn();
-
-    render(<TmcBulkActions
-      items={[groupedItem]}
-      actorUserId={ITEM.responsibleId}
-      actorRole="admin"
-      buildings={[]}
-      rooms={[]}
-      onComplete={onComplete}
-    />);
-
-    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" }));
+    render(<TmcBulkActions items={[ITEM, second]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} />);
+    openAssignment();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
-    const quantity = await screen.findByRole("spinbutton", {
-      name: /tmc\.localBarcode\.quantityQuestion/,
-    });
-    expect(quantity.getAttribute("min")).toBe("1");
-    expect(quantity.getAttribute("max")).toBe("5");
-    fireEvent.change(quantity, { target: { value: "2" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "tmc.localBarcode.comment" }), {
-      target: { value: "Two chairs" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "tmc.localBarcode.submit" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitAssignment" }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    expect(fetch).toHaveBeenLastCalledWith(
-      "/api/inventory/local-barcodes",
-      expect.objectContaining({ method: "POST" }),
-    );
-    const init = vi.mocked(fetch).mock.calls.at(-1)?.[1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toEqual({
-      itemId: ITEM.id,
-      sourceGroupId: null,
-      recipientUserId: "22222222-2222-4222-8222-222222222222",
-      quantity: 2,
-      sourceVersion: 3,
-      comment: "Two chairs",
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inventory/transfer-requests", expect.objectContaining({ method: "POST" }));
+    const payload = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    expect(payload.itemIds).toEqual([ITEM.id, second.id]);
+    expect(payload.quantityTransfers).toBeUndefined();
+    expect(screen.getAllByText("tmc.bulk.success")).toHaveLength(2);
+    expect(screen.queryByText("Current User")).toBeNull();
+  });
+
+  it.each([false, true])("reports invalidated assignments without a false success (partial=%s)", async (partial) => {
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor" };
+    const rows = partial ? [ITEM, second] : [ITEM];
+    vi.mocked(fetch).mockResolvedValue(assignmentResponse(rows, ITEM.id));
+    const onComplete = vi.fn();
+    render(<TmcBulkActions items={rows} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} />);
+    openAssignment();
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitAssignment" }));
+    await screen.findByText("tmc.problem.responsibility_changed");
+    expect(screen.queryAllByText("tmc.bulk.success")).toHaveLength(partial ? 1 : 0);
+    expect(onComplete).toHaveBeenCalledTimes(partial ? 1 : 0);
+  });
+
+  it("does not report an unconfirmed administrator request as an assignment", async () => {
+    const response = assignmentResponse([ITEM]);
+    const body = await response.json();
+    body.result.request.items[0].result = "pending";
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => body } as Response);
+    const onComplete = vi.fn();
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} />);
+    openAssignment();
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitAssignment" }));
+    await screen.findByText("tmc.bulk.error");
+    expect(screen.queryByText("tmc.bulk.success")).toBeNull();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("shows an employee's pending handover as awaiting acceptance", async () => {
+    const body = await assignmentResponse([ITEM]).json();
+    body.result.request.items[0].result = "pending";
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => body } as Response);
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="employee" variant="issue" buildings={[]} rooms={[]} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.operation.issue" }));
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitTransfer" }));
+    await screen.findByText("tmc.bulk.requestSent");
+    expect(screen.queryByText("tmc.bulk.success")).toBeNull();
+  });
+
+  it("transfers a multi-unit employee item whole without offering a partial transfer", async () => {
+    const item = { ...ITEM, quantity: 20 };
+    const body = await assignmentResponse([item]).json();
+    body.result.request.items[0].result = "pending";
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => body } as Response);
+    render(<TmcBulkActions items={[item]} actorUserId={ITEM.responsibleId} actorRole="employee" variant="issue" buildings={[]} rooms={[]} onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "tmc.operation.issue" }));
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText(/tmc.bulk.wholeItemsOnly/)).not.toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitTransfer" }));
+    await screen.findByText("tmc.bulk.requestSent");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toBe("/api/inventory/transfer-requests");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      recipientId: "22222222-2222-4222-8222-222222222222",
+      itemIds: [item.id],
+      comment: null,
     });
-    expect(await screen.findByText("4897/4897-0001")).not.toBeNull();
   });
 
   it("offers admin-only location change and submits item versions with a directory room", async () => {
@@ -420,63 +456,25 @@ describe("TmcBulkActions", () => {
   });
 });
 
-function groupedDistributionResponse() {
-  return {
-    ok: true,
-    json: async () => ({
-      distribution: {
-        itemId: ITEM.id,
-        itemName: "Chair",
-        originalBarcode: "4897/4897",
-        originalQuantity: 5,
-        originalVersion: 3,
-        originalRemainder: 5,
-        originalResponsible: {
-          id: ITEM.responsibleId,
-          fullName: ITEM.responsible,
-        },
-        originalLocation: {
-          roomId: ITEM.roomId,
-          roomDesignation: ITEM.room,
-          buildingId: ITEM.buildingId,
-          buildingName: ITEM.building,
-        },
-        groups: [],
-      },
-    }),
-  } as Response;
+function openAssignment() {
+  fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" }));
 }
 
-function groupedTransferResponse() {
+function assignmentResponse(items: InventoryItem[], invalidatedId?: string): Response {
   return {
     ok: true,
-    json: async () => ({
-      result: {
-        createdNewCode: true,
-        group: {
-          id: "99999999-9999-4999-8999-999999999999",
-          itemId: ITEM.id,
-          itemName: "Chair",
-          originalBarcode: "4897/4897",
-          localBarcode: "4897/4897-0001",
-          parentGroupId: null,
-          quantity: 2,
-          responsible: {
-            id: "22222222-2222-4222-8222-222222222222",
-            fullName: "Recipient User",
-          },
-          location: {
-            roomId: ITEM.roomId,
-            roomDesignation: ITEM.room,
-            buildingId: ITEM.buildingId,
-            buildingName: ITEM.building,
-          },
-          transferredAt: "2026-09-01T00:00:00.000Z",
-          status: "active",
-          version: 1,
-          cancellation: null,
-        },
+    json: async () => ({ result: {
+      total: items.length, included: items.length, problems: 0,
+      items: items.map((item) => ({ itemId: item.id, outcome: "included", requestItemId: item.id, requestItemVersion: 1 })),
+      request: {
+        id: "99999999-9999-4999-8999-999999999999",
+        items: items.map((item) => ({
+          item: { id: item.id },
+          result: item.id === invalidatedId ? "invalidated" : "accepted",
+          invalidReason: item.id === invalidatedId ? "responsibility_changed" : null,
+        })),
       },
-    }),
+    } }),
   } as Response;
 }

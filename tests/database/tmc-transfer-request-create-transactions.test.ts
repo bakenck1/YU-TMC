@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { database, createService, expectPersistedRequest, requestCount, seedFixture, setupTmcTransferDatabase, teardownTmcTransferDatabase } from "./support/tmc-transfer-request-database";
@@ -6,6 +7,42 @@ import { database, createService, expectPersistedRequest, requestCount, seedFixt
 describe("TMC transfer request transactions", () => {
   beforeAll(setupTmcTransferDatabase);
   afterAll(teardownTmcTransferDatabase);
+
+  it("persists a whole-room administrator assignment for 50 mixed-quantity items and replays it safely", async () => {
+    const fixture = await seedFixture(50);
+    await database.query(`update "yu_inventory"."users" set role = 'admin' where id = $1`, [fixture.initiatorId]);
+    await database.query(`update "yu_inventory"."items" set quantity = 5 where id = any($1::uuid[])`, [fixture.itemIds.slice(0, 25)]);
+    await database.query(`update "yu_inventory"."responsibility_periods" set ended_at = now(), ended_by = $2, end_reason = 'test_release' where item_id = $1`, [fixture.itemIds[0], fixture.initiatorId]);
+    const before = await database.query(`select id, room_id, inventory_number, quantity from "yu_inventory"."items" where id = any($1::uuid[]) order by id`, [fixture.itemIds]);
+    const service = createService();
+    const input = { recipientId: fixture.recipientIds[0]!, itemIds: fixture.itemIds };
+    const actor = { userId: fixture.initiatorId, role: "admin" as const };
+    const key = `room-assignment:${randomUUID()}`;
+    const assigned = await service.createIdempotent(input, actor, key);
+    expect(assigned.result.request?.summary.accepted).toBe(50);
+    expect(assigned.result.request?.summary.pending).toBe(0);
+    const periods = await database.query(`select item_id, responsible_user_id, source from "yu_inventory"."responsibility_periods" where item_id = any($1::uuid[]) and ended_at is null`, [fixture.itemIds]);
+    expect(periods.rows).toHaveLength(50);
+    expect(periods.rows.every((row) => row.responsible_user_id === input.recipientId && row.source === 'admin_override')).toBe(true);
+    const items = createPostgresInventoryItemRepositories(database).items;
+    const listed = await items.listItems();
+    const selected = listed.filter((item) => fixture.itemIds.includes(item.id));
+    expect(selected).toHaveLength(50);
+    expect(selected.every((item) => item.responsibleId === input.recipientId && item.responsibleName === 'Transaction Recipient A')).toBe(true);
+    const recipientItems = await items.listItemsAssignedTo(input.recipientId);
+    expect(recipientItems.filter((item) => fixture.itemIds.includes(item.id))).toHaveLength(50);
+    const formerOwnerItems = await items.listItemsAssignedTo(fixture.initiatorId);
+    expect(formerOwnerItems.some((item) => fixture.itemIds.includes(item.id))).toBe(false);
+    const localGroups = await database.query(`select count(*)::int as count from "yu_inventory"."local_item_groups" where item_id = any($1::uuid[])`, [fixture.itemIds]);
+    expect(localGroups.rows[0]?.count).toBe(0);
+    const after = await database.query(`select id, room_id, inventory_number, quantity from "yu_inventory"."items" where id = any($1::uuid[]) order by id`, [fixture.itemIds]);
+    expect(after.rows).toEqual(before.rows);
+    const replay = await service.createIdempotent(input, actor, key);
+    expect(replay.kind).toBe("replayed");
+    expect(replay.result).toEqual(assigned.result);
+    const count = await database.query(`select count(*)::int as count from "yu_inventory"."responsibility_periods" where item_id = any($1::uuid[])`, [fixture.itemIds]);
+    expect(count.rows[0]?.count).toBe(100);
+  });
 
   it("isolates late item conflicts and rolls back an empty parent", async () => {
     const fixture = await seedFixture(9);

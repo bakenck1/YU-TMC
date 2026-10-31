@@ -55,27 +55,13 @@ describe("TMC issue wiring for local barcode groups", () => {
     openIssueDialog();
 
     expect(fetch).not.toHaveBeenCalled();
-    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("2");
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByText("tmc.localBarcode.quantityQuestion")).toBeNull();
   });
 
-  it("submits even a one-unit local group as a source-group quantity transfer", async () => {
-    vi.mocked(fetch).mockImplementation(async (_input, init) => ({
-      ok: true,
-      json: async () => init?.method === "POST" ? ({
-        result: {
-          request: null,
-          total: 1,
-          included: 0,
-          problems: 1,
-          items: [{
-            itemId: SOURCE_ITEM_ID,
-            outcome: "problem",
-            problem: "active_transfer_exists",
-          }],
-        },
-      }) : ({ distribution: distribution(1) }),
-    } as Response));
-    renderBulk(localGroup(1));
+  it.each([1, 5])("submits all %s units of a local group with its source metadata", async (quantity) => {
+    vi.mocked(fetch).mockResolvedValue(problemResponse([SOURCE_ITEM_ID]));
+    renderBulk(localGroup(quantity));
 
     openIssueDialog();
     fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
@@ -83,8 +69,13 @@ describe("TMC issue wiring for local barcode groups", () => {
     await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(submit);
 
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(true));
-    const [, init] = vi.mocked(fetch).mock.calls.find(([, request]) => request?.method === "POST")!;
+    await screen.findByText("tmc.problem.active_transfer_exists");
+    expect(screen.queryByText(SOURCE_ITEM_ID)).toBeNull();
+    expect(screen.getAllByText("Local chair group")).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toBe("/api/inventory/transfer-requests");
+    expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({
       recipientId: "22222222-2222-4222-8222-222222222222",
       itemIds: [SOURCE_ITEM_ID],
@@ -92,23 +83,87 @@ describe("TMC issue wiring for local barcode groups", () => {
         itemId: SOURCE_ITEM_ID,
         sourceLocalGroupId: GROUP_ID,
         sourceVersion: 7,
-        quantity: 1,
+        quantity,
+      }],
+      comment: null,
+    });
+  });
+
+  it("shows an administrator's accepted whole-group assignment against the selected local row", async () => {
+    const onComplete = vi.fn();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: {
+        total: 1,
+        included: 1,
+        problems: 0,
+        items: [{ itemId: SOURCE_ITEM_ID, outcome: "included", requestItemId: GROUP_ID, requestItemVersion: 1 }],
+        request: {
+          id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          items: [{ item: { id: SOURCE_ITEM_ID }, result: "accepted", invalidReason: null }],
+        },
+      } }),
+    } as Response);
+    renderBulk(localGroup(5), "admin", onComplete);
+    openIssueDialog();
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitAssignment" }));
+    await screen.findByText("tmc.bulk.success");
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("Local chair group")).toHaveLength(2);
+    expect(screen.queryByText(SOURCE_ITEM_ID)).toBeNull();
+    expect(screen.queryByText("Current owner")).toBeNull();
+    expect(screen.getByText("Previous responsible")).not.toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/inventory/transfer-requests");
+  });
+
+  it("moves a mixed selection without splitting the original item's quantity", async () => {
+    const originalId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const original = {
+      ...localGroup(20),
+      id: originalId,
+      sourceItemId: undefined,
+      localGroupId: undefined,
+      inventoryNumber: "ORIGINAL-20",
+      name: "Original chair stock",
+      version: 3,
+    } satisfies InventoryItem;
+    vi.mocked(fetch).mockResolvedValue(problemResponse([originalId, SOURCE_ITEM_ID]));
+    renderBulk([original, localGroup(5)]);
+    openIssueDialog();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "choose-recipient" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.submitTransfer" }));
+    await waitFor(() => expect(screen.getAllByText("tmc.problem.active_transfer_exists")).toHaveLength(2));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toBe("/api/inventory/transfer-requests");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      recipientId: "22222222-2222-4222-8222-222222222222",
+      itemIds: [originalId, SOURCE_ITEM_ID],
+      quantityTransfers: [{
+        itemId: SOURCE_ITEM_ID,
+        sourceLocalGroupId: GROUP_ID,
+        sourceVersion: 7,
+        quantity: 5,
       }],
       comment: null,
     });
   });
 });
 
-function renderBulk(item: InventoryItem) {
+function renderBulk(item: InventoryItem | InventoryItem[], actorRole: "admin" | "employee" = "employee", onComplete = vi.fn()) {
   render(
     <TmcBulkActions
-      items={[item]}
+      items={Array.isArray(item) ? item : [item]}
       actorUserId={OWNER_ID}
-      actorRole="employee"
+      actorRole={actorRole}
       variant="issue"
       buildings={[]}
       rooms={[]}
-      onComplete={vi.fn()}
+      onComplete={onComplete}
     />,
   );
 }
@@ -118,21 +173,15 @@ function openIssueDialog() {
   fireEvent.click(screen.getByRole("menuitem", { name: "tmc.operation.issue" }));
 }
 
-function distribution(quantity: number) {
+function problemResponse(itemIds: string[]): Response {
   return {
-    itemId: SOURCE_ITEM_ID,
-    itemName: "Local chair group",
-    originalBarcode: "123/456",
-    originalQuantity: quantity,
-    originalVersion: 7,
-    originalRemainder: quantity,
-    originalResponsible: { id: OWNER_ID, fullName: "Current owner" },
-    originalLocation: {
-      roomId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      roomDesignation: "101",
-      buildingId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      buildingName: "The Main Campus",
-    },
-    groups: [],
-  };
+    ok: true,
+    json: async () => ({ result: {
+      request: null,
+      total: itemIds.length,
+      included: 0,
+      problems: itemIds.length,
+      items: itemIds.map((itemId) => ({ itemId, outcome: "problem", problem: "active_transfer_exists" })),
+    } }),
+  } as Response;
 }
