@@ -37,9 +37,9 @@ async function read(data: Parameters<typeof exportOneCAnalyticsExcel>[0]) {
 
 test("six ordered full lists preserve IDs and balances, count confirmed cards once, and overlap temporary correctly", async () => {
   const workbook = await read(snapshot());
-  assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["ОС", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
-  assert.equal(cell(workbook.getWorksheet("ОС")!, "Код 1С").value, "00001");
-  assert.equal(cell(workbook.getWorksheet("ОС")!, "Инвентарный номер").value, "0000123");
+  assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["Основные средства", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
+  assert.equal(cell(workbook.getWorksheet("Основные средства")!, "Код 1С").value, "00001");
+  assert.equal(cell(workbook.getWorksheet("Основные средства")!, "Инвентарный номер").value, "0000123");
   const materials = workbook.getWorksheet("МП")!;
   assert.equal(materials.rowCount, 10); // Three source balances, then two matched Inventory cards.
   assert.equal(cell(materials, "Тип строки", 8).value, "Остаток 1С");
@@ -48,7 +48,7 @@ test("six ordered full lists preserve IDs and balances, count confirmed cards on
   const firstMaterial = findRow(materials, "00002", "Код 1С").number;
   assert.equal(cell(materials, "Остаток", firstMaterial).value, 1);
   assert.equal(cell(materials, "Учётная цена, KZT", firstMaterial).value, 101.25);
-  assert.match(String(materials.getCell("A3").value), /Активные позиции 1С: 5 = ОС 3 \+ МП 2/);
+  assert.match(String(materials.getCell("A3").value), /Активные позиции 1С: 5 = Основные средства 3 \+ МП 2/);
   assert.match(String(materials.getCell("A2").value), /2 кодов МП.*3 строк остатков/);
   const found = workbook.getWorksheet("Совпадения 1С")!;
   assert.equal(found.rowCount, 9);
@@ -56,14 +56,14 @@ test("six ordered full lists preserve IDs and balances, count confirmed cards on
   const weak = findRow(found, "weak").number;
   assert.equal(cell(found, "Результат сверки", weak).value, "Нужно сверить номер");
   assert.equal(cell(found, "Раздел 1С", findRow(found, "both").number).value, "МП");
-  assert.match(String(found.getCell("A2").value), /ОС: 1 · МП: 2/);
+  assert.match(String(found.getCell("A2").value), /Основные средства: 1 · МП: 2/);
   const osRow = findRow(found, "os").number;
   assert.equal(cell(found, "Цена в нашей базе, KZT", osRow).value, 123.45);
   assert.equal(cell(found, "Ответственный в нашей базе", osRow).value, "Ответственный Inventory");
-  assert.equal(cell(found, "Первоначальная стоимость ОС, KZT", osRow).value, 900.5);
-  assert.equal(cell(found, "Остаточная стоимость ОС, KZT", osRow).value, 450.25);
+  assert.equal(cell(found, "Первоначальная стоимость основных средств, KZT", osRow).value, 900.5);
+  assert.equal(cell(found, "Остаточная стоимость основных средств, KZT", osRow).value, 450.25);
   assert.equal(cell(found, "Цены строк МП, KZT", findRow(found, "mp").number).value, "100.25\n101.25");
-  assert.equal(cell(found, "Первоначальная стоимость ОС, KZT", weak).value, null);
+  assert.equal(cell(found, "Первоначальная стоимость основных средств, KZT", weak).value, null);
   assert.equal(cell(found, "Цены строк МП, KZT", weak).value, null);
   const temporary = workbook.getWorksheet("Временные")!;
   assert.equal(temporary.rowCount, 7);
@@ -98,20 +98,20 @@ test("unavailable sources do not turn local cards into false missing records; te
   assert.equal(workbook.getWorksheet("Временные")!.rowCount, 7);
   assert.equal(cell(workbook.getWorksheet("Временные")!, "Результат сверки").value, "Нет данных для сверки");
   assert.equal(workbook.getWorksheet("Добавить в базу")!.rowCount, 5);
-  assert.match(String(workbook.getWorksheet("Не найдено в 1С")!.getCell("A4").value), /Нет данных ОС и МП/);
+  assert.match(String(workbook.getWorksheet("Не найдено в 1С")!.getCell("A4").value), /Нет данных основных средств и МП/);
 });
 
 test("partial sources explicitly scope missing results and exports do not stop at a page boundary", async () => {
   const data = snapshot();
   data.rows.push(...Array.from({ length: 150 }, (_, i) => row(`extra${i}`)));
-  data.assets.push(...Array.from({ length: 150 }, (_, i) => ({ ...data.assets[0], externalId: `asset${i}`, asset: { ...data.assets[0].asset, code: `000${i}`, name: `ОС ${i}` } })));
+  data.assets.push(...Array.from({ length: 150 }, (_, i) => ({ ...data.assets[0], externalId: `asset${i}`, asset: { ...data.assets[0].asset, code: `000${i}`, name: `Основные средства ${i}` } })));
   data.analytics.assets.total = data.assets.length;
   const workbook = await read({ ...data, materials: { ...data.materials, batchId: null }, materialRecords: [] });
   const missing = workbook.getWorksheet("Не найдено в 1С")!;
   assert.equal(missing.rowCount, 155);
-  assert.equal(workbook.getWorksheet("ОС")!.rowCount, 158);
-  assert.ok(findRow(workbook.getWorksheet("ОС")!, "000149", "Код 1С"));
-  assert.match(String(missing.getCell("A4").value), /Сверка только по ОС/);
+  assert.equal(workbook.getWorksheet("Основные средства")!.rowCount, 158);
+  assert.ok(findRow(workbook.getWorksheet("Основные средства")!, "000149", "Код 1С"));
+  assert.match(String(missing.getCell("A4").value), /Сверка только по Основные средства/);
 });
 
 test("the MP sheet includes every current balance beyond the registry page size", async () => {
@@ -140,7 +140,7 @@ test("temporary sheet keeps saved 1C codes beside owner, price and name as text,
   const absentRow = findRow(sheet, 'missing').number;
   assert.equal(cell(sheet, 'Код 1С в нашей базе', absentRow).value, '000009149');
   assert.equal(cell(sheet, 'Результат сверки', absentRow).value, 'Не найдено');
-  assert.equal(cell(sheet, 'Коды ОС', absentRow).value, '');
+  assert.equal(cell(sheet, 'Коды основных средств', absentRow).value, '');
   data.inventory.find(item => item.id === 'missing')!.oneCCode = null;
   const absent = await read(data);
   const missingSheet = absent.getWorksheet('Временные')!;
@@ -150,8 +150,8 @@ test("temporary sheet keeps saved 1C codes beside owner, price and name as text,
 test("add-to-database sheet includes every absent active source, preserves balances and excludes even weak candidates", async () => {
   const data = snapshot();
   data.assets.push(
-    { ...data.assets[0], externalId: "absent-os", asset: { ...data.assets[0].asset, externalId: "absent-os", code: "00000099", name: "Новое ОС", responsibleName: "Алия Иванова", initialCost: "900.50" } },
-    { ...data.assets[0], externalId: "aggregate-os", asset: { ...data.assets[0].asset, externalId: "aggregate-os", code: "00000100", name: "Групповое ОС", responsibleName: "Алия Иванова", quantity: 2, initialCost: "5000" } },
+    { ...data.assets[0], externalId: "absent-os", asset: { ...data.assets[0].asset, externalId: "absent-os", code: "00000099", name: "Новое Основные средства", responsibleName: "Алия Иванова", initialCost: "900.50" } },
+    { ...data.assets[0], externalId: "aggregate-os", asset: { ...data.assets[0].asset, externalId: "aggregate-os", code: "00000100", name: "Групповое Основные средства", responsibleName: "Алия Иванова", quantity: 2, initialCost: "5000" } },
   );
   data.materialRecords.push(
     { key: "absent-mp-1", material: { ...mp, code: "00000088", name: "Новый МП", responsibleName: "Борис Иванов", quantity: "2.5", unitPrice: "200" } },
@@ -160,12 +160,12 @@ test("add-to-database sheet includes every absent active source, preserves balan
   const book = await read(data);
   const sheet = book.getWorksheet("Добавить в базу")!;
   assert.equal(sheet.rowCount, 9);
-  assert.match(String(sheet.getCell("A2").value), /2 ОС · 2 строк остатков МП/u);
+  assert.match(String(sheet.getCell("A2").value), /2 Основные средства · 2 строк остатков МП/u);
   assert.equal(cell(sheet, "Код 1С").value, "00000099");
   assert.equal(cell(sheet, "Цена за единицу, KZT").value, 900.5);
   const aggregate = findRow(sheet, "00000100", "Код 1С").number;
   assert.equal(cell(sheet, "Цена за единицу, KZT", aggregate).value, null);
-  assert.equal(cell(sheet, "Первоначальная стоимость ОС, KZT", aggregate).value, 5000);
+  assert.equal(cell(sheet, "Первоначальная стоимость основных средств, KZT", aggregate).value, 5000);
   assert.equal(cell(sheet, "Цена за единицу, KZT", 8).value, 300);
   assert.equal(cell(sheet, "Цена за единицу, KZT", 9).value, 200);
   assert.equal(cell(sheet, "Количество", 9).value, 2.5);

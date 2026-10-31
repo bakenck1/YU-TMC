@@ -5,3 +5,6 @@ drizzle/meta/*.json text eol=lf
 
 # Preserve PDF byte offsets and encrypted streams on every platform.
 *.pdf binary
+
+# The production updater runs under Bash on Linux.
+deploy/update-one-c-temporary.sh text eol=lf

@@ -3,14 +3,14 @@ import type { InventoryAuditEnrichmentPlan, InventoryAuditEnrichmentRow } from "
 import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
 import { classifyOneCAudit } from "@/lib/one-c-analytics";
+import { oneCResponsibleNameKey } from "@/lib/one-c-responsible-name";
 
 export type EnrichmentResponsibleUser = { id: string; fullName: string; role: UserRole; active: boolean; deleted: boolean };
 export type EnrichmentResponsibilityState = { itemId: string; userId: string | null; name: string | null; pendingTransfer: boolean; unavailable: boolean };
 // 1C may append the accounting role on a separate line. It is not part of a person's name.
 // Strip only a separate trailing marker; never remove arbitrary words or match partial names.
-const normalized = (value: string) => value.normalize("NFKC").trim()
-  .replace(/(?:[\s,;]+мол|\s*\(\s*мол\s*\))$/iu, "")
-  .toLocaleLowerCase("ru-RU").replaceAll("ё", "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/u).sort().join(" ");
+const normalized = (value: string) => (oneCResponsibleNameKey(value) ?? "")
+  .replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/u).sort().join(" ");
 // Only established, explicit full-name spellings are interchangeable. Never match a subset of somebody's name.
 const aliases = new Map([
   [normalized("Бауыржан Анесович"), normalized("Тынымбаев Бауыржан Анесович")],

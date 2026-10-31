@@ -66,6 +66,7 @@ jobs:
           npm run db:check
           bash -n deploy/backup-postgres.sh
           bash -n deploy/enable-https.sh
+          bash -n deploy/update-one-c-temporary.sh
           node --check deploy/backup-postgres-connection.mjs
       - name: Run isolated deployment smoke tests
         run: sudo env "PATH=$PATH" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash scripts/test-deployment-runtime.sh

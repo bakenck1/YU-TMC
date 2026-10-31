@@ -39,6 +39,7 @@
     "db:seed": "node --conditions=react-server --import tsx scripts/db/seed.ts",
     "db:backfill-one-c": "node --conditions=react-server --import tsx scripts/db/backfill-one-c-reconciliation.ts",
     "db:fill-one-c-responsibles": "node --conditions=react-server --import tsx scripts/db/fill-one-c-responsibles.ts",
+    "db:reconcile-one-c-temporary": "node --conditions=react-server --import tsx scripts/db/reconcile-one-c-temporary.ts",
     "db:reset": "tsx scripts/db/reset.ts",
     "db:reset-users": "tsx scripts/db/reset-users.ts"
   },

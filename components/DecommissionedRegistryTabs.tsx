@@ -14,7 +14,7 @@ export default function DecommissionedRegistryTabs({
     : "rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100";
 
   return (
-    <nav aria-label="Источники списанных ОС" className="flex flex-wrap gap-2 rounded-2xl border border-black/5 bg-white p-2 shadow-sm">
+    <nav aria-label="Источники списанных основных средств" className="flex flex-wrap gap-2 rounded-2xl border border-black/5 bg-white p-2 shadow-sm">
       <Link className={tabClass(active === "inventory")} href="/items/decommissioned">
         Списанные в Inventory{inventoryTotal === null ? "" : ` (${inventoryTotal.toLocaleString("ru-RU")})`}
       </Link>

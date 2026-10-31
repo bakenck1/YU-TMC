@@ -8,6 +8,26 @@ const url = "https://inventory.test/api/integrations/1c/enrichment";
 const input = { runId: "current-registry", planHash: "a".repeat(64) };
 const request = (value: unknown) => new Request(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
 
+test("temporary endpoint previews only its scope and rejects cross-scope applies", async () => {
+  const calls: unknown[] = [];
+  const scoped = { ...input, runId: "current-registry-temporary" };
+  const handlers = createOneCCurrentEnrichmentHandlers({ authenticate: async () => actor, service: () => ({
+    previewCurrent: async () => { throw new Error("wrong scope"); },
+    previewTemporary: async () => ({ ...scoped, rows: [] }),
+    applyCurrent: async value => { calls.push(value); return { updated: 1 }; },
+  }) });
+  const preview = await handlers.GET(new Request(`${url}?scope=temporary`));
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).plan.runId, scoped.runId);
+  assert.equal((await handlers.POST(new Request(`${url}?scope=temporary`, request(scoped)))).status, 200);
+  assert.deepEqual(calls, [scoped]);
+  assert.equal((await handlers.POST(request(scoped))).status, 400);
+  assert.equal((await handlers.POST(new Request(`${url}?scope=temporary`, request(input)))).status, 400);
+  for (const query of ["?scope=temporary&scope=temporary", "?scope=all", "?scope=temporary&extra=1"]) {
+    assert.equal((await handlers.GET(new Request(url + query))).status, 400);
+  }
+});
+
 test("global enrichment authenticates before reading either registry or any POST body", async () => {
   let reads = 0;
   const handlers = createOneCCurrentEnrichmentHandlers({
@@ -29,7 +49,7 @@ test("preview and apply target the full current registry with the exact reviewed
   const handlers = createOneCCurrentEnrichmentHandlers({
     authenticate: async () => actor,
     service: () => ({
-      previewCurrent: async value => { calls.push(value); return { ...input, rows: [] }; },
+      previewTemporary: async () => ({}), previewCurrent: async value => { calls.push(value); return { ...input, rows: [] }; },
       applyCurrent: async (value, user) => { calls.push([value, user]); return { updated: 2 }; },
     }),
   });
@@ -46,7 +66,7 @@ test("global apply rejects batch scopes, malformed hashes, extra fields and over
   let applies = 0;
   const handlers = createOneCCurrentEnrichmentHandlers({
     authenticate: async () => actor,
-    service: () => ({ previewCurrent: async () => ({}), applyCurrent: async () => { applies++; return {}; } }),
+    service: () => ({ previewTemporary: async () => ({}), previewCurrent: async () => ({}), applyCurrent: async () => { applies++; return {}; } }),
   });
   for (const body of [null, [], {}, { ...input, runId: actor.userId }, { ...input, planHash: "A".repeat(64) }, { ...input, planHash: "a".repeat(63) }, { ...input, rows: [] }]) {
     assert.equal((await handlers.POST(request(body))).status, 400);

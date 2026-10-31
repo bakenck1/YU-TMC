@@ -38,7 +38,7 @@ test("matched-card list requires permission and validates query before reading i
 });
 
 test("matched list searches all cards before pagination and keeps OS-code cards in the MP group", async () => {
-  const cards = Array.from({ length: 120 }, (_, index) => ({ id: String(index), group: "materials", name: `Товар ${index}`, inventoryNumber: `TMP-${index}`, oneCCode: `0000${index}`, sourceCodes: [`0000${index}`], responsibleName: "Иванов Иван", barcode: index === 119 ? "1350 / 16355" : "", oneCUnitPrice: String(index), currentUnitPrice: "0", source: "ОС" }));
+  const cards = Array.from({ length: 120 }, (_, index) => ({ id: String(index), group: "materials", name: `Товар ${index}`, inventoryNumber: `TMP-${index}`, oneCCode: `0000${index}`, sourceCodes: [`0000${index}`], responsibleName: "Иванов Иван", barcode: index === 119 ? "1350 / 16355" : "", oneCUnitPrice: String(index), currentUnitPrice: "0", source: "Основные средства" }));
   const route = loadRoute("app/api/integrations/1c/analytics/matched/route.ts", async () => ({}), async () => ({ analytics: { calculatedAt: "2026-10-28T00:00:00Z" } }), () => cards);
   const response = await route.GET(new Request("https://inventory.example/api?group=materials&page=2&pageSize=50"));
   const body = await response.json();

@@ -29,7 +29,7 @@ export function classifyOneCAudit(rows: readonly AuditMatch[]): Map<string, OneC
     };
     const sourceCode = exactMaterialCode(row.siteOneCCode);
     const ownerMatches = (name: string, responsibleName?: string | null) => oneCNameOwnerCanIdentify({ name: row.itemName, inventoryNumber: row.siteNumber, inventoryNumberKind: row.numberKind, responsibleName: row.siteResponsibleName, oneCCode: row.siteOneCCode }, name, responsibleName);
-    const fixedAssets = row.oneC.some(entry => (sourceCode !== null && exactMaterialCode(entry.code) === sourceCode) || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity)
+    const fixedAssets = row.oneC.some(entry => entry.matchedBy.includes("guid") || (sourceCode !== null && exactMaterialCode(entry.code) === sourceCode) || matches(entry.name, entry.inventoryNumber, entry.barcode, entry.quantity)
       || entry.matchedBy.includes("name_owner") && ownerMatches(entry.name, entry.responsibleName));
     const quantities = new Map<string, number>();
     for (const entry of row.excel) if (entry.oneCCode) quantities.set(entry.oneCCode, (quantities.get(entry.oneCCode) ?? 0) + Number(entry.endingBalance ?? 0));

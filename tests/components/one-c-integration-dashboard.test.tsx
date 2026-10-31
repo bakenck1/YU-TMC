@@ -18,8 +18,17 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("opens the temporary-card review without loading the asset or material registry", () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" })).getByRole("button", { name: "Временные" }));
+    expect(screen.getByText(/Временный номер создаётся/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Проверить изменения" })).toBeTruthy();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("shows matched temporary cards directly inside the materials tab alongside the original registry", async () => {
-    const fetcher = vi.fn(async (input: string) => new Response(JSON.stringify({ data: input.includes("/analytics/matched") ? [{ id: "female", group: "materials", name: "Манекен женский", inventoryNumber: "TMP-2026-TEST", oneCCode: "00000012626", sourceCodes: ["00000012626"], responsibleName: "Сотрудник", oneCUnitPrice: "29000.00", currentUnitPrice: "29000.00", source: "ОС" }] : [], total: input.includes("/analytics/matched") ? 1 : 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
+    const fetcher = vi.fn(async (input: string) => new Response(JSON.stringify({ data: input.includes("/analytics/matched") ? [{ id: "female", group: "materials", name: "Манекен женский", inventoryNumber: "TMP-2026-TEST", oneCCode: "00000012626", sourceCodes: ["00000012626"], responsibleName: "Сотрудник", oneCUnitPrice: "29000.00", currentUnitPrice: "29000.00", source: "Основные средства" }] : [], total: input.includes("/analytics/matched") ? 1 : 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     fireEvent.click(within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" })).getByRole("button", { name: "Материальный предмет" }));
@@ -34,7 +43,7 @@ describe("integration overview", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     const rows = screen.getAllByRole("listitem");
-    for (const label of ["ОС", "Материальный предмет"]) {
+    for (const label of ["Основные средства", "Материальный предмет"]) {
       const row = rows.find(row => within(row).queryByText(label));
       expect(row).toBeTruthy();
       expect(within(row!).queryByRole("button")).toBeNull();
@@ -75,7 +84,7 @@ describe("integration overview", () => {
   });
   it("groups cards found in both registers under materials without changing the found total", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
-    expect(screen.queryByText("Найдено в ОС и МП")).toBeNull();
+    expect(screen.queryByText("Найдено в Основные средства и МП")).toBeNull();
     const materialsRow = screen.getAllByText("Материальный предмет").map(element => element.closest("li")).find(Boolean);
     expect(materialsRow?.textContent).toBe("Материальный предмет2");
     expect(screen.getByText("60%")).toBeTruthy();
@@ -96,9 +105,9 @@ describe("integration overview", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} batches={batches} />);
     expect(screen.queryByRole("heading", { name: "Обновление карточек из 1С" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Перейти к сверке ОС" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Перейти к сверке Основные средства" })).toBeNull();
     const navigation = within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" }));
-    fireEvent.click(navigation.getByRole("button", { name: "ОС" }));
+    fireEvent.click(navigation.getByRole("button", { name: "Основные средства" }));
     expect(screen.getByRole("heading", { name: "Основные средства" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { name: "Обновление карточек из 1С" })).toHaveLength(1);
     expect((screen.getByRole("button", { name: "Проверить изменения" }) as HTMLButtonElement).disabled).toBe(false);
@@ -147,9 +156,9 @@ describe("integration overview", () => {
 
   it("keeps reconciliation and materials in distinct navigable panels", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} batches={batches} />);
-    expect(screen.queryByRole("heading", { name: "Основные средства" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Поиск основных средств" })).toBeNull();
     const navigation = within(screen.getByRole("navigation", { name: "Разделы интеграции 1С" }));
-    fireEvent.click(navigation.getByRole("button", { name: "ОС" }));
+    fireEvent.click(navigation.getByRole("button", { name: "Основные средства" }));
     expect(screen.getByRole("heading", { name: "Основные средства" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Материальный предмет" })).toBeNull();
     fireEvent.click(navigation.getByRole("button", { name: "Материальный предмет" }));
@@ -166,8 +175,8 @@ describe("integration overview", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={{ ...materials, batchId: "mp", materialCount: 3, rowCount: 50, positiveRows: 40 }} batches={batches} />);
     const composition = within(screen.getByRole("region", { name: "Состав 1С" }));
     expect(composition.getByText("9")).toBeTruthy();
-    expect(composition.getByText("6 ОС + 3 МП = 9")).toBeTruthy();
-    expect(screen.queryByText("ОС и материальный предмет")).toBeNull();
+    expect(composition.getByText("6 Основные средства + 3 МП = 9")).toBeTruthy();
+    expect(screen.queryByText("Основные средства и материальный предмет")).toBeNull();
     expect(screen.queryByText("Проверить совпадения")).toBeNull();
     expect(screen.queryByText("снято с учёта", { exact: false })).toBeNull();
     const inventory = within(screen.getByRole("region", { name: "Наша база" }));

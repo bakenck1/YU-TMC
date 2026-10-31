@@ -19,6 +19,26 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); appLanguage.value = "ru"; });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it("reviews and applies only temporary cards and resets the plan when the scope changes", async () => {
+    const temporaryPlan = { ...plan, runId: "current-registry-temporary", rows: [
+      { ...plan.rows[0], temporaryMatch: { found: true, category: "materials" } },
+      { ...plan.rows[1], temporaryMatch: { found: false, category: "missing" } },
+    ] };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: temporaryPlan })).mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
+    vi.stubGlobal("fetch", fetcher);
+    const onApplied = vi.fn();
+    const view = render(<InventoryCurrentEnrichment temporaryOnly onApplied={onApplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    expect(await screen.findByText("Найдено в 1С")).toBeTruthy();
+    expect(fetcher.mock.calls[0][0]).toBe("/api/integrations/1c/enrichment?scope=temporary");
+    fireEvent.click(screen.getByRole("button", { name: "Применить 1 обновлений" }));
+    await screen.findByRole("status");
+    expect(fetcher.mock.calls[1][0]).toBe("/api/integrations/1c/enrichment?scope=temporary");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ runId: temporaryPlan.runId, planHash: temporaryPlan.planHash });
+    expect(onApplied).toHaveBeenCalledOnce();
+    view.rerender(<InventoryCurrentEnrichment onApplied={onApplied} />);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
   it("translates current-registry review and price status", async () => {
     appLanguage.value = "en";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({ plan: { ...plan, runId: "current-registry", counts: { ready: 0, unchanged: 1, skipped: 0 }, rows: [{ ...plan.rows[0], changed: false, price: { currentUnitPrice: "100", nextUnitPrice: "100", changed: false, status: "missing" } }] } })));
@@ -34,7 +54,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
     render(<InventoryCurrentEnrichment onApplied={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
     await screen.findByText("Сравнить номера и названия");
-    expect(screen.getByText("ОС: Ноутбук Lenovo IdeaPad №2411/00390")).toBeTruthy();
+    expect(screen.getByText("Основные средства: Ноутбук Lenovo IdeaPad №2411/00390")).toBeTruthy();
     expect(screen.getAllByText("2411/0390")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
   });
@@ -91,7 +111,7 @@ describe("reviewing and applying confirmed inventory codes", () => {
     const apply = await screen.findByRole("button", { name: "Применить 1 обновлений" });
     expect(fetcher.mock.calls[0][0]).toBe("/api/integrations/1c/enrichment");
     expect(fetcher.mock.calls[0][1].method).toBe("GET");
-    expect(screen.getByText("ОС проверено")).toBeTruthy();
+    expect(screen.getByText("Проверено основных средств")).toBeTruthy();
     expect(screen.getByText("МП проверено")).toBeTruthy();
     expect(screen.getByText("100")).toBeTruthy();
     expect(within(screen.getByRole("table")).getByText("МП")).toBeTruthy();
@@ -251,9 +271,9 @@ describe("reviewing and applying confirmed inventory codes", () => {
     await screen.findByText("Можно обновить: 0. Без изменений: 0. Пропущено: 5.");
     const reasons = within(screen.getByRole("list", { name: "Причины пропуска" })).getAllByRole("listitem").map((row) => row.textContent);
     expect(reasons).toEqual(expect.arrayContaining([
-      "Нет подтверждения в ОС 1С — проверьте партию и полный номер: 1",
+      "Нет подтверждения в основных средствах 1С — проверьте партию и полный номер: 1",
       "Нет подтверждения в материалах API 1С — проверьте реестр и полный номер: 2",
-      "Нет подтверждения в ОС и материалах API 1С — проверьте оба источника: 1",
+      "Нет подтверждения в основных средствах и материалах API 1С — проверьте оба источника: 1",
       "Нет подтверждения в источниках — проверьте полные номера: 1",
     ]));
     expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();

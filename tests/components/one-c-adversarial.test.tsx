@@ -29,7 +29,7 @@ function deferred<T>() {
 async function open() {
   render(<OneCReconciliationManager initialBatches={{ data: [batch(1)], page: 1, pageSize: 50, total: 1 }} initialMaterials={snapshot("a".repeat(64))} />);
   fireEvent.click(screen.getByRole("button", { name: "Открыть сверку" }));
-  await screen.findByText(/Партия ОС:.*версия 1/);
+  await screen.findByText(/Партия основных средств:.*версия 1/);
   await waitFor(() => expect(screen.getByRole("button", { name: "Сверить" }).hasAttribute("disabled")).toBe(false));
 }
 
@@ -73,7 +73,7 @@ describe("adversarial 1C analysis regressions", () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
     expect((await screen.findByRole("alert")).textContent).toContain("API 1С");
-    expect(screen.getByText(/Партия ОС:.*версия 1/)).toBeTruthy();
+    expect(screen.getByText(/Партия основных средств:.*версия 1/)).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/batches/${id}`))).toHaveLength(2);
   });
 
@@ -119,10 +119,10 @@ describe("adversarial 1C analysis regressions", () => {
     await open();
     fireEvent.change(screen.getByRole("combobox", { name: "Источник сводки" }), { target: { value: "1c" } });
     fireEvent.click(screen.getByRole("button", { name: "Сверить" }));
-    await screen.findByText(/Партия ОС:.*версия 2/);
+    await screen.findByText(/Партия основных средств:.*версия 2/);
     await act(async () => { oldAudit.resolve(response(audit(1))); await oldAudit.promise; });
-    expect(screen.queryByText(/Партия ОС:.*версия 1/)).toBeNull();
-    expect(screen.getByText(/Партия ОС:.*версия 2/)).toBeTruthy();
+    expect(screen.queryByText(/Партия основных средств:.*версия 1/)).toBeNull();
+    expect(screen.getByText(/Партия основных средств:.*версия 2/)).toBeTruthy();
   });
 
   it("does not attach a delayed audit to a different selected batch", async () => {
@@ -140,14 +140,14 @@ describe("adversarial 1C analysis regressions", () => {
     }));
     render(<OneCReconciliationManager initialBatches={{ data: [batch(1), { ...batch(2), id: secondId }], page: 1, pageSize: 50, total: 2 }} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Открыть сверку" })[0]);
-    await screen.findByText(/Партия ОС:.*версия 1/);
+    await screen.findByText(/Партия основных средств:.*версия 1/);
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Открыть сверку" })[1].hasAttribute("disabled")).toBe(false));
     fireEvent.change(screen.getByRole("combobox", { name: "Источник сводки" }), { target: { value: "1c" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Открыть сверку" })[1]);
-    await screen.findByText(/Партия ОС:.*версия 2/);
+    await screen.findByText(/Партия основных средств:.*версия 2/);
     await act(async () => { oldAudit.resolve(response(audit(1))); await oldAudit.promise; });
-    expect(screen.queryByText(/Партия ОС:.*версия 1/)).toBeNull();
-    expect(screen.getByText(/Партия ОС:.*версия 2/)).toBeTruthy();
+    expect(screen.queryByText(/Партия основных средств:.*версия 1/)).toBeNull();
+    expect(screen.getByText(/Партия основных средств:.*версия 2/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Скачать сводку Excel" }).getAttribute("href")).toContain(secondId);
   });
 

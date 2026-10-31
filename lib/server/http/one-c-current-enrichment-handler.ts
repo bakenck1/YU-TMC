@@ -8,6 +8,7 @@ type Dependencies = {
   authenticate(request: Request): Promise<OneCAdminActor>;
   service(): {
     previewCurrent(actor: OneCAdminActor): Promise<unknown>;
+    previewTemporary(actor: OneCAdminActor): Promise<unknown>;
     applyCurrent(input: { runId: string; planHash: string }, actor: OneCAdminActor): Promise<unknown>;
   };
 };
@@ -17,14 +18,18 @@ export function createOneCCurrentEnrichmentHandlers(dependencies: Dependencies) 
   async function handle(request: Request, mutation: boolean) {
     try {
       const actor = await dependencies.authenticate(request);
-      if (new URL(request.url).search) throw invalid();
-      if (!mutation) return Response.json({ plan: await dependencies.service().previewCurrent(actor) }, { headers: PRIVATE });
+      const url = new URL(request.url);
+      const temporaryOnly = url.search === "?scope=temporary";
+      if (url.search && !temporaryOnly) throw invalid();
+      if (!mutation) return Response.json({ plan: await (temporaryOnly
+        ? dependencies.service().previewTemporary(actor) : dependencies.service().previewCurrent(actor)) }, { headers: PRIVATE });
       const body = await readLimitedJson(request, 1024);
       if (!body || typeof body !== "object" || Array.isArray(body)) throw invalid();
       const value = body as Record<string, unknown>;
-      if (Object.keys(value).length !== 2 || value.runId !== "current-registry"
+      const runId = temporaryOnly ? "current-registry-temporary" : "current-registry";
+      if (Object.keys(value).length !== 2 || value.runId !== runId
         || typeof value.planHash !== "string" || !/^[a-f0-9]{64}$/u.test(value.planHash)) throw invalid();
-      return Response.json({ result: await dependencies.service().applyCurrent({ runId: value.runId, planHash: value.planHash }, actor) }, { headers: PRIVATE });
+      return Response.json({ result: await dependencies.service().applyCurrent({ runId, planHash: value.planHash }, actor) }, { headers: PRIVATE });
     } catch (error) { return applicationErrorResponse(error, PRIVATE); }
   }
   return { GET: (request: Request) => handle(request, false), POST: (request: Request) => handle(request, true) };

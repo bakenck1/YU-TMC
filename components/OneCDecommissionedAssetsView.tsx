@@ -21,7 +21,7 @@ export default function OneCDecommissionedAssetsView({
           <div>
             <h1 className="text-xl font-semibold text-zinc-900">Списанные по данным 1С</h1>
             <p className="mt-1 text-sm text-amber-900">
-              Найдено {result.total.toLocaleString("ru-RU")} ОС со статусом «Снято с учёта».
+              Найдено {result.total.toLocaleString("ru-RU")} основных средств со статусом «Снято с учёта».
               Это справочный список: записи ещё не опубликованы в Inventory.
             </p>
           </div>
@@ -31,7 +31,7 @@ export default function OneCDecommissionedAssetsView({
       <form className="flex gap-2 rounded-2xl border border-black/5 bg-white p-4" method="get">
         <input type="hidden" name="source" value="one-c" />
         <label className="relative min-w-0 flex-1">
-          <span className="sr-only">Поиск по списанным ОС 1С</span>
+          <span className="sr-only">Поиск по списанным основным средствам 1С</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             name="q"

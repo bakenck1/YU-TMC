@@ -39,7 +39,8 @@ export type InventoryAuditEnrichmentRow = {
   excelRowNumber?: number;
   siteNumber?: string;
   identityEvidence?: string;
-  identityMethod?: "material_code" | "asset_code" | "name_owner";
+  identityMethod?: "material_code" | "asset_code" | "name_owner" | "saved_link";
+  temporaryMatch?: { found: boolean; category: "fixedAssets" | "materials" | "both" | "possible" | "missing" };
   searchText?: string;
   sourceDetails?: Array<{ kind: "ОС" | "МП"; name: string; inventoryNumber: string | null; barcode: string | null }>;
   price?: {
@@ -222,6 +223,10 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     // The two registers may reuse a code for different property. Presence in
     // both is reported, but updates must not silently pick one register.
     if (useMaterialCode && useAssetCode) return skip("source_ambiguous");
+    const linkedAssets = options.allowSourceCode ? row.oneC.filter(entry => entry.matchedBy.includes("guid") && entry.origins.includes("current_registry")) : [];
+    const useSavedLink = !useMaterialCode && !useAssetCode && linkedAssets.length > 0;
+    if (useSavedLink && new Set(linkedAssets.map(entry => entry.externalId)).size !== 1) return skip("source_ambiguous");
+    if (useSavedLink && materialCode && linkedAssets.some(entry => exactMaterialCode(entry.code) !== materialCode)) return skip("code_conflict");
     const nameOwnerItem = { ...item, inventoryNumberKind: row.numberKind };
     const nameOwnerAssets = row.oneC.filter(entry => entry.matchedBy.includes("name_owner")
       && oneCNameOwnerCanIdentify(nameOwnerItem, entry.name, entry.responsibleName));
@@ -239,7 +244,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       if (!identities.length && options.allowDescriptionIdentity && !entry.inventoryNumber?.trim() && !entry.barcode?.trim()) identities = descriptionIdentity(item, entry.name, options.formattedNumbers);
       return !identityIssue(item, identities, entry.name, entry.barcode, options.allowDescriptionIdentity, entry.inventoryNumber, options.formattedNumbers);
     });
-    const selectedNameOwner = !useMaterialCode && !useAssetCode && !hasNumberIdentity ? selectOneCNameOwnerSource([
+    const selectedNameOwner = !useMaterialCode && !useAssetCode && !useSavedLink && !hasNumberIdentity ? selectOneCNameOwnerSource([
       ...nameOwnerAssets.map(entry => ({ kind: "asset" as const, entry })),
       ...nameOwnerMaterials.map(entry => ({ kind: "material" as const, entry })),
     ], candidate => candidate.kind === "asset"
@@ -248,7 +253,7 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     const useNameOwner = selectedNameOwner !== undefined;
     const materialEvidence = useMaterialCode ? codeMaterials : selectedNameOwner?.kind === "asset" ? []
       : selectedNameOwner?.kind === "material" ? nameOwnerMaterials.filter(entry => entry.oneCCode === selectedNameOwner.entry.oneCCode && entry.materialGuid === selectedNameOwner.entry.materialGuid) : row.excel;
-    const oneC = (useAssetCode ? codeAssets : useMaterialCode || selectedNameOwner?.kind === "material" ? []
+    const oneC = (useSavedLink ? linkedAssets : useAssetCode ? codeAssets : useMaterialCode || selectedNameOwner?.kind === "material" ? []
       : selectedNameOwner?.kind === "asset" ? row.oneC.filter(entry => entry.externalId === selectedNameOwner.entry.externalId) : row.oneC).filter((entry) => Array.isArray(entry.origins)
       && entry.origins.some((origin) => origin === "selected_batch" || origin === "current_registry"));
     if (!oneC.length && !row.excel.length) {
@@ -272,11 +277,11 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       if (!source.externalId) return skip("source_ambiguous");
 
       const reused = (oneCOwners.get(source.externalId)?.size ?? 0) > 1;
-      if (!useAssetCode && !useNameOwner && reused) return skip("source_reused");
+      if (!useAssetCode && !useNameOwner && !useSavedLink && reused) return skip("source_reused");
       let identities = [number(source.inventoryNumber), barcode(source.barcode)].filter((value): value is string => Boolean(value));
       if (!identities.length && options.allowDescriptionIdentity && !source.inventoryNumber?.trim() && !source.barcode?.trim()) identities = descriptionIdentity(item, source.name, options.formattedNumbers);
       const issue = identityIssue(item, identities, source.name, source.barcode, options.allowDescriptionIdentity, source.inventoryNumber, options.formattedNumbers);
-      if (issue && !useAssetCode && !useNameOwner) return skip(issue);
+      if (issue && !useAssetCode && !useNameOwner && !useSavedLink) return skip(issue);
       codeOnlyIdentity = Boolean(useAssetCode && (issue || reused));
       name = source.name.trim();
     } else {
@@ -320,9 +325,10 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
     if (useMaterialCode && codeOnlyIdentity) result.identityMethod = "material_code";
     if (useAssetCode && codeOnlyIdentity) result.identityMethod = "asset_code";
     if (useNameOwner) result.identityMethod = "name_owner";
+    if (useSavedLink) result.identityMethod = "saved_link";
     if (options.allowDescriptionIdentity) {
       result.siteNumber = item.inventoryNumber;
-      result.identityEvidence = useMaterialCode || useAssetCode ? `1C: ${materialCode}` : source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
+      result.identityEvidence = useSavedLink ? `1C GUID: ${source!.externalId}` : useMaterialCode || useAssetCode ? `1C: ${materialCode}` : source?.inventoryNumber || source?.barcode || excel?.explicitInventoryNumber || excel?.barcode || descriptionIdentity(item, name, options.formattedNumbers).join(", ");
     }
     result.nextName = name;
     result.nextCode = nextCode;

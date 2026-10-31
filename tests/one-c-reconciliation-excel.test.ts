@@ -31,7 +31,7 @@ test("Excel separates missing cabinets from possible matches, pending rows and p
     assert.equal(sheet.getCell("V2").text, "Нет в Inventory");
     assert.equal(sheet.getCell("W2").text, "Осы шкаф жоқ — нет в Inventory");
     assert.equal(workbook.getWorksheet("Требует проверки")?.rowCount, scope === "all" ? 4 : undefined);
-    assert.equal(workbook.getWorksheet("Все ОС")?.rowCount, scope === "all" ? 7 : undefined);
+    assert.equal(workbook.getWorksheet("Все основные средства")?.rowCount, scope === "all" ? 7 : undefined);
   }
 });
 
@@ -85,7 +85,7 @@ test("exports every 1C reconciliation row with Russian labels and responsible de
   const workbook = new Workbook();
   await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   const summary = workbook.getWorksheet("Сводка")!;
-  const rows = workbook.getWorksheet("Все ОС")!;
+  const rows = workbook.getWorksheet("Все основные средства")!;
   assert.equal(summary.getCell("B2").value, 2);
   assert.equal(rows.rowCount, 3);
   assert.equal(rows.getCell("A2").value, "Заблокировано");

@@ -33,7 +33,7 @@ function addInventoryRows(sheet: Worksheet, rows: AuditMatch[], api = false): vo
   sheet.addRow(["Итог", "Источник", "ID ТМЦ", "Наименование сайта", "Номер сайта", "Инв. номер Excel", "Номенклатура Excel", "Строка Excel", "Конечный остаток Excel", "GUID 1С", "Инв. номер 1С", "Наименование 1С", "Статус 1С", "Ссылка на ТМЦ", "Штрихкоды сайта", "Найдено в Excel по", "Штрихкод 1С", "Найдено в 1С по", "Запись 1С из", "Статус проверки партии 1С", "Код 1С", "Код 1С из Excel"]);
   for (const row of rows) {
     const excel = row.excel[0], oneC = row.oneC[0];
-    sheet.addRow([auditNeedsReview(row) ? "Возможное совпадение — проверьте номер" : label(row.result), api ? row.source === "excel" ? "Материалы 1С" : row.source === "1c+excel" ? "ОС + Материалы" : row.source === "1c" ? "ОС" : "" : source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.matchedInventoryNumber ?? excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(oneC?.reviewState), safeText(oneC?.code), safeText(excel?.oneCCode)]);
+    sheet.addRow([auditNeedsReview(row) ? "Возможное совпадение — проверьте номер" : label(row.result), api ? row.source === "excel" ? "Материалы 1С" : row.source === "1c+excel" ? "Основные средства + Материалы" : row.source === "1c" ? "Основные средства" : "" : source(row.source), safeText(row.itemId), safeText(row.itemName), safeText(row.siteNumber), safeText(excel?.matchedInventoryNumber ?? excel?.inventoryNumber), safeText(excel?.nomenclature), excel?.rowNumber ?? "", safeText(excel?.endingBalance), safeText(oneC?.externalId), safeText(oneC?.inventoryNumber), safeText(oneC?.name), safeText(oneC?.status), `/items/${row.itemId}`, safeText(row.siteBarcodes?.map((barcode) => `${barcode.kind}: ${barcode.value}`).join("; ")), safeText(excel?.matchedBy?.join(", ")), safeText(oneC?.barcode), safeText(oneC?.matchedBy?.join(", ")), safeText(oneC?.origins?.map((origin) => origin === "selected_batch" ? "выбранная партия" : "текущий реестр").join(", ")), safeText(oneC?.reviewState), safeText(oneC?.code), safeText(excel?.oneCCode)]);
   }
   if (api) sheet.getRow(1).eachCell(cell => { if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Excel", "материалов API 1С"); });
   sheet.columns.forEach((column) => { column.width = 24; });
@@ -89,7 +89,7 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
     { name: "Из найденных возможные", contains: (row) => row.result === "matched" && auditNeedsReview(row) },
   ];
   const groupSheets = groups.map(({ name, contains }) => {
-    const group = workbook.addWorksheet(api ? name.replace("Только 1С", "Только ОС").replace("Только Excel", "Только материалы").replace("1С + Excel", "ОС + Материалы") : name, { views: [{ state: "frozen", ySplit: 1 }] });
+    const group = workbook.addWorksheet(api ? name.replace("Только 1С", "Только Основные средства").replace("Только Excel", "Только материалы").replace("1С + Excel", "Основные средства + Материалы") : name, { views: [{ state: "frozen", ySplit: 1 }] });
     addInventoryRows(group, data.rows.filter(contains), api);
     return group;
   });
@@ -105,7 +105,7 @@ export async function exportInventorySourceAuditExcel(data: AuditExport): Promis
       line++;
     }
     summary.eachRow(row => row.eachCell(cell => {
-      if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Только 1С", "Только ОС").replaceAll("1С + Excel", "ОС + Материалы").replaceAll("Excel", "материалов API 1С");
+      if (typeof cell.value === "string") cell.value = cell.value.replaceAll("Только 1С", "Только Основные средства").replaceAll("1С + Excel", "Основные средства + Материалы").replaceAll("Excel", "материалов API 1С");
     }));
     summary.addRow(["Источник", "Текущий реестр материалов API 1С; Excel не используется"]);
     const material = data.run.material_source as Record<string, unknown>;

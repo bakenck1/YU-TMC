@@ -61,7 +61,7 @@ test("same-code balances with different prices preserve price while consistent n
 
 test("temporary material-code proposals ignore unrelated OS and MP number candidates", () => {
   const { audit } = review();
-  audit.rows[0].oneC.push({ externalId: "os", code: item.oneCCode, name: "Другая ОС", inventoryNumber: "999/999", barcode: null, status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["code"], matchedBarcodes: [] });
+  audit.rows[0].oneC.push({ externalId: "os", code: item.oneCCode, name: "Другая Основные средства", inventoryNumber: "999/999", barcode: null, status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["code"], matchedBarcodes: [] });
   audit.rows[0].excel.push({ ...material, oneCCode: "OTHER", rowNumber: 2, sourceKey: "foreign", nomenclature: "Другой материал", unitPrice: "999999" });
   const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [item], options);
   addOneCPriceProposals(plan, audit.rows, new Map(), [item]);

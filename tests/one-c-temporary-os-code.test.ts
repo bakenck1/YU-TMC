@@ -11,7 +11,7 @@ import { workbookCell } from "./helpers/one-c-workbook";
 
 const options = { formattedNumbers: true, descriptionBarcodes: true, allowDescriptionIdentity: true, allowTemporaryMaterialCode: true, allowTemporaryAssetCode: true };
 const card = (id: string, code: string) => ({ id, name: `Наш ${id}`, inventoryNumber: `TMP-${id}`, inventoryNumberKind: "temporary", oneCCode: code, officialBarcodes: [], sourceCodes: [], version: 1, itemSection: "general", status: "active", unitPrice: "0" });
-const asset: OneCFixedAsset = { externalId: "os", code: "00000123", name: "Название ОС", inventoryNumber: null, barcode: null, quantity: 1, initialCost: 50000, residualCost: 1000, category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, acceptedAt: null, updatedAt: null };
+const asset: OneCFixedAsset = { externalId: "os", code: "00000123", name: "Название Основные средства", inventoryNumber: null, barcode: null, quantity: 1, initialCost: 50000, residualCost: 1000, category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, acceptedAt: null, updatedAt: null };
 const mp: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "00000456", nomenclature: "Название МП", inventoryNumber: "", explicitInventoryNumber: null, barcode: null, endingBalance: "2", unitPrice: "1234" };
 
 test("temporary code matches in either register are grouped under MP without changing the actual source", () => {
@@ -42,7 +42,7 @@ test("code found in both sections is counted once and conflicting sources do not
 
 test("OS code retains zeros, and multiple OS records sharing a code require review", () => {
   const items = [card("wrong", "123"), card("right", asset.code!)];
-  const audit = buildInventorySourceAudit(items, [{ externalId: "os", asset }, { externalId: "os2", asset: { ...asset, externalId: "os2", name: "Другая ОС" } }], [], [], options);
+  const audit = buildInventorySourceAudit(items, [{ externalId: "os", asset }, { externalId: "os2", asset: { ...asset, externalId: "os2", name: "Другая Основные средства" } }], [], [], options);
   assert.equal(classifyOneCAudit(audit.rows).get("wrong")?.category, "missing");
   assert.equal(classifyOneCAudit(audit.rows).get("right")?.category, "fixedAssets");
   assert.equal(buildInventoryAuditEnrichmentPlan(audit.rows, items, options).rows.find(row => row.itemId === "right")?.reason, "source_ambiguous");
@@ -92,9 +92,9 @@ test("Excel groups a legacy TMP-number OS code match as found in MP and retains 
     const sheet = workbook.getWorksheet(name)!;
     assert.equal(workbookCell(sheet, "Раздел 1С").value, "МП");
     assert.equal(workbookCell(sheet, "Результат сверки").value, "Найдено");
-    assert.equal(workbookCell(sheet, "Коды ОС").value, asset.code);
+    assert.equal(workbookCell(sheet, "Коды основных средств").value, asset.code);
     assert.equal(workbookCell(sheet, "Коды МП").value, "");
-    assert.equal(workbookCell(sheet, "Первоначальная стоимость ОС, KZT").value, 50000);
+    assert.equal(workbookCell(sheet, "Первоначальная стоимость основных средств, KZT").value, 50000);
     assert.equal(workbookCell(sheet, "Цены строк МП, KZT").value, null);
   }
   assert.equal(workbook.getWorksheet("Добавить в базу")!.rowCount, 5);
@@ -104,5 +104,5 @@ test("Excel groups a legacy TMP-number OS code match as found in MP and retains 
   assert.equal(workbookCell(materials, "ID карточки").value, item.id);
   assert.equal(workbookCell(materials, "Учётная цена, KZT").value, 50000);
   assert.equal(workbookCell(materials, "Цена в нашей базе, KZT").value, 0);
-  assert.equal(workbookCell(materials, "Источник совпадения").value, "ОС");
+  assert.equal(workbookCell(materials, "Источник совпадения").value, "Основные средства");
 });

@@ -16,9 +16,9 @@ const page: AuditPage = {
 describe("inventory audit counts and source explanations", () => {
   it("names source categories and explains overlap and subsets", () => {
     render(<InventorySourceAuditPanel batchId="batch" audit={page} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getAllByText("ОС").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Основные средства").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Материалы").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("ОС + Материалы").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Основные средства + Материалы").length).toBeGreaterThan(0);
     expect(screen.queryByText("Только 1С")).toBeNull();
     expect(screen.queryByText("Только Excel")).toBeNull();
     expect(screen.getByText(/736 \+ 294 \+ 67 \+ 891 = 1988/)).toBeTruthy();

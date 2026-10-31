@@ -52,7 +52,7 @@ export function getOneCMatchedCards(data: { rows: AuditMatch[]; inventory: Inven
       oneCCode: item?.oneCCode ?? row.siteOneCCode ?? null,
       sourceCodes: [...new Set([...row.oneC.map(source => source.code), ...row.excel.map(source => source.oneCCode)].filter((code): code is string => Boolean(code)))],
       group: oneCAuditDisplayCategory(row, confirmed) === "fixedAssets" ? "assets" as const : "materials" as const,
-      source: confirmed.fixedAssets && confirmed.materials ? "ОС + МП" : confirmed.fixedAssets ? "ОС" : "МП",
+      source: confirmed.fixedAssets && confirmed.materials ? "Основные средства + МП" : confirmed.fixedAssets ? "Основные средства" : "МП",
       responsibleName: item?.responsibleName ?? row.siteResponsibleName ?? null,
       quantity: item?.quantity ?? 0, status: item?.status ?? "",
       currentUnitPrice: item?.unitPrice ?? null,

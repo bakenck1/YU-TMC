@@ -15,6 +15,7 @@ import { addOneCResponsibilityProposals } from "@/lib/one-c-enrichment-responsib
 import { createPostgresInventoryResponsibilityRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-responsibility-repositories";
 import { addOneCPriceProposals } from "@/lib/one-c-enrichment-price";
 import { isInventoryResponsibleRole } from "@/lib/inventory-responsible-user";
+import { temporaryReconciliationPlan } from "@/lib/one-c-temporary-reconciliation";
 
 type ApplyInput = { runId: string; planHash: string };
 type ApplyResult = { updated: number; unchanged: number; skipped: number; planHash: string };
@@ -28,6 +29,10 @@ export class InventoryAuditEnrichmentService {
 
   previewCurrent(actor: OneCAdminActor) {
     return this.transaction(actor, false, (client) => this.currentPlan(client));
+  }
+
+  previewTemporary(actor: OneCAdminActor) {
+    return this.transaction(actor, false, (client) => this.currentPlan(client, false, false, true));
   }
 
   previewMissingResponsibilities(actor: OneCAdminActor) {
@@ -49,7 +54,7 @@ export class InventoryAuditEnrichmentService {
         where actor_id=$1 and action='item.audit_enrichment' and metadata->>'scope'='current_registry'
           and metadata->>'planHash'=$2 and metadata->>'runId'=$3 limit 1`, [actor.userId, input.planHash, input.runId]);
       if (previous.rows[0]) return previous.rows[0].result as ApplyResult;
-      const plan = await this.currentPlan(client, true);
+      const plan = await this.currentPlan(client, true, false, input.runId === "current-registry-temporary");
       if (plan.runId !== input.runId || plan.planHash !== input.planHash) throw stale();
       return this.writePlan(client, plan, actor, null);
     });
@@ -112,13 +117,14 @@ export class InventoryAuditEnrichmentService {
           JSON.stringify({ source: "inventory_audit_enrichment", batchId, runId: plan.runId, planHash: plan.planHash,
             scope: batchId === null ? "current_registry" : "selected_batch",
             externalId: row.externalId, excelRowNumber: row.excelRowNumber,
-            nameSource: row.nameSource, codeStatus: row.codeStatus, price: row.price, result })]);
+            nameSource: row.nameSource, codeStatus: row.codeStatus, identityMethod: row.identityMethod,
+            temporaryMatch: row.temporaryMatch, price: row.price, result })]);
       }
       return result;
   }
 
   /** One live comparison across all OS and MP, independent of batch analysis/history. */
-  private async currentPlan(client: PoolClient, lock = false, responsibilityOnly = false) {
+  private async currentPlan(client: PoolClient, lock = false, responsibilityOnly = false, temporaryOnly = false) {
     const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,i.status,i.unit_price,i.quantity,
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id
         where p.item_id=i.id and p.ended_at is null) as responsible_name,
@@ -192,14 +198,15 @@ export class InventoryAuditEnrichmentService {
     } else {
       addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true });
     }
-    const runId = responsibilityOnly ? "current-registry-responsibilities" : "current-registry";
+    const scopedPlan = temporaryOnly ? temporaryReconciliationPlan(plan, audit.rows) : plan;
+    const runId = temporaryOnly ? "current-registry-temporary" : responsibilityOnly ? "current-registry-responsibilities" : "current-registry";
     const planHash = createHash("sha256").update(JSON.stringify({
       scope: runId, algorithm: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION,
       registry: registry.rows, materialRegistrySha256: materials.metadata.sha256,
-      materialBatchId: materials.metadata.batchId, cards: cards.rows, links: links.rows, rows: plan.rows,
+      materialBatchId: materials.metadata.batchId, cards: cards.rows, links: links.rows, rows: scopedPlan.rows,
       responsibility: { users: users.rows, periods: periods.rows, pending: pending.rows, status: status.rows },
     })).digest("hex");
-    return { runId, planHash, ...plan, responsibilityPolicy: "fill_missing" as const, sources: {
+    return { runId, planHash, ...scopedPlan, responsibilityPolicy: "fill_missing" as const, sources: {
       fixedAssets: registry.rows.length, materials: new Set(materials.rows.map(row => row.oneCCode)).size,
       materialBalances: materials.rows.length, cards: currentCards.length,
     } };

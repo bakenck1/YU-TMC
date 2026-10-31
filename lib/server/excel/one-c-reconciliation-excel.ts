@@ -34,7 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ISSUE_LABELS: Record<string, string> = {
-  non_physical_asset: "Не является физическим движимым ОС",
+  non_physical_asset: "Не является физическим движимым основным средством",
   missing_inventory_number: "Нет инвентарного номера",
   missing_room: "Не выбран физический кабинет",
   unsupported_item_type: "Не выбран тип ТМЦ",
@@ -56,7 +56,7 @@ export async function exportOneCReconciliation(data: OneCReconciliationExport, s
   addRowsSheet(workbook, missing, "Нет в Inventory");
   if (scope === "all") {
     addRowsSheet(workbook, data.rows.filter((row) => ["review", "pending"].includes(oneCInventoryPresence(row))), "Требует проверки");
-    addRowsSheet(workbook, data.rows, "Все ОС");
+    addRowsSheet(workbook, data.rows, "Все основные средства");
   }
   return new Uint8Array(await workbook.xlsx.writeBuffer());
 }

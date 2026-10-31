@@ -43,6 +43,55 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
+  it.each(["OS", "MP", "GUID"] as const)("reconciles temporary cards through %s, preserves numbers and applies the scoped plan idempotently", async (source) => {
+    const f = await seed();
+    const temporaryId = randomUUID();
+    const fullName = "Иванов Иван Иванович";
+    const personId = await addUser(fullName);
+    const name = "Шкаф 800*400*2000";
+    const number = `TMP-2026-${temporaryId}`;
+    await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,$2,1,100,room_id,'temporary',$3::text,$3::text,$4,$4 from yu_inventory.items where id=$5`, [temporaryId, name, number, f.actor.userId, f.itemId]);
+    await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by)
+      values($1,$2,$3,'admin_override',$4)`, [randomUUID(), temporaryId, personId, f.actor.userId]);
+    let externalId: string | null = null;
+    if (source === "MP") {
+      await save([{ ...base, code: "001234", name, inventoryNumber: null, barcode: null, responsibleName: fullName + "\nосн МОЛ", unitPrice: "7000" }]);
+    } else {
+      externalId = randomUUID();
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch([{
+        externalId, code: "001234", name: source === "GUID" ? "Официальное название 1С" : name,
+        inventoryNumber: "011/00134", barcode: null, responsibleName: source === "GUID" ? null : fullName + "\nМОЛ",
+        responsibleExternalId: null, status: "Принято к учёту", quantity: 1, initialCost: 7000, residualCost: 500,
+        category: null, location: null, acceptedAt: null, updatedAt: null,
+      }], { sourceSha256: metadata().sourceSha256, sourceFilename: "temporary.xml" });
+      if (source === "GUID") await pool.query(`insert into yu_inventory.item_one_c_links
+        (external_id,item_id,source_code,linked_by,link_method,last_batch_id,last_payload_hash)
+        select external_id,$2,'001234',$3,'manual',last_batch_id,payload_hash
+        from yu_inventory.one_c_fixed_asset_inbox where external_id=$1`, [externalId, temporaryId, f.actor.userId]);
+    }
+    const service = new InventoryAuditEnrichmentService(pool);
+    const plan = await service.previewTemporary(f.actor);
+    expect(plan.runId).toBe("current-registry-temporary");
+    expect(plan.rows.map(row => row.itemId)).toEqual([temporaryId]);
+    expect(plan.rows[0]).toMatchObject({ eligible: true, changed: true, nextCode: "001234", temporaryMatch: { found: true }, identityMethod: source === "GUID" ? "saved_link" : "name_owner" });
+    expect(plan.counts.ready).toBe(1);
+    const before = await getOneCAnalyticsSnapshot(pool);
+    expect(before.analytics.reconciliation.temporaryFound).toBe(1);
+    expect(before.analytics.reconciliation.temporaryUnmatched).toBe(0);
+    const input = { runId: plan.runId, planHash: plan.planHash };
+    const applied = await service.applyCurrent(input, f.actor);
+    expect(applied.updated).toBe(1);
+    expect(await service.applyCurrent(input, f.actor)).toEqual(applied);
+    const saved = (await pool.query(`select inventory_number,inventory_number_kind,one_c_code,unit_price,version from yu_inventory.items where id=$1`, [temporaryId])).rows[0];
+    expect(saved).toMatchObject({ inventory_number: number, inventory_number_kind: "temporary", one_c_code: "001234", unit_price: "7000.00", version: 2 });
+    expect((await pool.query(`select one_c_code,version from yu_inventory.items where id=$1`, [f.itemId])).rows[0]).toMatchObject({ one_c_code: null, version: 1 });
+    expect((await service.previewTemporary(f.actor)).counts.ready).toBe(0);
+    const after = await getOneCAnalyticsSnapshot(pool);
+    expect(after.analytics.reconciliation.temporaryFound).toBe(1);
+    expect(getOneCMatchedCards(after).some(row => row.id === temporaryId)).toBe(true);
+  });
+
   it.each(["OS", "MP"] as const)("moves all six code-confirmed temporary examples into MP after %s import and reduces unmatched without modifying cards", async (source) => {
     const f = await seed();
     const examples = [
@@ -122,11 +171,11 @@ describe("live materials API replaces Excel as audit input", () => {
     const f = await seed();
     await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-PRICE',inventory_number_key='tmp-2026-price',one_c_code='OTHER' where id=$1`, [f.itemId]);
     const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
-    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...source, initialCost: 50000 }, { ...source, externalId: randomUUID(), name: "Другое ОС того же кода", initialCost: null }], metadata());
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...source, initialCost: 50000 }, { ...source, externalId: randomUUID(), name: "Другое Основные средства того же кода", initialCost: null }], metadata());
     const snapshot = await getOneCAnalyticsSnapshot(pool);
     const list = getOneCMatchedCards(snapshot).filter(card => card.group === "materials");
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ id: f.itemId, oneCUnitPrice: "50000.00", currentUnitPrice: "100.00", source: "ОС" });
+    expect(list[0]).toMatchObject({ id: f.itemId, oneCUnitPrice: "50000.00", currentUnitPrice: "100.00", source: "Основные средства" });
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     const workbook = new Workbook();
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
@@ -145,7 +194,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const f = await seed();
     const osId = randomUUID();
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
-      select $1,'Наше ОС',3,250,room_id,'official','999/999','999/999',created_by,updated_by from yu_inventory.items where id=$2`, [osId, f.itemId]);
+      select $1,'Наше Основные средства',3,250,room_id,'official','999/999','999/999',created_by,updated_by from yu_inventory.items where id=$2`, [osId, f.itemId]);
     await save([base, { ...base, responsibleCode: "002", quantity: "15" }]);
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
@@ -153,7 +202,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(preview.sources).toEqual({ fixedAssets: 1, materials: 1, materialBalances: 2, cards: 2 });
     expect(preview.counts).toEqual({ ready: 2, unchanged: 0, skipped: 0 });
     expect(preview.rows.find(row => row.itemId === f.itemId)).toMatchObject({ nameSource: "materials_api", nextCode: base.code });
-    expect(preview.rows.find(row => row.itemId === osId)).toMatchObject({ nameSource: "1c", nextName: "Другое ОС" });
+    expect(preview.rows.find(row => row.itemId === osId)).toMatchObject({ nameSource: "1c", nextName: "Другое Основные средства" });
     expect((await pool.query('select name from yu_inventory.items where id=$1', [f.itemId])).rows[0].name).toBe("Наше название");
     expect((await pool.query('select count(*)::int count from yu_inventory.inventory_source_audit_runs')).rows[0].count).toBe(0);
     const result = await service.applyCurrent(preview, f.actor);
@@ -161,7 +210,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(await service.applyCurrent(preview, f.actor)).toEqual(result);
     const cards = (await pool.query('select id,name,one_c_code,version,inventory_number,quantity,unit_price from yu_inventory.items order by id')).rows;
     expect(cards.find(row => row.id === f.itemId)).toMatchObject({ name: base.name, one_c_code: base.code, version: 2, inventory_number: base.inventoryNumber, quantity: 1, unit_price: "9100.00" });
-    expect(cards.find(row => row.id === osId)).toMatchObject({ name: "Другое ОС", one_c_code: "OTHER", version: 2, quantity: 3 });
+    expect(cards.find(row => row.id === osId)).toMatchObject({ name: "Другое Основные средства", one_c_code: "OTHER", version: 2, quantity: 3 });
     const records = await pool.query(`select metadata from yu_inventory.audit_records where action='item.audit_enrichment'`);
     expect(records.rows).toHaveLength(2);
     expect(records.rows.every(row => row.metadata.scope === "current_registry" && row.metadata.batchId === null)).toBe(true);
@@ -367,7 +416,7 @@ describe("live materials API replaces Excel as audit input", () => {
       const sheet = workbook.getWorksheet(name)!;
       const osRow = workbookRow(sheet, f.itemId).number;
       expect(workbookCell(sheet, "Раздел 1С", osRow).value).toBe("МП");
-      expect(workbookCell(sheet, "Первоначальная стоимость ОС, KZT", osRow).value).toBe(50000);
+      expect(workbookCell(sheet, "Первоначальная стоимость основных средств, KZT", osRow).value).toBe(50000);
     }
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
@@ -476,7 +525,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const workbook = new Workbook();
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
-    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["ОС", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
+    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["Основные средства", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
     expect(workbook.getWorksheet("МП")!.rowCount).toBe(8);
     expect(workbookCell(workbook.getWorksheet("Совпадения 1С")!, "ID карточки").value).toBe(f.itemId);
     expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(6);
@@ -520,13 +569,13 @@ describe("live materials API replaces Excel as audit input", () => {
     const workbook = new Workbook();
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
-    expect(workbook.getWorksheet("ОС")!.rowCount).toBe(6);
+    expect(workbook.getWorksheet("Основные средства")!.rowCount).toBe(6);
     expect(workbook.getWorksheet("МП")!.rowCount).toBe(7);
     const found = workbook.getWorksheet("Совпадения 1С")!;
     expect(found.rowCount).toBe(7);
     const foundRow = workbookRow(found, f.itemId).number;
     expect(workbookCell(found, "Цена в нашей базе, KZT", foundRow).value).toBe(100);
-    expect(workbookCell(found, "Статусы ОС в 1С", foundRow).value).toContain("Снято с учёта");
+    expect(workbookCell(found, "Статусы основных средств в 1С", foundRow).value).toContain("Снято с учёта");
   });
 
   it("updates a uniquely identified MP despite spaces and punctuation, and keeps unmatched temporary cards separate", async () => {
@@ -646,7 +695,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const old = await addUser("Текущий сотрудник");
     const osId = randomUUID();
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
-      select $1,'Наше ОС',1,250,room_id,'official','999/999','999/999',created_by,updated_by from yu_inventory.items where id=$2`, [osId, f.itemId]);
+      select $1,'Наше Основные средства',1,250,room_id,'official','999/999','999/999',created_by,updated_by from yu_inventory.items where id=$2`, [osId, f.itemId]);
     await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'admin_override',$4)`, [randomUUID(), f.itemId, old, f.actor.userId]);
     await pool.query(`update yu_inventory.one_c_fixed_asset_inbox set payload=jsonb_set(payload,'{responsibleName}',to_jsonb($1::text))`, ["Тынымбаев Бауыржан Анесович"]);
     await save([{ ...base, responsibleName: "Нурмаганбет Ермек Талантович" }]);
@@ -970,7 +1019,7 @@ async function seed() {
   await pool.query('insert into "yu_inventory"."buildings"(id,name,name_key,address,address_key,created_by,updated_by) values($1,\'Building\',$2,\'Address\',$2,$3,$3)', [buildingId, buildingId, userId]);
   await pool.query('insert into "yu_inventory"."rooms"(id,building_id,designation,designation_key,floor_number,created_by,updated_by) values($1,$2,\'101\',$3,1,$4,$4)', [roomId, buildingId, roomId, userId]);
   await pool.query('insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by) values($1,\'Наше название\',1,100,$2,\'official\',$3::text,$3::text,$4,$4)', [itemId, roomId, "1350/14444", userId]);
-  const asset: OneCFixedAsset = { externalId: randomUUID(), code: "OTHER", inventoryNumber: "999/999", barcode: null, name: "Другое ОС", category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null };
+  const asset: OneCFixedAsset = { externalId: randomUUID(), code: "OTHER", inventoryNumber: "999/999", barcode: null, name: "Другое Основные средства", category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null };
   const source = metadata();
   await new PostgresOneCFixedAssetRepository(pool).saveBatch([asset], { sourceSha256: source.sourceSha256, sourceFilename: "audit.xml" });
   const batch = (await pool.query('select id from "yu_inventory"."one_c_import_batches" where source_sha256=$1', [source.sourceSha256])).rows[0];

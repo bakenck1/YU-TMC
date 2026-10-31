@@ -1,16 +1,12 @@
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { inventoryAuditItemNameNumbers, inventoryAuditNumbersEqual } from "@/lib/inventory-audit-numbers";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
+import { oneCResponsibleNameKey } from "@/lib/one-c-responsible-name";
+export { oneCResponsibleNameKey } from "@/lib/one-c-responsible-name";
 
 /** Full-name equality only: preserve punctuation and every digit, ignore casing/spacing. */
 export function oneCSourceNameKey(value: string): string | null {
   const key = value.normalize("NFKC").toLocaleLowerCase("ru-RU").replaceAll("ё", "е").replace(/\s/gu, "");
-  return key || null;
-}
-
-/** Identity comparison for a supplied full name; a missing owner is never evidence. */
-export function oneCResponsibleNameKey(value: string | null | undefined): string | null {
-  const key = value?.normalize("NFKC").toLocaleLowerCase("ru-RU").replaceAll("ё", "е").trim().replace(/\s+/gu, " ");
   return key || null;
 }
 

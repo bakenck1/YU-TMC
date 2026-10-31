@@ -7,13 +7,13 @@ import type { InventoryAuditEnrichmentRow } from "@/lib/inventory-audit-enrichme
 import { useAppSettings } from "@/components/AppSettingsProvider";
 
 const currentCopy = {
-  ru: { title: "Обновление карточек из 1С", subtitle: "Название · код · цена · ответственный", check: "Проверить изменения", checking: "Проверка…", apply: "Применить", updates: "обновлений", retry: "Проверить результат обновления", preview: "Сначала просмотр изменений, затем применение.", ready: "Можно обновить", unchanged: "Без изменений", skipped: "Пропущено", priceChanges: "Изменение цены", ownerChanges: "Изменение ответственного", assetsChecked: "ОС проверено", materialsChecked: "МП проверено", cardsChecked: "Карточек проверено", readyToApply: "Готово к обновлению", reasons: "Причины пропуска", show: "Показать изменения и причины пропуска", search: "Поиск по всем карточкам сверки", placeholder: "Название, номер, штрихкод, код 1С или ответственный", shown: "Показано", of: "из", searchScope: "Поиск по всему списку выбранной группы.", which: "Какие обновления показать", readyRows: "Готовые к обновлению", unchangedRows: "Без изменений", skippedRows: "Пропущенные", allRows: "Все карточки", columns: ["ТМЦ", "Новое название", "Источник названия и кода", "Код 1С после обновления", "Результат", "Ответственный", "Цена за единицу, ₸"], matched: "Совпало", was: "Было", codeKept: "Код сохранён без изменения", empty: "В этой группе нет карточек.", more: "Показать ещё 100", sourceAssets: "ОС", sourceMaterials: "МП", updated: "Обновлено карточек", resultError: "Не удалось получить результат. Повторите проверку.", stale: "Данные 1С или карточки изменились. Повторите проверку обновлений.", permission: "Недостаточно прав для обновления карточек." },
+  ru: { title: "Обновление карточек из 1С", subtitle: "Название · код · цена · ответственный", check: "Проверить изменения", checking: "Проверка…", apply: "Применить", updates: "обновлений", retry: "Проверить результат обновления", preview: "Сначала просмотр изменений, затем применение.", ready: "Можно обновить", unchanged: "Без изменений", skipped: "Пропущено", priceChanges: "Изменение цены", ownerChanges: "Изменение ответственного", assetsChecked: "Проверено основных средств", materialsChecked: "МП проверено", cardsChecked: "Карточек проверено", readyToApply: "Готово к обновлению", reasons: "Причины пропуска", show: "Показать изменения и причины пропуска", search: "Поиск по всем карточкам сверки", placeholder: "Название, номер, штрихкод, код 1С или ответственный", shown: "Показано", of: "из", searchScope: "Поиск по всему списку выбранной группы.", which: "Какие обновления показать", readyRows: "Готовые к обновлению", unchangedRows: "Без изменений", skippedRows: "Пропущенные", allRows: "Все карточки", columns: ["ТМЦ", "Новое название", "Источник названия и кода", "Код 1С после обновления", "Результат", "Ответственный", "Цена за единицу, ₸"], matched: "Совпало", was: "Было", codeKept: "Код сохранён без изменения", empty: "В этой группе нет карточек.", more: "Показать ещё 100", sourceAssets: "Основные средства", sourceMaterials: "МП", updated: "Обновлено карточек", resultError: "Не удалось получить результат. Повторите проверку.", stale: "Данные 1С или карточки изменились. Повторите проверку обновлений.", permission: "Недостаточно прав для обновления карточек." },
   kk: { title: "1С деректерімен карточкаларды жаңарту", subtitle: "Атауы · коды · бағасы · жауапты тұлға", check: "Өзгерістерді тексеру", checking: "Тексерілуде…", apply: "Қолдану", updates: "жаңарту", retry: "Жаңарту нәтижесін тексеру", preview: "Алдымен өзгерістерді қарап, содан кейін қолданыңыз.", ready: "Жаңартуға болады", unchanged: "Өзгеріссіз", skipped: "Өткізілді", priceChanges: "Баға өзгерісі", ownerChanges: "Жауапты тұлға өзгерісі", assetsChecked: "НҚ тексерілді", materialsChecked: "МЗ тексерілді", cardsChecked: "Карточкалар тексерілді", readyToApply: "Жаңартуға дайын", reasons: "Өткізу себептері", show: "Өзгерістер мен өткізу себептерін көрсету", search: "Барлық салыстырылған карточкалардан іздеу", placeholder: "Атауы, нөмірі, штрихкоды, 1С коды немесе жауапты тұлға", shown: "Көрсетілді", of: "/", searchScope: "Іздеу таңдалған топтың толық тізімінде жүреді.", which: "Көрсетілетін жаңартулар", readyRows: "Жаңартуға дайын", unchangedRows: "Өзгеріссіз", skippedRows: "Өткізілген", allRows: "Барлық карточкалар", columns: ["Мүлік", "Жаңа атауы", "Атауы мен кодының көзі", "Жаңартудан кейінгі 1С коды", "Нәтиже", "Жауапты тұлға", "Бірлік бағасы, ₸"], matched: "Сәйкес келді", was: "Бұрын", codeKept: "Код өзгеріссіз сақталды", empty: "Бұл топта карточкалар жоқ.", more: "Тағы 100 көрсету", sourceAssets: "НҚ", sourceMaterials: "МЗ", updated: "Жаңартылған карточкалар", resultError: "Нәтиже алынбады. Қайта тексеріңіз.", stale: "1С деректері немесе карточкалар өзгерді. Қайта тексеріңіз.", permission: "Карточкаларды жаңартуға құқық жеткіліксіз." },
   en: { title: "Update cards from 1C", subtitle: "Name · code · price · responsible person", check: "Review changes", checking: "Checking…", apply: "Apply", updates: "updates", retry: "Check update result", preview: "Review changes before applying them.", ready: "Ready to update", unchanged: "Unchanged", skipped: "Skipped", priceChanges: "Price changes", ownerChanges: "Responsible person changes", assetsChecked: "Fixed assets checked", materialsChecked: "Materials checked", cardsChecked: "Cards checked", readyToApply: "Ready to update", reasons: "Reasons skipped", show: "Show changes and reasons skipped", search: "Search all reconciled cards", placeholder: "Name, number, barcode, 1C code or responsible person", shown: "Showing", of: "of", searchScope: "Search covers the whole selected group.", which: "Updates to show", readyRows: "Ready to update", unchangedRows: "Unchanged", skippedRows: "Skipped", allRows: "All cards", columns: ["Item", "New name", "Name and code source", "1C code after update", "Result", "Responsible person", "Unit price, ₸"], matched: "Matched", was: "Previous", codeKept: "Code kept unchanged", empty: "No cards in this group.", more: "Show 100 more", sourceAssets: "Fixed assets", sourceMaterials: "Materials", updated: "Cards updated", resultError: "Could not get the result. Review again.", stale: "1C data or cards changed. Review updates again.", permission: "Insufficient permission to update cards." },
 } as const;
 
 type Plan = { runId: string; planHash: string; counts: { ready: number; unchanged: number; skipped: number }; rows: InventoryAuditEnrichmentRow[]; sources?: { fixedAssets: number; materials: number; materialBalances: number; cards: number } };
-type Props = { batchId: string; runId: string; blocked: boolean; currentRegistry?: boolean; onApplied(): void };
+type Props = { batchId: string; runId: string; blocked: boolean; currentRegistry?: boolean; temporaryOnly?: boolean; onApplied(): void };
 
 const blockedMessage = "Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите сверку заново.";
 
@@ -25,15 +25,16 @@ export function EnrichmentDescription({ currentRegistry = false }: { currentRegi
   </>;
 }
 
-export function InventoryCurrentEnrichment({ blocked = false, onApplied }: { blocked?: boolean; onApplied(): void }) {
-  return <EnrichmentReview batchId="" runId="current-registry" currentRegistry blocked={blocked} onApplied={onApplied} />;
+export function InventoryCurrentEnrichment({ blocked = false, temporaryOnly = false, onApplied }: { blocked?: boolean; temporaryOnly?: boolean; onApplied(): void }) {
+  const runId = temporaryOnly ? "current-registry-temporary" : "current-registry";
+  return <EnrichmentReview key={runId} batchId="" runId={runId} temporaryOnly={temporaryOnly} currentRegistry blocked={blocked} onApplied={onApplied} />;
 }
 
 export default function InventoryAuditEnrichment({ batchId, runId, blocked, onApplied }: Props) {
   return <EnrichmentReview key={`${batchId}:${runId}`} batchId={batchId} runId={runId} blocked={blocked} onApplied={onApplied} />;
 }
 
-export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = false, onApplied }: Props) {
+export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = false, temporaryOnly = false, onApplied }: Props) {
   const { language } = useAppSettings();
   const c = currentCopy[language];
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -63,7 +64,7 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
     let definitiveFailure = false;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(currentRegistry ? "/api/integrations/1c/enrichment" : `/api/integrations/1c/batches/${batchId}/audit/enrichment`, {
+      const response = await fetch(currentRegistry ? `/api/integrations/1c/enrichment${temporaryOnly ? "?scope=temporary" : ""}` : `/api/integrations/1c/batches/${batchId}/audit/enrichment`, {
         method: apply ? "POST" : "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal,
         ...(apply ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ runId: reviewedPlan!.runId, planHash: reviewedPlan!.planHash }) } : {}),
       });
@@ -119,6 +120,11 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
 
   return <section className="space-y-4 rounded-2xl border border-teal-200/70 bg-gradient-to-br from-white via-teal-50/60 to-sky-50/60 p-5 shadow-sm shadow-teal-900/5 sm:p-6" aria-label={currentRegistry ? c.title : "Обновление названий и кодов 1С"}>
     <EnrichmentDescription currentRegistry={currentRegistry} />
+    {temporaryOnly ? <p className="text-sm text-slate-600">{{
+      ru: "Временный номер создаётся, когда при добавлении не указан официальный номер. Здесь проверяются только такие карточки. Подтверждённое совпадение с 1С даёт статус «Найдено»; временный номер сохраняется. Перед применением проверьте предлагаемые код, название и цену.",
+      kk: "Уақытша нөмір ресми нөмір көрсетілмегенде жасалады. Мұнда тек осы карточкалар тексеріледі. Расталған 1С сәйкестігі «Табылды» мәртебесін береді; уақытша нөмір сақталады. Қолданар алдында кодты, атауды және бағаны тексеріңіз.",
+      en: "Temporary numbers are created when no official number is supplied. Only those cards are checked here. A confirmed 1C match marks the card as found and preserves its temporary number. Review the proposed code, name and price before applying.",
+    }[language]}</p> : null}
     {blocked ? <p className="text-sm text-amber-800">{blockedMessage}</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {message ? <p role="status" className="text-sm text-emerald-800">{message}</p> : null}
@@ -142,7 +148,7 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
         </select>
         {currentRegistry ? <p className="mt-2 text-xs text-slate-500">{c.shown} {visibleRows.length} {c.of} {filteredRows.length}. {c.searchScope}</p> : null}
         <div className="mt-3 max-h-[32rem] overflow-auto rounded-xl border border-teal-100 bg-white/90"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-slate-600"><tr>{c.columns.slice(0, currentRegistry ? 7 : 5).map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible && row.nameSource ? row.nameSource === "materials_api" ? c.sourceMaterials : row.nameSource === "excel" ? "Excel" : currentRegistry ? c.sourceAssets : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">{c.matched}: {row.identityEvidence}</p> : null}</td><td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">{c.was}: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">{c.codeKept}: {localizedReason({ ...row, reason: row.codeStatus }, language, currentRegistry)}</p> : null}</td><td className="p-3">{row.eligible ? row.changed ? c.readyToApply : c.unchanged : localizedReason(row, language, currentRegistry)}{currentRegistry && !row.eligible ? <SourceIdentityDetails row={row} /> : null}</td>{currentRegistry ? <><td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td><td className="min-w-48 p-3"><PricePreview row={row} /></td></> : null}</tr>)}
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible && row.nameSource ? row.nameSource === "materials_api" ? c.sourceMaterials : row.nameSource === "excel" ? "Excel" : currentRegistry ? c.sourceAssets : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">{c.matched}: {row.identityEvidence}</p> : null}</td><td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">{c.was}: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">{c.codeKept}: {localizedReason({ ...row, reason: row.codeStatus }, language, currentRegistry)}</p> : null}</td><td className="p-3">{row.temporaryMatch ? <TemporaryMatchPreview row={row} /> : null}{row.eligible ? row.changed ? c.readyToApply : c.unchanged : localizedReason(row, language, currentRegistry)}{currentRegistry && !row.eligible ? <SourceIdentityDetails row={row} /> : null}</td>{currentRegistry ? <><td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td><td className="min-w-48 p-3"><PricePreview row={row} /></td></> : null}</tr>)}
             {!visibleRows.length ? <tr><td colSpan={currentRegistry ? 7 : 5} className="p-3 text-zinc-500">{c.empty}</td></tr> : null}
           </tbody></table></div>
         {currentRegistry && visibleRows.length < filteredRows.length ? <button type="button" onClick={() => setVisibleLimit(value => value + 100)} className="mt-3 rounded-xl border border-teal-200 bg-white px-4 py-2 text-sm text-teal-800">{c.more}</button> : null}
@@ -150,11 +156,23 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
   </section>;
 }
 
+export function TemporaryMatchPreview({ row }: { row: InventoryAuditEnrichmentRow }) {
+  const { language } = useAppSettings();
+  const match = row.temporaryMatch;
+  if (!match) return null;
+  const labels = {
+    ru: { found: "Найдено в 1С", possible: "Нужно сверить номер", missing: "Не найдено в 1С" },
+    kk: { found: "1С-тен табылды", possible: "Нөмірді тексеру керек", missing: "1С-тен табылмады" },
+    en: { found: "Found in 1C", possible: "Check the number", missing: "Not found in 1C" },
+  }[language];
+  return <p className={`mb-1 font-medium ${match.found ? "text-emerald-700" : "text-amber-700"}`}>{match.found ? labels.found : match.category === "possible" ? labels.possible : labels.missing}</p>;
+}
+
 export function SourceIdentityDetails({ row }: { row: InventoryAuditEnrichmentRow }) {
   const { language } = useAppSettings();
   if (!row.sourceDetails?.length) return null;
   const labels = { ru: ["Сравнить номера и названия", "Номер в поле 1С", "Штрихкод"], kk: ["Нөмірлер мен атауларды салыстыру", "1С өрісіндегі нөмір", "Штрихкод"], en: ["Compare numbers and names", "Number in 1C field", "Barcode"] }[language];
-  return <details className="mt-2 min-w-64 text-xs text-slate-600"><summary className="cursor-pointer text-teal-800">{labels[0]}</summary><div className="mt-2 space-y-3">{row.sourceDetails.map((source, index) => <div key={index}><p className="font-medium">{source.kind}: {source.name}</p><p className="mt-1">{labels[1]}: <span className="font-mono">{source.inventoryNumber ?? "—"}</span></p><p>{labels[2]}: <span className="font-mono">{source.barcode ?? "—"}</span></p></div>)}</div></details>;
+  return <details className="mt-2 min-w-64 text-xs text-slate-600"><summary className="cursor-pointer text-teal-800">{labels[0]}</summary><div className="mt-2 space-y-3">{row.sourceDetails.map((source, index) => <div key={index}><p className="font-medium">{source.kind === "ОС" ? currentCopy[language].sourceAssets : source.kind}: {source.name}</p><p className="mt-1">{labels[1]}: <span className="font-mono">{source.inventoryNumber ?? "—"}</span></p><p>{labels[2]}: <span className="font-mono">{source.barcode ?? "—"}</span></p></div>)}</div></details>;
 }
 
 export function PricePreview({ row }: { row: InventoryAuditEnrichmentRow }) {
@@ -167,7 +185,7 @@ export function PricePreview({ row }: { row: InventoryAuditEnrichmentRow }) {
   }[language];
   if (!price) return <>{labels.unchanged}</>;
   const source = {
-    ru: { os_initial_cost: "ОС · первоначальная стоимость", material_unit_price: "МП · цена за единицу" },
+    ru: { os_initial_cost: "Основные средства · первоначальная стоимость", material_unit_price: "МП · цена за единицу" },
     kk: { os_initial_cost: "НҚ · бастапқы құн", material_unit_price: "МЗ · бірлік бағасы" },
     en: { os_initial_cost: "Fixed assets · initial cost", material_unit_price: "Materials · unit price" },
   }[language];
@@ -214,9 +232,9 @@ function reasonLabel(row: InventoryAuditEnrichmentRow, currentRegistry = false) 
 
 function legacyReasonLabel(row: InventoryAuditEnrichmentRow) {
   if (row.reason === "sources_missing" && row.missingSources?.length) {
-    if (row.missingSources.length === 2) return "Нет подтверждения в ОС и материалах API 1С — проверьте оба источника";
+    if (row.missingSources.length === 2) return "Нет подтверждения в основных средствах и материалах API 1С — проверьте оба источника";
     return row.missingSources[0] === "1c"
-      ? "Нет подтверждения в ОС 1С — проверьте партию и полный номер"
+      ? "Нет подтверждения в основных средствах 1С — проверьте партию и полный номер"
       : "Нет подтверждения в материалах API 1С — проверьте реестр и полный номер";
   }
   const labels: Record<string, string> = {
