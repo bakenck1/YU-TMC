@@ -9,8 +9,35 @@ import {
   groupInventoryRoomsByMainCampusWing,
   isMainCampusWingFloor,
   mainCampusWingFromDesignation,
+  normalizeInventoryRoomSearch,
   sortInventoryRoomsForSelection,
 } from "../lib/inventory-room-floors";
+
+test("room search matches Cyrillic and Latin lookalikes in both directions and cases", () => {
+  const pairs = [
+    ["А", "A"], ["В", "B"], ["Е", "E"], ["К", "K"], ["М", "M"],
+    ["Н", "H"], ["О", "O"], ["Р", "P"], ["С", "C"], ["Т", "T"],
+    ["У", "Y"], ["Х", "X"], ["І", "I"],
+  ];
+  for (const [cyrillic, latin] of pairs) {
+    for (const letter of [cyrillic, latin, cyrillic.toLowerCase(), latin.toLowerCase()]) {
+      assert.equal(normalizeInventoryRoomSearch(`${letter}201`), `${latin.toLowerCase()}201`);
+      assert.equal(normalizeInventoryRoomSearch(`201 ${letter}`), `201 ${latin.toLowerCase()}`);
+    }
+  }
+  assert.equal(normalizeInventoryRoomSearch("  Ｅ２０１  "), "e201");
+  assert.equal(normalizeInventoryRoomSearch("Е\u00a0 201"), "e 201");
+  assert.equal(normalizeInventoryRoomSearch("АBС-001"), "abc-001");
+});
+
+test("room search preserves digits, distinct letters and ordinary room names", () => {
+  for (const [first, second] of [["Р201", "R201"], ["В201", "V201"], ["Е201", "E2010"], ["Е001", "E1"], ["Ә201", "A201"], ["З201", "3201"]]) {
+    assert.notEqual(normalizeInventoryRoomSearch(first), normalizeInventoryRoomSearch(second));
+  }
+  assert.equal(normalizeInventoryRoomSearch("Охрана"), normalizeInventoryRoomSearch(" ОХРАНА "));
+  assert.equal(normalizeInventoryRoomSearch("Коридор"), normalizeInventoryRoomSearch(" КОРИДОР "));
+  assert.equal(normalizeInventoryRoomSearch(""), "");
+});
 
 function room(id: string, designation: string, floorNumber: number): RoomDto {
   return {

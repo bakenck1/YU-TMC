@@ -26,6 +26,38 @@ const BASE_ITEM: InventoryItem = {
   room: "301",
 };
 
+test("room filters return both scripts for a letter and preserve exact room-number matching", () => {
+  const pairs = [["А", "A"], ["В", "B"], ["Е", "E"], ["К", "K"], ["М", "M"], ["Н", "H"], ["О", "O"], ["Р", "P"], ["С", "C"], ["Т", "T"], ["У", "Y"], ["Х", "X"], ["І", "I"]];
+  const filters = { query: "", category: "all", location: "all", statusKey: "all" };
+  for (const [cyrillic, latin] of pairs) {
+    const items = [
+      { ...BASE_ITEM, id: "latin", room: `${latin}201` },
+      { ...BASE_ITEM, id: "cyrillic", room: `${cyrillic}201` },
+      { ...BASE_ITEM, id: "longer-number", room: `${cyrillic}2010` },
+      { ...BASE_ITEM, id: "other-wing", room: "F201" },
+    ];
+    for (const letter of [cyrillic, latin, cyrillic.toLowerCase(), latin.toLowerCase()]) {
+      assert.deepEqual(filterInventoryItems(items, { ...filters, room: letter })
+        .map((item) => item.id), ["latin", "cyrillic", "longer-number"]);
+      assert.deepEqual(filterInventoryItems(items, { ...filters, room: `${letter}201` })
+        .map((item) => item.id), ["latin", "cyrillic"]);
+    }
+  }
+});
+
+test("room filters normalize mixed-script suffixes and legacy location fields", () => {
+  const items = [
+    { ...BASE_ITEM, id: "mixed", room: "АBС-001" },
+    { ...BASE_ITEM, id: "suffix", room: "201 Е" },
+    { ...BASE_ITEM, id: "legacy", room: undefined, location: "Main Campus / E201" },
+  ];
+  const filters = { query: "", category: "all", location: "all", statusKey: "all" };
+  for (const [query, expectedId] of [["abc-001", "mixed"], ["201 e", "suffix"], ["е201", "legacy"]]) {
+    assert.deepEqual(filterInventoryItems(items, { ...filters, room: query })
+      .map((item) => item.id), [expectedId]);
+  }
+});
+
 test("always exposes the decommissioned lifecycle status option", () => {
   const keys = inventoryStatusOptions([BASE_ITEM]).map((option) => option.key);
   assert.ok(keys.includes("lifecycle:decommissioned"));

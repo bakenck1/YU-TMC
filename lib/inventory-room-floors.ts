@@ -119,10 +119,16 @@ export function groupInventoryRoomsByEngineeringFacultyWing(
   };
 }
 
-/** Cyrillic К and Latin K must match in room filters and suggestions. */
+const ROOM_SEARCH_LOOKALIKE_LETTERS: Readonly<Record<string, string>> = {
+  а: "a", в: "b", е: "e", к: "k", м: "m", н: "h", о: "o",
+  р: "p", с: "c", т: "t", у: "y", х: "x", і: "i",
+};
+
+/** Compare visually matching Cyrillic/Latin letters without changing room names. */
 export function normalizeInventoryRoomSearch(value: string): string {
-  return value.normalize("NFKC").trim().toLocaleLowerCase()
-    .replace(/к/g, "k").replace(/\s+/g, " ");
+  return value.normalize("NFKC").trim().toLowerCase()
+    .replace(/[авекмнорстухі]/g, (letter) => ROOM_SEARCH_LOOKALIKE_LETTERS[letter] ?? letter)
+    .replace(/\s+/g, " ");
 }
 
 export function mainCampusWingFromDesignation(
