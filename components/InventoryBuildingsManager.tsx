@@ -27,7 +27,9 @@ import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 import {
+  engineeringFacultyWingFromDesignation,
   groupInventoryRoomsByFloor,
+  groupInventoryRoomsByEngineeringFacultyWing,
   groupInventoryRoomsByMainCampusWing,
   isMainCampusWingFloor,
   mainCampusWingFromDesignation,
@@ -230,7 +232,10 @@ export default function InventoryBuildingsManager({
     setOpenBuildingIds((current) => new Set(current).add(room.buildingId));
     setExpandedRoomGroups((current) => {
       const next = new Set(current).add(`floor-${room.buildingId}-${room.floorNumber}`);
-      const wingCode = mainCampusWingFromDesignation(room.designation);
+      const building = buildings.find((value) => value.id === room.buildingId);
+      const wingCode = findCampusBuildingPreset(building?.name ?? "")?.id === "engineering-faculty"
+        ? engineeringFacultyWingFromDesignation(room.designation)
+        : mainCampusWingFromDesignation(room.designation);
       if (wingCode) next.add(`wing-${room.buildingId}-${room.floorNumber}-${wingCode}`);
       return next;
     });
@@ -368,15 +373,18 @@ export default function InventoryBuildingsManager({
     building: BuildingDto,
     floor: InventoryRoomFloor,
   ) {
-    const splitByWing =
-      findCampusBuildingPreset(building.name)?.id === "main-campus" &&
+    const presetId = findCampusBuildingPreset(building.name)?.id;
+    const splitByMainCampusWing =
+      presetId === "main-campus" &&
       isMainCampusWingFloor(floor.floorNumber);
-    if (!splitByWing) {
+    if (!splitByMainCampusWing && presetId !== "engineering-faculty") {
       return floor.rooms.map((room) => renderRoom(building, room));
     }
 
     const { wings, unassignedRooms } =
-      groupInventoryRoomsByMainCampusWing(floor.rooms, floor.floorNumber);
+      splitByMainCampusWing
+        ? groupInventoryRoomsByMainCampusWing(floor.rooms, floor.floorNumber)
+        : groupInventoryRoomsByEngineeringFacultyWing(floor.rooms);
     return (
       <>
         {wings.map((wing) => (

@@ -17,7 +17,7 @@ export const MAIN_CAMPUS_WINGS = [
 export type MainCampusWingCode = (typeof MAIN_CAMPUS_WINGS)[number]["code"];
 
 export interface InventoryRoomWing {
-  code: MainCampusWingCode;
+  code: string;
   label: string;
   rooms: RoomDto[];
 }
@@ -69,6 +69,52 @@ export function groupInventoryRoomsByMainCampusWing(
       ...wing,
       rooms: naturallySortRooms(roomsByWing.get(wing.code) ?? []),
     })),
+    unassignedRooms: naturallySortRooms(unassignedRooms),
+  };
+}
+
+/** Engineering wings are discovered from saved rooms, without a fixed list. */
+export function engineeringFacultyWingFromDesignation(
+  designation: string,
+): string | null {
+  const normalized = designation.normalize("NFKC").trim().toLocaleUpperCase();
+  return normalized.match(/^(\p{L})\s*[-–—./]?\s*\d/u)?.[1]
+    ?? normalized.match(/^\d[\d\s./-]*[-–—]?\s*(\p{L})$/u)?.[1]
+    ?? normalized.match(/(?:^|\s|[-–—./])(\p{L})$/u)?.[1]
+    ?? normalized.match(/^(\p{L})\s+(?:КОРПУС|КОРПУСЫ|BLOCK)$/u)?.[1]
+    ?? null;
+}
+
+/** Group a floor by letter only when at least two rooms share that letter. */
+export function groupInventoryRoomsByEngineeringFacultyWing(
+  rooms: readonly RoomDto[],
+): { wings: InventoryRoomWing[]; unassignedRooms: RoomDto[] } {
+  const roomsByWing = new Map<string, RoomDto[]>();
+  const unassignedRooms: RoomDto[] = [];
+
+  for (const room of rooms) {
+    const code = engineeringFacultyWingFromDesignation(room.designation);
+    if (!code) {
+      unassignedRooms.push(room);
+      continue;
+    }
+    const wingRooms = roomsByWing.get(code) ?? [];
+    wingRooms.push(room);
+    roomsByWing.set(code, wingRooms);
+  }
+
+  const wings: InventoryRoomWing[] = [];
+  for (const [code, wingRooms] of roomsByWing) {
+    // A single lettered room stays directly on its floor until it has a peer.
+    if (wingRooms.length < 2) {
+      unassignedRooms.push(...wingRooms);
+    } else {
+      wings.push({ code, label: code, rooms: naturallySortRooms(wingRooms) });
+    }
+  }
+
+  return {
+    wings: wings.sort((left, right) => left.code.localeCompare(right.code, "ru", { numeric: true })),
     unassignedRooms: naturallySortRooms(unassignedRooms),
   };
 }
