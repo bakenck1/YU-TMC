@@ -205,6 +205,29 @@ describe("ItemsTable adversarial location filters", () => {
     expectHidden("Annex E inventory");
   });
 
+  it("preserves a partial room query when only an empty registry room matches it exactly", () => {
+    render(<ItemsTable
+      items={[
+        item("main-e201", "Matching E201 inventory", "building-main", "Main Campus", "room-main-e201", "E201", 2),
+        item("annex-f201", "Other building inventory", "building-annex", "Main Campus Annex", "room-annex-f201", "F201", 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("empty-e", "building-main", "E", 1),
+        room("room-main-e201", "building-main", "E201", 2),
+        room("room-annex-f201", "building-annex", "F201", 2),
+      ] }}
+    />);
+    openFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: "Е" } });
+    choose("items.filterBuilding", "Main Campus");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    choose("items.filterFloor", "2 floor");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    applyFilters();
+    expectVisible("Matching E201 inventory");
+    expectHidden("Other building inventory");
+  });
+
   it("clears a partial Cyrillic room query when choosing an incompatible building or floor", () => {
     render(<ItemsTable
       items={[

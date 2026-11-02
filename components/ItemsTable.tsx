@@ -604,8 +604,8 @@ export default function ItemsTable({
 
   function roomQueryMatcher(value: string) {
     const query = normalizeInventoryRoomSearch(value);
-    const hasExactMatch = locationDirectory.rooms.some(
-      (room) => normalizeInventoryRoomSearch(room.designation) === query,
+    const hasExactMatch = items.some(
+      (item) => normalizeInventoryRoomSearch(item.room ?? item.location.split("/").at(-1) ?? "") === query,
     );
     return (designation: string) => {
       const candidate = normalizeInventoryRoomSearch(designation);
