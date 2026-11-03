@@ -1,5 +1,7 @@
 "use client";
 
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
+
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { inventoryNumberLabel } from "@/lib/inventory-number-label";
@@ -140,7 +142,7 @@ function categoryLabel(
 }
 
 function isTemporaryBarcode(value: string) {
-  return /^TMP-\d{4}-\d{6}$/i.test(value);
+  return isTemporaryInventoryNumber(value);
 }
 
 interface InventoryFilterLocations {

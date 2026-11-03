@@ -1206,6 +1206,7 @@ const ru = {
   "itemPhotos.previous": "Предыдущая фотография",
   "itemPhotos.next": "Следующая фотография",
   "itemDetails.errorPhotoLimit": "Можно добавить не больше 4 фотографий.",
+  "itemDetails.temporaryNumberHint": "Официальный номер не присвоен. Показан временный системный номер. Замените его подтверждённым инвентарным номером. Код 1С — отдельное поле.",
   "itemDetails.officialNumberHint": "Можно исправить ошибочно введённый номер. Номер должен быть уникальным.",
 } as const;
 
@@ -1273,6 +1274,7 @@ const kk: Record<TranslationKey, string> = {
   "itemPhotos.previous": "Алдыңғы фотосурет",
   "itemPhotos.next": "Келесі фотосурет",
   "itemDetails.errorPhotoLimit": "4 фотосуреттен артық қосуға болмайды.",
+  "itemDetails.temporaryNumberHint": "Ресми нөмір берілмеген. Уақытша жүйелік нөмір көрсетілген. Оны расталған түгендеу нөмірімен ауыстырыңыз. 1С коды — бөлек өріс.",
   "itemDetails.officialNumberHint": "Қате енгізілген нөмірді түзетуге болады. Нөмір бірегей болуы керек.",
   "excel.exporting": "Экспорт…",
   "inspections.progressItems": "{total} ТМҚ-ның {completed} тексерілді",
@@ -2020,6 +2022,7 @@ const en: Record<TranslationKey, string> = {
   "itemPhotos.previous": "Previous photo",
   "itemPhotos.next": "Next photo",
   "itemDetails.errorPhotoLimit": "You can add no more than 4 photos.",
+  "itemDetails.temporaryNumberHint": "No official number has been assigned. This is a temporary system number. Replace it with a verified inventory number. The 1C code is a separate field.",
   "itemDetails.officialNumberHint": "You can correct an incorrectly entered number. The number must be unique.",
   "excel.exporting": "Exporting…",
   "inspections.progressItems": "Checked {completed} of {total} items",

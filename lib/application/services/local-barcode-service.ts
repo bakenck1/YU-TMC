@@ -1,3 +1,4 @@
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
 import type {
   CancelLocalBarcodeInput,
   CreateLocalBarcodeTransferInput,
@@ -50,7 +51,7 @@ export async function applyApprovedLocalBarcodeTransfer(
   if (!item) throw notFound("item_not_found");
   assertLocalBarcodeMutationAllowed(item, input.initiator.role);
   if (!isInventoryTransferAllowed(item.status)) throw conflict("item_not_available");
-  if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
+  if (isTemporaryInventoryNumber(item.inventoryNumber)) {
     throw validation("source_barcode_required");
   }
 
@@ -198,7 +199,7 @@ export class LocalBarcodeService {
       if (!item) throw notFound("item_not_found");
       assertLocalBarcodeMutationAllowed(item, currentActor.role);
       if (!isInventoryTransferAllowed(item.status)) throw conflict("item_not_available");
-      if (/^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
+      if (isTemporaryInventoryNumber(item.inventoryNumber)) {
         throw validation("source_barcode_required");
       }
       const occurredAt = this.clock.now();

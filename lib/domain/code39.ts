@@ -1,3 +1,4 @@
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
 const CODE_39_PATTERNS: Readonly<Record<string, string>> = {
   "0": "nnnwwnwnn",
   "1": "wnnwnnnnw",
@@ -78,7 +79,7 @@ export function code39PayloadForInventoryNumber(
   if (
     !candidate ||
     candidate === "-" ||
-    /^TMP-\d{4}-\d{6}$/i.test(candidate) ||
+    isTemporaryInventoryNumber(candidate) ||
     candidate.length > MAX_INVENTORY_NUMBER_LENGTH ||
     !CODE_39_DATA_PATTERN.test(candidate)
   ) {
