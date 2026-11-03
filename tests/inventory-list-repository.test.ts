@@ -4,6 +4,37 @@ import test from "node:test";
 import { createPostgresInventoryItemRepositories } from "../lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 
+test("dedicated 1C code mutation uses a version check, touches only its field and reloads the saved value", async () => {
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const now = new Date("2026-11-03T00:00:00Z");
+  const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const source = {
+    query: async (sql: string, values: readonly unknown[] = []) => {
+      calls.push({ sql, values });
+      return { rows: [{ id, one_c_code: "000014398", quantity: 28, unit_price: 50, created_at: now, updated_at: now }], rowCount: 1 };
+    },
+  } as unknown as PostgresRepositorySource;
+  const saved = await createPostgresInventoryItemRepositories(source).items.updateItemOneCCode({
+    id, oneCCode: "000014398", actorId: id, expectedVersion: 3, occurredAt: now,
+  });
+  assert.equal(saved?.oneCCode, "000014398");
+  assert.equal(saved?.quantity, 28);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].sql, /set one_c_code = \$2, updated_by = \$3, updated_at = \$4,\s+version = version \+ 1/);
+  assert.match(calls[0].sql, /where id = \$1 and version = \$5 and item_section = 'general'/);
+  assert.deepEqual(calls[0].values, [id, "000014398", id, now, 3]);
+});
+
+test("a stale 1C code write does not reload or return an unsaved item", async () => {
+  let queries = 0;
+  const source = { query: async () => { queries++; return { rows: [], rowCount: 0 }; } } as unknown as PostgresRepositorySource;
+  const result = await createPostgresInventoryItemRepositories(source).items.updateItemOneCCode({
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", oneCCode: "00042", actorId: "admin", expectedVersion: 3, occurredAt: new Date(),
+  });
+  assert.equal(result, null);
+  assert.equal(queries, 1);
+});
+
 test("only employee collections check responsibility before pagination while every row retains its responsible person", async () => {
   const queries: string[] = [];
   const source = { query: async (sql: string) => {

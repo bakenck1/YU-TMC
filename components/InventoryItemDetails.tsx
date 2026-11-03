@@ -1222,7 +1222,7 @@ export default function InventoryItemDetails({
             <InventoryOverviewRow label={t("items.object")} value={translateCampusBuilding(language, item.room.buildingName)} />
             <InventoryOverviewRow label={t("items.location")} value={item.room.designation} />
             {item.itemSection !== "it" ? <InventoryOverviewRow label={t("items.responsible")} value={item.responsible?.name || t("common.notAssigned")} /> : null}
-            {actorRole === "admin" && item.itemSection !== "it" && supportsMaterialStatementOneCCode(item.category ?? item.itemType) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
+            {actorRole === "admin" && item.itemSection !== "it" && (supportsMaterialStatementOneCCode(item.category ?? item.itemType) || Boolean(item.oneCCode)) ? <InventoryOverviewRow label={t("itemDetails.oneCCode")} value={item.oneCCode || t("common.notSpecified")} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.localBarcode")} value={item.inventoryNumber} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.originalBarcode")} value={localBarcodeInfo.originalBarcode} /> : null}
             {item.itemSection !== "it" && localBarcodeInfo ? <InventoryOverviewRow label={t("itemDetails.transferredAt")} value={new Date(localBarcodeInfo.transferredAt).toLocaleString(locale)} /> : null}

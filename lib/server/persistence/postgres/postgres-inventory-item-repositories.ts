@@ -906,6 +906,21 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
     return this.findItemById(input.id);
   }
 
+  async updateItemOneCCode(
+    input: Parameters<InventoryItemRepository["updateItemOneCCode"]>[0],
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set one_c_code = $2, updated_by = $3, updated_at = $4,
+           version = version + 1
+       where id = $1 and version = $5 and item_section = 'general'
+       returning id`,
+      [input.id, input.oneCCode, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (!result.rows[0]) return null;
+    return this.findItemById(input.id);
+  }
+
   async updateItemProject(
     input: Parameters<InventoryItemRepository["updateItemProject"]>[0],
   ): Promise<InventoryItemRecord | null> {

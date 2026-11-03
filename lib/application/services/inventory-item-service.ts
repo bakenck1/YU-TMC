@@ -882,6 +882,42 @@ export class InventoryItemService {
     }, { isolation: "serializable", maxAttempts: 3 });
   }
 
+  async bulkChangeOneCCode(
+    itemIds: readonly string[],
+    oneCCode: unknown,
+    actor: AuthorizationActor,
+  ): Promise<{ updatedItemIds: string[]; oneCCode: string }> {
+    requirePermission(actor, "inventory.item.bulk_manage");
+    if (actor.role !== "admin") throw forbidden();
+    const ids = normalizeBulkItemIds(itemIds);
+    const code = normalizeOptionalText(oneCCode, 64, "invalid_one_c_code");
+    if (!code || /[\u0000-\u001f\u007f]/.test(code)) {
+      throw new ApplicationError("validation", "invalid_one_c_code");
+    }
+    const occurredAt = this.clock.now();
+    return this.unitOfWork.transaction(async ({ items }) => {
+      for (const id of ids) {
+        const current = await items.findItemById(id);
+        if (!current || (current.itemSection ?? "general") !== "general") {
+          throw new ApplicationError("not_found", "item_not_found");
+        }
+        if (current.oneCCode === code) continue;
+        const updated = await items.updateItemOneCCode({
+          id, oneCCode: code, actorId: actor.userId,
+          expectedVersion: current.version, occurredAt,
+        });
+        if (!updated) throw versionConflict();
+        await items.appendAudit(createAudit({
+          id: this.ids.create(), actor, subjectId: id,
+          subjectRevision: updated.version, action: "item.one_c_code_updated",
+          beforeValues: { oneCCode: current.oneCCode ?? null },
+          afterValues: { oneCCode: updated.oneCCode ?? null }, occurredAt,
+        }));
+      }
+      return { updatedItemIds: ids, oneCCode: code };
+    }, { isolation: "serializable", maxAttempts: 3 });
+  }
+
   async bulkChangeProject(
     itemIds: readonly string[],
     isProject: unknown,

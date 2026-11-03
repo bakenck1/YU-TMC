@@ -478,3 +478,105 @@ function assignmentResponse(items: InventoryItem[], invalidatedId?: string): Res
     } }),
   } as Response;
 }
+
+
+describe("bulk 1C code", () => {
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
+
+  it("saves the trimmed code including leading zeros for only the frozen selection", async () => {
+    const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor" };
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ updatedItemIds: [ITEM.id, second.id], oneCCode: "0000014398" }) } as Response);
+    const props = { actorUserId: ITEM.responsibleId, actorRole: "admin" as const, buildings: [], rooms: [], onComplete, onClear };
+    const { rerender } = render(<TmcBulkActions items={[ITEM, second]} {...props} />);
+    openOneCCode();
+    expect(screen.getByRole("dialog", { name: "items.oneCCode" })).not.toBeNull();
+    expect(screen.getByText("tmc.bulk.oneCCodeHint")).not.toBeNull();
+    const input = screen.getByRole("textbox", { name: "items.oneCCode" }) as HTMLInputElement;
+    expect(input.type).toBe("text");
+    expect(input.maxLength).toBe(64);
+    expect(input.required).toBe(true);
+    fireEvent.change(input, { target: { value: " 0000014398 " } });
+    rerender(<TmcBulkActions items={[{ ...ITEM, id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" }]} {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inventory/items/bulk-one-c-code", expect.objectContaining({
+      method: "PATCH", body: JSON.stringify({ itemIds: [ITEM.id, second.id], oneCCode: "0000014398" }),
+    }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("deduplicates source item ids for selected local groups", async () => {
+    const first = { ...ITEM, sourceItemId: ITEM.id, id: "group-1", localGroupId: "local-1" };
+    const second = { ...ITEM, sourceItemId: ITEM.id, id: "group-2", localGroupId: "local-2" };
+    const onComplete = vi.fn();
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ updatedItemIds: [ITEM.id], oneCCode: "00042" }) } as Response);
+    render(<TmcBulkActions items={[first, second]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} />);
+    openOneCCode();
+    fireEvent.change(screen.getByRole("textbox", { name: "items.oneCCode" }), { target: { value: "00042" } });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    const payload = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    expect(payload.itemIds).toEqual([ITEM.id]);
+  });
+
+  it.each([
+    { ok: false, body: { error: "version_conflict" } },
+    { ok: true, body: { updatedItemIds: [], oneCCode: "00042" } },
+    { ok: true, body: { updatedItemIds: [ITEM.id], oneCCode: "42" } },
+    { ok: true, body: { updatedItemIds: [ITEM.id, "unexpected-id"], oneCCode: "00042" } },
+    { ok: true, body: {} },
+  ])("keeps the code and selection if saving is unconfirmed: $ok / $body", async ({ ok, body }) => {
+    vi.mocked(fetch).mockResolvedValue({ ok, json: async () => body } as Response);
+    const onComplete = vi.fn();
+    const onClear = vi.fn();
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} onClear={onClear} />);
+    openOneCCode();
+    fireEvent.change(screen.getByRole("textbox", { name: "items.oneCCode" }), { target: { value: "00042" } });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("tmc.bulk.error"));
+    expect((screen.getByRole("textbox", { name: "items.oneCCode" }) as HTMLInputElement).value).toBe("00042");
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { actorRole: "employee" as const, itemSection: "general" as const, variant: "issue" as const },
+    { actorRole: "warehouse" as const, itemSection: "general" as const, variant: "transfer" as const },
+    { actorRole: "admin" as const, itemSection: "it" as const, variant: "transfer" as const },
+  ])("hides the 1C code action for $actorRole / $itemSection", (props) => {
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} buildings={[]} rooms={[]} onComplete={vi.fn()} {...props} />);
+    const actions = screen.queryByRole("button", { name: "tmc.bulk.actions" });
+    if (actions) fireEvent.click(actions);
+    expect(screen.queryByRole("menuitem", { name: "items.oneCCode" })).toBeNull();
+  });
+
+  it("disables saving empty codes and blocks duplicate requests while saving", async () => {
+    let finish!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementation(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const onComplete = vi.fn();
+    render(<TmcBulkActions items={[ITEM]} actorUserId={ITEM.responsibleId} actorRole="admin" buildings={[]} rooms={[]} onComplete={onComplete} />);
+    openOneCCode();
+    const input = screen.getByRole("textbox", { name: "items.oneCCode" }) as HTMLInputElement;
+    const save = screen.getByRole("button", { name: "common.save" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "   " } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "00042" } });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(save.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "common.cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    finish({ ok: true, json: async () => ({ updatedItemIds: [ITEM.id], oneCCode: "00042" }) } as Response);
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+  });
+});
+
+function openOneCCode() {
+  fireEvent.click(screen.getByRole("button", { name: "tmc.bulk.actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "items.oneCCode" }));
+}

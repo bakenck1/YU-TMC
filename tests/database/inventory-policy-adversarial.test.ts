@@ -37,6 +37,34 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     await resetSchemas(migrationConfig);
   });
 
+  it("bulk 1C code persists with leading zeroes, reloads in cards and rolls back an incomplete batch", async () => {
+    const adminId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID());
+    await seedRoom(adminId, randomUUID(), roomId);
+    const actor = { userId: adminId, role: "admin" as const };
+    const service = createService(runtimeDatabase);
+    const first = await service.createItem({ name: "Coded cable", category: "components", roomId }, actor);
+    const second = await service.createItem({ name: "Coded component", category: "components", roomId }, actor);
+    const unselected = await service.createItem({ name: "Unselected component", category: "components", roomId }, actor);
+    const ids = [first.id, second.id];
+    expect(await service.bulkChangeOneCCode(ids, " 00000014398 ", actor)).toEqual({
+      updatedItemIds: ids, oneCCode: "00000014398",
+    });
+    for (const id of ids) {
+      const reloaded = await service.findItem(id, actor);
+      expect(reloaded).toMatchObject({ oneCCode: "00000014398", quantity: 1, name: id === first.id ? first.name : second.name });
+    }
+    expect((await service.findItem(unselected.id, actor)).oneCCode).toBeNull();
+    const before = await database.query('select id, one_c_code, version from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    await expect(service.bulkChangeOneCCode([first.id, randomUUID()], "00042", actor)).rejects.toThrow("item_not_found");
+    const after = await database.query('select id, one_c_code, version from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    expect(after.rows).toEqual(before.rows);
+    const audits = await database.query('select before_values, after_values from "yu_inventory"."audit_records" where subject_id = any($1::uuid[]) and action = $2', [ids, "item.one_c_code_updated"]);
+    expect(audits.rows).toHaveLength(2);
+    expect(audits.rows.every(row => row.after_values.oneCCode === "00000014398")).toBe(true);
+  });
+
   it("bulk project flag persists for all selected items and rolls back a batch with an unavailable item", async () => {
     const adminId = randomUUID();
     const roomId = randomUUID();

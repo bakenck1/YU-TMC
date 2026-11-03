@@ -19,6 +19,11 @@ const ITEM: InventoryItemDto = { id: "10000000-0000-4000-8000-000000000001", nam
 function view(role: UserRole = "warehouse", editing = false, item = ITEM, manageCode = false) { return render(<InventoryItemDetails initialItem={item} canEditContent={role === "admin" || role === "warehouse"} canSendToService={false} requiresServicePhoto={false} canManageCode={manageCode} operations={[]} initialComments={[]} canComment={false} canManageProtected={false} rooms={[]} initialComponents={[]} canManageComponents={false} actorId={ITEM.id} actorRole={role} hideComposition initialEditing={editing} />); }
 afterEach(() => vi.unstubAllGlobals());
 describe("adversarial legacy category and role repair UI", () => {
+  it("shows the saved 1C code on an administrator's legacy-category card", () => {
+    view("admin", false, { ...ITEM, oneCCode: "000014398" });
+    expect(screen.getByText("000014398")).not.toBeNull();
+    expect(screen.getByText("itemDetails.oneCCode")).not.toBeNull();
+  });
   it.each([
     ["Кабина акустическая №2417/0315 от 08.08.2025", "2417/0315"],
     ["стол прист д/ перег.No125/00134 02.04.10 канцелярия", "125/00134"],

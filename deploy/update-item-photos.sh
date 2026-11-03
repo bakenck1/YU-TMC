@@ -18,7 +18,17 @@ if [[ -n "$working_changes" ]]; then
   exit 1
 fi
 echo '[2/5] Creating and checking the database backup'
-systemctl start yu-inventory-backup.service
+systemctl start yu-inventory-backup.service &
+backup_job=$!
+backup_elapsed=0
+while kill -0 "$backup_job" 2>/dev/null; do
+  sleep 10
+  backup_elapsed=$((backup_elapsed + 10))
+  if kill -0 "$backup_job" 2>/dev/null; then
+    printf 'Database backup is still running (%s seconds); site services have not been stopped.\n' "$backup_elapsed"
+  fi
+done
+wait "$backup_job"
 test "$(systemctl show yu-inventory-backup.service -p Result --value)" = success
 test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" = 0
 echo '[3/5] Stopping services'
@@ -47,6 +57,6 @@ echo '[5/5] Restarting and checking services'
 systemctl restart yu-inventory yu-inventory-push-worker
 systemctl is-active --quiet yu-inventory
 systemctl is-active --quiet yu-inventory-push-worker
-curl --fail --silent --show-error --max-time 15 --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/login
+curl --fail --silent --show-error --output /dev/null --max-time 15 --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/login
 sudo -u yu-inventory git log -1 --format='Installed commit: %h %s'
-echo 'Update complete. Item galleries now support up to ten photos.'
+echo 'Site update complete.'
