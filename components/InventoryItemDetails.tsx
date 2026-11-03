@@ -1,5 +1,8 @@
 "use client";
 
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
+
+
 import { inventoryNumberLabel } from "@/lib/inventory-number-label";
 
 import {
@@ -628,7 +631,7 @@ export default function InventoryItemDetails({
     width: number;
     height: number;
   }) {
-    if (itemPhotoUrls.length >= 4) return;
+    if (itemPhotoUrls.length >= MAX_ITEM_PHOTOS) return;
     setCapturingPhoto(true);
     setError("");
     setSaved(false);
@@ -1127,14 +1130,14 @@ export default function InventoryItemDetails({
                 </>
               ) : null}
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex max-h-[20vh] w-full shrink-0 flex-wrap items-center justify-center gap-2 overflow-y-auto">
               {itemPhotoUrls.map((photoUrl, index) => (
                 <button key={photoUrl} type="button" onClick={() => setSelectedPhotoIndex(index)} aria-label={`${t("items.photo")} ${index + 1}`} className={`relative h-14 w-14 overflow-hidden rounded-lg border-2 ${index === selectedPhotoIndex ? "border-emerald-400" : "border-white/50"}`}><Image src={photoUrl} alt="" fill unoptimized className="object-cover" /></button>
               ))}
             </div>
             {canEditContent ? (
               <div className="flex items-center gap-2">
-                {itemPhotoUrls.length < 4 ? <button type="button" onClick={() => { setCameraTarget("item"); setCameraOpen(true); }} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />{t("itemPhotos.add")}</button> : null}
+                {itemPhotoUrls.length < MAX_ITEM_PHOTOS ? <button type="button" onClick={() => { setCameraTarget("item"); setCameraOpen(true); }} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />{t("itemPhotos.add")}</button> : null}
                 {!mustKeepLastPhoto ? <button type="button" onClick={() => void deletePhoto(selectedPhotoUrl)} disabled={capturingPhoto} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("item.deletePhoto")}</button> : null}
               </div>
             ) : null}
@@ -1157,7 +1160,7 @@ export default function InventoryItemDetails({
                   aria-label={t("itemDetails.openPhoto")}
                 >
                   <Image src={item.photoUrl} alt={item.name} fill unoptimized className="object-cover" />
-                  {itemPhotoUrls.length > 1 ? <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-1 text-xs font-semibold text-white">{itemPhotoUrls.length} / 4</span> : null}
+                  {itemPhotoUrls.length > 1 ? <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-1 text-xs font-semibold text-white">{itemPhotoUrls.length} / {MAX_ITEM_PHOTOS}</span> : null}
                 </button>
               ) : (
                 <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-zinc-400">
@@ -1168,12 +1171,12 @@ export default function InventoryItemDetails({
               {canEditContent ? (
                 <button
                   type="button"
-                  onClick={() => { if (itemPhotoUrls.length < 4) { setCameraTarget("item"); setCameraOpen(true); } else { setSelectedPhotoIndex(0); setPhotoOpen(true); } }}
+                  onClick={() => { if (itemPhotoUrls.length < MAX_ITEM_PHOTOS) { setCameraTarget("item"); setCameraOpen(true); } else { setSelectedPhotoIndex(0); setPhotoOpen(true); } }}
                   disabled={capturingPhoto}
                   className="absolute bottom-2 right-2 inline-flex h-11 items-center gap-2 rounded-full bg-white px-3 text-sm font-semibold text-zinc-800 shadow-lg transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
                 >
                   <Camera className="h-4 w-4" />
-                  {capturingPhoto ? t("itemDetails.saving") : itemPhotoUrls.length < 4 ? t("itemPhotos.add") : t("items.photo")}
+                  {capturingPhoto ? t("itemDetails.saving") : itemPhotoUrls.length < MAX_ITEM_PHOTOS ? t("itemPhotos.add") : t("items.photo")}
                 </button>
               ) : null}
               {canEditContent && item.photoUrl && !mustKeepLastPhoto ? (

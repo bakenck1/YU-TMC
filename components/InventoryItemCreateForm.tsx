@@ -1,5 +1,8 @@
 "use client";
 
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
+
+
 import { useMemo, useState } from "react";
 import { Camera, CheckCircle2, Plus, ScanLine, Trash2, X } from "lucide-react";
 import Image from "next/image";
@@ -269,8 +272,8 @@ export default function InventoryItemCreateForm({
                   </div>
                 ) : null}
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <button type="button" disabled={photos.length >= 4} onClick={() => setCameraOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><Camera className="h-4 w-4" />{t("camera.open")}</button>
-                  <label className={`inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 text-center text-sm font-semibold text-emerald-800 ${photos.length >= 4 ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>{t("service.attachPhoto")}<input type="file" multiple accept="image/jpeg" disabled={photos.length >= 4} className="sr-only" onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 4 - photos.length); event.target.value = ""; void Promise.all(files.map(readJpeg)).then((values) => setPhotos((current) => [...current, ...values].slice(0, 4))).catch(() => setError(t("common.error"))); }} /></label>
+                  <button type="button" disabled={photos.length >= MAX_ITEM_PHOTOS} onClick={() => setCameraOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><Camera className="h-4 w-4" />{t("camera.open")}</button>
+                  <label className={`inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 text-center text-sm font-semibold text-emerald-800 ${photos.length >= MAX_ITEM_PHOTOS ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>{t("service.attachPhoto")}<input type="file" multiple accept="image/jpeg" disabled={photos.length >= MAX_ITEM_PHOTOS} className="sr-only" onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, MAX_ITEM_PHOTOS - photos.length); event.target.value = ""; void Promise.all(files.map(readJpeg)).then((values) => setPhotos((current) => [...current, ...values].slice(0, MAX_ITEM_PHOTOS))).catch(() => setError(t("common.error"))); }} /></label>
                 </div>
                 {photos.length ? <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-5 w-5" />{t("itemPhotos.count", { count: photos.length })}</p> : null}
               </div>
@@ -289,7 +292,7 @@ export default function InventoryItemCreateForm({
                 }}
               />
             ) : null}
-            <InventoryItemCameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCapture={(value) => { setPhotos((current) => [...current, value].slice(0, 4)); setCameraOpen(false); }} />
+            <InventoryItemCameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCapture={(value) => { setPhotos((current) => [...current, value].slice(0, MAX_ITEM_PHOTOS)); setCameraOpen(false); }} />
           </div>
         </div>
       ) : null}

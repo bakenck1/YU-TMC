@@ -70,11 +70,11 @@ test("room QR scanning and downloads are discoverable outside the mobile menu", 
   assert.match(buildings, /room\.qrSelectHint/);
 });
 
-test("non-restricted item creation requires one to four attached photos", () => {
+test("non-restricted item creation requires one to ten attached photos", () => {
   const route = read("app/api/inventory/items/route.ts");
   assert.match(route, /\(!restricted && !body\.photo && !body\.photos\)/);
   assert.match(
     route,
-    /photosValue\.length > 4 \|\| \(!restricted && photosValue\.length < 1\)/,
+    /photosValue\.length > MAX_ITEM_PHOTOS \|\| \(!restricted && photosValue\.length < 1\)/,
   );
 });

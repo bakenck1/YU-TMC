@@ -8,3 +8,5 @@ drizzle/meta/*.json text eol=lf
 
 # The production updater runs under Bash on Linux.
 deploy/update-one-c-temporary.sh text eol=lf
+
+deploy/update-item-photos.sh text eol=lf

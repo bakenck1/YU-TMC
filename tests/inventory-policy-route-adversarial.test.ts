@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "../lib/inventory-item-photo-policy";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -27,6 +28,7 @@ async function routeHarness(role: string) {
       updateContent: async () => { throw new Error("wrong mutation"); },
     } }) },
     "@/lib/server/http/error-response": { applicationErrorResponse: (error: ApplicationError) => Response.json({ error: error.publicCode }, { status: error.kind === "forbidden" ? 403 : 400 }) },
+    "@/lib/inventory-item-photo-policy": { MAX_ITEM_PHOTOS },
     "@/lib/server/http/photo-request": { assertPhotoJsonRequest: () => undefined, readPhotoJsonRequest: (r: Request) => r.json() },
     "@/lib/server/http/request-body": {},
     "@/lib/server/security/request-user": { requireCurrentUser: async () => actor, authorizationActor: (user: unknown) => user },
@@ -68,12 +70,13 @@ async function createRouteHarness() {
     "@/lib/server/application": { getApplicationServices: () => ({ items: { createItem: async (input: { status?: string }) => { calls.push(input); return { id: ID, status: input.status }; } } }) },
     "@/lib/server/http/error-response": { applicationErrorResponse: (error: ApplicationError) => Response.json({ error: error.publicCode }, { status: 400 }) },
     "@/lib/server/security/request-user": { requireCurrentUser: async () => ({ userId: ID, role: "admin" }), authorizationActor: (user: unknown) => user },
+    "@/lib/inventory-item-photo-policy": { MAX_ITEM_PHOTOS },
     "@/lib/server/http/photo-request": { assertPhotoJsonRequest: () => undefined, readPhotoJsonRequest: (request: Request) => request.json() },
   };
   const exports: Record<string, unknown> = {};
   new Function("require", "exports", code)((name: string) => { if (!(name in deps)) throw new Error("missing route dependency " + name); return deps[name]; }, exports);
   const post = exports.POST as (request: Request) => Promise<Response>;
-  return { calls, post: (status: unknown) => post(new Request("https://example.test/api/inventory/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Cable", category: "components", roomId: ID, status, photos: [{ imageDataUrl: "data:image/jpeg;base64,eA==", width: 1, height: 1 }] }) })) };
+  return { calls, post: (status: unknown, photoCount = 1) => post(new Request("https://example.test/api/inventory/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Cable", category: "components", roomId: ID, status, photos: Array.from({ length: photoCount }, () => ({ imageDataUrl: "data:image/jpeg;base64,eA==", width: 1, height: 1 })) }) })) };
 }
 for (const status of ["active", "broken", "maintenance", "decommissioned", "decommissioned_in_use"]) {
   test(`creation route accepts selected lifecycle status ${status}`, async () => {
@@ -91,3 +94,18 @@ for (const status of ["invalid-status", null, 1, {}, ["active"]]) {
     assert.equal(h.calls.length, 0);
   });
 }
+
+
+test("creation route accepts ten photos", async () => {
+  const harness = await createRouteHarness();
+  const response = await harness.post("active", 10);
+  assert.equal(response.status, 201);
+  assert.equal(harness.calls.length, 1);
+});
+
+test("creation route rejects eleven photos before calling the service", async () => {
+  const harness = await createRouteHarness();
+  const response = await harness.post("active", 11);
+  assert.equal(response.status, 400);
+  assert.equal(harness.calls.length, 0);
+});

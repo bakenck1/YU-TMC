@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import type { ItemStatus } from "@/lib/types";
 import type { CreateInventoryItemInput } from "@/lib/contracts/inventory-items";
 import { after } from "next/server";
@@ -37,9 +38,9 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     const actor = authorizationActor(user);
-    assertPhotoJsonRequest(request, 4);
+    assertPhotoJsonRequest(request, MAX_ITEM_PHOTOS);
     const input = parseCreate(
-      await readPhotoJsonRequest(request, 4),
+      await readPhotoJsonRequest(request, MAX_ITEM_PHOTOS),
       actor.role === "warehouse",
     );
     const item = await getApplicationServices().items.createItem(
@@ -107,7 +108,7 @@ function parseCreate(
     throw invalidRequest();
   }
   const photosValue = body.photos === undefined ? (photo ? [photo] : []) : body.photos;
-  if (!Array.isArray(photosValue) || photosValue.length > 4 || (!restricted && photosValue.length < 1)) {
+  if (!Array.isArray(photosValue) || photosValue.length > MAX_ITEM_PHOTOS || (!restricted && photosValue.length < 1)) {
     throw invalidRequest();
   }
   const photos = photosValue.map((value) => {

@@ -41,11 +41,11 @@ const PHOTO = {
 
 test("refreshes a stale item and retries adding its photo once", async () => {
   const calls: Array<{ input: string; init?: RequestInit }> = [];
-  const freshItem = { ...ITEM, version: 8 };
+  const freshItem = { ...ITEM, version: 8, photoUrls: Array.from({ length: 9 }, (_, i) => `/photo/${i + 1}`) };
   const savedItem = {
     ...freshItem,
     photoUrl: `/api/inventory/items/${ITEM.id}/photo?photoId=photo-1`,
-    photoUrls: [`/api/inventory/items/${ITEM.id}/photo?photoId=photo-1`],
+    photoUrls: [...freshItem.photoUrls, `/api/inventory/items/${ITEM.id}/photo?photoId=photo-1`],
     version: 9,
   };
   const responses = [
@@ -69,12 +69,12 @@ test("refreshes a stale item and retries adding its photo once", async () => {
   assert.deepEqual(JSON.parse(String(calls[2]?.init?.body)).version, 8);
 });
 
-test("does not upload a fifth photo after refreshing a stale item", async () => {
+test("does not upload an eleventh photo after refreshing a stale item", async () => {
   const fullItem = {
     ...ITEM,
     version: 8,
     photoUrl: "/photo/1",
-    photoUrls: ["/photo/1", "/photo/2", "/photo/3", "/photo/4"],
+    photoUrls: Array.from({ length: 10 }, (_, i) => `/photo/${i + 1}`),
   };
   const responses = [
     Response.json({ error: "version_conflict" }, { status: 409 }),

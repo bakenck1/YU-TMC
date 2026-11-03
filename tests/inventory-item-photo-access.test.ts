@@ -121,11 +121,34 @@ test("loads a selected gallery photo without weakening item access checks", asyn
   assert.equal(selectedPhotoId, photoId);
 });
 
-test("rejects a fifth item photo before writing it", async () => {
+for (const existingCount of [4, 9]) {
+  test(`accepts item photo ${existingCount + 1} and keeps the existing gallery`, async () => {
+    const jpeg = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).jpeg().toBuffer();
+    const photoIds = Array.from({ length: existingCount }, (_, i) => String(i + 1));
+    let writes = 0;
+    const service = createService({
+      findItemById: async () => ({ ...item(null), photoIds }),
+      updateItemPhoto: async () => {
+        writes += 1;
+        return { ...item(null), photoIds: [...photoIds, "new-photo"], version: 2 };
+      },
+      appendAudit: async () => undefined,
+    });
+    const updated = await service.updatePhoto(
+      ITEM_ID,
+      { version: 1, imageDataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}`, width: 2, height: 2 },
+      { userId: "admin-1", role: "admin" },
+    );
+    assert.equal(writes, 1);
+    assert.equal(updated.photoUrls?.length, existingCount + 1);
+  });
+}
+
+test("rejects an eleventh item photo before writing it", async () => {
   const jpeg = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).jpeg().toBuffer();
   let photoWrite = false;
   const service = createService({
-    findItemById: async () => ({ ...item(null), photoIds: ["1", "2", "3", "4"] }),
+    findItemById: async () => ({ ...item(null), photoIds: Array.from({ length: 10 }, (_, i) => String(i + 1)) }),
     updateItemPhoto: async () => { photoWrite = true; return item(null); },
   });
 

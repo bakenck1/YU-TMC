@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import type { CreateItInventoryItemInput } from "@/lib/contracts/inventory-items";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { isItEquipmentType } from "@/lib/it-inventory";
@@ -34,8 +35,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requirePermission(request, "inventory.it.manage");
-    assertPhotoJsonRequest(request, 4);
-    const input = parseCreate(await readPhotoJsonRequest(request, 4));
+    assertPhotoJsonRequest(request, MAX_ITEM_PHOTOS);
+    const input = parseCreate(await readPhotoJsonRequest(request, MAX_ITEM_PHOTOS));
     const item = await getApplicationServices().items.createItItem(
       input,
       authorizationActor(user),
@@ -58,7 +59,7 @@ function parseCreate(value: unknown): CreateItInventoryItemInput {
     !isItEquipmentType(body.itType) ||
     !Array.isArray(body.photos) ||
     body.photos.length < 1 ||
-    body.photos.length > 4 ||
+    body.photos.length > MAX_ITEM_PHOTOS ||
     "barcode" in body ||
     "inventoryNumber" in body ||
     "responsibleUserId" in body ||

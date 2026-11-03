@@ -71,3 +71,20 @@ describe("adversarial legacy category and role repair UI", () => {
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).not.toHaveProperty("oneCCode");
   });
 });
+
+
+describe("item photo gallery capacity", () => {
+  it.each([4, 9, 10])("shows all %i photos and offers uploads only below ten", (count) => {
+    const photoUrls = Array.from({ length: count }, (_, i) => `/photo/${i + 1}`);
+    view("admin", false, { ...ITEM, photoUrl: photoUrls[0], photoUrls });
+    expect(screen.getByText(`${count} / 10`)).not.toBeNull();
+    if (count < 10) expect(screen.getByRole("button", { name: "itemPhotos.add" })).not.toBeNull();
+    else expect(screen.queryByRole("button", { name: "itemPhotos.add" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "itemDetails.openPhoto" }));
+    const dialog = screen.getByRole("dialog", { name: "itemDetails.photoFullSize" });
+    expect(within(dialog).getByRole("button", { name: `items.photo ${count}`, exact: true })).not.toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: `items.photo ${count}`, exact: true }));
+    expect(within(dialog).getByText(`${count} / ${count}`)).not.toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "itemPhotos.add" }) !== null).toBe(count < 10);
+  });
+});

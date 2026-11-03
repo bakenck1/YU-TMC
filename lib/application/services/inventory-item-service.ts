@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 
 import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
@@ -501,7 +502,7 @@ export class InventoryItemService {
       requirePermission(actor, "inventory.item.manage_protected_fields");
     }
     const requestedPhotos = authorizedInput.photos ?? (authorizedInput.photo ? [authorizedInput.photo] : []);
-    if (requestedPhotos.length > 4) {
+    if (requestedPhotos.length > MAX_ITEM_PHOTOS) {
       throw new ApplicationError("validation", "photo_limit_reached");
     }
     const photos = await Promise.all(
@@ -1092,7 +1093,7 @@ export class InventoryItemService {
       }
       const photo = await normalizeCameraPhoto(input);
       if (current.version !== input.version) throw versionConflict();
-      if ((current.photoIds?.length ?? (current.photoUrl ? 1 : 0)) >= 4) {
+      if ((current.photoIds?.length ?? (current.photoUrl ? 1 : 0)) >= MAX_ITEM_PHOTOS) {
         throw new ApplicationError("conflict", "photo_limit_reached");
       }
       const updated = await items.updateItemPhoto({

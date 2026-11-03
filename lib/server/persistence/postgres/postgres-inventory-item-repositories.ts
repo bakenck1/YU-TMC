@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -671,7 +672,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         where item_id = $1 and purpose = 'item' and status = 'attached'`,
       [input.id],
     );
-    if (Number(count.rows[0]?.count ?? 0) >= 4) {
+    if (Number(count.rows[0]?.count ?? 0) >= MAX_ITEM_PHOTOS) {
       throw new ApplicationError("conflict", "photo_limit_reached");
     }
     const objectKey = `database://items/${input.id}/${input.photoId}.jpg`;
