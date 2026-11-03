@@ -542,7 +542,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(afterArchive.getWorksheet("Добавить в базу")!.rowCount).toBe(8);
   });
 
-  it("keeps active stock totals but reconciles all OS and all nonarchived cards", async () => {
+  it("reconciles only active Inventory cards against all OS records", async () => {
     const f = await seed();
     await save([base, { ...base, code: "ZERO", quantity: "0" }, { ...base, code: "NEGATIVE", quantity: "-1" }]);
     const source = (await pool.query('select payload from yu_inventory.one_c_fixed_asset_inbox')).rows[0].payload as OneCFixedAsset;
@@ -555,8 +555,8 @@ describe("live materials API replaces Excel as audit input", () => {
     const snapshot = await getOneCAnalyticsSnapshot(pool);
     expect(snapshot.analytics.assets).toMatchObject({ total: 1, active: 1, retired: 0, other: 0 });
     expect(snapshot.materials).toMatchObject({ materialCount: 1, rowCount: 1, positiveRows: 1, nonPositiveRows: 0 });
-    expect(snapshot.analytics.inventory).toEqual({ total: 2, active: 1, quantity: 10 });
-    expect(snapshot.analytics.reconciliation).toMatchObject({ total: 2, materials: 0, fixedAssets: 1, both: 1, possible: 0 });
+    expect(snapshot.analytics.inventory).toEqual({ total: 1, active: 1, quantity: 1 });
+    expect(snapshot.analytics.reconciliation).toMatchObject({ total: 1, materials: 0, fixedAssets: 0, both: 1, possible: 0 });
     expect(snapshot.registryAssets).toHaveLength(3);
     const materialPage = await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool);
     expect(materialPage.total).toBe(snapshot.materials.rowCount);
@@ -572,7 +572,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(workbook.getWorksheet("Основные средства")!.rowCount).toBe(6);
     expect(workbook.getWorksheet("МП")!.rowCount).toBe(7);
     const found = workbook.getWorksheet("Совпадения 1С")!;
-    expect(found.rowCount).toBe(7);
+    expect(found.rowCount).toBe(6);
     const foundRow = workbookRow(found, f.itemId).number;
     expect(workbookCell(found, "Цена в нашей базе, KZT", foundRow).value).toBe(100);
     expect(workbookCell(found, "Статусы основных средств в 1С", foundRow).value).toContain("Снято с учёта");

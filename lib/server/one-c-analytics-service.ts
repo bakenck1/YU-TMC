@@ -16,7 +16,7 @@ export async function getOneCAnalytics(pool: Pick<Pool, "connect"> = getDatabase
   return { analytics, materials };
 }
 
-/** Export and dashboard share the same matching and consistent database snapshot. */
+/** Export, matched lists and dashboard reconcile only active, nonarchived Inventory cards. */
 export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = getDatabasePool()) {
   const client = await pool.connect();
   try {
@@ -28,7 +28,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id where p.item_id=i.id and p.ended_at is null) as responsible_name,
       coalesce((select array_agg(original_value) from yu_inventory.barcode_registry where item_id=i.id and kind='official'),'{}') as official_barcodes,
       coalesce((select array_agg(barcode_value) from yu_inventory.local_item_groups where item_id=i.id and status='active'),'{}') as local_barcodes
-      from yu_inventory.items i where archived_at is null order by i.id`);
+      from yu_inventory.items i where i.archived_at is null and i.status = 'active' order by i.id`);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links`);
     const clock = await client.query("select transaction_timestamp() as calculated_at");
     await client.query("commit");
