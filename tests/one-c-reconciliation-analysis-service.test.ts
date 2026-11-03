@@ -76,3 +76,37 @@ test(hasMatch ? "dry-run finds an active item by 1C code and writes row results 
   assert.equal(plan.link, hasMatch ? 1 : 0);
 });
 }
+
+
+test("publication records the initial number history and creation details for a new 1C item", async () => {
+  const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+  const client = {
+    release() {},
+    query: async (sql: string, values: readonly unknown[] = []) => {
+      calls.push({ sql, values });
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ acquired: true }] };
+      if (sql.startsWith('select * from "yu_inventory"."one_c_import_batch_rows"')) return { rows: [{
+        external_id: externalId, proposed_action: "create", payload_hash: "hash",
+        payload: { externalId, name: "Monitor", inventoryNumber: "INV-42", quantity: 1 },
+        decision: { roomId: itemId, itemType: "electronics", confirmCreate: true, confirmConditionDefault: true },
+      }] };
+      if (sql.startsWith('insert into "yu_inventory"."item_one_c_links"')) return { rows: [{ external_id: externalId }] };
+      if (sql.startsWith("select count")) return { rows: [{ count: 0 }] };
+      if (sql.startsWith("select failed_items")) return { rows: [{ failed_items: 0 }] };
+      return { rows: [], rowCount: 1 };
+    },
+  };
+  const pool = {
+    connect: async () => client,
+    query: async () => ({ rows: [{ id: itemId, batch_id: batchId, requested_by: itemId }] }),
+  };
+  assert.equal(await new OneCReconciliationService(pool as unknown as Pick<Pool, "query" | "connect">).processNextPublication(), true);
+  const history = calls.find(({ sql }) => sql.startsWith('insert into "yu_inventory"."item_inventory_number_history"'));
+  assert.ok(history);
+  assert.match(history.sql, /inventory_number_key,created_at,created_by/);
+  const audit = calls.find(({ sql }) => sql.startsWith('insert into "yu_inventory"."audit_records"'));
+  assert.ok(audit);
+  assert.equal(history.values[1], audit.values[3]);
+  assert.deepEqual(JSON.parse(String(audit.values[5])), { externalId, batchId, name: "Monitor", inventoryNumber: "INV-42", inventoryNumberKind: "official" });
+  assert.equal(calls.some(({ sql }) => sql.includes("set review_state='failed'")), false);
+});
