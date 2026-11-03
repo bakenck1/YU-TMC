@@ -1,3 +1,4 @@
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
 import type {
   InsertedTmcTransferRequestItemRecord,
   TmcOperationRepositories,
@@ -2048,7 +2049,7 @@ async function quantityTransferProblem(
   if (!isInventoryTransferStateAllowed(candidate.itemStatus, candidate.archivedAt)) return "item_inactive";
   if (candidate.hasActiveTransfer) return "active_transfer_exists";
   const item = await localBarcodes.findItemForUpdate(transfer.itemId);
-  if (!item || /^TMP-\d{4}-\d{6}$/i.test(item.inventoryNumber)) {
+  if (!item || isTemporaryInventoryNumber(item.inventoryNumber)) {
     return "item_unavailable";
   }
   if (transfer.sourceLocalGroupId) {

@@ -1,8 +1,7 @@
 "use client";
 
 import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
-
-
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
 import { inventoryNumberLabel } from "@/lib/inventory-number-label";
 
 import {
@@ -842,7 +841,7 @@ export default function InventoryItemDetails({
               />
             </div> : null}
             {item.itemSection !== "it" ? <label className="block text-sm">
-              <span className="text-zinc-600">{t("itemDetails.officialNumber")}</span>
+              <span className="text-zinc-600">{t(isTemporaryInventoryNumber(inventoryNumber) ? "items.inventoryNumber" : "itemDetails.officialNumber")}</span>
               <input
                 value={inventoryNumber}
                 onChange={(event) => setInventoryNumber(event.target.value)}
@@ -851,7 +850,7 @@ export default function InventoryItemDetails({
                 className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2.5"
               />
               <span id="official-number-hint" className="mt-1 block text-xs text-zinc-500">
-                {t("itemDetails.officialNumberHint")}
+                {t(isTemporaryInventoryNumber(inventoryNumber) ? "itemDetails.temporaryNumberHint" : "itemDetails.officialNumberHint")}
               </span>
             </label> : null}
             <label className="block text-sm">

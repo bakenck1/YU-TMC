@@ -1,5 +1,7 @@
 "use client";
 
+import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
+
 import {
   Barcode,
   Download,
@@ -227,7 +229,7 @@ export default function LocalBarcodeDistributionPanel({
   }
 
   const originalCanTransfer =
-    !/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode) &&
+    !isTemporaryInventoryNumber(distribution.originalBarcode) &&
     distribution.originalRemainder > 0 &&
     (distribution.originalResponsible?.id === actorId ||
       (actorRole === "admin" && !distribution.originalResponsible));
@@ -264,7 +266,7 @@ export default function LocalBarcodeDistributionPanel({
         </p>
       ) : null}
 
-      {/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode) ? (
+      {isTemporaryInventoryNumber(distribution.originalBarcode) ? (
         <div role="alert" className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <strong className="block">Штрихкод отсутствует</strong>
           Товар можно учитывать без штрихкода. Для распределения количества администратору нужно открыть редактирование карточки и указать исходный штрихкод 1С. После сохранения локальный код будет создан в формате «исходный код-0001».
@@ -296,7 +298,7 @@ export default function LocalBarcodeDistributionPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-mono text-sm font-semibold">
-                {/^TMP-\d{4}-\d{6}$/i.test(distribution.originalBarcode)
+                {isTemporaryInventoryNumber(distribution.originalBarcode)
                   ? "Штрихкод отсутствует"
                   : distribution.originalBarcode}
               </p>

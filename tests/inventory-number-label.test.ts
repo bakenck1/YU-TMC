@@ -2,6 +2,11 @@
 import test from "node:test";
 import { inventoryNumberLabel } from "../lib/inventory-number-label";
 const item = { name: 'кабина звукоизоляционная акустическая №2417/0315 от 08.08.2025', inventoryNumber: 'TMP-2026-2327E74FEEDF5F4B9C08' };
+
+test('the reported board retains its saved number without inventing an identity from document numbers', () => {
+  const board = { name: 'Доска стеклянная магнитно-маркерная No2 от 02.06.20 от 07.07.20 No2', inventoryNumber: 'TMP-2026-8AB5D6D6FC4C971D3538' };
+  assert.equal(inventoryNumberLabel(board), board.inventoryNumber);
+});
 test('temporary list number comes from the single marked inventory number, excluding the date', () => {
   assert.equal(inventoryNumberLabel(item), '2417/0315');
   assert.equal(inventoryNumberLabel({...item, name: 'Монитор инв. № 1350 / 15721'}), '1350 / 15721');

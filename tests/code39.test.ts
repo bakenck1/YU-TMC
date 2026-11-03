@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  code39PayloadForInventoryNumber,
   code39PayloadForItem,
   inventoryNumberComparisonKey,
   parseCode39ScanInput,
@@ -9,6 +10,13 @@ import {
 } from "../lib/domain/code39";
 
 const ITEM_ID = "0d8c3600-5d2f-4e9c-b26f-1bc773146aec";
+
+test("temporary numbers in both generated formats never become official barcode payloads", () => {
+  for (const value of ["TMP-2026-000123", "TMP-2026-8AB5D6D6FC4C971D3538", " tmp-2026-8ab5d6d6fc4c971d3538 "]) {
+    assert.equal(code39PayloadForInventoryNumber(value), null);
+    assert.equal(code39PayloadForItem(value, ITEM_ID), "YUI-0D8C36005D2F4E9C");
+  }
+});
 
 test("uses a normalized inventory number when the barcode can encode it", () => {
   assert.equal(code39PayloadForItem(" 050-0002369 ", ITEM_ID), "050-0002369");

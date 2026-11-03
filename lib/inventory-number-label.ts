@@ -12,7 +12,9 @@ export function inventoryNumberLabel(item: { inventoryNumber: string; name: stri
     if (ref.numberIsUnmarked && !/^\d{2,}\s*\/\s*\d{3,}$/u.test(candidate)) continue;
     if (inventoryAuditRange(candidate) || /^\d+[/-]\d+-\d+$/u.test(candidate)) return saved || null;
     const key = inventoryAuditFormattedKey(candidate);
-    if (key) numbers.set(key, candidate);
+    // Short marked tokens such as the board's "No2" can be document/model
+    // numbers. Match the minimum evidence used by inventoryAuditItemNameNumbers.
+    if (key && key.length >= 5) numbers.set(key, candidate);
   }
   return numbers.size === 1 ? [...numbers.values()][0] : saved || null;
 }
