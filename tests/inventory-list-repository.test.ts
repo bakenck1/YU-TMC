@@ -106,3 +106,28 @@ test("inventory collection fails explicitly above the supported 25,000-row contr
   );
   assert.equal(call, 51);
 });
+
+
+for (const kind of ["official", "temporary"] as const) {
+  test(`item creation preserves the first ${kind} number and its assignment time`, async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const occurredAt = new Date("2026-11-03T00:00:00Z");
+    const calls: Array<{ sql: string; values: readonly unknown[] }> = [];
+    const source = {
+      query: async (sql: string, values: readonly unknown[] = []) => {
+        calls.push({ sql, values });
+        return { rows: [{ id, quantity: 1, unit_price: 1, created_at: occurredAt, updated_at: occurredAt }], rowCount: 1 };
+      },
+    } as unknown as PostgresRepositorySource;
+    const repository = createPostgresInventoryItemRepositories(source).items;
+    await repository.insertItem({
+      id, name: "Monitor", description: null, itemType: "electronics", itemSection: "general",
+      itType: null, brand: null, model: null, quantity: 1, unitPrice: 1, roomId: id,
+      inventoryNumberKind: kind, inventoryNumber: "INV-1", inventoryNumberKey: "INV1", actorId: id, occurredAt,
+    });
+    const history = calls.filter(({ sql }) => sql.includes('insert into "yu_inventory"."item_inventory_number_history"'));
+    assert.equal(history.length, 1);
+    assert.match(history[0]!.sql, /assigned_by, assigned_at/);
+    assert.deepEqual(history[0]!.values.slice(1), [id, kind, "INV-1", "INV1", id, occurredAt]);
+  });
+}

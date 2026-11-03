@@ -601,11 +601,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       if (!result.rows[0]) throw new Error("item_insert_failed");
       const item = await this.findItemById(input.id);
       if (!item) throw new Error("item_insert_failed");
-      if (input.inventoryNumberKind === "temporary" && input.inventoryNumber) {
+      // Keep the initial official number as well as generated temporary numbers.
+      // Otherwise the first official value is absent when a later edit replaces it.
+      if (input.inventoryNumber) {
         await this.source.query(
           `insert into ${HISTORY}
-             (id, item_id, kind, value, comparison_key, assigned_by)
-           values ($1, $2, $3, $4, $5, $6)`,
+             (id, item_id, kind, value, comparison_key, assigned_by, assigned_at)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
           [
             `${input.id.slice(0, 8)}-0000-4000-8000-${input.id.slice(-12)}`,
             input.id,
@@ -613,6 +615,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
             input.inventoryNumber,
             input.inventoryNumberKey,
             input.actorId,
+            input.occurredAt,
           ],
         );
       }
