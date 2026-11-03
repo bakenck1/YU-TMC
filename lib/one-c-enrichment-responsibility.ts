@@ -20,6 +20,12 @@ const aliases = new Map([
 ]);
 const personKey = (value: string) => aliases.get(normalized(value)) ?? normalized(value);
 
+// A shared chair balance may cover individually assigned pieces. Its accounting
+// owner cannot establish the owner of the whole inventory card.
+function isChairName(value: string): boolean {
+  return /(?:^|[^\p{L}\p{N}])(?:стул(?:а|у|ом|е)?|стуль(?:я|ев|ям|ями|ях)|chairs?)(?=$|[^\p{L}\p{N}])/iu.test(value.normalize("NFKC"));
+}
+
 /** Fill only vacant assignments from confirmed full identifiers or saved 1C codes. */
 export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPlan, evidence: AuditMatch[], osNames: Map<string, string | null>, users: EnrichmentResponsibleUser[], states: EnrichmentResponsibilityState[]) {
   const matches = new Map(evidence.map(row => [row.itemId, row]));
@@ -38,6 +44,10 @@ export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPla
     if (state?.userId) { proposal.status = "unchanged"; continue; }
     if (!state || state.unavailable) { proposal.status = "unavailable"; continue; }
     if (state.pendingTransfer) { proposal.status = "pending_transfer"; continue; }
+    if ([row.currentName, row.nextName, match?.itemName ?? "",
+      ...(match?.oneC ?? []).map(entry => entry.name),
+      ...(match?.excel ?? []).map(entry => entry.nomenclature)]
+      .some(isChairName)) { proposal.status = "not_allowed"; continue; }
     // A source may safely identify the owner even when its name cannot be applied
     // (too long, shared monitor/system number, or several unanimous source copies).
     // Missing, changed and conflicting identities still cannot authorize an assignment.

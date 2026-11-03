@@ -9,9 +9,9 @@ const user: EnrichmentResponsibleUser = { id: "person", fullName: owner, role: "
 const vacant: EnrichmentResponsibilityState = { itemId: "item", userId: null, name: null, pendingTransfer: false, unavailable: false };
 const os: AuditMatch["oneC"][number] = { externalId: "os", code: "000123", name: "Стол", inventoryNumber: "1350/12345", barcode: null, responsibleName: owner, status: "Принято к учёту", origins: ["current_registry"], matchedBy: ["code"], matchedBarcodes: [] };
 const mp: AuditMatch["excel"][number] = { sourceKey: "mp", sourceKind: "materials_api", rowNumber: 1, nomenclature: "Стол", inventoryNumber: "", endingBalance: "1", oneCCode: "000123", responsibleName: owner, matchedBy: ["code"] };
-function proposal(options: { state?: Partial<EnrichmentResponsibilityState>; users?: EnrichmentResponsibleUser[]; source?: "os" | "mp" | "both"; code?: string | null; number?: string; ambiguous?: boolean; reason?: InventoryAuditEnrichmentReason; otherOwner?: string; sourceOwner?: string } = {}) {
-  const plan: InventoryAuditEnrichmentPlan = { rows: [{ itemId: "item", itemVersion: 1, currentName: "Местное название", nextName: "Местное название", currentCode: "000123", nextCode: "000123", eligible: !options.ambiguous, changed: false, reason: options.ambiguous ? options.reason ?? "source_ambiguous" : "unchanged" }], counts: { ready: 0, unchanged: options.ambiguous ? 0 : 1, skipped: options.ambiguous ? 1 : 0 } };
-  const evidence: AuditMatch = { itemId: "item", itemName: "Стол", siteNumber: options.number ?? "TMP-2026-TEST", siteOneCCode: options.code === undefined ? "000123" : options.code, siteBarcodes: [], numberKind: "temporary", itemVersion: 1, result: "matched", source: null, oneC: options.source === "mp" ? [] : [os], excel: options.source === "mp" || options.source === "both" ? [{ ...mp, responsibleName: options.otherOwner ?? options.sourceOwner ?? owner }] : [] };
+function proposal(options: { name?: string; nextName?: string; sourceName?: string; materialName?: string; state?: Partial<EnrichmentResponsibilityState>; users?: EnrichmentResponsibleUser[]; source?: "os" | "mp" | "both"; code?: string | null; number?: string; ambiguous?: boolean; reason?: InventoryAuditEnrichmentReason; otherOwner?: string; sourceOwner?: string } = {}) {
+  const plan: InventoryAuditEnrichmentPlan = { rows: [{ itemId: "item", itemVersion: 1, currentName: options.name ?? "Local name", nextName: options.nextName ?? options.name ?? "Local name", currentCode: "000123", nextCode: "000123", eligible: !options.ambiguous, changed: false, reason: options.ambiguous ? options.reason ?? "source_ambiguous" : "unchanged" }], counts: { ready: 0, unchanged: options.ambiguous ? 0 : 1, skipped: options.ambiguous ? 1 : 0 } };
+  const evidence: AuditMatch = { itemId: "item", itemName: options.name ?? os.name, siteNumber: options.number ?? "TMP-2026-TEST", siteOneCCode: options.code === undefined ? "000123" : options.code, siteBarcodes: [], numberKind: "temporary", itemVersion: 1, result: "matched", source: null, oneC: options.source === "mp" ? [] : [{ ...os, name: options.sourceName ?? os.name }], excel: options.source === "mp" || options.source === "both" ? [{ ...mp, nomenclature: options.materialName ?? mp.nomenclature, responsibleName: options.otherOwner ?? options.sourceOwner ?? owner }] : [] };
   addOneCResponsibilityProposals(plan, [evidence], new Map([["os", options.sourceOwner ?? owner]]), options.users ?? [user], [{ ...vacant, ...options.state }]);
   return plan;
 }
@@ -29,6 +29,55 @@ for (const source of ["os", "mp", "both"] as const) {
     assert.equal(p.status, "unchanged");
   });
 }
+test("chairs never inherit a single source owner, including grouped chairs sharing a 1C code", () => {
+  for (const source of ["os", "mp", "both"] as const) {
+    for (const name of ["Стул", "СТУЛ офисный", "Стулья 500 шт.", "Набор стульев", "Chair", "Office chairs", "Стул-кресло"]) {
+      const plan = proposal({ source, name });
+      assert.equal(plan.rows[0].responsibility?.status, "not_allowed", name);
+      assert.equal(plan.rows[0].responsibility?.changed, false, name);
+      assert.equal(plan.rows[0].responsibility?.nextUserId, null, name);
+      assert.deepEqual(plan.counts, { ready: 0, unchanged: 1, skipped: 0 });
+    }
+  }
+});
+
+test("chair identity in either source or proposed name also prevents automatic assignment", () => {
+  for (const names of [{ sourceName: "Стул" }, { materialName: "Стулья" }, { nextName: "Стул офисный" }]) {
+    const plan = proposal({ source: "both", ...names });
+    assert.equal(plan.rows[0].responsibility?.status, "not_allowed");
+    assert.equal(plan.rows[0].responsibility?.changed, false);
+  }
+  const numberMatched = proposal({ name: "Стул", code: null, number: "1350 / 12345" });
+  assert.equal(numberMatched.rows[0].responsibility?.status, "not_allowed");
+});
+
+test("an existing individual chair assignment is preserved and other furniture still receives owners", () => {
+  const existing = proposal({ name: "Стул", state: { userId: "individual-owner", name: owner } });
+  assert.equal(existing.rows[0].responsibility?.status, "unchanged");
+  assert.equal(existing.rows[0].responsibility?.nextUserId, "individual-owner");
+  assert.equal(existing.rows[0].responsibility?.changed, false);
+  for (const name of ["Стол", "Шкаф", "Столешница", "Подстолье", "Монитор", "Chairman display"]) {
+    assert.equal(proposal({ name }).rows[0].responsibility?.status, "ready", name);
+  }
+});
+
+test("blocking a chair assignment leaves already planned name and code updates intact", () => {
+  const plan: InventoryAuditEnrichmentPlan = {
+    rows: [{ itemId: "item", itemVersion: 1, currentName: "Стул", nextName: "Стул офисный",
+      currentCode: null, nextCode: "000123", eligible: true, changed: true, reason: "confirmed" }],
+    counts: { ready: 1, unchanged: 0, skipped: 0 },
+  };
+  const evidence: AuditMatch = { itemId: "item", itemName: "Стул", siteNumber: "1350/12345", siteOneCCode: null,
+    siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: null, oneC: [os], excel: [] };
+  addOneCResponsibilityProposals(plan, [evidence], new Map([["os", owner]]), [user], [vacant]);
+  assert.equal(plan.rows[0].responsibility?.status, "not_allowed");
+  assert.equal(plan.rows[0].responsibility?.changed, false);
+  assert.equal(plan.rows[0].changed, true);
+  assert.equal(plan.rows[0].nextName, "Стул офисный");
+  assert.equal(plan.rows[0].nextCode, "000123");
+  assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
+});
+
 test("a complete inventory number assigns without any saved code", () => {
   assert.equal(proposal({ code: null, number: "1350 / 12345" }).rows[0].responsibility?.status, "ready");
   assert.equal(proposal({ code: null }).rows[0].responsibility?.changed, false);

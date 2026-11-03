@@ -718,6 +718,25 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(next.rows.every(row => row.responsibility?.status === "unchanged")).toBe(true);
   });
 
+  it("never assigns a grouped chair card through either current enrichment or missing-owner backfill", async () => {
+    const f = await seed();
+    const fullName = "Иванов Иван Иванович";
+    await addUser(fullName);
+    await pool.query(`update yu_inventory.items set name='Стул',quantity=500 where id=$1`, [f.itemId]);
+    await save([{ ...base, name: "Стул офисный", responsibleName: fullName }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    const chair = preview.rows.find(row => row.itemId === f.itemId)!;
+    expect(chair.responsibility).toMatchObject({ changed: false, nextUserId: null, status: "not_allowed" });
+    expect(chair.nextCode).toBe(base.code);
+    expect((await service.fillMissingResponsibilities(f.actor)).updated).toBe(0);
+    await service.applyCurrent(preview, f.actor);
+    const saved = (await pool.query('select name,one_c_code,quantity from yu_inventory.items where id=$1', [f.itemId])).rows[0];
+    expect(saved).toMatchObject({ name: "Стул офисный", one_c_code: base.code, quantity: 500 });
+    expect((await pool.query('select id from yu_inventory.responsibility_periods where item_id=$1', [f.itemId])).rows).toHaveLength(0);
+    expect((await service.previewCurrent(f.actor)).rows.find(row => row.itemId === f.itemId)?.responsibility?.changed).toBe(false);
+  });
+
   it.each(["OS", "MP"] as const)("fills an empty responsibility from exact %s code and exposes the item in the recipient account", async source => {
     const f = await seed();
     const fullName = "Иванов Иван Иванович";
