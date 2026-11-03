@@ -79,7 +79,7 @@ export function summarizeOneCAudit(rows: AuditMatch[], assetIds: string[], mater
 
 export type OneCAnalytics = {
   calculatedAt: string;
-  /** Stock totals are active; presence is checked across all OS records and nonarchived cards. */
+  /** Stock totals are active; presence is checked across all OS records and active, nonarchived cards. */
   assets: { total: number; active: number; retired: number; other: number; receivedAt: string | null };
   inventory: { total: number; active: number; quantity: number };
   reconciliation: Omit<ReturnType<typeof summarizeOneCAudit>, "temporaryUnmatched" | "temporaryFound" | "temporaryPossible"> & { temporaryUnmatched?: number; temporaryFound?: number; temporaryPossible?: number };
