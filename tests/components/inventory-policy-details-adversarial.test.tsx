@@ -87,8 +87,8 @@ describe("item photo gallery capacity", () => {
     else expect(screen.queryByRole("button", { name: "itemPhotos.add" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "itemDetails.openPhoto" }));
     const dialog = screen.getByRole("dialog", { name: "itemDetails.photoFullSize" });
-    expect(within(dialog).getByRole("button", { name: `items.photo ${count}`, exact: true })).not.toBeNull();
-    fireEvent.click(within(dialog).getByRole("button", { name: `items.photo ${count}`, exact: true }));
+    expect(within(dialog).getByRole("button", { name: `items.photo ${count}` })).not.toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: `items.photo ${count}` }));
     expect(within(dialog).getByText(`${count} / ${count}`)).not.toBeNull();
     expect(within(dialog).queryByRole("button", { name: "itemPhotos.add" }) !== null).toBe(count < 10);
   });

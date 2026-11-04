@@ -11,7 +11,7 @@ const KEY = "test-materials-api-key";
 const ROW = "<Material><Code>0000006135</Code><Name>МФУ Laser Jet M130 №1350/1444</Name><Quantity>1</Quantity></Material>";
 function xml(rows = ROW, date = "2026-10-14T13:11:41+05:00") { return `<Materials><SnapshotAt>${date}</SnapshotAt>${rows}</Materials>`; }
 function xmlV2(rows: string, extra = "") { return xml(rows).replace("<Materials>", `<Materials><SchemaVersion>2</SchemaVersion>${extra}`); }
-function request(body: string | Uint8Array = xml(), headers: Record<string, string> = {}) {
+function request(body: string | Uint8Array = xml(ROW.replace("</Material>", "<UnitPrice>66784.48</UnitPrice></Material>")), headers: Record<string, string> = {}) {
   return new Request("https://inventory.example/api/integrations/1c/materials", {
     method: "POST", headers: { authorization: `Bearer ${KEY}`, "content-type": "application/xml; charset=utf-8", ...headers },
     body: typeof body === "string" ? body : new Uint8Array(body).buffer,
@@ -189,13 +189,14 @@ describe("1C materials HTTP boundary", () => {
         return { received: 1, created: 0, updated: 0, unchanged: 1, batchId: "batch-replayed", replayed: true };
       },
     } });
-    const response = await handler(request(xml(), { "x-source-filename": "materials.xml" }));
+    const pricedXml = xml(ROW.replace("</Material>", "<UnitPrice>66784.48</UnitPrice></Material>"));
+    const response = await handler(request(pricedXml, { "x-source-filename": "materials.xml" }));
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.batchId, "batch-replayed");
     assert.equal(body.replayed, true);
     assert.equal(body.requestId, response.headers.get("x-request-id"));
-    assert.deepEqual(metadata, { sourceSha256: createHash("sha256").update(xml()).digest("hex"), requestId: body.requestId, sourceFilename: "materials.xml" });
+    assert.deepEqual(metadata, { sourceSha256: createHash("sha256").update(pricedXml).digest("hex"), requestId: body.requestId, sourceFilename: "materials.xml" });
   });
   it("bounds declared payloads and rejects malformed UTF8/XML before import", async () => {
     let imports = 0;

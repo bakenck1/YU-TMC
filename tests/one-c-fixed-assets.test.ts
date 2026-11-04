@@ -14,7 +14,7 @@ import { observeHttpRequest } from "@/lib/server/observability";
 
 const API_KEY = "test-one-c-key";
 const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
-const XML = `<FixedAssets><FixedAsset><GUID>${GUID}</GUID><Code>000009352</Code><Name>Компьютер</Name></FixedAsset></FixedAssets>`;
+const XML = `<FixedAssets><FixedAsset><GUID>${GUID}</GUID><Code>000009352</Code><Name>Компьютер</Name><InitialCost>186990.00</InitialCost></FixedAsset></FixedAssets>`;
 
 describe("1C fixed assets HTTP boundary", () => {
   it("the real POST route preserves source metadata through the service to persistence", async () => {
@@ -64,12 +64,17 @@ describe("1C fixed assets HTTP boundary", () => {
     const response = getOneCFixedAssetsCapability("");
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
-    assert.deepEqual(await response.json(), {
+    const { pricing, ...capability } = await response.json();
+    assert.deepEqual(capability, {
       service: "1c-fixed-assets", status: "capability", configured: false,
       method: "POST", authentication: "Bearer token required",
       contentType: ["application/xml", "text/xml"], maximumBytes: MAX_ONE_C_XML_BYTES,
       maximumRecords: MAX_ONE_C_RECORDS,
     });
+    assert.equal(pricing.field, "InitialCost");
+    assert.equal(pricing.required, true);
+    assert.equal(pricing.exclusiveMinimum, 0);
+    assert.equal(pricing.currency, "KZT");
   });
 
   it("rejects missing configuration, wrong credentials, and media type before persistence", async () => {

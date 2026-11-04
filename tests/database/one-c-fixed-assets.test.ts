@@ -425,7 +425,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     });
     const makeRequest = () => new Request("https://inventory.example/api/integrations/1c/fixed-assets", {
       method: "POST", headers: { authorization: "Bearer database-test-key", "content-type": "application/xml", "x-source-filename": "snapshot.xml" },
-      body: `<FixedAssets><FixedAsset><GUID>${asset.externalId}</GUID><Name>${asset.name}</Name><ResidualCost>-1</ResidualCost></FixedAsset></FixedAssets>`,
+      body: `<FixedAssets><FixedAsset><GUID>${asset.externalId}</GUID><Name>${asset.name}</Name><InitialCost>186990.00</InitialCost><ResidualCost>-1</ResidualCost></FixedAsset></FixedAssets>`,
     });
     expect((await handler(makeRequest())).status).toBe(200);
     expect((await handler(makeRequest())).status).toBe(200);
@@ -492,7 +492,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
         service: new OneCFixedAssetImportService(repository), apiKey: () => "database-test-key", logFailure: () => undefined,
       })(new Request("https://inventory.example/api/integrations/1c/fixed-assets", {
         method: "POST", headers: { authorization: "Bearer database-test-key", "content-type": "application/xml" },
-        body: `<FixedAssets><FixedAsset><GUID>${asset.externalId}</GUID><Name>${asset.name}</Name></FixedAsset></FixedAssets>`,
+        body: `<FixedAssets><FixedAsset><GUID>${asset.externalId}</GUID><Name>${asset.name}</Name><InitialCost>186990.00</InitialCost></FixedAsset></FixedAssets>`,
       }));
       expect(response.status).toBe(503);
       await expect(response.json()).resolves.toMatchObject({ error: "import_timeout" });

@@ -21,6 +21,10 @@ import { workbookCell, workbookRow } from "../helpers/one-c-workbook";
 import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
 import { buildOneCReconciliationReport } from "@/lib/one-c-reconciliation-report";
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
+import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
+import { createOneCMaterialsPostHandler } from "@/lib/server/http/one-c-materials-handler";
+import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
+import { OneCMaterialImportService } from "@/lib/application/services/one-c-material-import-service";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -42,6 +46,37 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it.each(["OS", "MP"] as const)("imports full %s prices through HTTP, applies them to the correct card and rejects a later zero", async source => {
+    const f = await seed();
+    const key = "full-price-database-test-key";
+    const guid = randomUUID();
+    const handler = source === "OS" ? createOneCFixedAssetsPostHandler({
+      apiKey: () => key, service: new OneCFixedAssetImportService(new PostgresOneCFixedAssetRepository(pool)),
+    }) : createOneCMaterialsPostHandler({
+      apiKey: () => key, service: new OneCMaterialImportService(new PostgresOneCMaterialsRepository(pool)),
+    });
+    const xml = (price: string) => source === "OS"
+      ? `<FixedAssets><FixedAsset><GUID>${guid}</GUID><Code>000012</Code><InventoryNumber>1350/14444</InventoryNumber><Name>Принтер</Name><Quantity>1</Quantity><InitialCost>${price}</InitialCost><ResidualValue>0</ResidualValue><Status>Принято к учёту</Status></FixedAsset></FixedAssets>`
+      : `<Materials><SchemaVersion>2</SchemaVersion><SnapshotAt>2026-11-04T12:00:00+05:00</SnapshotAt><Material><Code>000012</Code><InventoryNumber>1350/14444</InventoryNumber><Name>Принтер</Name><AccountCode>1317</AccountCode><Quantity>7</Quantity><UnitPrice>${price}</UnitPrice></Material></Materials>`;
+    const send = (price: string) => handler(new Request(`https://inventory.example/api/integrations/1c/${source === "OS" ? "fixed-assets" : "materials"}`, {
+      method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/xml" }, body: xml(price),
+    }));
+    const expected = source === "OS" ? "186990.00" : "9100.25";
+    expect((await send(expected)).status).toBe(200);
+    expect((await pool.query(`select unit_price from yu_inventory.items where id=$1`, [f.itemId])).rows[0].unit_price).toBe("100.00");
+    const service = new InventoryAuditEnrichmentService(pool);
+    const plan = await service.previewCurrent(f.actor);
+    expect(plan.rows.find(row => row.itemId === f.itemId)?.price).toMatchObject({ nextUnitPrice: expected, changed: true });
+    expect((await service.applyCurrent(plan, f.actor)).updated).toBe(1);
+    expect((await pool.query(`select unit_price from yu_inventory.items where id=$1`, [f.itemId])).rows[0].unit_price).toBe(expected);
+    expect((await send("0")).status).toBe(422);
+    const refreshed = await service.previewCurrent(f.actor);
+    expect(refreshed.rows.find(row => row.itemId === f.itemId)?.price).toMatchObject({ nextUnitPrice: expected, changed: false });
+    expect((await pool.query(`select unit_price from yu_inventory.items where id=$1`, [f.itemId])).rows[0].unit_price).toBe(expected);
+    const auditCount = await pool.query(`select count(*)::int count from yu_inventory.audit_records where subject_id=$1 and action='item.audit_enrichment'`, [f.itemId]);
+    expect(auditCount.rows[0].count).toBe(1);
+  });
 
   it.each(["OS", "MP", "GUID"] as const)("reconciles temporary cards through %s, preserves numbers and applies the scoped plan idempotently", async (source) => {
     const f = await seed();

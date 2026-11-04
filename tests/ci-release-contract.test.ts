@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { getDatabaseTestFiles } from "../scripts/database-test-files.mjs";
+import { MAX_ONE_C_XML_BYTES } from "../lib/server/integrations/one-c-fixed-assets";
 
 test("CI validates the documented release gates in dependency order", async () => {
   const workflow = await readFile(".github/workflows/tests.yml", "utf8");
@@ -125,7 +126,8 @@ test("production deployment protects HTTPS activation and database backups", asy
   assert.match(httpsConfig, /listen 443 ssl default_server/);
   assert.match(httpsConfig, /return 444/);
   assert.doesNotMatch(httpsConfig, /ssl_reject_handshake/);
-  assert.match(httpsConfig, /client_max_body_size 65m/);
+  const nginxBodyLimitBytes = Number(httpsConfig.match(/client_max_body_size\s+(\d+)m;/)?.[1]) * 1024 * 1024;
+  assert.ok(nginxBodyLimitBytes > MAX_ONE_C_XML_BYTES, "Nginx must admit a complete 64 MiB 1C XML request before the application applies its limit");
   assert.match(httpsConfig, /client_body_timeout 120s/);
   assert.match(httpsConfig, /proxy_read_timeout 180s/);
   assert.match(httpsConfig, /ssl_protocols TLSv1\.2 TLSv1\.3/);
