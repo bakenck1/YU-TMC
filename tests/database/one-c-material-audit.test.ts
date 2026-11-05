@@ -689,6 +689,30 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await pool.query(`select after_values->>'origin' as origin from yu_inventory.audit_records where subject_kind='responsibility'`)).rows).toEqual([{ origin: "one_c_responsibility_backfill" }]);
   });
 
+  it.each(["OS", "MP"] as const)("excludes only the selected system units from %s backfill and leaves a shared-number monitor assignable", async source => {
+    const f = await seed();
+    const fullName = "Тестовый Бывший Сотрудник";
+    const recipient = await addUser(fullName);
+    const ids: string[] = [];
+    for (const number of ["123/357", "123/358", "123/353"]) {
+      const id = randomUUID();ids.push(id);
+      await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+        select $1,'Системный блок в сборе Intel','electronics',1,24850,room_id,'official',$3::text,$3::text,created_by,updated_by from yu_inventory.items where id=$2`, [id, f.itemId, number]);
+    }
+    await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics',inventory_number='123/357',inventory_number_key='123/357' where id=$1`, [f.itemId]);
+    if (source === "OS") {
+      const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch(["123/357", "123/358", "123/353"].map(number => ({ ...original, externalId: randomUUID(), inventoryNumber: number, responsibleName: fullName })), metadata());
+    } else await save(["123/357", "123/358", "123/353"].map(number => ({ ...base, code: number, name: "Устройство", inventoryNumber: number, responsibleName: fullName })));
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewMissingResponsibilities(f.actor);
+    for (const id of ids) expect(preview.rows.find(row => row.itemId === id)?.responsibility).toMatchObject({ changed: false, nextUserId: null, status: "not_allowed" });
+    expect(preview.rows.find(row => row.itemId === f.itemId)?.responsibility).toMatchObject({ changed: true, nextUserId: recipient });
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 1 });
+    expect((await pool.query(`select item_id from yu_inventory.responsibility_periods where ended_at is null`)).rows).toEqual([{ item_id: f.itemId }]);
+    for (const id of ids) expect((await pool.query(`select unit_price from yu_inventory.items where id=$1`, [id])).rows[0].unit_price).toBe("24850.00");
+  });
+
   it("fills both vacant owners for a shared monitor/system number without renaming either card", async () => {
     const f = await seed();
     const recipient = await addUser("Сотрудник Полное Имя");

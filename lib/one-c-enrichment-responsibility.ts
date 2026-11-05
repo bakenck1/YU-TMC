@@ -1,3 +1,5 @@
+import { inventoryAuditNumberKey } from "@/lib/inventory-audit-numbers";
+import { sharedInventoryNumberDevice } from "@/lib/inventory-number-pair-policy";
 import type { UserRole } from "@/lib/contracts/users";
 import type { InventoryAuditEnrichmentPlan, InventoryAuditEnrichmentRow } from "@/lib/inventory-audit-enrichment";
 import type { AuditMatch } from "@/lib/inventory-source-audit";
@@ -19,6 +21,10 @@ const aliases = new Map([
   [normalized("Нурмаганбет Ермек Талантулы"), normalized("Нурмаганбет Ермек Талантович")],
 ]);
 const personKey = (value: string) => aliases.get(normalized(value)) ?? normalized(value);
+
+// Temporary item-level exception: their former owner is still present in 1C.
+// Restrict by both full inventory number and device kind: a monitor may share a number.
+const SYSTEM_UNITS_WITHOUT_AUTOMATIC_RESPONSIBILITY = new Set(["123/357", "123/358", "123/353"]);
 
 // A shared chair balance may cover individually assigned pieces. Its accounting
 // owner cannot establish the owner of the whole inventory card.
@@ -44,6 +50,11 @@ export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPla
     if (state?.userId) { proposal.status = "unchanged"; continue; }
     if (!state || state.unavailable) { proposal.status = "unavailable"; continue; }
     if (state.pendingTransfer) { proposal.status = "pending_transfer"; continue; }
+    if (SYSTEM_UNITS_WITHOUT_AUTOMATIC_RESPONSIBILITY.has(inventoryAuditNumberKey(match?.siteNumber ?? row.siteNumber ?? ""))
+      && sharedInventoryNumberDevice(row.currentName) === "system_unit") {
+      proposal.status = "not_allowed";
+      continue;
+    }
     if ([row.currentName, row.nextName, match?.itemName ?? "",
       ...(match?.oneC ?? []).map(entry => entry.name),
       ...(match?.excel ?? []).map(entry => entry.nomenclature)]
