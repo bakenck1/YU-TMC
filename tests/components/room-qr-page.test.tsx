@@ -19,6 +19,9 @@ vi.mock("next/navigation", () => ({
   notFound: () => { throw new Error("NEXT_HTTP_ERROR_FALLBACK;404"); },
 }));
 vi.mock("@/lib/security/session", () => ({ SESSION_COOKIE_NAME: "session" }));
+vi.mock("@/lib/server/room-booking", () => ({
+  getRoomBooking: async () => ({ status: "hidden" }),
+}));
 vi.mock("@/lib/server/security/request-user", () => ({
   resolveCurrentUserToken: state.resolveUser,
   authorizationActor: (user: unknown) => user,
@@ -63,6 +66,7 @@ describe("opening existing printed room QR links", () => {
     expect(page.props.room).toMatchObject({ access: "full", designation: ROOM.designation });
     expect(page.props.returnTo).toBe(`/rooms/qr/${encodeURIComponent(TOKEN)}`);
     expect(page.props.authenticated).toBe(true);
+    expect(page.props.booking).toEqual({ status: "hidden" });
   });
 
   it("also accepts an unescaped identifier", async () => {
@@ -84,6 +88,7 @@ describe("opening existing printed room QR links", () => {
     const page = await openPage(encodeURIComponent(TOKEN));
     expect(page.props.room).toEqual({ access: "authentication_required" });
     expect(page.props.authenticated).toBe(false);
+    expect(page.props.booking).toEqual({ status: "hidden" });
     expect(page.props.returnTo).toBe(`/rooms/qr/${encodeURIComponent(TOKEN)}`);
     expect(state.listRoomItems).not.toHaveBeenCalled();
   });

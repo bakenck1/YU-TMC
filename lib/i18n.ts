@@ -1,11 +1,13 @@
 import type { AppLanguage } from "./app-settings";
 import { passportRu, passportKk, passportEn } from "./room-passport-translations";
+import { roomBookingRu, roomBookingKk, roomBookingEn } from "./room-booking-translations";
 
 const ru = {
   "nav.mobileItems": "ТМЦ",
   "nav.mobileScan": "Сканер",
   "nav.mobilePassports": "Паспорта",
   ...passportRu,
+  ...roomBookingRu,
   "common.save": "Сохранить",
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
@@ -1222,6 +1224,7 @@ const kk: Record<TranslationKey, string> = {
   "nav.mobilePassports": "Паспорттар",
 
   ...passportKk,
+  ...roomBookingKk,
   "nav.scanQr": "Кабинет QR-кодын сканерлеу", "nav.requests": "Өтініштер",
   "room.title": "Кабинет", "room.responsible": "Жауапты", "room.floor": "Қабат",
   "room.itemCount": "Барлық ТМҚ", "room.connected": "Қосылған", "room.disconnected": "Қосылмаған",
@@ -1971,6 +1974,7 @@ const en: Record<TranslationKey, string> = {
   "nav.mobilePassports": "Passports",
 
   ...passportEn,
+  ...roomBookingEn,
   "nav.scanQr": "Scan room QR", "nav.requests": "Requests",
   "room.title": "Room", "room.responsible": "Responsible person", "room.floor": "Floor",
   "room.itemCount": "Total items", "room.connected": "Connected", "room.disconnected": "Not connected",

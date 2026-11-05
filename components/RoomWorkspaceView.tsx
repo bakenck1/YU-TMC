@@ -8,6 +8,8 @@ import { useAppSettings } from "@/components/AppSettingsProvider";
 import ProblemReportButton from "@/components/ProblemReportButton";
 import RoomMetric from "./RoomMetric";
 import PassportFileLinks from "@/components/PassportFileLinks";
+import RoomBookingCard from "@/components/RoomBookingCard";
+import type { RoomBookingDto } from "@/lib/contracts/room-booking";
 
 export default function RoomWorkspaceView({
   room,
@@ -15,12 +17,14 @@ export default function RoomWorkspaceView({
   returnTo,
   backTo,
   readOnly = false,
+  booking = { status: "hidden" },
 }: {
   room: RoomWorkspaceDto | PublicRoomDto;
   authenticated: boolean;
   returnTo: string;
   backTo?: "/scan" | "/inventory";
   readOnly?: boolean;
+  booking?: RoomBookingDto;
 }) {
   const { t } = useAppSettings();
   if (!("items" in room)) {
@@ -68,6 +72,7 @@ export default function RoomWorkspaceView({
           <span className="flex items-center gap-2"><CircleUserRound className="h-5 w-5" />{room.responsibleName ?? t("common.notAssigned")}</span>
         </div>
       </section>
+      <RoomBookingCard booking={booking} />
       {room.access === "limited" ? (
         <p className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">{t("room.limitedAccess")}</p>
       ) : null}

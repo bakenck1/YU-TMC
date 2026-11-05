@@ -32,6 +32,9 @@ test("critical interface and push messages have distinct RU, KK and EN translati
     "transfers.scanHint",
     "maintenance.title",
     "profile.accountTitle",
+    "room.bookingTitle",
+    "room.bookingAction",
+    "room.bookingSoonDescription",
   ] as const;
 
   for (const key of keys) {
