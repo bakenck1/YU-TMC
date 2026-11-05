@@ -1,5 +1,6 @@
 "use client";
 
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { ArrowRightLeft, ChevronDown, MapPin, Tags, FolderCheck, Hash, Trash2, X } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
 
@@ -69,7 +70,7 @@ export default function TmcBulkActions({
   const standardSelectionValid = items.length > 0 && items.length <= 50;
   const categorySelectionValid = items.length > 0 && items.length <= 2_000;
   const activeRooms = useMemo(
-    () => rooms.filter((room) => room.status === "active" && room.buildingId === buildingId),
+    () => sortInventoryRoomsForSelection(rooms.filter((room) => room.status === "active" && room.buildingId === buildingId)),
     [buildingId, rooms],
   );
   const transferSelectionValid = operationItems.every((item) =>

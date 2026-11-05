@@ -1,5 +1,6 @@
 "use client";
 
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
 import Link from "next/link";
 
 import { useAppSettings } from "@/components/AppSettingsProvider";
@@ -29,7 +30,7 @@ export default function TmcHistory({ requests, locationChanges = [], nextRequest
         <select name="initiatorId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allInitiators")}</option>{participants.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}</select>
         <select name="recipientId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allRecipients")}</option>{participants.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}</select>
         <select name="buildingId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allBuildings")}</option>{buildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}</select>
-        <select name="roomId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allRooms")}</option>{locations.map((location) => <option key={location.roomId} value={location.roomId}>{location.roomDesignation}</option>)}</select>
+        <select name="roomId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allRooms")}</option>{locations.toSorted((left, right) => compareInventoryRoomDesignations(left.roomDesignation, right.roomDesignation)).map((location) => <option key={location.roomId} value={location.roomId}>{location.roomDesignation}</option>)}</select>
         <select name="itemId" defaultValue="" className="min-h-11 rounded-xl border border-zinc-200 px-3"><option value="">{t("tmc.history.allItems")}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.inventoryNumber}</option>)}</select>
         <label className="flex min-h-11 items-center gap-2 rounded-xl border border-zinc-200 px-3"><input type="checkbox" name="overdue" value="true" /> {t("tmc.history.overdueOnly")}</label>
         <button className="min-h-11 rounded-xl bg-emerald-600 px-4 font-semibold text-white">{t("common.search")}</button>

@@ -264,6 +264,23 @@ describe("inventory setup actions", () => {
     });
   });
 
+  it.each([
+    ["B207", "В201", "B210", "В202", "B203"],
+    ["E207", "Е201", "E210", "Е202", "E203"],
+    ["K207", "К201", "K210", "К202", "K203"],
+    ["107", "101", "110", "102", "103"],
+    ["G207", "G201", "G210", "G202", "G203"],
+  ])("orders all room numbers naturally in the create form: %s", (...names) => {
+    const rooms = names.map((designation, index) => ({ ...ROOM, id: `room-${index}`, designation, floorNumber: 2 }));
+    render(<InventoryItemCreateForm rooms={rooms} openInitially />);
+    const select = screen.getByLabelText(/itemDetails\.room/) as HTMLSelectElement;
+    expect(Array.from(select.options, option => option.value)).toEqual([
+      "room-1", "room-3", "room-4", "room-0", "room-2",
+    ]);
+    expect(select.value).toBe("room-1");
+    expect(rooms.map(row => row.designation)).toEqual(names);
+  });
+
   it("orders item room choices by floor and then A, B, D and E blocks", () => {
     const rooms = [
       { ...ROOM, id: "room-e-2", designation: "E201", floorNumber: 2 },

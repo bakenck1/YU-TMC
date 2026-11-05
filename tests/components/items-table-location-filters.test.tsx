@@ -70,6 +70,23 @@ describe("ItemsTable adversarial location filters", () => {
     window.history.replaceState({}, "", "/items");
   });
 
+  it.each(["B", "В", "b", "в"])("keeps mixed-alphabet room suggestions numeric when searching %s2", (prefix) => {
+    const names = ["B207", "B210", "В201", "В202", "B203", "В204", "B205"];
+    render(<ItemsTable items={[]} locations={{ buildings: BUILDINGS, rooms: names.map((name, index) =>
+      room(`mixed-${index}`, "building-main", name, 2)
+    ) }} />);
+    openFilters();
+    choose("items.filterBuilding", "Main Campus");
+    const input = screen.getByRole("combobox", { name: "items.filterRoom" });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: `${prefix}2` } });
+    expect(within(screen.getByRole("listbox")).getAllByRole("option").map(option => option.textContent)).toEqual([
+      "В201", "В202", "B203", "В204", "B205", "B207", "B210",
+    ]);
+    fireEvent.click(screen.getByRole("option", { name: "В202" }));
+    expect(inputValue("items.filterRoom")).toBe("В202");
+  });
+
   it.each([
     ...LOOKALIKE_ROOM_QUERIES,
     ["аBе201", "AВE201", "АBЕ2010"],

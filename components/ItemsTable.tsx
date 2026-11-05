@@ -18,7 +18,7 @@ import {
 } from "@/lib/inventory-list";
 import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
 import { normalizeInventorySearchText } from "@/lib/inventory-search";
-import { normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
+import { compareInventoryRoomDesignations, normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
 import {
   DEFAULT_INVENTORY_COLUMNS,
   INVENTORY_COLUMN_KEYS,
@@ -439,7 +439,7 @@ export default function ItemsTable({
     buildingRoomOptions
       .filter((room) => selectedFloorNumber === undefined || room.floorNumber === selectedFloorNumber)
       .map((room) => room.designation),
-  )].sort(compareLocationValues);
+  )].sort(compareInventoryRoomDesignations);
   const searchItems = useMemo(
     () => filterInventoryItems(items, { ...filters, query: "" }),
     [items, filters],

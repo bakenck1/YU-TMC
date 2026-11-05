@@ -1,5 +1,6 @@
 "use client";
 
+import { compareInventoryRoomDesignations, sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { isEmployeeRole } from "@/lib/contracts/users";
 
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +15,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import type { InspectionDto } from "@/lib/contracts/inventory-inspections";
+import type { InspectionDto, InspectionRoomDto } from "@/lib/contracts/inventory-inspections";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";
 import type {
@@ -40,6 +41,12 @@ interface InspectionTechnician {
   id: string;
   fullName: string;
   role: "warehouse" | "employee" | "passport_author" | "passport_reviewer";
+}
+
+function compareInspectionRooms(left: InspectionRoomDto, right: InspectionRoomDto) {
+  return compareInventoryRoomDesignations(left.buildingName, right.buildingName)
+    || left.floorNumber - right.floorNumber
+    || compareInventoryRoomDesignations(left.roomDesignation, right.roomDesignation);
 }
 
 export default function InventoryInspectionsManager({
@@ -602,7 +609,7 @@ export default function InventoryInspectionsManager({
                   {t("inspections.rooms", { count: inspection.rooms.length })}
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-zinc-600">
-                  {inspection.rooms.map((room) => (
+                  {inspection.rooms.toSorted(compareInspectionRooms).map((room) => (
                     <li key={room.id}>
                       {translateCampusBuilding(language, room.buildingName)} · {room.roomDesignation}
                     </li>
@@ -630,7 +637,7 @@ export default function InventoryInspectionsManager({
                       }
                       className="mt-1 w-full rounded-lg border border-black/10 bg-white px-2 py-2 text-sm text-zinc-700"
                     >
-                      {inspection.rooms.map((room) => (
+                      {inspection.rooms.toSorted(compareInspectionRooms).map((room) => (
                         <option key={room.id} value={room.id}>
                           {translateCampusBuilding(language, room.buildingName)} · {room.roomDesignation}
                         </option>
@@ -678,7 +685,7 @@ export default function InventoryInspectionsManager({
                           }
                           className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-2 text-sm"
                         >
-                          {rooms.map((room) => (
+                          {sortInventoryRoomsForSelection(rooms).map((room) => (
                             <option key={room.id} value={room.id}>
                               {room.designation} ·{" "}
                               {t("inspections.floor", {

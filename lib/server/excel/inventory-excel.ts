@@ -1,5 +1,7 @@
 import "server-only";
 
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
+
 import { Buffer } from "node:buffer";
 import { PassThrough } from "node:stream";
 import { inflateRawSync } from "node:zlib";
@@ -73,7 +75,11 @@ export async function createInventoryTemplate(rooms: ImportRoom[]): Promise<Uint
     { header: "Room", key: "room", width: 20 },
     { header: "Floor", key: "floor", width: 12 },
   ];
-  rooms.forEach((room) => directory.addRow({
+  rooms.toSorted((left, right) =>
+    compareInventoryRoomDesignations(left.buildingName, right.buildingName)
+    || left.floorNumber - right.floorNumber
+    || compareInventoryRoomDesignations(left.designation, right.designation)
+  ).forEach((room) => directory.addRow({
     building: room.buildingName,
     room: room.designation,
     floor: room.floorLabel ?? room.floorNumber,

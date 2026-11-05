@@ -1,5 +1,7 @@
 import "server-only";
 
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
+
 import type { Pool } from "pg";
 
 import type {
@@ -72,7 +74,12 @@ export function createPostgresFacilitiesRepository(
         result.rows,
         COLLECTION_LIMITS.facilitiesRooms,
         "facilities_rooms_too_large",
-      ).map(mapRoom);
+      ).map(mapRoom).sort((left, right) =>
+        compareInventoryRoomDesignations(left.buildingName, right.buildingName)
+        || left.buildingId.localeCompare(right.buildingId)
+        || left.floorNumber - right.floorNumber
+        || compareInventoryRoomDesignations(left.designation, right.designation)
+      );
     },
   };
 }

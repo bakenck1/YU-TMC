@@ -1,5 +1,6 @@
 "use client";
 
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
 import { useMemo, useState } from "react";
 import type { ServiceRequestDto } from "@/lib/contracts/service-requests";
 import type { ServiceRequestStatus } from "@/lib/contracts/inventory-domain";
@@ -25,7 +26,7 @@ export default function ServiceRequestsManager({
   const [dateTo, setDateTo] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [statusErrorId, setStatusErrorId] = useState<string | null>(null);
-  const rooms = unique(requests.map((request) => ({ id: request.room.id, name: `${request.room.buildingName} В· ${request.room.designation}` })));
+  const rooms = unique(requests.toSorted((left, right) => compareInventoryRoomDesignations(left.room.buildingName, right.room.buildingName) || compareInventoryRoomDesignations(left.room.designation, right.room.designation)).map((request) => ({ id: request.room.id, name: `${request.room.buildingName} В· ${request.room.designation}` })));
   const employees = unique(requests.map((request) => ({ id: request.author.id, name: request.author.name })));
   const visible = useMemo(() => requests.filter((request) => {
     const created = request.createdAt.slice(0, 10);

@@ -1,5 +1,6 @@
 "use client";
 
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -219,13 +220,9 @@ export default function InventoryBuildingsManager({
       const exists = currentRooms.some((value) => value.id === room.id);
       return {
         ...current,
-        [room.buildingId]: exists
+        [room.buildingId]: sortInventoryRoomsForSelection(exists
           ? currentRooms.map((value) => (value.id === room.id ? room : value))
-          : [...currentRooms, room].sort(
-              (left, right) =>
-                left.floorNumber - right.floorNumber ||
-                left.designation.localeCompare(right.designation),
-            ),
+          : [...currentRooms, room]),
       };
     });
     setRoomEditor(null);

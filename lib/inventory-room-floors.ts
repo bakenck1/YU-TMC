@@ -203,12 +203,23 @@ function naturallySortRooms(rooms: readonly RoomDto[]): RoomDto[] {
   return rooms.toSorted(naturalRoomDesignationCompare);
 }
 
+const ROOM_DESIGNATION_COLLATOR = new Intl.Collator("ru", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+/** Use the same Cyrillic/Latin equivalence as room search when ordering labels. */
+export function compareInventoryRoomDesignations(left: string, right: string): number {
+  return ROOM_DESIGNATION_COLLATOR.compare(
+    normalizeInventoryRoomSearch(left),
+    normalizeInventoryRoomSearch(right),
+  ) || ROOM_DESIGNATION_COLLATOR.compare(left, right)
+    || (left < right ? -1 : left > right ? 1 : 0);
+}
+
 function naturalRoomDesignationCompare(
   left: Pick<RoomDto, "designation">,
   right: Pick<RoomDto, "designation">,
 ): number {
-  return left.designation.localeCompare(right.designation, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  return compareInventoryRoomDesignations(left.designation, right.designation);
 }

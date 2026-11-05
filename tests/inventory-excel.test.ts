@@ -36,6 +36,16 @@ test("creates an empty import template with an authoritative room directory", as
   assert.equal(workbook.getWorksheet("Rooms")?.getCell("B2").text, ROOM.designation);
 });
 
+test("orders the template room directory by building, floor and mixed-alphabet room number", async () => {
+  const names = ["B207", "В201", "B210", "В202", "B203"];
+  const rooms = names.map((designation, index) => ({ ...ROOM, id: `room-${index}`, designation, floorNumber: 2 }));
+  const workbook = await loadWorkbook(await createInventoryTemplate(rooms));
+  const sheet = workbook.getWorksheet("Rooms")!;
+  assert.deepEqual(Array.from({ length: names.length }, (_, index) => sheet.getCell(`B${index + 2}`).text),
+    ["В201", "В202", "B203", "B207", "B210"]);
+  assert.deepEqual(rooms.map(row => row.designation), names);
+});
+
 test("validates Excel rows and rejects an unrelated duplicate inventory number before import", async () => {
   const workbook = await loadWorkbook(await createInventoryTemplate([ROOM]));
   const sheet = workbook.getWorksheet("Items")!;

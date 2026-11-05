@@ -1,4 +1,5 @@
 "use client";
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Building2, MessageSquareText, RotateCcw, SlidersHorizontal } from "lucide-react";
@@ -51,7 +52,7 @@ export default function RoomPassportList({ passports, prioritizeReview = false, 
   const buildings = [...new Map(passports.map(row => [row.buildingId, row.buildingName])).entries()];
   const byBuilding = passports.filter(row => !building || row.buildingId === building);
   const floors = [...new Set(byBuilding.map(row => row.floorNumber))].sort((a, b) => a - b);
-  const rooms = byBuilding.filter(row => !floor || String(row.floorNumber) === floor);
+  const rooms = sortInventoryRoomsForSelection(byBuilding.filter(row => !floor || String(row.floorNumber) === floor));
   const matchingLocation = useMemo(() => passports.filter(row =>
     (!building || row.buildingId === building) &&
     (!floor || String(row.floorNumber) === floor) &&

@@ -1,5 +1,6 @@
 "use client";
 
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import { isTemporaryInventoryNumber } from "@/lib/domain/inventory-number";
 import { inventoryNumberLabel } from "@/lib/inventory-number-label";
@@ -192,9 +193,9 @@ export default function InventoryItemDetails({
       ]),
     ).values(),
   );
-  const protectedBuildingRooms = rooms.filter(
+  const protectedBuildingRooms = sortInventoryRoomsForSelection(rooms.filter(
     (room) => room.buildingId === protectedBuildingId,
-  );
+  ));
   const itemPhotoUrls = item.photoUrls?.length
     ? item.photoUrls
     : item.photoUrl ? [item.photoUrl] : [];

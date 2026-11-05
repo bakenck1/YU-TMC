@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { RoomDto } from "../lib/contracts/inventory-locations";
 import {
+  compareInventoryRoomDesignations,
   engineeringFacultyWingFromDesignation,
   groupInventoryRoomsByFloor,
   groupInventoryRoomsByEngineeringFacultyWing,
@@ -12,6 +13,30 @@ import {
   normalizeInventoryRoomSearch,
   sortInventoryRoomsForSelection,
 } from "../lib/inventory-room-floors";
+
+test("interleaves Cyrillic and Latin room numbers in natural order without mutating input", () => {
+  const names = ["B207", "B210", "В201", "В202", "B203", "В204", "B205", "b2", "В10"];
+  const original = [...names];
+  const expected = ["b2", "В10", "В201", "В202", "B203", "В204", "B205", "B207", "B210"];
+  assert.deepEqual(names.toSorted(compareInventoryRoomDesignations), expected);
+  const rooms = names.map((name, index) => room(String(index), name, 2));
+  assert.deepEqual(sortInventoryRoomsForSelection(rooms).map(row => row.designation), expected);
+  assert.deepEqual(groupInventoryRoomsByFloor(rooms)[0].rooms.map(row => row.designation), expected);
+  assert.deepEqual(groupInventoryRoomsByMainCampusWing(rooms, 2).wings
+    .find(wing => wing.code === "B")?.rooms.map(row => row.designation), expected);
+  assert.deepEqual(names, original);
+  assert.deepEqual(rooms.map(row => row.designation), original);
+});
+
+test("room ordering is deterministic for equivalent spellings and supports every search lookalike", () => {
+  for (const [latin, cyrillic] of [["A", "А"], ["B", "В"], ["E", "Е"], ["K", "К"], ["M", "М"], ["H", "Н"], ["O", "О"], ["P", "Р"], ["C", "С"], ["T", "Т"], ["Y", "У"], ["X", "Х"], ["I", "І"]]) {
+    assert.ok(compareInventoryRoomDesignations(`${latin}202`, `${cyrillic}210`) < 0);
+    assert.ok(compareInventoryRoomDesignations(`${cyrillic}202`, `${latin}210`) < 0);
+  }
+  const variants = ["В201", "b201", "B201", "Ｂ２０１", "B0201", " B201 "];
+  assert.deepEqual(variants.toSorted(compareInventoryRoomDesignations), variants.toReversed().toSorted(compareInventoryRoomDesignations));
+  assert.deepEqual(["B10/10", "В10/2", "B2/1"].toSorted(compareInventoryRoomDesignations), ["B2/1", "В10/2", "B10/10"]);
+});
 
 test("room search matches Cyrillic and Latin lookalikes in both directions and cases", () => {
   const pairs = [
