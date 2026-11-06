@@ -407,6 +407,20 @@
       "when": 1792386108374,
       "tag": "20261019050148_material-api-audit-source",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793963568872,
+      "tag": "20261106111248_integration-events",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793964424885,
+      "tag": "20261106112704_integration-record-revision",
+      "breakpoints": true
     }
   ]
 }

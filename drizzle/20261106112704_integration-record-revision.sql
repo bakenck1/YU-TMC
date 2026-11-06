@@ -1,0 +1,1 @@
+CREATE INDEX "integration_events_record_revision_idx" ON "yu_inventory"."integration_events" USING btree ("entity","record_id","id");
