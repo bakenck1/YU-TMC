@@ -87,9 +87,12 @@ export default function InventoryBuildingsManager({
 
   function buildingRoomFloors(building: BuildingDto): InventoryRoomFloor[] {
     const floors = groupInventoryRoomsByFloor(rooms[building.id] ?? []);
-    if (findCampusBuildingPreset(building.name)?.id === "main-campus" &&
-      !floors.some((floor) => floor.floorNumber === 2)) {
-      floors.push({ floorNumber: 2, label: null, rooms: [] });
+    const preset = findCampusBuildingPreset(building.name);
+    const requiredFloor = preset?.id === "main-campus" ? 2
+      : preset?.id === "engineering-faculty" ? preset.firstFloor : undefined;
+    if (requiredFloor !== undefined &&
+      !floors.some((floor) => floor.floorNumber === requiredFloor)) {
+      floors.push({ floorNumber: requiredFloor, label: null, rooms: [] });
       floors.sort((left, right) => left.floorNumber - right.floorNumber);
     }
     return floors;

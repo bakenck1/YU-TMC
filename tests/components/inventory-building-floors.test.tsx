@@ -48,6 +48,58 @@ function room(id: string, designation: string, floorNumber: number): RoomDto {
 describe("building room navigation", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each([
+    "Факультет инжиниринга",
+    "24 мкр",
+    "Yessenov university — Факультет инжиниринга",
+  ])("shows an empty ground floor for %s before rooms are created", async (name) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ rooms: [] })));
+    render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[
+      { ...BUILDING, name, address: "24-й микрорайон, 12, Актау", roomCount: 0 },
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: /inventory\.roomsCount: 0/ }));
+    const floor = (await screen.findByText("0 inventory.floorShort")).closest("details")!;
+    expect(within(floor).getByText("inventory.roomsCount: 0")).toBeTruthy();
+    expect(screen.getByText("24-й микрорайон, 12, Актау")).toBeTruthy();
+  });
+
+  it("saves an engineering room on floor zero and keeps it there after reload", async () => {
+    const createdRoom = room("engineering-ground-room", "G001", 0);
+    let saved = false;
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        saved = true;
+        return Response.json({ room: createdRoom });
+      }
+      return Response.json({ rooms: saved ? [createdRoom] : [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const building = { ...BUILDING, name: "Факультет инжиниринга", roomCount: 0 };
+    const { unmount } = render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[building]} />);
+    fireEvent.click(screen.getByRole("button", { name: "inventory.addRoom" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("inventory.roomDesignation"), { target: { value: "G001" } });
+    const floorSelect = within(dialog).getByLabelText("inventory.floor") as HTMLSelectElement;
+    expect(Array.from(floorSelect.options, (option) => option.value)).toEqual(["0", "1", "2", "3", "4"]);
+    fireEvent.change(floorSelect, { target: { value: "0" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({ designation: "G001", floorNumber: 0 });
+    const floor = screen.getByText("0 inventory.floorShort").closest("details")!;
+    expect(floor.open).toBe(true);
+    expect(within(floor).getByText("G001")).toBeTruthy();
+    expect(screen.getAllByText("0 inventory.floorShort")).toHaveLength(1);
+    unmount();
+
+    render(<InventoryBuildingsManager actorRole="admin" initialBuildings={[{ ...building, roomCount: 1 }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /inventory\.roomsCount: 1/ }));
+    await screen.findByText("G001");
+    const reloadedFloor = screen.getByText("0 inventory.floorShort").closest("details")!;
+    expect(within(reloadedFloor).getByText("G001")).toBeTruthy();
+    expect(screen.getAllByText("0 inventory.floorShort")).toHaveLength(1);
+  });
+
   it("opens a floor list first and keeps rooms inside their floor", async () => {
     const rooms = [
       room("22222222-2222-4222-8222-222222222222", "101", 1),

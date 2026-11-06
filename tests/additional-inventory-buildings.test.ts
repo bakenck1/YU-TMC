@@ -24,7 +24,7 @@ const ADDITIONAL_BUILDINGS = [
     name: "Факультет инжиниринга",
     legacyName: "24 мкр",
     address: "24-й микрорайон, 12, Актау",
-    floors: [1, 2, 3, 4],
+    floors: [0, 1, 2, 3, 4],
   },
   {
     id: "zerde-house",

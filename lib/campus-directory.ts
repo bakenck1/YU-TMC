@@ -106,7 +106,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     legacyNames: ["24 мкр", "Yessenov university — Факультет инжиниринга"],
     mapVisible: false,
     address: "24-й микрорайон, 12, Актау",
-    floorCount: 4,
+    firstFloor: 0,
+    floorCount: 5,
   },
   {
     id: "zerde-house",
