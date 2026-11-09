@@ -89,7 +89,8 @@ export default function InventoryBuildingsManager({
     const floors = groupInventoryRoomsByFloor(rooms[building.id] ?? []);
     const preset = findCampusBuildingPreset(building.name);
     const requiredFloor = preset?.id === "main-campus" ? 2
-      : preset?.id === "engineering-faculty" ? preset.firstFloor : undefined;
+      : preset?.id === "engineering-faculty" || preset?.id === "marine-academy"
+        ? preset.firstFloor : undefined;
     if (requiredFloor !== undefined &&
       !floors.some((floor) => floor.floorNumber === requiredFloor)) {
       floors.push({ floorNumber: requiredFloor, label: null, rooms: [] });

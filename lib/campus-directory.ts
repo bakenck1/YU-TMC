@@ -36,7 +36,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     id: "marine-academy",
     name: "Корпус Морской академии",
     address: CAMPUS_ADDRESS,
-    floorCount: 3,
+    firstFloor: 0,
+    floorCount: 4,
   },
   {
     id: "sports-complex",

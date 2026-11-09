@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { BuildingDto, RoomDto } from "../lib/contracts/inventory-locations";
 import {
+  campusBuildingFloorNumbers,
   CAMPUS_MAP_BUILDING_PRESETS,
   CAMPUS_INVENTORY_BUILDING_PRESETS,
   findCampusBuildingPreset,
@@ -42,6 +44,33 @@ test("builds Main Campus floor selectors from zero through fifteen", () => {
     mainCampus?.floors.map((floor) => floor.n),
     Array.from({ length: 16 }, (_, index) => index),
   );
+});
+
+test("keeps Marine Academy floors one through three and adds floor zero to the directory and map", () => {
+  const preset = findCampusBuildingPreset("Корпус Морской академии")!;
+  assert.equal(preset.address, "32-й микрорайон, Актау");
+  assert.equal(preset.floorCount, 4);
+  assert.deepEqual(campusBuildingFloorNumbers(preset), [0, 1, 2, 3]);
+  const marine = buildCampusMapData([], [], []).buildings["marine-academy"];
+  assert.equal(marine.floorCount, 4);
+  assert.deepEqual(marine.floors.map((floor) => floor.n), [0, 1, 2, 3]);
+  assert.deepEqual(marine.floors.map((floor) => floor.roomCount), [0, 0, 0, 0]);
+});
+
+test("places saved Marine Academy ground-floor rooms on floor zero without losing upper-floor rooms", () => {
+  const building: BuildingDto = {
+    id: "marine-building", name: "Корпус Морской академии", address: "32-й микрорайон",
+    qrCode: "", roomCount: 4, status: "active", version: 1,
+    createdAt: "2026-11-09T00:00:00.000Z", updatedAt: "2026-11-09T00:00:00.000Z",
+  };
+  const rooms: RoomDto[] = [0, 1, 2, 3].map((floorNumber) => ({
+    id: `marine-room-${floorNumber}`, buildingId: building.id, designation: `${floorNumber}01`,
+    floorNumber, floorLabel: null, primaryResponsible: null, qrCode: "", status: "active", version: 1,
+    createdAt: building.createdAt, updatedAt: building.updatedAt,
+  }));
+  const marine = buildCampusMapData([building], rooms, []).buildings["marine-academy"];
+  assert.deepEqual(marine.floors.map((floor) => floor.roomCount), [1, 1, 1, 1]);
+  assert.deepEqual(marine.floors.map((floor) => floor.rooms[0].code), ["001", "101", "201", "301"]);
 });
 
 test("renders the stadium and centers, removes the court, and shifts KGI west", () => {
