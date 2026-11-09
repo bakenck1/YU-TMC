@@ -18,7 +18,7 @@ import { MAX_ONE_C_RECORDS, MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFix
 const ACCEPTED_MEDIA_TYPES = ["application/xml", "text/xml"];
 const IMPORT_BODY_TIMEOUT_MS = 120_000;
 const INITIAL_COST_REQUIREMENT = {
-  field: "InitialCost", required: true, exclusiveMinimum: 0, currency: "KZT",
+  field: "InitialCost", required: true, minimum: 0, currency: "KZT",
   maximumIntegerDigits: 12, maximumFractionDigits: 2,
   description: "Первоначальная стоимость конкретного ОС до вычета амортизации. ResidualValue передаётся отдельно и не заменяет InitialCost.",
 } as const;
@@ -59,7 +59,7 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
       if (priceErrors.total > 0) {
         return json({
           success: false, error: "initial_cost_required", requestId,
-          message: "Передайте положительную первоначальную стоимость InitialCost для каждого ОС. Пакет не сохранён. Нулевая остаточная стоимость ResidualValue допустима.",
+          message: "Передайте неотрицательную первоначальную стоимость InitialCost для каждого ОС. Пакет не сохранён. Нулевая остаточная стоимость ResidualValue допустима.",
           pricing: INITIAL_COST_REQUIREMENT,
           invalidRecords: priceErrors.total, issues: priceErrors.issues,
           issuesTruncated: priceErrors.total > priceErrors.issues.length,
@@ -94,8 +94,7 @@ function validateInitialCosts(assets: readonly OneCFixedAsset[]) {
   for (const [index, asset] of assets.entries()) {
     const value = asset.initialCost;
     const reason = value == null ? "missing_initial_cost"
-      : value === 0 ? "zero_initial_cost"
-        : !Number.isFinite(value) || value < 0 || !/^\d{1,12}(?:\.\d{1,2})?$/u.test(String(value))
+      : !Number.isFinite(value) || value < 0 || !/^\d{1,12}(?:\.\d{1,2})?$/u.test(String(value))
           ? "invalid_initial_cost" : null;
     if (!reason) continue;
     total++;

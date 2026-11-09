@@ -11,7 +11,7 @@ import { MAX_ONE_C_MATERIALS_RECORDS, MAX_ONE_C_MATERIALS_XML_BYTES, OneCMateria
 
 const MEDIA_TYPES = ["application/xml", "text/xml"];
 const UNIT_PRICE_REQUIREMENT = {
-  field: "UnitPrice", requiredFor: "positive_quantity", exclusiveMinimum: 0, currency: "KZT",
+  field: "UnitPrice", requiredFor: "positive_quantity", minimum: 0, currency: "KZT",
   maximumIntegerDigits: 12, maximumFractionDigits: 2,
   description: "Полная учётная цена за одну единицу данной позиции материала, отдельно по складу, счёту и МОЛ. Не общая сумма остатка.",
 } as const;
@@ -61,7 +61,7 @@ export function createOneCMaterialsPostHandler(dependencies: Dependencies) {
       const priceErrors = validateUnitPrices(snapshot);
       if (priceErrors.total > 0) return json({
         success: false, error: "unit_price_required",
-        message: "Для каждой позиции с положительным остатком передайте положительную цену за единицу UnitPrice. Пакет не сохранён. Нулевые остатки допускаются без цены.",
+        message: "Для каждой позиции с положительным остатком передайте неотрицательную цену за единицу UnitPrice. Пакет не сохранён. Нулевые остатки допускаются без цены.",
         pricing: UNIT_PRICE_REQUIREMENT,
         invalidRecords: priceErrors.total, issues: priceErrors.issues,
         issuesTruncated: priceErrors.total > priceErrors.issues.length,
@@ -106,8 +106,7 @@ function validateUnitPrices(snapshot: OneCMaterialsSnapshot) {
     if (!(Number(material.quantity) > 0)) continue;
     const value = material.unitPrice;
     const reason = value == null ? "missing_unit_price"
-      : Number(value) === 0 ? "zero_unit_price"
-        : !/^\d{1,12}(?:\.\d{1,2})?$/u.test(value) ? "invalid_unit_price" : null;
+      : !/^\d{1,12}(?:\.\d{1,2})?$/u.test(value) ? "invalid_unit_price" : null;
     if (!reason) continue;
     total++;
     if (issues.length < 100) issues.push({
