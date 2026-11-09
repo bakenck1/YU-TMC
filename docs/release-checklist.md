@@ -28,7 +28,7 @@
 - [ ] PostgreSQL подключён с TLS (`verify-full`), а Nginx корректно задаёт доверенный IP-клиента;
 - [ ] исходный каталог сертификатов принадлежит `root`, не writable для группы/остальных, а `privkey.pem` закрыт;
 - [ ] создан бэкап БД и проверено восстановление на отдельной БД;
-- [ ] `yu-inventory-backup.timer` включён, последний custom-format dump проверен через `pg_restore --list`;
+- [ ] `yu-inventory-backup.timer` включён, последний custom-format dump прочитан целиком через `pg_restore --file=/dev/null` и проверен восстановлением в отдельную БД;
 - [ ] выполнены миграции и разовый import настроек до запуска новой версии;
 - [ ] systemd-сервисы `yu-inventory` и `yu-inventory-push-worker` работают;
 - [ ] Nginx отдаёт приложение по HTTPS, загрузка фото и QR-потоки проверены;

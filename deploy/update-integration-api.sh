@@ -18,6 +18,10 @@ test -f drizzle/20261106111248_integration-events.sql
 test -r /etc/yu-inventory/yu-inventory.env
 
 echo '[1/4] Backing up the database before stopping services'
+# Install the reviewed verifier before creating this release's backup.
+install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/sbin
+install -o root -g root -m 0750 deploy/backup-postgres-connection.mjs /usr/local/libexec/yu-inventory-backup-connection.mjs
+install -o root -g root -m 0750 deploy/backup-postgres.sh /usr/local/sbin/yu-inventory-backup
 systemctl start yu-inventory-backup.service
 test "$(systemctl show yu-inventory-backup.service -p Result --value)" = success
 test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" = 0

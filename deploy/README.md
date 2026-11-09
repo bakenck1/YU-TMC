@@ -93,7 +93,10 @@ sudo systemctl status yu-inventory yu-inventory-push-worker
 `/usr/local/sbin/yu-inventory-backup`, создайте закрытый каталог
 `/var/backups/yu-inventory`, затем включите
 `yu-inventory-backup.timer`. Таймер ежедневно создаёт проверенный custom-format
-дамп PostgreSQL и удаляет только дампы YU Inventory старше 30 дней:
+дамп PostgreSQL и удаляет только дампы YU Inventory старше 30 дней.
+Перед публикацией копии читаются оглавление и все блоки данных архива.
+Если чтение не удалось, старые копии сохраняются. Проверка читаемости
+не заменяет пробного восстановления в отдельную БД:
 
 ```bash
 sudo install -d -o root -g root -m 0700 /var/backups/yu-inventory
@@ -216,9 +219,6 @@ DATABASE_TARGET=production
 ```bash
 sudo bash <<'DEPLOY'
 set -euo pipefail
-systemctl start yu-inventory-backup.service
-test "$(systemctl show yu-inventory-backup.service -p Result --value)" = success
-test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" = 0
 cd /opt/yu-inventory/current
 test -z "$(sudo -u yu-inventory git status --porcelain)"
 sudo -u yu-inventory git fetch origin
@@ -226,29 +226,7 @@ sudo -u yu-inventory git switch master
 sudo -u yu-inventory git pull --ff-only origin master
 sudo -u yu-inventory git merge-base --is-ancestor 4d4c69abd4d287b2435700926db7533a9af7b5a0 HEAD
 sudo -u yu-inventory git log -1 --format='%h %cI %s'
-systemctl stop yu-inventory yu-inventory-push-worker
-node deploy/prepare-runtime-env.mjs /etc/yu-inventory/yu-inventory.env /etc/yu-inventory/yu-inventory-runtime.env
-trap 'install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env /opt/yu-inventory/current/.env.production.local' EXIT
-install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory.env .env.production.local
-sudo -u yu-inventory bash <<'UPDATE'
-set -euo pipefail
-cd /opt/yu-inventory/current
-npm ci --include=dev
-npm run db:migrate -- --target=production
-npm run db:smoke -- --target=production
-npm run build
-mkdir -p .next/cache
-UPDATE
-install -o yu-inventory -g yu-inventory -m 600 /etc/yu-inventory/yu-inventory-runtime.env .env.production.local
-trap - EXIT
-install -o root -g root -m 644 deploy/systemd/yu-inventory.service /etc/systemd/system/yu-inventory.service
-install -o root -g root -m 644 deploy/systemd/yu-inventory-push-worker.service /etc/systemd/system/yu-inventory-push-worker.service
-systemctl daemon-reload
-systemctl restart yu-inventory yu-inventory-push-worker
-systemctl is-active --quiet yu-inventory
-systemctl is-active --quiet yu-inventory-push-worker
-curl --fail --silent --show-error --max-time 15 --retry 10 --retry-delay 1 --retry-connrefused --retry-max-time 30 https://inventory.yu.edu.kz/login >/dev/null
-sudo -u yu-inventory git log -1 --format='Installed commit: %h %cI %s'
+bash deploy/update-integration-api.sh
 DEPLOY
 ```
 

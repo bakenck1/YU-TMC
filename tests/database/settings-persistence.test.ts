@@ -11,6 +11,7 @@ import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { importLegacySettings } from "@/lib/db/settings-import";
 import { migrateDatabase } from "@/lib/db/migrations";
 import { createPostgresPool } from "@/lib/db/pool";
+import { assertSettingsDeleteRejected } from "@/lib/db/settings-delete-probe";
 import { PostgresSettingsRepository } from "@/lib/server/persistence/postgres/postgres-settings-repository";
 
 let migrationConfig: DatabaseConfig;
@@ -68,16 +69,28 @@ describe("PostgreSQL settings persistence", () => {
     );
     expect(privileges.rows[0]).toEqual({ canInsert: false, canDelete: false });
 
-    await expect(
-      runtimePool.query(
-        `delete from "yu_inventory"."settings" where id = 'global'`,
-      ),
-    ).rejects.toMatchObject({ code: "42501" });
-    await expect(
-      migrationPool.query(
-        `delete from "yu_inventory"."settings" where id = 'global'`,
-      ),
-    ).rejects.toMatchObject({ code: "55006" });
+    await expect(assertSettingsDeleteRejected(runtimePool, "42501")).resolves.toBeUndefined();
+    await expect(assertSettingsDeleteRejected(migrationPool, "55006")).resolves.toBeUndefined();
+    await expect(repository.get()).resolves.toEqual(DEFAULT_APP_SETTINGS);
+  });
+
+  it("leaves settings intact when the deployment probe discovers a broken delete guard", async () => {
+    const before = await migrationPool.query('select * from "yu_inventory"."settings"');
+    // Simulate an incorrectly configured database, only in this isolated test DB.
+    await migrationPool.query(
+      'alter table "yu_inventory"."settings" disable trigger "settings_delete_protection"',
+    );
+    try {
+      await expect(assertSettingsDeleteRejected(migrationPool, "55006")).rejects.toThrow(
+        "Settings delete protection check failed",
+      );
+      const after = await migrationPool.query('select * from "yu_inventory"."settings"');
+      expect(after.rows).toEqual(before.rows);
+    } finally {
+      await migrationPool.query(
+        'alter table "yu_inventory"."settings" enable trigger "settings_delete_protection"',
+      );
+    }
   });
 
   it("provides read-after-write across separate runtime pool clients", async () => {

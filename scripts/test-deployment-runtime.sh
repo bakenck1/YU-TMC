@@ -68,7 +68,14 @@ EOF
 cat >"$fake_bin/pg_restore" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "${1:-}" == --list && -s "${2:-}" ]] || exit 2
+[[ -s "${2:-}" ]] || exit 2
+case "${1:-}" in
+  --list) ;;
+  --file=/dev/null)
+    [[ ! -e /tmp/yu-inventory-deployment-test/corrupt-backup-payload ]] || exit 1
+    ;;
+  *) exit 2 ;;
+esac
 EOF
 cat >"$fake_bin/nginx" <<'EOF'
 #!/usr/bin/env bash
@@ -130,6 +137,18 @@ grep -F 'migrator:migrator-password' "$test_root/psql.log" >/dev/null
 grep -F 'runtime:runtime-password' "$test_root/psql.log" >/dev/null
 [[ ! -e "$test_root/source-sentinel" ]] || fail "environment file was executed as shell code"
 assert_no_temporary_files /var/backups/yu-inventory
+
+printf 'retained older backup\n' >/var/backups/yu-inventory/yu-inventory-retained.dump
+touch -d '31 days ago' /var/backups/yu-inventory/yu-inventory-retained.dump
+backup_list_before="$(find /var/backups/yu-inventory -maxdepth 1 -type f -name '*.dump' -printf '%f\n' | sort)"
+touch "$test_root/corrupt-backup-payload"
+if /usr/local/sbin/yu-inventory-backup >"$test_root/backup-corrupt.log" 2>&1; then
+  fail "backup with readable contents list but unreadable data was accepted"
+fi
+backup_list_after="$(find /var/backups/yu-inventory -maxdepth 1 -type f -name '*.dump' -printf '%f\n' | sort)"
+[[ "$backup_list_before" == "$backup_list_after" ]] || fail "failed verification changed published backups"
+assert_no_temporary_files /var/backups/yu-inventory
+rm -f -- "$test_root/corrupt-backup-payload"
 
 backup_list_before="$(find /var/backups/yu-inventory -maxdepth 1 -type f -name '*.dump' -printf '%f\n' | sort)"
 printf 'wrong-deployment\n' >"$test_root/deployment-id"

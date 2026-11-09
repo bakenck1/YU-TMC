@@ -218,6 +218,9 @@ else
 fi
 
 env -i PATH="$PATH" pg_restore --list "$temporary_backup" >/dev/null
+# Read every data block too: a valid table of contents alone does not prove
+# that the archive payload is readable. This does not connect to any database.
+env -i PATH="$PATH" pg_restore --file=/dev/null "$temporary_backup"
 chmod 0600 "$temporary_backup"
 mv -- "$temporary_backup" "$final_backup"
 temporary_backup=""
@@ -225,4 +228,4 @@ temporary_backup=""
 find "$backup_directory" -maxdepth 1 -type f \
   -name 'yu-inventory-*.dump' -mtime +30 -delete
 
-echo "Verified PostgreSQL backup created: $final_backup"
+echo "PostgreSQL backup created and fully read: $final_backup"

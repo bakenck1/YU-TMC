@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/migration-manifest";
 import { createPostgresPool } from "@/lib/db/pool";
 import { assertSchemaContract } from "@/lib/db/schema-contract";
+import { assertSettingsDeleteRejected } from "@/lib/db/settings-delete-probe";
 
 async function main() {
   const target = parseTargetArgument(process.argv.slice(2));
@@ -183,8 +184,8 @@ async function main() {
       );
     }
 
-    await assertRuntimeSettingsDeleteRejected(runtimePool);
-    await assertMigratorSettingsDeleteRejected(migrationPool);
+    await assertSettingsDeleteRejected(runtimePool, "42501");
+    await assertSettingsDeleteRejected(migrationPool, "55006");
     await runtimePool.query(
       `select s.id, s.user_id, s.endpoint, s.p256dh, s.auth,
               s.expiration_time, s.user_agent, s.created_at, s.updated_at
@@ -202,60 +203,6 @@ async function main() {
   } finally {
     await Promise.all([runtimePool.end(), migrationPool.end()]);
   }
-}
-
-async function assertRuntimeSettingsDeleteRejected(
-  runtimePool: ReturnType<typeof createPostgresPool>,
-): Promise<void> {
-  try {
-    await runtimePool.query(
-      `delete from "yu_inventory"."settings" where id = 'global'`,
-    );
-  } catch (error) {
-    if (postgresErrorCode(error) !== "42501") {
-      throw new DatabaseOperationError(
-        "Runtime settings delete was rejected for an unexpected reason.",
-      );
-    }
-    return;
-  }
-  throw new DatabaseOperationError(
-    "Runtime database role unexpectedly deleted the settings singleton.",
-  );
-}
-
-async function assertMigratorSettingsDeleteRejected(
-  migrationPool: ReturnType<typeof createPostgresPool>,
-): Promise<void> {
-  const client = await migrationPool.connect();
-  try {
-    await client.query("begin");
-    let deletionError: unknown;
-    try {
-      await client.query(
-        `delete from "yu_inventory"."settings" where id = 'global'`,
-      );
-    } catch (error) {
-      deletionError = error;
-    }
-    await client.query("rollback");
-    if (postgresErrorCode(deletionError) !== "55006") {
-      throw new DatabaseOperationError(
-        "Migration settings delete was not rejected by the protection trigger.",
-      );
-    }
-    return;
-  } finally {
-    client.release();
-  }
-}
-
-function postgresErrorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return undefined;
-  }
-  const code = (error as { code?: unknown }).code;
-  return typeof code === "string" ? code : undefined;
 }
 
 main().catch((error: unknown) => {
