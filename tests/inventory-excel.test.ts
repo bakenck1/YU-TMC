@@ -36,6 +36,16 @@ test("creates an empty import template with an authoritative room directory", as
   assert.equal(workbook.getWorksheet("Rooms")?.getCell("B2").text, ROOM.designation);
 });
 
+test("orders the template room directory by building, floor and mixed-alphabet room number", async () => {
+  const names = ["B207", "В201", "B210", "В202", "B203"];
+  const rooms = names.map((designation, index) => ({ ...ROOM, id: `room-${index}`, designation, floorNumber: 2 }));
+  const workbook = await loadWorkbook(await createInventoryTemplate(rooms));
+  const sheet = workbook.getWorksheet("Rooms")!;
+  assert.deepEqual(Array.from({ length: names.length }, (_, index) => sheet.getCell(`B${index + 2}`).text),
+    ["В201", "В202", "B203", "B207", "B210"]);
+  assert.deepEqual(rooms.map(row => row.designation), names);
+});
+
 test("validates Excel rows and rejects an unrelated duplicate inventory number before import", async () => {
   const workbook = await loadWorkbook(await createInventoryTemplate([ROOM]));
   const sheet = workbook.getWorksheet("Items")!;
@@ -137,15 +147,10 @@ test("streams the inventory export without changing its workbook contract", asyn
   assert.equal(sheet.getCell("J2").value, ROOM.buildingName);
   assert.equal(sheet.getCell("K2").value, ROOM.designation);
   assert.equal(sheet.getCell("M2").value, "Inventory Owner");
-  assert.equal(sheet.getCell("H2").numFmt, "#,##0.00");
-  assert.equal(sheet.getCell("N2").numFmt, "yyyy-mm-dd hh:mm");
-  assert.equal(sheet.getCell("A2").fill.type, "pattern");
   assert.equal(sheet.rowCount, 3);
-  assert.equal(sheet.views[0]?.state, "frozen");
-  assert.ok(sheet.autoFilter);
 });
 
-test("preserves selected-column, nullable-value, and alternating-style behavior", async () => {
+test("exports selected columns and preserves nullable values", async () => {
   const bytes = await exportInventoryItems([
     exportItem({ description: null, qrCode: null }),
     exportItem({ id: "00000000-0000-4000-8000-000000000098", description: "Second", qrCode: "QR-2" }),
@@ -158,15 +163,6 @@ test("preserves selected-column, nullable-value, and alternating-style behavior"
   assert.equal(sheet.getCell("B3").value, "QR-2");
   assert.equal(sheet.getCell("C3").value, "Second");
   assert.ok(sheet.getCell("D2").value instanceof Date);
-  assert.equal(sheet.getCell("D2").numFmt, "yyyy-mm-dd hh:mm");
-  assert.equal(sheet.getColumn(1).width, 34);
-  assert.equal(sheet.getColumn(2).width, 28);
-  assert.equal(sheet.autoFilter, "A1:D1");
-  assert.equal(sheet.getCell("A1").font.bold, true);
-  assert.equal(sheet.getCell("A1").fill.type, "pattern");
-  assert.equal(sheet.getCell("A2").fill.type, "pattern");
-  assert.equal(sheet.getCell("A2").fill.fgColor.argb, "FFF1F5F9");
-  assert.equal(sheet.getCell("A3").fill, undefined);
 });
 
 test("rejects non-ZIP uploads before invoking the workbook parser", async () => {

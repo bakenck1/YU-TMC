@@ -35,3 +35,13 @@ test("OS uses initial cost only for a single asset and never substitutes residua
   assert.equal(proposal("1c", [null]).rows[0].price?.status, "missing");
   assert.equal(proposal("1c", ["500"], 2).rows[0].price?.status, "ambiguous");
 });
+
+test("historical zero costs in either register cannot erase a nonzero card price", () => {
+  for (const source of ["1c", "materials_api"] as const) {
+    const plan = proposal(source, ["0.00"]);
+    assert.equal(plan.rows[0].price?.status, "invalid");
+    assert.equal(plan.rows[0].price?.changed, false);
+    assert.equal(plan.rows[0].price?.nextUnitPrice, "100.00");
+    assert.deepEqual(plan.counts, { ready: 0, unchanged: 1, skipped: 0 });
+  }
+});

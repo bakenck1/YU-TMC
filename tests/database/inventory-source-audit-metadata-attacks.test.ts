@@ -1,3 +1,4 @@
+import { auditTotal } from "../helpers/audit-total";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -57,7 +58,7 @@ describe("inventory audit metadata attacks against PostgreSQL", () => {
     const fixture = await createFixture();
     const service = new OneCReconciliationService(runtimePool);
     const initial = await service.getInventoryAuditPage(fixture.batchId, { page: 1, pageSize: 50 });
-    const savedTotal = Number(initial.run.counts.total);
+    const savedTotal = Number(auditTotal(initial.run.counts));
     expect(savedTotal).toBeGreaterThan(0);
     await runtimePool.query(`update "yu_inventory"."items" set archived_at=now(),archived_by=$1,version=version+1 where archived_at is null`, [fixture.userId]);
     const afterRemoval = await service.getInventoryAuditPage(fixture.batchId, { page: 1, pageSize: 50 });
@@ -94,7 +95,7 @@ async function createFixture() {
     quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null,
   };
   const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
-  await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([asset], { sourceSha256, sourceFilename: "metadata.xml" });
+  await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([asset], { requestId: randomUUID(),  sourceSha256, sourceFilename: "metadata.xml" });
   const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_sha256=$1`, [sourceSha256]);
   const batchId = batch.rows[0]!.id;
   await new OneCReconciliationService(runtimePool).analyzeBatch(batchId, { version: batch.rows[0]!.version });

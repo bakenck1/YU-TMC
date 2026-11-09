@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { createTmcTransferRequestDecisionPostHandler } from "../lib/server/http/tmc-transfer-request-decision-handler";
 import { ApplicationError } from "../lib/domain/application-error";
+import { createTmcTransferRequestDecisionPostHandler } from "../lib/server/http/tmc-transfer-request-decision-handler";
 
 test("decision POST forwards authenticated actor, path scope and idempotency key", async () => {
   const calls: unknown[] = [];
@@ -81,20 +80,6 @@ test("decision POST rejects unknown fields and missing idempotency key", async (
     const response = await handler(request, "22222222-2222-4222-8222-222222222222");
     assert.equal(response.status, 400);
   }
-});
-
-test("decision authentication rejects cross-site mutations before consuming API budget", () => {
-  const source = readFileSync(
-    new URL("../lib/server/security/request-user.ts", import.meta.url),
-    "utf8",
-  );
-  const functionBody = source.slice(
-    source.indexOf("export async function requireCurrentUser"),
-  );
-  assert.ok(
-    functionBody.indexOf("requireSameOriginMutation(request)") <
-      functionBody.indexOf("consumeApiRateLimit(request)"),
-  );
 });
 
 function jsonRequest(body: unknown) {

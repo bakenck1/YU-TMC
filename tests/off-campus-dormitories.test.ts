@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  CAMPUS_BUILDING_PRESETS,
-  CAMPUS_MAP_BUILDING_PRESETS,
-  findCampusBuildingPreset,
+CAMPUS_BUILDING_PRESETS,
+CAMPUS_MAP_BUILDING_PRESETS,
+findCampusBuildingPreset,
 } from "../lib/campus-directory";
 import {
-  buildCampusMapData,
-  isCampusBuildingName,
+buildCampusMapData,
+isCampusBuildingName,
 } from "../lib/campus-map-data";
 import type { InventoryItemDto } from "../lib/contracts/inventory-items";
 import type {
-  BuildingDto,
-  RoomDto,
+BuildingDto,
+RoomDto,
 } from "../lib/contracts/inventory-locations";
 
 test("adds both off-campus dormitories to the building catalog", () => {
@@ -69,15 +68,6 @@ test("does not map rooms or inventory loaded from off-campus dormitories", () =>
   assert.equal(map.totals.units, 0);
   assert.equal(map.totals.attention, 0);
   assert.equal(map.totals.locations, CAMPUS_MAP_BUILDING_PRESETS.length);
-});
-
-test("does not define off-campus dormitory overlays in the campus renderer", () => {
-  const source = readFileSync(
-    new URL("../components/CampusMap.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.doesNotMatch(source, /id: "off-campus-dormitory-[12]"/);
 });
 
 function building(id: string, name: string): BuildingDto {

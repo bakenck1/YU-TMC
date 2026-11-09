@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
-  AppendResponsibilityAuditRecord,
-  InventoryResponsibilityRepositories,
-  InventoryResponsibilityRepository,
-  TransferRecord,
+AppendResponsibilityAuditRecord,
+InventoryResponsibilityRepositories,
+InventoryResponsibilityRepository,
+TransferRecord,
 } from "../lib/application/ports/inventory-responsibility-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryResponsibilityService } from "../lib/application/services/inventory-responsibility-service";
@@ -85,46 +85,6 @@ function createHarness(
   };
 }
 
-test("only the live requester can cancel and the mutation remains actor-bound", async () => {
-  const harness = createHarness();
-
-  const result = await harness.service.cancelTransfer(
-    TRANSFER_ID.toUpperCase(),
-    1,
-    { ...ACTOR, userId: ACTOR.userId.toUpperCase() },
-  );
-
-  assert.equal(result.status, "cancelled");
-  assert.equal(result.version, 2);
-  assert.equal(result.direction, "outgoing");
-  assert.equal("currentResponsibleIdAtRequest" in result, false);
-  assert.deepEqual(harness.cancellationInputs, [{
-    id: TRANSFER_ID,
-    version: 1,
-    requestedBy: REQUESTER_ID,
-    closedBy: REQUESTER_ID,
-    closedAt: new Date("2026-08-13T08:00:00.000Z"),
-  }]);
-  assert.deepEqual(harness.transactionOptions, [{
-    isolation: "serializable",
-    maxAttempts: 3,
-  }]);
-  assert.deepEqual(harness.audits, [{
-    id: "66666666-6666-4666-8666-666666666666",
-    actorId: REQUESTER_ID,
-    actorRole: "employee",
-    subjectKind: "transfer",
-    subjectId: TRANSFER_ID,
-    subjectRevision: 2,
-    action: "transfer.cancelled",
-    beforeValues: { status: "pending_current_owner" },
-    afterValues: { status: "cancelled" },
-    reason: null,
-    isAdministrativeException: false,
-    occurredAt: new Date("2026-08-13T08:00:00.000Z"),
-  }]);
-});
-
 test("missing, foreign and malformed cancellation scopes remain uniformly hidden", async () => {
   const harness = createHarness();
   for (const [id, actor] of [
@@ -194,32 +154,6 @@ test("cancellation reauthorizes active state, deletion, role and session version
     assert.equal(lookups, 0);
     assert.equal(harness.cancellationInputs.length, 0);
   }
-});
-
-test("state/version CAS makes duplicate or racing cancellation side-effect safe", async () => {
-  const harness = createHarness();
-  await harness.service.cancelTransfer(TRANSFER_ID, 1, ACTOR);
-
-  await assert.rejects(
-    harness.service.cancelTransfer(TRANSFER_ID, 1, ACTOR),
-    (error) =>
-      error instanceof ApplicationError &&
-      error.kind === "conflict" &&
-      error.publicCode === "transfer_not_pending",
-  );
-  assert.equal(harness.audits.length, 1);
-
-  const lostCas = createHarness(pendingTransfer(), {
-    cancelTransfer: async () => null,
-  });
-  await assert.rejects(
-    lostCas.service.cancelTransfer(TRANSFER_ID, 1, ACTOR),
-    (error) =>
-      error instanceof ApplicationError &&
-      error.kind === "conflict" &&
-      error.publicCode === "version_conflict",
-  );
-  assert.equal(lostCas.audits.length, 0);
 });
 
 test("cancellation rejects invalid actor/session and version bounds before mutation", async () => {

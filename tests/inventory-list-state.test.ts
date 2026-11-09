@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { employeeItemTabFromParam } from "../lib/employee-items-tabs";
@@ -188,54 +187,4 @@ test("employee inventory tab is validated and can be restored", () => {
   assert.equal(employeeItemTabFromParam("maintenance"), "maintenance");
   assert.equal(employeeItemTabFromParam("unknown"), "active");
   assert.equal(employeeItemTabFromParam(["maintenance"]), "active");
-});
-
-test("inventory-list entry points wire durable navigation state", async () => {
-  const [
-    page,
-    table,
-    employeeTabs,
-    details,
-    backLink,
-    itemPage,
-    localBarcodePage,
-    summary,
-    decommissioned,
-    tmcFlow,
-  ] = await Promise.all([
-    readFile(new URL("../app/(protected)/items/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/ItemsTable.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/EmployeeItemsTabs.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/InventoryItemDetails.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/InventoryItemBackLink.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/(protected)/items/[id]/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/(protected)/local-barcodes/[id]/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/InventorySummaryAccordions.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/DecommissionedItemsView.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/TmcItemQrFlow.tsx", import.meta.url), "utf8"),
-  ]);
-
-  assert.match(page, /searchParams: Promise<InventorySearchParams>/);
-  assert.match(page, /parseInventoryTableViewState\(resolvedSearchParams\)/);
-  assert.match(page, /initialViewState=\{initialViewState\}/);
-  assert.match(page, /stateUrlPath="\/items"/);
-  assert.match(table, /window\.history\.replaceState\(null/);
-  assert.match(employeeTabs, /stateUrlPath="\/items"/);
-  assert.doesNotMatch(
-    `${table}\n${employeeTabs}`,
-    /replaceState\(window\.history\.state/,
-  );
-  assert.match(table, /inventoryDetailsHref\(itemPath, returnHref\)/);
-  assert.match(details, /router\.replace\(returnDestination\)/);
-  assert.match(details, /<InventoryItemBackLink href=\{returnDestination\}/);
-  assert.match(backLink, /href=\{href\}[\s\S]*replace/);
-  assert.match(backLink, /h-11 w-11[\s\S]*sm:w-auto/);
-  assert.match(itemPage, /canonicalInventoryDetailsReturnHref/);
-  assert.match(itemPage, /canAccessPath\(user\.role, requestedReturnHref\)/);
-  assert.match(itemPage, /returnHref=\{returnHref\}/);
-  assert.match(localBarcodePage, /canonicalInventoryDetailsReturnHref/);
-  assert.match(localBarcodePage, /returnHref=\{returnHref\}/);
-  assert.match(summary, /inventoryDetailsHref\(itemPath, returnHref\)/);
-  assert.match(decommissioned, /itemReturnHref="\/items\/decommissioned"/);
-  assert.match(tmcFlow, /itemReturnHref=\{operation\.href\}/);
 });

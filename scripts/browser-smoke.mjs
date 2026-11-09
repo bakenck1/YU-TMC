@@ -69,6 +69,7 @@ try {
     SESSION_SECRET: "browser-smoke-session-secret-with-at-least-43-characters",
     APP_PUBLIC_ORIGIN: baseURL,
     BROWSER_SMOKE_BASE_URL: baseURL,
+    TRUSTED_CLIENT_IP_HEADER: "x-real-ip",
   };
 
   runNode(["node_modules/next/dist/bin/next", "build"], productionEnvironment);
@@ -90,7 +91,7 @@ try {
   // Keep this process responsive so collectLog drains the server's pipes.
   // spawnSync would stop reading them, eventually blocking the server on Linux.
   await runBrowserTests(productionEnvironment);
-  console.log("Browser smoke passed: 2 Chromium journeys.");
+  console.log("Browser smoke passed.");
 } catch (error) {
   failure = error;
   await persistDatabaseFailureEvidence();

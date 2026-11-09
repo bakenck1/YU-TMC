@@ -19,7 +19,7 @@ test("local session secret enables sign-in without SESSION_SECRET", () => {
   );
 
   try {
-    process.env.NODE_ENV = "test";
+    Object.assign(process.env, { NODE_ENV: "test" });
     Reflect.deleteProperty(process.env, "SESSION_SECRET");
     process.env.YU_DATA_DIRECTORY = temporaryDataDirectory;
     resetSessionStateForTests();
@@ -48,7 +48,7 @@ test("local session secret enables sign-in without SESSION_SECRET", () => {
     if (previousNodeEnv === undefined) {
       Reflect.deleteProperty(process.env, "NODE_ENV");
     } else {
-      process.env.NODE_ENV = previousNodeEnv;
+      Object.assign(process.env, { NODE_ENV: previousNodeEnv });
     }
     rmSync(temporaryDataDirectory, { recursive: true, force: true });
   }

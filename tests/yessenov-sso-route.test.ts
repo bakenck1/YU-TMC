@@ -8,7 +8,7 @@ import { resetRateLimitStateForTests } from "../lib/security/rate-limiter";
 import { YESSENOV_SSO_TRANSACTION_COOKIE } from "../lib/security/yessenov-sso";
 
 test("unconfigured Yessenov SSO uses a host-independent login redirect", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   delete process.env.YESSENOV_OIDC_CLIENT_ID;
   delete process.env.YESSENOV_OIDC_CLIENT_SECRET;
   delete process.env.YESSENOV_OIDC_REDIRECT_URI;
@@ -24,7 +24,7 @@ test("unconfigured Yessenov SSO uses a host-independent login redirect", async (
 });
 
 test("unconfigured Yessenov callback clears state without trusting Host", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   delete process.env.YESSENOV_OIDC_CLIENT_ID;
   delete process.env.YESSENOV_OIDC_CLIENT_SECRET;
   delete process.env.YESSENOV_OIDC_REDIRECT_URI;

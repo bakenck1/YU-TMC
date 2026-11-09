@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
 import WhatsAppPhonePage from "@/app/whatsapp-phone/page";
 import UserFormModal from "@/components/UserFormModal";
 import { requireAuthenticatedPage } from "@/lib/server/security/page-access";
+import { render,screen } from "@testing-library/react";
+import { expect,it,vi } from "vitest";
 
 const { currentUser, redirect } = vi.hoisted(() => ({ currentUser: vi.fn(), redirect: vi.fn((path: string) => { throw new Error(`redirect:${path}`); }) }));
 vi.mock("server-only", () => ({}));

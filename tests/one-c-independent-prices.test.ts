@@ -11,7 +11,7 @@ const card = { id: "card", name: "Наш товар", inventoryNumber: "011-0013
 const asset: OneCFixedAsset = { externalId: "os", code: "000003966", name: "Процессор 3.1 инв№011-00134", inventoryNumber: "011 00134", barcode: null, quantity: 1, initialCost: null, residualCost: 0, status: "Снято с учёта", category: null, location: null, responsibleName: null, responsibleExternalId: null, acceptedAt: null, updatedAt: null };
 const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "MP-134", nomenclature: "Процессор №011-00134", inventoryNumber: "", explicitInventoryNumber: null, barcode: null, endingBalance: "1", unitPrice: "27440" };
 const options = { descriptionBarcodes: true, formattedNumbers: true, exactNames: true, allowDescriptionIdentity: true, includeIt: true, allowSourceCode: true };
-function review(item = card, os: OneCFixedAsset[] = [asset], mp: ExcelSourceRow[] = [material]) {
+function review(item: typeof card & { responsibleName?: string } = card, os: OneCFixedAsset[] = [asset], mp: ExcelSourceRow[] = [material]) {
   const audit = buildInventorySourceAudit([item], os.map(asset => ({ externalId: asset.externalId, asset })), mp, [], options);
   const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [item], options);
   addOneCPriceProposals(plan, audit.rows, new Map(os.map(asset => [asset.externalId, asset])), [item], { independentSources: true });
@@ -81,12 +81,12 @@ test("permanent cards can use an exact 1C code in either register", () => {
   }
 });
 
-test("a shared metadata code cannot authorize assigning one source's owner to several physical cards", () => {
+test("a saved code with a unanimous source owner fills each vacant card assignment", () => {
   const cards = [card, { ...card, id: "second" }].map(item => ({ ...item, oneCCode: material.oneCCode! }));
   const audit = buildInventorySourceAudit(cards, [], [{ ...material, responsibleName: "Бауыржан Анесович" }], [], options);
   const plan = buildInventoryAuditEnrichmentPlan(audit.rows, cards, options);
   addOneCResponsibilityProposals(plan, audit.rows, new Map(), [{ id: "owner", fullName: "Бауыржан Анесович", active: true, deleted: false, role: "employee" }], cards.map(item => ({ itemId: item.id, userId: null, name: null, pendingTransfer: false, unavailable: false })));
-  assert.ok(plan.rows.every(row => row.identityMethod === "material_code" && !row.responsibility?.changed));
+  assert.ok(plan.rows.every(row => row.identityMethod === "material_code" && row.responsibility?.changed));
 });
 
 test("formatted barcodes and complete numbers in names recover prices in either register", () => {

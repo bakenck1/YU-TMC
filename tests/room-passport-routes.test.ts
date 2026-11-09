@@ -38,11 +38,12 @@ test("PDF responses are private and distinguish published URLs from management U
   assert.equal(calls[0][3], true);
 });
 test("upload reads a bounded PDF body and refuses missing versions and unsupported types", async () => {
-  for (const headers of [
+  const invalidHeaders: HeadersInit[] = [
     { "content-type": "application/pdf", "x-file-name": "room.pdf" },
     { "content-type": "image/png", "x-file-name": "room.pdf", "x-passport-version": "2" },
     { "content-type": "application/pdf", "x-file-name": "room.pdf", "x-passport-version": "NaN" },
-  ]) {
+  ];
+  for (const headers of invalidHeaders) {
     const { api, calls } = handlers();
     assert.ok((await api.upload(new Request("https://app.test", { method: "POST", headers, body: "file" }), roomId)).status >= 400);
     assert.equal(calls.length, 0);

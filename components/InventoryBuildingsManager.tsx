@@ -1,5 +1,6 @@
 "use client";
 
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -27,7 +28,9 @@ import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomQrScanner from "@/components/InventoryRoomQrScanner";
 import { translateCampusBuilding, type TranslationKey } from "@/lib/i18n";
 import {
+  engineeringFacultyWingFromDesignation,
   groupInventoryRoomsByFloor,
+  groupInventoryRoomsByEngineeringFacultyWing,
   groupInventoryRoomsByMainCampusWing,
   isMainCampusWingFloor,
   mainCampusWingFromDesignation,
@@ -84,9 +87,13 @@ export default function InventoryBuildingsManager({
 
   function buildingRoomFloors(building: BuildingDto): InventoryRoomFloor[] {
     const floors = groupInventoryRoomsByFloor(rooms[building.id] ?? []);
-    if (findCampusBuildingPreset(building.name)?.id === "main-campus" &&
-      !floors.some((floor) => floor.floorNumber === 2)) {
-      floors.push({ floorNumber: 2, label: null, rooms: [] });
+    const preset = findCampusBuildingPreset(building.name);
+    const requiredFloor = preset?.id === "main-campus" ? 2
+      : preset?.id === "engineering-faculty" || preset?.id === "marine-academy"
+        ? preset.firstFloor : undefined;
+    if (requiredFloor !== undefined &&
+      !floors.some((floor) => floor.floorNumber === requiredFloor)) {
+      floors.push({ floorNumber: requiredFloor, label: null, rooms: [] });
       floors.sort((left, right) => left.floorNumber - right.floorNumber);
     }
     return floors;
@@ -217,20 +224,19 @@ export default function InventoryBuildingsManager({
       const exists = currentRooms.some((value) => value.id === room.id);
       return {
         ...current,
-        [room.buildingId]: exists
+        [room.buildingId]: sortInventoryRoomsForSelection(exists
           ? currentRooms.map((value) => (value.id === room.id ? room : value))
-          : [...currentRooms, room].sort(
-              (left, right) =>
-                left.floorNumber - right.floorNumber ||
-                left.designation.localeCompare(right.designation),
-            ),
+          : [...currentRooms, room]),
       };
     });
     setRoomEditor(null);
     setOpenBuildingIds((current) => new Set(current).add(room.buildingId));
     setExpandedRoomGroups((current) => {
       const next = new Set(current).add(`floor-${room.buildingId}-${room.floorNumber}`);
-      const wingCode = mainCampusWingFromDesignation(room.designation);
+      const building = buildings.find((value) => value.id === room.buildingId);
+      const wingCode = findCampusBuildingPreset(building?.name ?? "")?.id === "engineering-faculty"
+        ? engineeringFacultyWingFromDesignation(room.designation)
+        : mainCampusWingFromDesignation(room.designation);
       if (wingCode) next.add(`wing-${room.buildingId}-${room.floorNumber}-${wingCode}`);
       return next;
     });
@@ -368,15 +374,18 @@ export default function InventoryBuildingsManager({
     building: BuildingDto,
     floor: InventoryRoomFloor,
   ) {
-    const splitByWing =
-      findCampusBuildingPreset(building.name)?.id === "main-campus" &&
+    const presetId = findCampusBuildingPreset(building.name)?.id;
+    const splitByMainCampusWing =
+      presetId === "main-campus" &&
       isMainCampusWingFloor(floor.floorNumber);
-    if (!splitByWing) {
+    if (!splitByMainCampusWing && presetId !== "engineering-faculty") {
       return floor.rooms.map((room) => renderRoom(building, room));
     }
 
     const { wings, unassignedRooms } =
-      groupInventoryRoomsByMainCampusWing(floor.rooms, floor.floorNumber);
+      splitByMainCampusWing
+        ? groupInventoryRoomsByMainCampusWing(floor.rooms, floor.floorNumber)
+        : groupInventoryRoomsByEngineeringFacultyWing(floor.rooms);
     return (
       <>
         {wings.map((wing) => (

@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { afterEach,describe,expect,it,vi } from "vitest";
 
-import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryInspectionsManager from "@/components/InventoryInspectionsManager";
+import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
 import InventoryRoomFormModal from "@/components/InventoryRoomFormModal";
 import type {
-  BuildingDto,
-  RoomDto,
+BuildingDto,
+RoomDto,
 } from "@/lib/contracts/inventory-locations";
 
 vi.mock("next/navigation", () => ({
@@ -119,45 +119,21 @@ describe("inventory setup actions", () => {
     expect(screen.getByRole("status").textContent).toContain("createItem.noRooms");
   });
 
-  it("marks every field that blocks item creation as required", () => {
+  it("blocks an incomplete creation and submits after the missing data is supplied", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ item: { id: ROOM.id } }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
     render(<InventoryItemCreateForm rooms={[ROOM]} openInitially />);
-
-    const nameInput = screen.getByLabelText(/items\.name/);
-    const typeInput = screen.getByLabelText(/items\.type/);
-    const roomSelect = screen.getByLabelText(/itemDetails\.room/);
-    const barcodeInput = screen.getByLabelText(/createItem\.barcode/);
-    const responsibleInput = screen.getByLabelText(/createItem\.responsible/);
-
-    expect((nameInput as HTMLInputElement).required).toBe(true);
-    expect((typeInput as HTMLInputElement).required).toBe(true);
-    expect((roomSelect as HTMLSelectElement).required).toBe(true);
-    expect((barcodeInput as HTMLInputElement).required).toBe(false);
-    expect((responsibleInput as HTMLInputElement).required).toBe(false);
-    expect(
-      (screen.getByRole("option", {
-        name: "data.electricalEquipment",
-      }) as HTMLOptionElement).value,
-    ).toBe("electrical_equipment");
-    expect(
-      (screen.getByRole("option", {
-        name: "data.components",
-      }) as HTMLOptionElement).value,
-    ).toBe("components");
-    expect(nameInput.closest("label")?.textContent).toContain(
-      "createItem.required",
-    );
-    expect(typeInput.closest("label")?.textContent).toContain(
-      "createItem.required",
-    );
-    expect(barcodeInput.closest("label")?.textContent).toContain(
-      "createItem.optional",
-    );
-    expect(screen.getByText("createItem.responsible").className).toContain(
-      "font-normal",
-    );
-    expect((responsibleInput as HTMLInputElement).labels?.item(0)?.textContent).toContain(
-      "createItem.optional",
-    );
+    const submit = screen.getByRole("button", { name: "createItem.create" }) as HTMLButtonElement;
+    fireEvent.click(submit);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/items\.type/), { target: { value: "components" } });
+    fireEvent.change(screen.getByLabelText(/items\.name/), { target: { value: "Cable" } });
+    fireEvent.click(screen.getByRole("button", { name: "camera.open" }));
+    fireEvent.click(screen.getByRole("button", { name: "capture-test-photo" }));
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({ name: "Cable", category: "components", roomId: ROOM.id });
   });
 
   it("shows the 1C code for all general categories to administrators and preserves it when the category changes", async () => {
@@ -262,6 +238,23 @@ describe("inventory setup actions", () => {
       expect(createCall).toBeDefined();
       expect("oneCCode" in JSON.parse(String((createCall?.[1] as RequestInit).body))).toBe(false);
     });
+  });
+
+  it.each([
+    ["B207", "В201", "B210", "В202", "B203"],
+    ["E207", "Е201", "E210", "Е202", "E203"],
+    ["K207", "К201", "K210", "К202", "K203"],
+    ["107", "101", "110", "102", "103"],
+    ["G207", "G201", "G210", "G202", "G203"],
+  ])("orders all room numbers naturally in the create form: %s", (...names) => {
+    const rooms = names.map((designation, index) => ({ ...ROOM, id: `room-${index}`, designation, floorNumber: 2 }));
+    render(<InventoryItemCreateForm rooms={rooms} openInitially />);
+    const select = screen.getByLabelText(/itemDetails\.room/) as HTMLSelectElement;
+    expect(Array.from(select.options, option => option.value)).toEqual([
+      "room-1", "room-3", "room-4", "room-0", "room-2",
+    ]);
+    expect(select.value).toBe("room-1");
+    expect(rooms.map(row => row.designation)).toEqual(names);
   });
 
   it("orders item room choices by floor and then A, B, D and E blocks", () => {

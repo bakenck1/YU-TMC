@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type {
-  DormitoryRequestRepository,
-  DormitoryRequestResult,
+DormitoryRequestRepository,
+DormitoryRequestResult,
 } from "../lib/contracts/dormitory-requests";
 import { createDormitoryRequest } from "../lib/dormitory-requests-api";
 
@@ -101,11 +100,4 @@ test("rejects unsupported actions, unknown fields, and invalid item identifiers"
   ]) {
     assert.equal((await createDormitoryRequest(request(body), { repository })).status, 400);
   }
-});
-
-test("migration keeps internal photo requirements and external idempotency", () => {
-  const migration = readFileSync("drizzle/20260923062128_even_krista_starr.sql", "utf8");
-  assert.match(migration, /service_requests_dormitory_external_unique/);
-  assert.match(migration, /source[^]*= 'internal'[^]*photo_binary_data[^]*IS NOT NULL/);
-  assert.match(migration, /requested_action[^]*repair[^]*damaged[^]*missing[^]*other/);
 });

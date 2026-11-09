@@ -1,8 +1,8 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { getDatabaseTestFiles } from "./database-test-files.mjs";
+import { databaseTestArguments, getDatabaseTestFiles } from "./database-test-files.mjs";
 
 const root = process.cwd();
 const testDirectory = path.join(root, "tests");
@@ -26,16 +26,24 @@ const allRootTests = readdirSync(testDirectory)
   .filter((name) => name.endsWith(".test.ts"))
   .sort();
 
+// Refresh generated route contracts before checking the full application,
+// test and Storybook graph. A renamed route must not fail on a stale validator.
+for (const distDir of [".next", ".next-e2e"].filter((directory) => directory === ".next" || existsSync(path.join(root, directory)))) {
+  run(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "typegen"], {
+    ...process.env, NODE_ENV: "development", NEXT_DIST_DIR: distDir,
+  });
+}
+run(
+  process.execPath,
+  [path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--incremental", "false", "--pretty", "false"],
+  { ...process.env, NODE_ENV: "test" },
+);
+
 runNodeTests(
   allRootTests.filter((name) => !clientTests.has(name)),
   ["--conditions=react-server"],
 );
 runNodeTests([...clientTests].sort(), []);
-run(
-  process.execPath,
-  [path.join(root, "node_modules/typescript/bin/tsc"), "--project", "tests/typecheck/tsconfig.components.json", "--pretty", "false"],
-  { ...process.env, NODE_ENV: "test" },
-);
 run(
   process.execPath,
   [path.join(root, "node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.components.config.mts"],
@@ -46,7 +54,7 @@ if (hasRuntimeDatabase) {
   for (const databaseTest of getDatabaseTestFiles(root)) {
     run(
       process.execPath,
-      [path.join(root, "node_modules/vitest/vitest.mjs"), "run", databaseTest],
+      databaseTestArguments(root, databaseTest),
       {
         ...process.env,
         NODE_ENV: "test",

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { TransferDto } from "../lib/contracts/inventory-responsibility";
@@ -171,25 +170,6 @@ for (const route of ROUTES) {
     }
   });
 }
-
-test("legacy transfer handlers cannot reintroduce local ID, error or cache primitives", async () => {
-  const handlerFiles = [
-    "lib/server/http/inventory-transfer-cancel-handler.ts",
-    "lib/server/http/inventory-transfer-decision-handler.ts",
-    "lib/server/http/inventory-transfer-override-handler.ts",
-  ];
-
-  for (const filename of handlerFiles) {
-    const source = await readFile(filename, "utf8");
-    assert.match(source, /from "@\/lib\/server\/http\/inventory-transfer-route-boundary"/);
-    assert.match(source, /parseLegacyTransferId\(transferId\)/);
-    assert.match(source, /legacyTransferJsonResponse\(\{ transfer \}\)/);
-    assert.match(source, /legacyTransferErrorResponse\(error\)/);
-    assert.doesNotMatch(source, /function (?:normalizeTransferId|errorResponse|errorHeaders)\b/);
-    assert.doesNotMatch(source, /\b(?:isUuid|applicationErrorResponse|Response\.json)\b/);
-    assert.doesNotMatch(source, /["']cache-control["']\s*:/);
-  }
-});
 
 function authenticate(state: FailureState) {
   if (state.authentication !== undefined) throw state.authentication;

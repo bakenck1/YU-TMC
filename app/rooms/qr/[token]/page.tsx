@@ -4,6 +4,7 @@ import PublicRoomWorkspaceScreen from "@/components/PublicRoomWorkspaceScreen";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { SESSION_COOKIE_NAME } from "@/lib/security/session";
 import { getApplicationServices } from "@/lib/server/application";
+import { getRoomBooking } from "@/lib/server/room-booking";
 import {
   authorizationActor,
   resolveCurrentUserToken,
@@ -50,6 +51,6 @@ export default async function PublicRoomQrPage({
     throw error;
   }
   return (
-    <PublicRoomWorkspaceScreen room={room} authenticated={Boolean(user)} returnTo={returnTo} readOnly={user?.role === "typography"} />
+    <PublicRoomWorkspaceScreen room={room} authenticated={Boolean(user)} returnTo={returnTo} readOnly={user?.role === "typography"} booking={await getRoomBooking(room)} />
   );
 }

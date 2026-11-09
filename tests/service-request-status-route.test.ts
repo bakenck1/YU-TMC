@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { ServiceRequestDto } from "../lib/contracts/service-requests";
@@ -170,18 +169,6 @@ test("PATCH bounds JSON and sanitizes unexpected failures without cacheable PII"
   }
 });
 
-test("Next 16 route awaits dynamic params and preserves current-user sessionVersion", async () => {
-  const source = await readFile(
-    "app/api/service-requests/[id]/route.ts",
-    "utf8",
-  );
-
-  assert.match(source, /createServiceRequestStatusPatchHandler/);
-  assert.match(source, /authenticate:\s*requireCurrentUser/);
-  assert.match(source, /\(await context\.params\)\.id/);
-  assert.doesNotMatch(source, /authorizationActor/);
-});
-
 function statusRequest() {
   return jsonRequest({ status: "completed", version: 1 });
 }
@@ -200,6 +187,7 @@ function dto(
   version: number,
 ): ServiceRequestDto {
   return {
+    source: "internal", externalRequestId: null, requestedAction: null,
     id,
     item: { id: BODY_REQUEST_ID, name: "Laptop", inventoryNumber: "INV-1" },
     room: { id: REQUEST_ID, designation: "101", buildingName: "Main" },

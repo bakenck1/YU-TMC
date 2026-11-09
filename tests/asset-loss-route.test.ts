@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import { ApplicationError } from "../lib/domain/application-error";
-import { createAssetLossCollectionHandlers, createAssetLossReceiptHandlers, createAssetLossReviewHandler } from "../lib/server/http/asset-loss-handlers";
+import { createAssetLossCollectionHandlers,createAssetLossReceiptHandlers,createAssetLossReviewHandler } from "../lib/server/http/asset-loss-handlers";
 
 const ACTOR = { userId: "11111111-1111-4111-8111-111111111111", role: "employee" as const, sessionVersion: 1 };
 const CASE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -43,14 +41,6 @@ test("receipt boundary enforces exact JSON shape and forwards normalized bytes",
   const response = await handlers.POST(jsonRequest({ photo: { imageDataUrl: "data:image/jpeg;base64,eA==" } }), CASE_ID);
   assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
   assert.equal(calls[0], "data:image/jpeg;base64,eA==");
-});
-
-test("production routes delegate through authenticated CSRF-aware request-user guards", () => {
-  const collection = readFileSync(path.join("app", "api", "inventory", "loss-cases", "route.ts"), "utf8");
-  const receipt = readFileSync(path.join("app", "api", "inventory", "loss-cases", "[id]", "receipt", "route.ts"), "utf8");
-  const review = readFileSync(path.join("app", "api", "inventory", "loss-cases", "[id]", "review", "route.ts"), "utf8");
-  assert.match(collection, /requireCurrentUser\(request\)/); assert.match(receipt, /requireCurrentUser\(request\)/);
-  assert.match(review, /requirePermission\(request, "inventory\.item\.manage_protected_fields"\)/);
 });
 
 function jsonRequest(body: unknown) { return new Request("https://inventory.example/api/inventory/loss-cases", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); }

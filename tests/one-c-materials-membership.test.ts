@@ -19,7 +19,7 @@ const samples = [
   ["stools", "00000011436", "стул школьный без обивки жесткий от 03.06.2024", 6, 8960],
 ] as const;
 function snapshot() {
-  const cards = samples.map(([id, code, name, quantity, price]) => ({ id, name, inventoryNumber: `TMP-2026-${id}`, inventoryNumberKind: "temporary", oneCCode: code as string | null, responsibleName: "Сотрудник проверки", quantity: Number(quantity), unitPrice: String(price), status: "active", version: 1, sourceCodes: [] as string[], officialBarcodes: [] as string[] }));
+  const cards = samples.map(([id, code, name, quantity, price]) => ({ id: String(id), name: String(name), inventoryNumber: `TMP-2026-${id}`, inventoryNumberKind: "temporary", oneCCode: code as string | null, responsibleName: "Сотрудник проверки", quantity: Number(quantity), unitPrice: String(price), status: "active", version: 1, sourceCodes: [] as string[], officialBarcodes: [] as string[] }));
   cards.push({ ...cards[0], id: "number-only", name: "Предмет №1350/12345", inventoryNumber: "TMP-2026-NUMBER", oneCCode: null });
   cards.push({ ...cards[0], id: "missing", name: "Не найденный предмет", inventoryNumber: "TMP-2026-MISSING", oneCCode: null });
   const assets: OneCFixedAsset[] = [...new Map(samples.map(([, code, name, , price]) => [code, { externalId: code, code, name, inventoryNumber: null, barcode: null, quantity: 1, initialCost: price, residualCost: 0, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, category: null, location: null, acceptedAt: null, updatedAt: null } satisfies OneCFixedAsset])).values()];

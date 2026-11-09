@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -600,11 +601,13 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       if (!result.rows[0]) throw new Error("item_insert_failed");
       const item = await this.findItemById(input.id);
       if (!item) throw new Error("item_insert_failed");
-      if (input.inventoryNumberKind === "temporary" && input.inventoryNumber) {
+      // Keep the initial official number as well as generated temporary numbers.
+      // Otherwise the first official value is absent when a later edit replaces it.
+      if (input.inventoryNumber) {
         await this.source.query(
           `insert into ${HISTORY}
-             (id, item_id, kind, value, comparison_key, assigned_by)
-           values ($1, $2, $3, $4, $5, $6)`,
+             (id, item_id, kind, value, comparison_key, assigned_by, assigned_at)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
           [
             `${input.id.slice(0, 8)}-0000-4000-8000-${input.id.slice(-12)}`,
             input.id,
@@ -612,6 +615,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
             input.inventoryNumber,
             input.inventoryNumberKey,
             input.actorId,
+            input.occurredAt,
           ],
         );
       }
@@ -671,7 +675,7 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
         where item_id = $1 and purpose = 'item' and status = 'attached'`,
       [input.id],
     );
-    if (Number(count.rows[0]?.count ?? 0) >= 4) {
+    if (Number(count.rows[0]?.count ?? 0) >= MAX_ITEM_PHOTOS) {
       throw new ApplicationError("conflict", "photo_limit_reached");
     }
     const objectKey = `database://items/${input.id}/${input.photoId}.jpg`;
@@ -899,6 +903,21 @@ class PostgresInventoryItemRepository implements InventoryItemRepository {
       ],
     );
     if (result.rowCount !== 1) return null;
+    return this.findItemById(input.id);
+  }
+
+  async updateItemOneCCode(
+    input: Parameters<InventoryItemRepository["updateItemOneCCode"]>[0],
+  ): Promise<InventoryItemRecord | null> {
+    const result = await this.source.query<{ id: string }>(
+      `update ${ITEMS}
+       set one_c_code = $2, updated_by = $3, updated_at = $4,
+           version = version + 1
+       where id = $1 and version = $5 and item_section = 'general'
+       returning id`,
+      [input.id, input.oneCCode, input.actorId, input.occurredAt, input.expectedVersion],
+    );
+    if (!result.rows[0]) return null;
     return this.findItemById(input.id);
   }
 

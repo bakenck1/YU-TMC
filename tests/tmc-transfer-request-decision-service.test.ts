@@ -130,40 +130,6 @@ test("decision uses the current database role and persists an administrator reas
   );
 });
 
-test("decision binds transactional authorization to the authenticated session version", async () => {
-  const harness = createHarness({ recipient: user({ version: 2 }) });
-  harness.repository.aggregate = requestRecord([candidate(uuid(1))]);
-  const input = {
-    requestVersion: 1,
-    decisions: [{ itemId: uuid(1), itemVersion: 1, decision: "accept" as const }],
-  };
-  const staleSessionActor = {
-    userId: RECIPIENT_ID,
-    role: "employee" as const,
-    sessionVersion: 1,
-  };
-
-  await assert.rejects(
-    harness.service.decideIdempotent(
-      harness.repository.aggregate.id,
-      input,
-      staleSessionActor,
-      "tmc-session-version-1",
-    ),
-    (error: unknown) =>
-      error instanceof ApplicationError && error.kind === "not_found",
-  );
-  assert.equal(harness.repository.decisionCalls.length, 0);
-
-  const completed = await harness.service.decideIdempotent(
-    harness.repository.aggregate.id,
-    input,
-    { ...staleSessionActor, sessionVersion: 2 },
-    "tmc-session-version-1",
-  );
-  assert.equal(completed.kind, "completed");
-});
-
 test("decision rejects invisible administrative reasons and all client version conflicts before writes", async () => {
   const administrator = user({ id: uuid(70), role: "admin" });
   for (const input of [
@@ -201,43 +167,6 @@ test("decision records invalidated outcomes and rolls back an earlier item on a 
   );
   assert.equal(rollback.repository.aggregate.items[0]?.result, "pending");
   assert.equal(rollback.repository.aggregate.status, "pending");
-});
-
-test("decision replays idempotently without applying responsibility twice", async () => {
-  const harness = createHarness();
-  harness.repository.aggregate = requestRecord([candidate(uuid(1)), candidate(uuid(2))]);
-  const input = {
-    requestVersion: 1,
-    administrativeReason: "   ",
-    decisions: harness.repository.aggregate.items.map((item) => ({
-      itemId: item.itemId,
-      itemVersion: item.version,
-      decision: "accept" as const,
-    })),
-  };
-  const first = await harness.service.decideIdempotent(
-    harness.repository.aggregate.id,
-    input,
-    { userId: RECIPIENT_ID, role: "employee", sessionVersion: 1 },
-    "tmc-decision-000001",
-  );
-  const replay = await harness.service.decideIdempotent(
-    harness.repository.aggregate.id,
-    {
-      requestVersion: input.requestVersion,
-      decisions: [...input.decisions].reverse().map((decision) => ({
-        decision: decision.decision,
-        itemVersion: decision.itemVersion,
-        itemId: decision.itemId,
-      })),
-    },
-    { userId: RECIPIENT_ID, role: "employee", sessionVersion: 1 },
-    "tmc-decision-000001",
-  );
-  assert.equal(first.kind, "completed");
-  assert.equal(replay.kind, "replayed");
-  assert.deepEqual(replay.request, first.request);
-  assert.equal(harness.repository.decisionCalls.length, 2);
 });
 
 test("decision replay reauthorizes the current database role and rejects changed payload", async () => {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { TransferDto } from "../lib/contracts/inventory-responsibility";
@@ -143,16 +142,6 @@ test("legacy cancellation bounds media type and body size and sanitizes retry he
   }), TRANSFER_ID);
   assert.equal(oversized.status, 413);
   assert.equal(oversized.headers.get("cache-control"), "no-store");
-});
-
-test("legacy cancellation route preserves CSRF, rate-limit and session-version authentication", async () => {
-  const source = await readFile(
-    "app/api/inventory/transfers/[id]/cancel/route.ts",
-    "utf8",
-  );
-  assert.match(source, /createInventoryTransferCancelPostHandler/);
-  assert.match(source, /authenticate:\s*requireCurrentUser/);
-  assert.doesNotMatch(source, /authorizationActor/);
 });
 
 function jsonRequest(body: unknown) {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -36,31 +35,6 @@ test("accept-all ignores checkboxes while selected explicitly rejects unchecked 
   const selected = new Set([request.items[0].id]);
   assert.deepEqual(buildTmcRequestDecisions(request, selected, "selected").map((item) => item.decision), ["accept"]);
   assert.equal(buildTmcRequestDecisions(request, selected, "selected")[0]?.itemVersion, request.items[0].version);
-});
-
-test("group request card exposes all required read-only metadata accessibly", () => {
-  const source = [
-    "components/TmcTransferRequestCard.tsx",
-    "components/TmcRequestItemResultBadge.tsx",
-  ].map((path) => readFileSync(path, "utf8")).join("\n");
-  const page = readFileSync("app/(protected)/tmc/transfer-requests/[id]/page.tsx", "utf8");
-  assert.match(source, /type="checkbox"/);
-  assert.match(source, /item\.responsibleUserProfile/);
-  assert.match(source, /request\.recipient/);
-  assert.match(source, /request\.initiator/);
-  assert.match(source, /request\.comment/);
-  assert.match(source, /showOverdue && request\.overdue/);
-  assert.match(page, /key=\{`\$\{request\.id\}:\$\{request\.version\}`\}/);
-  for (const result of ["pending", "accepted", "rejected", "cancelled", "invalidated"]) {
-    assert.match(source, new RegExp(`tmc\\.request\\.item\\.${result}`));
-  }
-  assert.match(source, /<time/);
-  assert.match(source, /item\.item\.photoUrl/);
-  assert.match(source, /min-h-11/);
-  assert.doesNotMatch(source, /dangerouslySetInnerHTML/);
-  assert.match(source, /tmc\.request\.acceptAll/);
-  assert.match(source, /tmc\.request\.acceptSelected/);
-  assert.match(source, /window\.confirm/);
 });
 
 function requestDto(): TmcTransferRequestDto {

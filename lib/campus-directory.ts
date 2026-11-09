@@ -36,7 +36,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     id: "marine-academy",
     name: "Корпус Морской академии",
     address: CAMPUS_ADDRESS,
-    floorCount: 3,
+    firstFloor: 0,
+    floorCount: 4,
   },
   {
     id: "sports-complex",
@@ -106,7 +107,8 @@ export const CAMPUS_BUILDING_PRESETS: readonly CampusBuildingPreset[] = [
     legacyNames: ["24 мкр", "Yessenov university — Факультет инжиниринга"],
     mapVisible: false,
     address: "24-й микрорайон, 12, Актау",
-    floorCount: 4,
+    firstFloor: 0,
+    floorCount: 5,
   },
   {
     id: "zerde-house",

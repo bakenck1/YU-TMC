@@ -8,7 +8,6 @@ test("a free active QR item offers receiving it for the current employee", () =>
     employeeScanAction({
       status: "active",
       isAssigned: false,
-      responsibleName: null,
       isCurrentUserResponsible: false,
     }),
     { kind: "claim_free" },
@@ -20,7 +19,6 @@ test("an item assigned to another employee cannot be claimed and offers a transf
     employeeScanAction({
       status: "active",
       isAssigned: true,
-      responsibleName: "another employee",
       isCurrentUserResponsible: false,
     }),
     { kind: "request_transfer" },
@@ -32,7 +30,6 @@ test("an employee's own QR item is shown as already assigned to them", () => {
     employeeScanAction({
       status: "active",
       isAssigned: true,
-      responsibleName: "current employee",
       isCurrentUserResponsible: true,
     }),
     { kind: "already_owned" },
@@ -44,7 +41,6 @@ test("inactive QR items cannot be received or requested", () => {
     employeeScanAction({
       status: "maintenance",
       isAssigned: false,
-      responsibleName: null,
       isCurrentUserResponsible: false,
     }),
     { kind: "unavailable" },

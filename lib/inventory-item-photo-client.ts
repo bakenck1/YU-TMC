@@ -1,3 +1,4 @@
+import { MAX_ITEM_PHOTOS } from "@/lib/inventory-item-photo-policy";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 
 export type ItemPhotoInput = {
@@ -55,7 +56,7 @@ export async function addItemPhotoWithRefresh(
     if (!latestResponse.ok || !latestBody.item) {
       throw new Error(latestBody.error ?? "refresh_failed");
     }
-    if (photoCount(latestBody.item) >= 4) {
+    if (photoCount(latestBody.item) >= MAX_ITEM_PHOTOS) {
       throw new Error("photo_limit_reached");
     }
     result = await submitPhoto(

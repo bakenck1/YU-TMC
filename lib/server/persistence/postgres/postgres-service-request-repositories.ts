@@ -288,8 +288,8 @@ class PostgresServiceRequestRepository implements ServiceRequestRepository {
   }) {
     const result = await this.source.query(
       `update ${REQUESTS} as request
-          set status = $2,
-              completed_at = case when $2 = 'completed' then $4 else null end,
+            set status = $2::"yu_inventory"."service_request_status",
+                completed_at = case when $2::"yu_inventory"."service_request_status" = 'completed' then $4::timestamptz else null end,
               updated_by = $3, updated_at = $4, version = version + 1
         where request.id = $1
           and request.version = $5

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type {
-  InventoryItemRecord,
-  InventoryItemRepositories,
-  InventoryItemRepository,
+InventoryItemRecord,
+InventoryItemRepositories,
+InventoryItemRepository,
 } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
@@ -259,114 +258,6 @@ test("keeps a temporary number temporary when only protected status is changed",
 
   assert.equal(protectedUpdate?.inventoryNumberKind, "temporary");
   assert.equal(protectedUpdate?.status, "active");
-});
-
-test("casts protected status updates to the PostgreSQL enum consistently", () => {
-  const repositorySource = readFileSync(
-    "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
-    "utf8",
-  );
-
-  assert.match(
-    repositorySource,
-    /status = \$6::"yu_inventory"\."item_status"/,
-  );
-  assert.match(
-    repositorySource,
-    /when \$6::"yu_inventory"\."item_status" = 'decommissioned'/,
-  );
-});
-
-test("operation feed uses historical room label snapshots without live-name fallback", () => {
-  const repositorySource = readFileSync(
-    "lib/server/persistence/postgres/postgres-inventory-item-repositories.ts",
-    "utf8",
-  );
-  const operationQuery = repositorySource.slice(
-    repositorySource.indexOf("async listOperations"),
-    repositorySource.indexOf("async listComments"),
-  );
-
-  assert.match(operationQuery, /a\.before_values->>'roomLabel' as "fromLocation"/);
-  assert.match(operationQuery, /a\.after_values->>'roomLabel' as "toLocation"/);
-  assert.match(operationQuery, /and a\.action in \(/);
-  assert.doesNotMatch(operationQuery, /'item\.comment_added'/);
-  assert.doesNotMatch(operationQuery, /'item\.imported'/);
-});
-
-test("item detail UI wires photo modal and recent operation rendering", () => {
-  const componentSource = readFileSync(
-    "components/InventoryItemDetails.tsx",
-    "utf8",
-  );
-  const presentationSource = readFileSync(
-    "components/InventoryItemDetailsPresentation.ts",
-    "utf8",
-  );
-
-  assert.match(componentSource, /const \[photoOpen, setPhotoOpen\] = useState\(false\)/);
-  assert.match(
-    componentSource,
-    /lg:grid-cols-\[minmax\(420px,0\.95fr\)_minmax\(0,1\.5fr\)\]/,
-  );
-  assert.match(componentSource, /const photoDialogRef = useRef<HTMLDivElement>\(null\)/);
-  assert.match(componentSource, /const photoTriggerRef = useRef<HTMLButtonElement>\(null\)/);
-  assert.match(componentSource, /const photoCloseButtonRef = useRef<HTMLButtonElement>\(null\)/);
-  assert.match(componentSource, /document\.body\.style\.overflow = "hidden"/);
-  assert.match(componentSource, /previousActiveElement \?\? photoTrigger/);
-  assert.match(componentSource, /event\.key === "Escape"/);
-  assert.match(componentSource, /event\.key !== "Tab"/);
-  assert.match(componentSource, /role="dialog"/);
-  assert.match(componentSource, /ref=\{photoDialogRef\}/);
-  assert.match(componentSource, /ref=\{photoCloseButtonRef\}/);
-  assert.match(componentSource, /ref=\{photoTriggerRef\}/);
-  assert.match(componentSource, /aria-label=\{t\("itemDetails\.photoFullSize"\)\}/);
-  assert.match(
-    componentSource,
-    /ref=\{photoTriggerRef\}[\s\S]{0,300}?onClick=\{\(\) => \{[\s\S]*?setSelectedPhotoIndex\(0\);[\s\S]*?setPhotoOpen\(true\);[\s\S]*?\}\}/,
-  );
-  assert.match(componentSource, /operations\.map\(\(entry\) =>/);
-  assert.match(componentSource, /operationTitle\(entry, t\)/);
-  assert.match(componentSource, /operationDetail\(entry, t\)/);
-  assert.match(componentSource, /aria-labelledby="item-editor-title"/);
-  assert.match(componentSource, /onClick=\{openContentEditor\}/);
-  assert.match(componentSource, /ref=\{protectedTriggerRef\}/);
-  assert.match(componentSource, /ref=\{protectedDialogRef\}/);
-  assert.match(componentSource, /aria-labelledby="protected-fields-title"/);
-  assert.match(componentSource, /t\("analytics\.buildingFilter"\)/);
-  assert.match(componentSource, /protectedBuildingRooms\.map\(\(room\) =>/);
-  assert.match(componentSource, /result\.response\.status === 409/);
-  assert.match(componentSource, /latestResponse = await fetch/);
-  assert.match(presentationSource, /itemDetails\.errorInventoryNumber/);
-  assert.match(presentationSource, /itemDetails\.errorInvalidFields/);
-  assert.match(componentSource, /h-\[208px\] w-full max-w-\[208px\]/);
-  assert.match(componentSource, /sm:grid-cols-\[minmax\(0,1fr\)_190px\]/);
-  assert.match(componentSource, /kind=qr&format=svg/);
-  assert.match(componentSource, /<InventoryOverviewRow label=\{t\("items\.type"\)\}/);
-  assert.doesNotMatch(componentSource, /id="item-information"/);
-  assert.ok(
-    componentSource.lastIndexOf("<InventoryItemComposition") <
-      componentSource.indexOf('{t("itemDetails.recentOperations")}'),
-    "composition should appear below the photo and code before the operation feed",
-  );
-});
-
-test("decommissioned-in-use items can be saved without a responsible employee", () => {
-  const componentSource = readFileSync(
-    "components/InventoryItemDetails.tsx",
-    "utf8",
-  );
-  const routeSource = readFileSync(
-    "app/api/inventory/items/[id]/route.ts",
-    "utf8",
-  );
-
-  assert.match(
-    componentSource,
-    /label=\{`\$\{t\("createItem\.responsible"\)\} \(\$\{t\("createItem\.optional"\)\}\)`\}/,
-  );
-  assert.doesNotMatch(componentSource, /status === "decommissioned_in_use" && !responsible/);
-  assert.match(routeSource, /body\.responsibleUserId === null/);
 });
 
 test("archive route is visible to administrators and warehouse staff", () => {

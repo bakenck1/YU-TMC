@@ -5,7 +5,7 @@ import { POST } from "../app/api/auth/reset-password/route";
 import { resetRateLimitStateForTests } from "../lib/security/rate-limiter";
 
 test("password reset rejects cross-site credential changes", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetRateLimitStateForTests();
 
   const response = await POST(

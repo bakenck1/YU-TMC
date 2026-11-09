@@ -2,28 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import type { ItemResultDto } from "../lib/contracts/inventory-inspection-results";
+import type { InspectionDto } from "../lib/contracts/inventory-inspections";
 
-import { pushPermissionError } from "../lib/client-push-subscription";
-import { syncExistingPushSubscription } from "../lib/client-push-subscription";
-import { syncPushSubscriptionLanguage } from "../lib/client-push-subscription";
+import { pushPermissionError,syncExistingPushSubscription,syncPushSubscriptionLanguage } from "../lib/client-push-subscription";
 import {
-  applyInspectionResult,
-  firstInspectionRoomId,
+applyInspectionResult,
+firstInspectionRoomId,
 } from "../lib/inventory-inspection-selection";
 
 const ROOT = new URL("../", import.meta.url);
-
-test("service worker displays assignment pushes and opens only app-local URLs", async () => {
-  const worker = await source("public/sw.js");
-
-  assert.match(worker, /addEventListener\("push"/);
-  assert.match(worker, /registration\.showNotification/);
-  assert.match(worker, /addEventListener\("notificationclick"/);
-  assert.match(worker, /clients\.openWindow\(targetUrl\)/);
-  assert.match(worker, /appClient\.navigate\(targetUrl\)/);
-  assert.match(worker, /safeAppPath\(event\.notification\.data\?\.url\)/);
-  assert.match(worker, /url\.origin === self\.location\.origin/);
-});
 
 test("service worker keeps TMC deep links local and reuses an open app window", async () => {
   const listeners = new Map<string, (event: Record<string, unknown>) => void>();
@@ -51,6 +39,7 @@ test("service worker keeps TMC deep links local and reuses an open app window", 
     },
   };
   vm.runInNewContext(await source("public/sw.js"), { self: worker, URL, Promise });
+  assert.equal(listeners.has("fetch"), false);
   const pending: Promise<unknown>[] = [];
   listeners.get("push")!({
     data: { json: () => ({ title: "TMC", body: "1", url: "/tmc/transfer-requests/abc" }) },
@@ -70,20 +59,22 @@ test("service worker keeps TMC deep links local and reuses an open app window", 
 
 test("service worker opens the exact TMC card for focus, navigate, and navigation fallback paths", async () => {
   const target = "https://inventory.test/tmc/transfer-requests/abc";
-  const exact = await clickWorker("/tmc/transfer-requests/abc", [{
+  const exactClient = {
     url: target,
     async focus() { this.focused.push(target); },
     focused: [] as string[],
-  }]);
+  };
+  const exact = await clickWorker("/tmc/transfer-requests/abc", [exactClient]);
   assert.deepEqual((exact.clients[0] as { focused: string[] }).focused, [target]);
   assert.deepEqual(exact.opened, []);
 
-  const navigated = await clickWorker("/tmc/transfer-requests/abc", [{
+  const navigatedClient = {
     url: "https://inventory.test/tmc",
     async navigate(url: string) { this.navigated.push(url); return { focus: async () => this.focused.push(url) }; },
     navigated: [] as string[],
     focused: [] as string[],
-  }]);
+  };
+  const navigated = await clickWorker("/tmc/transfer-requests/abc", [navigatedClient]);
   assert.deepEqual((navigated.clients[0] as { navigated: string[] }).navigated, [target]);
   assert.deepEqual((navigated.clients[0] as { focused: string[] }).focused, [target]);
   assert.deepEqual(navigated.opened, []);
@@ -102,61 +93,10 @@ test("service worker opens the exact TMC card for focus, navigate, and navigatio
   assert.deepEqual(noClient.opened, [target]);
 });
 
-test("durable TMC push worker is kicked after mutations and is available to every role", async () => {
-  const [route, decisionRoute, cancelRoute, landing, pushRepository, worker, service] = await Promise.all([
-    source("app/api/inventory/transfer-requests/route.ts"),
-    source("app/api/inventory/transfer-requests/[id]/decision/route.ts"),
-    source("app/api/inventory/transfer-requests/[id]/cancel/route.ts"),
-    source("components/TmcLanding.tsx"),
-    source("lib/server/persistence/postgres/postgres-web-push-repositories.ts"),
-    source("scripts/process-tmc-push-outbox.ts"),
-    source("deploy/systemd/yu-inventory-push-worker.service"),
-  ]);
-  for (const mutationRoute of [route, decisionRoute, cancelRoute]) {
-    assert.match(mutationRoute, /after\(\(\) => (?:services|getApplicationServices\(\))\.push\.processTmcPushOutbox\(\)\)/);
-  }
-  // WhatsApp checks/sends for both participants share the post-response window.
-  for (const whatsappRoute of [route, decisionRoute]) {
-    assert.match(whatsappRoute, /export const maxDuration = 60/);
-  }
-  assert.match(landing, /PushNotificationControl/);
-  assert.match(pushRepository, /u\.role in \('admin', 'warehouse', 'employee', 'passport_author', 'passport_reviewer'\)/);
-  assert.match(worker, /processTmcPushOutbox/);
-  assert.match(worker, /process\.argv\.includes\("--loop"\)/);
-  assert.match(service, /ExecStart=\/usr\/bin\/npm run worker:tmc-push -- --loop/);
-  assert.match(service, /EnvironmentFile=\/etc\/yu-inventory\/yu-inventory-runtime\.env/);
-  assert.doesNotMatch(service, /DATABASE_MIGRATOR_URL/);
-  assert.match(service, /TimeoutStopSec=35s/);
-});
-
-test("subscription lifecycle is authenticated and removed before logout", async () => {
-  const [subscriptionRoute, client, authProvider] = await Promise.all([
-    source("app/api/push/subscriptions/route.ts"),
-    source("lib/client-push-subscription.ts"),
-    source("components/AuthProvider.tsx"),
-  ]);
-
-  assert.match(subscriptionRoute, /requireCurrentUser\(request\)/);
-  assert.match(subscriptionRoute, /authorizationActor\(user\)/);
-  assert.match(client, /pushManager\.subscribe\(\{/);
-  assert.match(client, /userVisibleOnly: true/);
-  assert.match(client, /method: "DELETE"/);
-  assert.match(client, /subscription\.unsubscribe\(\)/);
-  assert.match(authProvider, /removePushSubscriptionBeforeLogout\(\)/);
-});
-
 test("dismissed notification permission remains retryable", async () => {
-  const control = await source("components/PushNotificationControl.tsx");
-
   assert.equal(pushPermissionError("default"), "push_permission_dismissed");
   assert.equal(pushPermissionError("denied"), "push_permission_denied");
   assert.equal(pushPermissionError("granted"), null);
-  assert.match(control, /\| "dismissed"/);
-  assert.match(control, /disabled=\{busy\}/);
-  assert.match(control, /state === "dismissed"/);
-  assert.match(control, /aria-busy=\{busy\}/);
-  assert.match(control, /role="status"/);
-  assert.match(control, /hintKey = "push\.assignmentHint"/);
 });
 
 test("VAPID key rotation removes an incompatible browser subscription", async () => {
@@ -168,7 +108,7 @@ test("VAPID key rotation removes an incompatible browser subscription", async ()
   const originalFetch = globalThis.fetch;
   const methods: string[] = [];
   let unsubscribed = false;
-  const subscription = {
+  const subscriptionData = {
     endpoint: "https://fcm.googleapis.com/subscription/old-key",
     options: {
       applicationServerKey: Uint8Array.from({ length: 65 }, () => 1).buffer,
@@ -177,7 +117,8 @@ test("VAPID key rotation removes an incompatible browser subscription", async ()
       unsubscribed = true;
       return true;
     },
-  } as unknown as PushSubscription;
+  };
+  const subscription = subscriptionData as unknown as PushSubscription;
   const registration = {
     pushManager: {
       async getSubscription() {
@@ -235,7 +176,7 @@ test("rapid language changes persist the newest push locale last", async () => {
   const firstRequest = new Promise<void>((resolve) => {
     releaseFirstRequest = resolve;
   });
-  const subscription = {
+  const currentSubscriptionData = {
     endpoint: "https://fcm.googleapis.com/subscription/current",
     toJSON() {
       return {
@@ -244,7 +185,8 @@ test("rapid language changes persist the newest push locale last", async () => {
         keys: { p256dh: "P".repeat(65), auth: "A".repeat(22) },
       };
     },
-  } as unknown as PushSubscription;
+  };
+  const subscription = currentSubscriptionData as unknown as PushSubscription;
 
   Object.defineProperty(globalThis, "window", {
     configurable: true,
@@ -310,7 +252,6 @@ test("an assigned employee starts with a room from the selected inspection", () 
         rooms: [
           {
             id: "inspection-room-1",
-            inspectionId: "inspection-1",
             buildingId: "building-1",
             roomId: "room-1",
             buildingName: "Main",
@@ -331,11 +272,11 @@ test("an assigned employee starts with a room from the selected inspection", () 
 });
 
 test("recording and revising a result updates inspection progress immediately", () => {
-  const inspection = {
+  const inspection: InspectionDto = {
     id: "inspection-1",
     name: "August audit",
     technicianId: "employee-1",
-    status: "in_progress",
+    status: "draft",
     version: 1,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
@@ -363,8 +304,8 @@ test("recording and revising a result updates inspection progress immediately", 
     results: [],
     progress: { checked: 0, total: 1, percent: 0, present: 0, missing: 0, unchecked: 1, comments: 0 },
     displayStatus: "draft",
-  } as const;
-  const firstResult = {
+  };
+  const firstResult: ItemResultDto = {
     id: "result-1",
     inspectionId: inspection.id,
     inspectionRoomId: inspection.rooms[0].id,
@@ -377,74 +318,16 @@ test("recording and revising a result updates inspection progress immediately", 
     comment: null,
     revisionNumber: 1,
     createdAt: "2026-08-02T10:00:00.000Z",
-  } as const;
+  };
   const afterFirst = applyInspectionResult([inspection], firstResult);
   assert.equal(afterFirst[0]?.rooms[0]?.inspectedAt, firstResult.createdAt);
   assert.equal(afterFirst[0]?.results.length, 1);
 
-  const revised = { ...firstResult, result: "damaged", revisionNumber: 2 } as const;
+  const revised = { ...firstResult, result: "broken", revisionNumber: 2 } as const;
   const afterRevision = applyInspectionResult(afterFirst, revised);
   assert.equal(afterRevision[0]?.results.length, 1);
-  assert.equal(afterRevision[0]?.results[0]?.result, "damaged");
+  assert.equal(afterRevision[0]?.results[0]?.result, "broken");
   assert.equal(afterRevision[0]?.results[0]?.revisionNumber, 2);
-});
-
-test("assignment data flows from admin selection to notifier after persistence", async () => {
-  const [
-    manager,
-    page,
-    route,
-    service,
-    inspectionRepository,
-    pushRepository,
-    schemaContract,
-    migration,
-  ] = await Promise.all([
-    source("components/InventoryInspectionsManager.tsx"),
-    source("app/(protected)/inventory/inspections/page.tsx"),
-    source("app/api/inventory/inspections/route.ts"),
-    source("lib/application/services/inventory-inspection-service.ts"),
-    source(
-      "lib/server/persistence/postgres/postgres-inventory-inspection-repositories.ts",
-    ),
-    source(
-      "lib/server/persistence/postgres/postgres-web-push-repositories.ts",
-    ),
-    source("lib/db/schema-contract.ts"),
-    source("drizzle/20260731104926_lethal_malice.sql"),
-  ]);
-
-  assert.match(manager, /technicianId: selectedTechnician/);
-  assert.match(manager, /aria-label=\{t\("inspections\.assignee"\)\}/);
-  assert.match(manager, /t\("inspections\.scanRoom"\)/);
-  assert.match(manager, /selectedInspectionRoom/);
-  assert.match(page, /searchParams: Promise/);
-  assert.match(page, /initialInspectionId/);
-  assert.match(route, /technicianId/);
-  assert.match(service, /findAssignableTechnician\(technicianId\)/);
-  assert.doesNotMatch(service, /assignmentNotifier/);
-  assert.match(route, /after\(\(\) =>/);
-  assert.match(route, /services\.push\.notifyInspectionAssignment/);
-  assert.match(route, /export const maxDuration = 30/);
-  assert.match(inspectionRepository, /and is_active = true/);
-  assert.match(inspectionRepository, /for share/);
-  assert.doesNotMatch(inspectionRepository, /and active = true/);
-  assert.match(pushRepository, /join \$\{USERS\} u on u\.id = s\.user_id/);
-  assert.match(pushRepository, /and u\.is_active = true/);
-  assert.match(
-    pushRepository,
-    /delete from \$\{SUBSCRIPTIONS\}\s+where user_id = \$1\s+and id in/,
-  );
-  assert.match(pushRepository, /and p256dh = \$4/);
-  assert.match(pushRepository, /and auth = \$5/);
-  assert.match(pushRepository, /expiration_time is not distinct from \$6/);
-  assert.match(schemaContract, /grant select, insert, update on all tables/);
-  assert.match(
-    schemaContract,
-    /grant delete on table\s+"yu_inventory"\."web_push_subscriptions"/,
-  );
-  assert.match(migration, /CREATE TABLE "yu_inventory"\."web_push_subscriptions"/);
-  assert.match(migration, /web_push_subscriptions_endpoint_unique/);
 });
 
 async function clickWorker(

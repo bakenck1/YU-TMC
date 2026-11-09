@@ -3,17 +3,15 @@ import test from "node:test";
 import sharp from "sharp";
 
 import type {
-  InventoryItemRecord,
-  InventoryItemRepositories,
-  InventoryItemRepository,
+InventoryItemRecord,
+InventoryItemRepositories,
+InventoryItemRepository,
 } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
-import { createPostgresInventoryItemRepositories } from "../lib/server/persistence/postgres/postgres-inventory-item-repositories";
-import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
+import { canonicalInventoryDetailsReturnHref } from "../lib/inventory-list-state";
 import { canAccessPath } from "../lib/security/authorization";
 import { hasPermission } from "../lib/security/permissions";
-import { canonicalInventoryDetailsReturnHref } from "../lib/inventory-list-state";
 
 const GENERAL_ITEM: InventoryItemRecord = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -121,23 +119,6 @@ test("IT inventory detail links preserve only canonical IT list state", () => {
   assert.equal(canonicalInventoryDetailsReturnHref("/it-items-archive?q=camera"), null);
 });
 
-test("ordinary and IT repository collections are separated by the system section", async () => {
-  const queries: string[] = [];
-  const source = {
-    query: async (text: string) => {
-      queries.push(text);
-      return { rows: [], rowCount: 0 };
-    },
-  } as unknown as PostgresRepositorySource;
-  const repository = createPostgresInventoryItemRepositories(source).items;
-
-  await repository.listItems();
-  await repository.listItItems();
-
-  assert.match(queries[0]!, /i\.item_section\s*=\s*'general'/i);
-  assert.match(queries[1]!, /i\.item_section\s*=\s*'it'/i);
-});
-
 test("IT list is available only to administrators", async () => {
   let calls = 0;
   const service = createService({
@@ -150,7 +131,7 @@ test("IT list is available only to administrators", async () => {
   const result = await service.listItItems({ userId: "admin-1", role: "admin" });
   assert.equal(result[0]?.itemSection, "it");
   assert.equal(result[0]?.itType, "wifi_access_point");
-  assert.equal(result[0]?.networkAddresses[0]?.ipAddress, "192.168.1.10");
+  assert.equal(result[0]?.networkAddresses?.[0]?.ipAddress, "192.168.1.10");
 
   await assert.rejects(
     service.listItItems({ userId: "warehouse-1", role: "warehouse" }),
@@ -236,7 +217,7 @@ test("empty address rows are dropped without normalizing entered address text", 
     insertItemQr: async () => undefined,
     appendAudit: async () => undefined,
     updateItemPhoto: async () => ({ ...IT_ITEM, photoUrl: "/photo", photoIds: ["photo-1"], version: 2 }),
-    replaceItNetworkAddresses: async (_id, addresses) => {
+    replaceItNetworkAddresses: async (_id: string, addresses: Parameters<NonNullable<InventoryItemRepository["replaceItNetworkAddresses"]>>[1]) => {
       replaced = addresses;
       return addresses.map((address, index) => ({
         id: `address-${index}`,

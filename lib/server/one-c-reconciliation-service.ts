@@ -415,6 +415,10 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         if (!roomId || !itemType || !asset.inventoryNumber || asset.quantity !== 1 || decision.confirmCreate !== true || decision.confirmConditionDefault !== true) throw new Error("create_not_confirmed");
         itemId = randomUUID();
         await client.query(`insert into "yu_inventory"."items"(id,name,item_type,item_section,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,status,condition,connection_status,created_by,updated_by) values($1,$2,$3,'general',1,0,$4,'official',$5,$6,$7,'good','not_applicable',$8,$8)`, [itemId, asset.name, itemType, roomId, asset.inventoryNumber, inventoryNumberComparisonKey(asset.inventoryNumber), asset.status === "Принято к учёту" ? "active" : "maintenance", actor.userId]);
+        await client.query(`insert into "yu_inventory"."item_inventory_number_history"
+          (id,item_id,kind,value,comparison_key,assigned_at,assigned_by)
+          select $1,id,inventory_number_kind,inventory_number,inventory_number_key,created_at,created_by
+          from "yu_inventory"."items" where id=$2`, [randomUUID(), itemId]);
         const qr = qrIdentifierFromEntropy(randomBytes(16));
         await client.query(`insert into "yu_inventory"."qr_identifiers"(id,original_value,canonical_key,format,target_kind,role,status,item_id,created_by) values($1,$2,$2,'generated_v1','item','primary','active',$3,$4)`, [randomUUID(), qr, itemId, actor.userId]);
         outcome = "created";
@@ -434,7 +438,9 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
       const linkMethod = outcome === "created" ? "created_from_one_c" : Array.isArray(decision.matchedBy) ? "manual" : "inventory_number_confirmed";
       const linked = await client.query(`insert into "yu_inventory"."item_one_c_links"(external_id,item_id,source_code,source_inventory_number,linked_by,link_method,last_batch_id,last_payload_hash,accounting_status,accounting_residual_value,source_department,source_responsible_name,source_updated_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(external_id) do update set last_batch_id=excluded.last_batch_id,last_payload_hash=excluded.last_payload_hash,source_code=excluded.source_code,source_inventory_number=excluded.source_inventory_number,accounting_status=excluded.accounting_status,accounting_residual_value=excluded.accounting_residual_value,source_department=excluded.source_department,source_responsible_name=excluded.source_responsible_name,source_updated_at=excluded.source_updated_at,version="yu_inventory"."item_one_c_links".version+1 where "yu_inventory"."item_one_c_links".item_id=excluded.item_id returning external_id`, [asset.externalId,itemId,asset.code,asset.inventoryNumber,actor.userId,linkMethod,batchId,row.payload_hash,asset.status,asset.residualCost,asset.location,asset.responsibleName,asset.updatedAt]);
       if (!linked.rows[0]) throw new Error("link_conflict");
-      await client.query(`insert into "yu_inventory"."audit_records"(id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,after_values,metadata) values($1,$2,$3,'item',$4,$5,$6::jsonb,$7::jsonb)`, [randomUUID(),actor.userId,actor.role,itemId,`item.one_c_${outcome}`,JSON.stringify({ externalId: asset.externalId, batchId }),JSON.stringify({ source: "one_c_reconciliation" })]);
+      await client.query(`insert into "yu_inventory"."audit_records"(id,actor_id,actor_role_snapshot,subject_kind,subject_id,action,after_values,metadata) values($1,$2,$3,'item',$4,$5,$6::jsonb,$7::jsonb)`, [randomUUID(),actor.userId,actor.role,itemId,`item.one_c_${outcome}`,JSON.stringify({ externalId: asset.externalId, batchId,
+        ...(outcome === "created" ? { name: asset.name, inventoryNumber: asset.inventoryNumber, inventoryNumberKind: "official" } : {}),
+      }),JSON.stringify({ source: "one_c_reconciliation" })]);
       await client.query(`update "yu_inventory"."one_c_import_batch_rows" set review_state='published',published_item_id=$3,published_at=now() where batch_id=$1 and external_id=$2`, [batchId,asset.externalId,itemId]);
       await client.query("commit"); return outcome;
     } catch (error) { await client.query("rollback"); throw error; }

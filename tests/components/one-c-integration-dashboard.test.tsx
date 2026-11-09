@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import OneCIntegrationDashboard from "@/components/OneCIntegrationDashboard";
-import type { OneCAnalytics } from "@/lib/one-c-analytics";
 import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-audit";
+import type { OneCAnalytics } from "@/lib/one-c-analytics";
+import { fireEvent,render,screen,within } from "@testing-library/react";
+import { afterEach,describe,expect,it,vi } from "vitest";
 
 const { refresh, appLanguage } = vi.hoisted(() => ({ refresh: vi.fn(), appLanguage: { value: "ru" as "ru" | "kk" | "en" } }));
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: appLanguage.value, locale: appLanguage.value === "en" ? "en-US" : "ru-RU" }) }));

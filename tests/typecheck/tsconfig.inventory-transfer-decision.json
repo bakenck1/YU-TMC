@@ -13,7 +13,6 @@
     "../../lib/server/persistence/postgres/postgres-inventory-responsibility-repositories.ts",
     "../inventory-transfer-decision-bola.test.ts",
     "../inventory-transfer-decision-route.test.ts",
-    "../inventory-responsibility-repositories.test.ts",
     "../inventory-transfer-workflow.test.ts"
   ]
 }

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 
 import TmcLanding from "@/components/TmcLanding";
 import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-detail-view";

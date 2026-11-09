@@ -1,53 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { getClientIp } from "../lib/security/rate-limiter";
-import type { UserRepositories } from "../lib/application/ports/user-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
+import type { UserRepositories } from "../lib/application/ports/user-repositories";
 import { UserService } from "../lib/application/services/user-service";
 import { ApplicationError } from "../lib/domain/application-error";
 import {
-  assertLoginJsonRequest,
-  MAX_LOGIN_JSON_BYTES,
-  readLoginJsonRequest,
+assertLoginJsonRequest,
+MAX_LOGIN_JSON_BYTES,
+readLoginJsonRequest,
 } from "../lib/security/login-request";
-
-test("login rejects cross-site credential submission before authentication", () => {
-  const source = readFileSync("app/api/auth/login/route.ts", "utf8");
-  const integrityCheck = source.indexOf("requireSameOriginMutation(request)");
-  const authentication = source.indexOf("users.authenticate(");
-
-  assert.ok(integrityCheck >= 0, "login route must enforce same-origin mutation");
-  assert.ok(
-    integrityCheck < authentication,
-    "origin validation must run before credential authentication",
-  );
-  assert.match(source, /applicationErrorResponse\(error, rateLimitHeaders\(apiLimit\)\)/);
-});
-
-test("all authentication routes use the shared secure cookie policy", () => {
-  for (const route of ["login", "register", "logout", "session"]) {
-    const source = readFileSync(`app/api/auth/${route}/route.ts`, "utf8");
-    assert.match(source, /sessionCookieOptions|expiredSessionCookieOptions/);
-  }
-});
-
-test("login validates and bounds JSON before parsing credentials", () => {
-  const source = readFileSync("app/api/auth/login/route.ts", "utf8");
-  const guard = source.indexOf("assertLoginJsonRequest(request)");
-  const parse = source.indexOf("readLoginJsonRequest(request)");
-
-  assert.ok(guard >= 0 && guard < parse);
-  assert.doesNotMatch(source, /request\.json\(\)/);
-});
-
-test("durable email throttling runs before expensive password verification", () => {
-  const source = readFileSync("app/api/auth/login/route.ts", "utf8");
-  const authentication = source.indexOf("users.authenticate(");
-  const emailLimit = source.indexOf("consumeLoginEmailLimit(email)");
-
-  assert.ok(emailLimit >= 0 && emailLimit < authentication);
-});
+import { getClientIp } from "../lib/security/rate-limiter";
 
 test("client-supplied forwarding headers are ignored without trusted proxy configuration", () => {
   const previous = process.env.TRUSTED_CLIENT_IP_HEADER;

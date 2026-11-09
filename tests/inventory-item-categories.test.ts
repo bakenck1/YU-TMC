@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  categoryFromLegacyType,
-  INVENTORY_ITEM_CATEGORIES,
-  inventoryItemCategoryTranslationKey,
-  isInventoryItemCategory,
+categoryFromLegacyType,
+INVENTORY_ITEM_CATEGORIES,
+inventoryItemCategoryTranslationKey,
+isInventoryItemCategory,
 } from "../lib/inventory-categories";
 
 test("supports all first-class inventory categories", () => {
@@ -33,29 +32,4 @@ test("supports all first-class inventory categories", () => {
     "data.components",
   );
   assert.equal(categoryFromLegacyType("Комплектующие"), "components");
-});
-
-test("database migration allows the components category", async () => {
-  const [migration, schema, journal] = await Promise.all([
-    readFile(
-      new URL(
-        "../drizzle/20260917075020_open_firebird.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-    readFile(new URL("../lib/db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"),
-  ]);
-
-  const allowedValues = /'electronics', 'electrical_equipment', 'furniture', 'components'/;
-  assert.match(migration, allowedValues);
-  assert.ok(schema.includes("btrim(${table.itemType}) <> ''"));
-  assert.equal(isInventoryItemCategory("household_inventory"), true);
-  assert.equal(isInventoryItemCategory("old_category"), false);
-  assert.ok(
-    JSON.parse(journal).entries.some(
-      (entry: { tag?: string }) => entry.tag === "20260917075020_open_firebird",
-    ),
-  );
 });

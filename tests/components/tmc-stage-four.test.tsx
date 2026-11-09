@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act,fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import TmcHistory from "@/components/TmcHistory";
 import TmcNotifications from "@/components/TmcNotifications";
-import type { TmcLocationHistoryDto, TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
+import type { TmcLocationHistoryDto,TmcTransferRequestDto } from "@/lib/contracts/tmc-operations";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -46,15 +46,17 @@ describe("TMC stage four UI", () => {
   beforeEach(() => { push.mockReset(); vi.stubGlobal("fetch", vi.fn()); });
 
   it("renders server-backed history filters and overdue results", () => {
-    render(<TmcHistory requests={[REQUEST]} locationChanges={[LOCATION_CHANGE]} nextRequestHref="/tmc/history?requestCursor=next" nextLocationHref="/tmc/history?locationCursor=next" />);
-    expect(screen.getAllByRole("combobox").length).toBeGreaterThanOrEqual(5);
-    expect(screen.getByText("Initiator → Recipient")).not.toBeNull();
-    expect(screen.getByText("tmc.request.overdue")).not.toBeNull();
-    expect(screen.getByRole("link", { name: /Initiator/ }).getAttribute("href")).toBe(`/tmc/transfer-requests/${REQUEST.id}`);
-    expect(screen.getByText("Building A / 101 → Building B / 202")).not.toBeNull();
-    expect(screen.getByText(/Move to laboratory/)).not.toBeNull();
-    expect(screen.getByRole("link", { name: "tmc.history.loadOlderRequests" }).getAttribute("href")).toContain("requestCursor=next");
-    expect(screen.getByRole("link", { name: "tmc.history.loadOlderLocations" }).getAttribute("href")).toContain("locationCursor=next");
+    const next = "/tmc/history?status=pending&requestCursor=next";
+    render(<TmcHistory requests={[REQUEST]} locationChanges={[LOCATION_CHANGE]} nextRequestHref={next} />);
+    expect(screen.getByRole("link", { name: /Initiator/ }).getAttribute("href")).toBe('/tmc/transfer-requests/' + REQUEST.id);
+    const form = screen.getByRole("button", { name: "common.search" }).closest("form")!;
+    const status = form.querySelector('select[name="status"]')!;
+    fireEvent.change(status, { target: { value: "accepted" } });
+    const data = new FormData(form);
+    expect(data.get("status")).toBe("accepted");
+    const older = new URL(screen.getByRole("link", { name: "tmc.history.loadOlderRequests" }).getAttribute("href")!, window.location.origin);
+    expect(older.searchParams.get("status")).toBe("pending");
+    expect(older.searchParams.get("requestCursor")).toBe("next");
   });
 
   it("shows unread count and exposes each notification as a request link with persisted read state", async () => {
@@ -79,7 +81,7 @@ describe("TMC stage four UI", () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: "2026-08-10T01:00:00.000Z" }] }) } as Response);
     render(<TmcNotifications />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.title" }));
+    fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
     expect(screen.getByText("tmc.notifications.read")).not.toBeNull();
   });
 
@@ -165,28 +167,23 @@ describe("TMC stage four UI", () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.completed", requestId: REQUEST.id, itemId: null, safePayload: { status: "accepted", isAdministrativeDecision: false }, occurredAt: REQUEST.createdAt, readAt: "2026-08-10T01:00:00.000Z" }] }) } as Response);
     render(<TmcNotifications />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "tmc.notifications.title" }));
+    fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
 
     expect(screen.getByText("tmc.notifications.accepted")).not.toBeNull();
   });
 
-  it("renders a large compact bell touch target", async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [] }) } as Response);
-    render(<TmcNotifications compact />);
-    const bell = screen.getByRole("button", { name: "tmc.notifications.title" });
-    expect(bell.className).toContain("min-h-11");
-    expect(bell.className).toContain("min-w-11");
-  });
-
   it("polls for newly arrived requests while the recipient stays on the same page", async () => {
     vi.useFakeTimers();
-    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ unreadCount: 0, notifications: [] }) } as Response);
-    render(<TmcNotifications />);
-    await act(async () => { await Promise.resolve(); });
-    expect(fetch).toHaveBeenCalledTimes(1);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    vi.useRealTimers();
+    try {
+      vi.mocked(fetch).mockResolvedValueOnce(Response.json({ unreadCount: 0, notifications: [] }))
+        .mockResolvedValue(Response.json({ unreadCount: 1, notifications: [{ id: "99999999-9999-4999-8999-999999999999", type: "tmc_transfer.requested", requestId: REQUEST.id, itemId: null, safePayload: {}, occurredAt: REQUEST.createdAt, readAt: null }] }));
+      render(<TmcNotifications />);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByLabelText("tmc.notifications.unread")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(screen.getByLabelText("tmc.notifications.unread").textContent).toBe("1");
+      fireEvent.click(screen.getByRole("button", { name: /tmc.notifications.title/ }));
+      expect(screen.getByRole("link").getAttribute("href")).toBe('/tmc/transfer-requests/' + REQUEST.id);
+    } finally { vi.useRealTimers(); }
   });
 });

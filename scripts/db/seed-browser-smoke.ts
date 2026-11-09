@@ -36,6 +36,7 @@ async function main() {
       [fixture.adminId, "E2E-ADMIN", fixture.adminEmail, "Browser Smoke Administrator", "admin"],
       [fixture.ownerId, "E2E-OWNER", fixture.ownerEmail, "Browser Smoke Owner", "employee"],
       [fixture.recipientId, "E2E-RECIPIENT", fixture.recipientEmail, "Browser Smoke Recipient", "employee"],
+      ["10000000-0000-4000-8000-000000000012", "E2E-PRINT", "browser-smoke-printer@example.invalid", "Browser Smoke Printer", "typography"],
     ] as const;
     for (const [id, code, email, name, role] of users) {
       await client.query(
@@ -63,7 +64,7 @@ async function main() {
     await client.query(
       `insert into "yu_inventory"."buildings"
          (id, name, name_key, address, address_key, created_by, updated_by)
-       values ($1, 'Browser Smoke Building', 'browser smoke building',
+       values ($1, 'Main Campus', 'main campus',
          'Browser Smoke Address', 'browser smoke address', $2, $2)`,
       [fixture.buildingId, fixture.adminId],
     );
@@ -101,6 +102,15 @@ async function main() {
        values ($1, $2, $3, 'migration', $4)`,
       [fixture.periodId, fixture.itemId, fixture.ownerId, fixture.adminId],
     );
+    await client.query(`insert into yu_inventory.items
+      (id,name,item_section,it_type,item_type,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      values ('10000000-0000-4000-8000-000000000009','Private IT camera','it','camera','camera',$1,'official','E2E-IT-CAMERA','e2e-it-camera',$2,$2)`, [fixture.roomId, fixture.adminId]);
+    await client.query(`insert into yu_inventory.rooms
+      (id,building_id,designation,designation_key,floor_number,access_mode,created_by,updated_by)
+      values ('10000000-0000-4000-8000-000000000010',$1,'E2E-Closed','e2e-closed',1,'closed',$2,$2)`, [fixture.buildingId, fixture.adminId]);
+    await client.query(`insert into yu_inventory.items
+      (id,name,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      values ('10000000-0000-4000-8000-000000000011','Hidden cabinet evidence','10000000-0000-4000-8000-000000000010','official','E2E-HIDDEN','e2e-hidden',$1,$1)`, [fixture.adminId]);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

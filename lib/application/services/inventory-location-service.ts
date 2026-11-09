@@ -1,4 +1,5 @@
 
+import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
 import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   BuildingDto,
@@ -204,7 +205,7 @@ export class InventoryLocationService {
       const rooms = isEmployeeRole(actor.role)
         ? await locations.listRoomsAssignedTo(buildingId, actor.userId)
         : await locations.listRooms(buildingId);
-      return rooms.map(toRoomDto);
+      return sortInventoryRoomsForSelection(rooms).map(toRoomDto);
     });
   }
 

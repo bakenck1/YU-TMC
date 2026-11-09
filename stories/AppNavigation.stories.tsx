@@ -42,6 +42,7 @@ const room: RoomWorkspaceDto = {
   disconnectedCount: 0,
   items: [{
     id: "item-1",
+    href: "/items/item-1",
     name: "Моноблок HP",
     inventoryNumber: "YU-0001",
     description: "Рабочее место",
@@ -71,6 +72,6 @@ export const SidebarNavLinkStory: Story = { name: "SidebarNavLink", render: () =
 export const StatCardStory: Story = { name: "StatCard", render: () => <StatCard label="Все ТМЦ" value={128} icon={Boxes} hint="Во всех корпусах" /> };
 export const RoomMetricStory: Story = { name: "RoomMetric", render: () => <RoomMetric icon={Boxes} label="ТМЦ" value={12} /> };
 export const RoomWorkspaceViewStory: Story = { name: "RoomWorkspaceView", render: () => <RoomWorkspaceView room={room} authenticated returnTo="/rooms/qr/demo" /> };
-export const PublicRoomWorkspaceScreenStory: Story = { name: "PublicRoomWorkspaceScreen", render: () => <PublicRoomWorkspaceScreen room={{ designation: "201" }} authenticated={false} returnTo="/rooms/qr/demo" /> };
+export const PublicRoomWorkspaceScreenStory: Story = { name: "PublicRoomWorkspaceScreen", render: () => <PublicRoomWorkspaceScreen room={{ access: "authentication_required" }} authenticated={false} returnTo="/rooms/qr/demo" /> };
 export const PwaRegistrationStory: Story = { name: "PwaRegistration", render: () => <PwaRegistration /> };
 export const LayoutWrapperExample: Story = { name: "Wrapper layout contract", render: () => <Wrapper direction="column" gap="md" padding="lg"><p>Layout</p><p>без косметических override-пропсов</p></Wrapper> };

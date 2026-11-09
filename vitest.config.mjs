@@ -14,5 +14,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    include: ["tests/database/**/*.test.ts"],
+    // Database suites rebuild the same test schema. This also makes a direct
+    // Vitest invocation safe, rather than relying only on the CLI runner loop.
+    fileParallelism: false,
   },
 });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, DoorOpen, LayersIcon } from "lucide-react";
 import type { Building } from "@/lib/types";
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
 import { useAppSettings } from "./AppSettingsProvider";
 
 export default function LocationFloorAccordion({ floor }: { floor: Building["floors"][number] }) {
@@ -19,7 +20,7 @@ export default function LocationFloorAccordion({ floor }: { floor: Building["flo
         {open ? (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <ul className="space-y-1 px-4 pb-3">
-              {floor.rooms.map((room) => (
+              {floor.rooms.toSorted((left, right) => compareInventoryRoomDesignations(left.name, right.name)).map((room) => (
                 <li key={room.id} className="flex items-center justify-between rounded-lg px-2 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
                   <span className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-zinc-400" aria-hidden="true" />{room.name}</span>
                   <span className="rounded-full bg-accent-light px-2 py-0.5 text-xs font-medium text-accent-dark">{room.itemCount} {t("common.unitShort")}</span>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import type { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
+import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { OneCImportUnavailableError } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { ApplicationError } from "@/lib/domain/application-error";
 import { readLimitedBody } from "@/lib/server/http/request-body";
@@ -16,6 +17,11 @@ import { MAX_ONE_C_RECORDS, MAX_ONE_C_XML_BYTES, OneCContractError, parseOneCFix
 
 const ACCEPTED_MEDIA_TYPES = ["application/xml", "text/xml"];
 const IMPORT_BODY_TIMEOUT_MS = 120_000;
+const INITIAL_COST_REQUIREMENT = {
+  field: "InitialCost", required: true, exclusiveMinimum: 0, currency: "KZT",
+  maximumIntegerDigits: 12, maximumFractionDigits: 2,
+  description: "Первоначальная стоимость конкретного ОС до вычета амортизации. ResidualValue передаётся отдельно и не заменяет InitialCost.",
+} as const;
 
 type Dependencies = {
   service: Pick<OneCFixedAssetImportService, "importBatch" | "tryAcquireLease">;
@@ -25,7 +31,7 @@ type Dependencies = {
 };
 
 export function getOneCFixedAssetsCapability(apiKey = process.env.ONE_C_FIXED_ASSETS_API_KEY) {
-  return json({ service: "1c-fixed-assets", status: "capability", configured: Boolean(apiKey?.trim()), method: "POST", authentication: "Bearer token required", contentType: ACCEPTED_MEDIA_TYPES, maximumBytes: MAX_ONE_C_XML_BYTES, maximumRecords: MAX_ONE_C_RECORDS });
+  return json({ service: "1c-fixed-assets", status: "capability", configured: Boolean(apiKey?.trim()), method: "POST", authentication: "Bearer token required", contentType: ACCEPTED_MEDIA_TYPES, maximumBytes: MAX_ONE_C_XML_BYTES, maximumRecords: MAX_ONE_C_RECORDS, pricing: INITIAL_COST_REQUIREMENT });
 }
 
 export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
@@ -48,7 +54,18 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
       let xml: string;
       try { xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
       catch { throw new OneCContractError("invalid_utf8"); }
-      const result = await dependencies.service.importBatch(parseOneCFixedAssets(xml), {
+      const assets = parseOneCFixedAssets(xml);
+      const priceErrors = validateInitialCosts(assets);
+      if (priceErrors.total > 0) {
+        return json({
+          success: false, error: "initial_cost_required", requestId,
+          message: "Передайте положительную первоначальную стоимость InitialCost для каждого ОС. Пакет не сохранён. Нулевая остаточная стоимость ResidualValue допустима.",
+          pricing: INITIAL_COST_REQUIREMENT,
+          invalidRecords: priceErrors.total, issues: priceErrors.issues,
+          issuesTruncated: priceErrors.total > priceErrors.issues.length,
+        }, 422);
+      }
+      const result = await dependencies.service.importBatch(assets, {
         sourceSha256: createHash("sha256").update(bytes).digest("hex"),
         requestId,
         sourceFilename: normalizedFilename(request.headers.get("x-source-filename")),
@@ -69,6 +86,23 @@ export function createOneCFixedAssetsPostHandler(dependencies: Dependencies) {
       await lease?.release().catch((error) => logSafeFailure(dependencies, requestId, "lease_release_failed", error instanceof Error ? error.name : "UnknownError"));
     }
   };
+}
+
+function validateInitialCosts(assets: readonly OneCFixedAsset[]) {
+  const issues: { row: number; externalId: string; code: string | null; field: "InitialCost"; reason: string }[] = [];
+  let total = 0;
+  for (const [index, asset] of assets.entries()) {
+    const value = asset.initialCost;
+    const reason = value == null ? "missing_initial_cost"
+      : value === 0 ? "zero_initial_cost"
+        : !Number.isFinite(value) || value < 0 || !/^\d{1,12}(?:\.\d{1,2})?$/u.test(String(value))
+          ? "invalid_initial_cost" : null;
+    if (!reason) continue;
+    total++;
+    // Keep the response bounded for bulk exports; the sender can correct all rows and retry.
+    if (issues.length < 100) issues.push({ row: index + 1, externalId: asset.externalId, code: asset.code, field: "InitialCost", reason });
+  }
+  return { total, issues };
 }
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}) {

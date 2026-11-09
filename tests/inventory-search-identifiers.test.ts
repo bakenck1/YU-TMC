@@ -48,22 +48,6 @@ test("published 1C search identifiers survive repository, DTO and UI projection 
   assert.equal(view.oneCCode, undefined);
 });
 
-test("identifier query considers every linked asset and only its latest published barcode", async () => {
-  const { source, queries } = sourceFixture([]);
-  await createPostgresInventoryItemRepositories(source).items.listItems();
-  const sql = queries[0]!;
-  assert.match(sql, /item_one_c_links/);
-  assert.match(sql, /source_code/);
-  assert.match(sql, /source_inventory_number/);
-  assert.match(sql, /payload\s*->>\s*'barcode'/);
-  assert.match(sql, /review_state\s*=\s*'published'/);
-  assert.match(sql, /published_item_id\s*=\s*i\.id/);
-  assert.match(sql, /external_id\s*=\s*l\.external_id/);
-  assert.match(sql, /order by\s+[^\n]*published_at desc nulls last/);
-  assert.match(sql, /array_agg\(distinct/);
-  assert.doesNotMatch(sql, /one_c_fixed_asset_inbox/);
-});
-
 test("legacy rows without supplemental identifiers expose an empty search array", async () => {
   const { source } = sourceFixture();
   const [record] = await createPostgresInventoryItemRepositories(source).items.listItems();

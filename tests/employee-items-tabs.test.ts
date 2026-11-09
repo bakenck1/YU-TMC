@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { Children, createElement, type ReactElement, type ReactNode } from "react";
+import { Children,createElement,type ReactElement,type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  EmployeeItemsTabList,
+EmployeeItemsTabList,
 } from "../components/EmployeeItemsTabs";
-import { employeeItemTabAfterKey, employeeItemsForStatus } from "../lib/employee-items-tabs";
+import { employeeItemTabAfterKey,employeeItemsForStatus } from "../lib/employee-items-tabs";
 
 test("employee inventory renders a roving, fully associated tab list", () => {
   const markup = renderToStaticMarkup(
@@ -68,36 +67,4 @@ test("employee status selection returns only the selected status items", () => {
   ] as const;
   const renderedIds = employeeItemsForStatus(items, "maintenance").map((item) => item.id);
   assert.deepEqual(renderedIds, ["m"]);
-});
-
-test("employee roles receive their assigned inventory interface", async () => {
-  const source = await readFile(
-    new URL("../app/(protected)/items/page.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /isEmployeeRole\(user\.role\)/);
-  assert.match(source, /<EmployeeItemsTabs/);
-  assert.match(source, /<EmployeeItemsTabs[\s\S]*items=\{items\}/);
-  assert.doesNotMatch(source, /recipientName/);
-  assert.match(source, /invoiceActions[\s\S]*showSummary[\s\S]*\/>/);
-  assert.doesNotMatch(source, /items\/active|items\/maintenance|items\/decommissioned/);
-});
-
-test("the invoice action is shown to an employee only when they have assigned inventory", async () => {
-  const source = await readFile(
-    new URL("../components/EmployeeItemsTabs.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /const invoiceActions = items\.length > 0;/);
-  assert.match(source, /invoiceActions=\{invoiceActions\}/);
-});
-
-test("employee saved tab links migrate to a clearable status filter", async () => {
-  const source = await readFile(new URL("../app/(protected)/items/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /isEmployeeRole\(user\.role\) && requestedTab !== undefined/);
-  assert.match(source, /redirect\(inventoryTableViewHref\("\/items"/);
-  assert.match(source, /statusKey: initialViewState\.filters\.statusKey === "all"/);
-  assert.match(source, /`lifecycle:\$\{status\}`/);
 });

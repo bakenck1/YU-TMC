@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import ItemsTable from "@/components/ItemsTable";
-import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto,RoomDto } from "@/lib/contracts/inventory-locations";
 import type { InventoryItem } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
@@ -51,31 +51,226 @@ const ITEMS: InventoryItem[] = [
   item("annex-1101", "Annex 1101", "building-annex", "Main Campus Annex", "room-annex-1101", "1101", 11),
 ];
 
+const LOOKALIKE_ROOM_LETTERS = [
+  ["А", "A"], ["В", "B"], ["Е", "E"], ["К", "K"], ["М", "M"],
+  ["Н", "H"], ["О", "O"], ["Р", "P"], ["С", "C"], ["Т", "T"],
+  ["У", "Y"], ["Х", "X"], ["І", "I"],
+] as const;
+
+const LOOKALIKE_ROOM_QUERIES = LOOKALIKE_ROOM_LETTERS.flatMap(([cyrillic, latin]) => [
+  [`${cyrillic}201`, `${latin}201`, `${cyrillic}2010`],
+  [`${cyrillic.toLocaleLowerCase()}201`, `${latin}201`, `${cyrillic}2010`],
+  [`${latin}201`, `${cyrillic}201`, `${latin}2010`],
+  [`${latin.toLocaleLowerCase()}201`, `${cyrillic}201`, `${latin}2010`],
+]);
+
 describe("ItemsTable adversarial location filters", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/items");
   });
 
+  it.each(["B", "В", "b", "в"])("keeps mixed-alphabet room suggestions numeric when searching %s2", (prefix) => {
+    const names = ["B207", "B210", "В201", "В202", "B203", "В204", "B205"];
+    render(<ItemsTable items={[]} locations={{ buildings: BUILDINGS, rooms: names.map((name, index) =>
+      room(`mixed-${index}`, "building-main", name, 2)
+    ) }} />);
+    openFilters();
+    choose("items.filterBuilding", "Main Campus");
+    const input = screen.getByRole("combobox", { name: "items.filterRoom" });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: `${prefix}2` } });
+    expect(within(screen.getByRole("listbox")).getAllByRole("option").map(option => option.textContent)).toEqual([
+      "В201", "В202", "B203", "В204", "B205", "B207", "B210",
+    ]);
+    fireEvent.click(screen.getByRole("option", { name: "В202" }));
+    expect(inputValue("items.filterRoom")).toBe("В202");
+  });
+
   it.each([
-    ["К201", "К201"], ["к201", "К201"], ["K201", "К201"], ["k201", "К201"],
-    ["К201", "K201"], ["к201", "K201"],
-  ])("finds a K room suggestion and its inventory using %s for %s", (query, designation) => {
+    ...LOOKALIKE_ROOM_QUERIES,
+    ["аBе201", "AВE201", "АBЕ2010"],
+    ["AВe201", "АBЕ201", "AВE2010"],
+  ])("finds an exact room suggestion and inventory using %s for %s", (query, designation, longerDesignation) => {
     render(<ItemsTable
       items={[
-        item("k-room", "K room inventory", "building-main", "Main Campus", "room-k", designation, 2),
-        item("k-room-long", "Other K room", "building-main", "Main Campus", "room-k-long", `${designation}0`, 2),
+        item("matched-room", "Matching room inventory", "building-main", "Main Campus", "room-match", designation, 2),
+        item("longer-room", "Longer room inventory", "building-main", "Main Campus", "room-longer", longerDesignation, 2),
+        item("annex-room", "Other building inventory", "building-annex", "Main Campus Annex", "room-annex", designation, 2),
       ]}
-      locations={{ buildings: BUILDINGS, rooms: [room("room-k", "building-main", designation, 2)] }}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("room-match", "building-main", designation, 2),
+        room("room-longer", "building-main", longerDesignation, 2),
+        room("room-annex", "building-annex", designation, 2),
+        room("room-annex-only", "building-annex", `${designation}9`, 2),
+      ] }}
+    />);
+    openFilters();
+    choose("items.filterBuilding", "Main Campus");
+    const roomFilter = screen.getByRole("combobox", { name: "items.filterRoom" });
+    fireEvent.focus(roomFilter);
+    fireEvent.change(roomFilter, { target: { value: query } });
+    expect(screen.getByRole("option", { name: designation })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: `${designation}9` })).toBeNull();
+    applyFilters();
+    expectVisible("Matching room inventory");
+    expectHidden("Longer room inventory");
+    expectHidden("Other building inventory");
+  });
+
+  it.each(["Е", "е", "E", "e"])("finds both room alphabets using the single-letter query %s within the chosen building", (query) => {
+    render(<ItemsTable
+      items={[
+        item("latin-e", "Latin E inventory", "building-main", "Main Campus", "room-latin-e", "E201", 2),
+        item("cyrillic-e", "Cyrillic E inventory", "building-main", "Main Campus", "room-cyrillic-e", "Е202", 2),
+        item("f-room", "Different letter inventory", "building-main", "Main Campus", "room-f", "F204", 2),
+        item("annex-e", "Annex E inventory", "building-annex", "Main Campus Annex", "room-annex-e", "Е203", 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("room-latin-e", "building-main", "E201", 2),
+        room("room-cyrillic-e", "building-main", "Е202", 2),
+        room("room-f", "building-main", "F204", 2),
+        room("room-annex-e", "building-annex", "Е203", 2),
+      ] }}
+    />);
+    openFilters();
+    choose("items.filterBuilding", "Main Campus");
+    const roomFilter = screen.getByRole("combobox", { name: "items.filterRoom" });
+    fireEvent.focus(roomFilter);
+    fireEvent.change(roomFilter, { target: { value: query } });
+    expect(screen.getByRole("option", { name: "E201" })).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Е202" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Е203" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "F204" })).toBeNull();
+    applyFilters();
+    expectVisible("Latin E inventory");
+    expectVisible("Cyrillic E inventory");
+    expectHidden("Different letter inventory");
+    expectHidden("Annex E inventory");
+  });
+
+  it.each([
+    ["R201", "Р201"], ["Р201", "R201"],
+    ["V201", "В201"], ["В201", "V201"],
+  ])("does not apply phonetic transliteration from %s to %s", (query, designation) => {
+    render(<ItemsTable
+      items={[item("phonetic-room", "Phonetic room inventory", "building-main", "Main Campus", "room-phonetic", designation, 2)]}
+      locations={{ buildings: BUILDINGS, rooms: [room("room-phonetic", "building-main", designation, 2)] }}
     />);
     openFilters();
     const roomFilter = screen.getByRole("combobox", { name: "items.filterRoom" });
     fireEvent.focus(roomFilter);
     fireEvent.change(roomFilter, { target: { value: query } });
-    expect(screen.getByRole("option", { name: designation })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: designation })).toBeNull();
     applyFilters();
-    expectVisible("K room inventory");
-    expectHidden("Other K room");
+    expectHidden("Phonetic room inventory");
+  });
+
+  it.each(LOOKALIKE_ROOM_LETTERS)("preserves a typed %s room when building and floor choices contain Latin %s", (cyrillic, latin) => {
+    const designation = `${latin}201`;
+    const query = `${cyrillic.toLocaleLowerCase()}201`;
+    render(<ItemsTable
+      items={[
+        item("main-room", "Main matching inventory", "building-main", "Main Campus", "room-main", designation, 2),
+        item("annex-room", "Annex matching inventory", "building-annex", "Main Campus Annex", "room-annex", designation, 2),
+        item("annex-other-floor", "Other floor inventory", "building-annex", "Main Campus Annex", "room-other-floor", `${latin}301`, 3),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("room-main", "building-main", designation, 2),
+        room("room-annex", "building-annex", designation, 2),
+        room("room-other-floor", "building-annex", `${latin}301`, 3),
+      ] }}
+    />);
+    openFilters();
+    choose("items.filterBuilding", "Main Campus");
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: query } });
+    choose("items.filterBuilding", "Main Campus Annex");
+    expect(inputValue("items.filterRoom")).toBe(query);
+    choose("items.filterFloor", "2 floor");
+    expect(inputValue("items.filterRoom")).toBe(query);
+    applyFilters();
+    expectVisible("Annex matching inventory");
+    expectHidden("Main matching inventory");
+    expectHidden("Other floor inventory");
+  });
+
+  it("preserves a partial Cyrillic room query when choosing a compatible building and floor", () => {
+    render(<ItemsTable
+      items={[
+        item("latin-e", "Latin E inventory", "building-main", "Main Campus", "room-latin-e", "E201", 2),
+        item("cyrillic-e", "Cyrillic E inventory", "building-main", "Main Campus", "room-cyrillic-e", "Е202", 2),
+        item("main-third", "Other floor inventory", "building-main", "Main Campus", "room-main-third", "E301", 3),
+        item("annex-e", "Annex E inventory", "building-annex", "Main Campus Annex", "room-annex-e", "Е203", 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("room-latin-e", "building-main", "E201", 2),
+        room("room-cyrillic-e", "building-main", "Е202", 2),
+        room("room-main-third", "building-main", "E301", 3),
+        room("room-annex-e", "building-annex", "Е203", 2),
+      ] }}
+    />);
+    openFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: "Е" } });
+    choose("items.filterBuilding", "Main Campus");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    choose("items.filterFloor", "2 floor");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    applyFilters();
+    expectVisible("Latin E inventory");
+    expectVisible("Cyrillic E inventory");
+    expectHidden("Other floor inventory");
+    expectHidden("Annex E inventory");
+  });
+
+  it("preserves a partial room query when only an empty registry room matches it exactly", () => {
+    render(<ItemsTable
+      items={[
+        item("main-e201", "Matching E201 inventory", "building-main", "Main Campus", "room-main-e201", "E201", 2),
+        item("annex-f201", "Other building inventory", "building-annex", "Main Campus Annex", "room-annex-f201", "F201", 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("empty-e", "building-main", "E", 1),
+        room("room-main-e201", "building-main", "E201", 2),
+        room("room-annex-f201", "building-annex", "F201", 2),
+      ] }}
+    />);
+    openFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: "Е" } });
+    choose("items.filterBuilding", "Main Campus");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    choose("items.filterFloor", "2 floor");
+    expect(inputValue("items.filterRoom")).toBe("Е");
+    applyFilters();
+    expectVisible("Matching E201 inventory");
+    expectHidden("Other building inventory");
+  });
+
+  it("clears a partial Cyrillic room query when choosing an incompatible building or floor", () => {
+    render(<ItemsTable
+      items={[
+        item("main-e", "Main E inventory", "building-main", "Main Campus", "room-main-e", "E201", 2),
+        item("main-f", "Main F inventory", "building-main", "Main Campus", "room-main-f", "F301", 3),
+        item("annex-f", "Annex F inventory", "building-annex", "Main Campus Annex", "room-annex-f", "F202", 2),
+      ]}
+      locations={{ buildings: BUILDINGS, rooms: [
+        room("room-main-e", "building-main", "E201", 2),
+        room("room-main-f", "building-main", "F301", 3),
+        room("room-annex-f", "building-annex", "F202", 2),
+      ] }}
+    />);
+    openFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: "Е" } });
+    choose("items.filterBuilding", "Main Campus Annex");
+    expect(inputValue("items.filterRoom")).toBe("");
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterBuilding" }), { target: { value: "" } });
+    choose("items.filterBuilding", "Main Campus");
+    fireEvent.change(screen.getByRole("combobox", { name: "items.filterRoom" }), { target: { value: "Е" } });
+    choose("items.filterFloor", "3 floor");
+    expect(inputValue("items.filterRoom")).toBe("");
+    applyFilters();
+    expectVisible("Main F inventory");
+    expectHidden("Main E inventory");
+    expectHidden("Annex F inventory");
   });
 
   it("shows the complete static building registry before the user types and then searches it", () => {

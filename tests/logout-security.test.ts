@@ -5,7 +5,7 @@ import { POST } from "../app/api/auth/logout/route";
 import { resetRateLimitStateForTests } from "../lib/security/rate-limiter";
 
 test("logout rejects cross-site cookie-authenticated requests", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetRateLimitStateForTests();
 
   const response = await POST(
@@ -26,7 +26,7 @@ test("logout rejects cross-site cookie-authenticated requests", async () => {
 });
 
 test("logout clears the host-only root session cookie", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetRateLimitStateForTests();
 
   const response = await POST(
@@ -51,7 +51,7 @@ test("logout clears the host-only root session cookie", async () => {
 });
 
 test("API rate exhaustion cannot prevent local session termination", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetRateLimitStateForTests();
   const request = () =>
     new Request("https://inventory.example/api/auth/logout", {

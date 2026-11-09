@@ -24,6 +24,7 @@ import type { TmcTransferRequestCardView } from "@/lib/tmc-transfer-request-deta
 import { STORY_BUILDING, STORY_ITEM_DTO, STORY_ROOM } from "./inventory-fixtures";
 
 const serviceRequest: ServiceRequestDto = {
+  source: "internal", externalRequestId: null, requestedAction: null,
   id: "service-1",
   item: { id: STORY_ITEM_DTO.id, name: STORY_ITEM_DTO.name, inventoryNumber: STORY_ITEM_DTO.inventoryNumber },
   room: { id: STORY_ROOM.id, designation: STORY_ROOM.designation, buildingName: STORY_BUILDING.name },

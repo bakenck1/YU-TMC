@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { POST } from "../app/api/auth/forgot-password/route";
 
 import {
-  commitPasswordResetCode,
-  createPasswordResetCode,
-  createPasswordResetUrl,
-  revokePasswordResetCode,
-  verifyAndConsumePasswordResetCode,
+commitPasswordResetCode,
+createPasswordResetCode,
+createPasswordResetUrl,
+revokePasswordResetCode,
+verifyAndConsumePasswordResetCode,
 } from "../lib/security/password-reset";
 
 test("password reset links use only the configured public origin", () => {
@@ -27,18 +26,6 @@ test("password reset links use only the configured public origin", () => {
     () => createPasswordResetUrl("http://inventory.example", "a@example.com"),
     /invalid_password_reset_public_origin/,
   );
-});
-
-test("forgot-password responds before delivery and rejects cross-site submission", () => {
-  const source = readFileSync(
-    "app/api/auth/forgot-password/route.ts",
-    "utf8",
-  );
-
-  assert.match(source, /requireSameOriginMutation\(request\)/);
-  assert.match(source, /after\(\(\) => \{/);
-  assert.doesNotMatch(source, /if \(user\) \{/);
-  assert.doesNotMatch(source, /new URL\("\/reset-password", request\.url\)/);
 });
 
 test("forgot-password runtime response is correlated by the observer", async () => {

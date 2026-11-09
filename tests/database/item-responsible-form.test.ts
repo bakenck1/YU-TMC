@@ -201,6 +201,11 @@ describe("PostgreSQL item-form responsibility assignment", () => {
     );
     expect(history.rows).toEqual([
       {
+        value: created.inventoryNumber,
+        replaced_at: expect.any(Date),
+        reason: "Исправление номера / штрих-кода ТМЦ",
+      },
+      {
         value: correctedNumber,
         replaced_at: null,
         reason: null,
@@ -231,13 +236,14 @@ describe("PostgreSQL item-form responsibility assignment", () => {
         order by assigned_at, id`,
       [created.id],
     );
-    expect(updatedHistory.rows).toHaveLength(2);
-    expect(updatedHistory.rows[0]).toMatchObject({
+    expect(updatedHistory.rows).toHaveLength(3);
+    expect(updatedHistory.rows[0]).toEqual(history.rows[0]);
+    expect(updatedHistory.rows[1]).toMatchObject({
       value: correctedNumber,
       reason: "Исправление номера / штрих-кода ТМЦ",
     });
-    expect(updatedHistory.rows[0]!.replaced_at).not.toBeNull();
-    expect(updatedHistory.rows[1]).toEqual({
+    expect(updatedHistory.rows[1]!.replaced_at).not.toBeNull();
+    expect(updatedHistory.rows[2]).toEqual({
       value: `${correctedNumber}-2`,
       replaced_at: null,
       reason: null,

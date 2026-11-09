@@ -37,6 +37,40 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     await resetSchemas(migrationConfig);
   });
 
+  it("bulk 1C code persists with leading zeroes, reloads in cards and rolls back an incomplete batch", async () => {
+    const adminId = randomUUID();
+    const roomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID());
+    await seedRoom(adminId, randomUUID(), roomId);
+    const actor = { userId: adminId, role: "admin" as const };
+    const service = createService(runtimeDatabase);
+    const first = await service.createItem({ name: "Coded cable", category: "components", roomId, quantity: 28, unitPrice: 50 }, actor);
+    const second = await service.createItem({ name: "Coded component", category: "components", roomId }, actor);
+    const unselected = await service.createItem({ name: "Unselected component", category: "components", roomId }, actor);
+    const ids = [first.id, second.id];
+    expect(await service.bulkChangeOneCCode(ids, " 00000014398 ", actor)).toEqual({
+      updatedItemIds: ids, oneCCode: "00000014398",
+    });
+    for (const id of ids) {
+      const reloaded = await service.findItem(id, actor);
+      expect(reloaded).toMatchObject({ oneCCode: "00000014398", quantity: id === first.id ? 28 : 1, name: id === first.id ? first.name : second.name });
+    }
+    expect((await service.findItem(unselected.id, actor)).oneCCode).toBeNull();
+    const before = await database.query('select id, one_c_code, version from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    const stale = await createPostgresInventoryItemRepositories(runtimeDatabase).items.updateItemOneCCode({
+      id: first.id, oneCCode: "00042", actorId: adminId, expectedVersion: first.version, occurredAt: new Date(),
+    });
+    expect(stale).toBeNull();
+    expect(await service.bulkChangeOneCCode(ids, "00000014398", actor)).toEqual({ updatedItemIds: ids, oneCCode: "00000014398" });
+    expect((await database.query('select id, one_c_code, version from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids])).rows).toEqual(before.rows);
+    await expect(service.bulkChangeOneCCode([first.id, randomUUID()], "00042", actor)).rejects.toThrow("item_not_found");
+    const after = await database.query('select id, one_c_code, version from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
+    expect(after.rows).toEqual(before.rows);
+    const audits = await database.query('select before_values, after_values from "yu_inventory"."audit_records" where subject_id = any($1::uuid[]) and action = $2', [ids, "item.one_c_code_updated"]);
+    expect(audits.rows).toHaveLength(2);
+    expect(audits.rows.every(row => row.after_values.oneCCode === "00000014398")).toBe(true);
+  });
+
   it("bulk project flag persists for all selected items and rolls back a batch with an unavailable item", async () => {
     const adminId = randomUUID();
     const roomId = randomUUID();
@@ -44,10 +78,26 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     await seedRoom(adminId, randomUUID(), roomId);
     const actor = { userId: adminId, role: "admin" as const };
     const service = createService(runtimeDatabase);
-    const first = await service.createItem({ name: "Project monitor", category: "components", roomId }, actor);
-    const second = await service.createItem({ name: "Project cable", category: "components", roomId }, actor);
+    const first = await service.createItem({ name: "Project monitor", category: "components", roomId, responsibleUserId: adminId }, actor);
+    const second = await service.createItem({ name: "Project cable", category: "components", roomId, responsibleUserId: adminId }, actor);
     const ids = [first.id, second.id];
+    const snapshot = async () => (await database.query(
+      `select i.id,i.name,i.is_project,i.version,i.room_id,i.status,i.inventory_number,i.quantity,
+        (select responsible_user_id from yu_inventory.responsibility_periods where item_id=i.id and ended_at is null) as responsible_user_id
+       from yu_inventory.items i where i.id=any($1::uuid[]) order by i.id`, [ids],
+    )).rows;
+    const original = await snapshot();
     expect(await service.bulkChangeProject(ids, true, actor)).toEqual(ids);
+    const afterMark = await snapshot();
+    expect(afterMark).toEqual(original.map(row => ({ ...row, is_project: true, version: row.version + 1 })));
+    const firstAudits = await database.query('select before_values,after_values from yu_inventory.audit_records where subject_id=any($1::uuid[]) and action=\'item.project_updated\'', [ids]);
+    expect(firstAudits.rows).toEqual([
+      { before_values: { isProject: false }, after_values: { isProject: true } },
+      { before_values: { isProject: false }, after_values: { isProject: true } },
+    ]);
+    expect(await service.bulkChangeProject(ids, true, actor)).toEqual(ids);
+    expect(await snapshot()).toEqual(afterMark);
+    expect((await database.query('select id from yu_inventory.audit_records where subject_id=any($1::uuid[]) and action=\'item.project_updated\'', [ids])).rows).toHaveLength(2);
     const marked = await database.query('select id, is_project, version, room_id, status from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
     expect(marked.rows).toHaveLength(2);
     for (const row of marked.rows) {
@@ -57,6 +107,7 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     const afterFailure = await database.query('select id, is_project, version, room_id, status from "yu_inventory"."items" where id = any($1::uuid[]) order by id', [ids]);
     expect(afterFailure.rows).toEqual(marked.rows);
     expect(await service.bulkChangeProject(ids, false, actor)).toEqual(ids);
+    expect(await snapshot()).toEqual(original.map(row => ({ ...row, is_project: false, version: row.version + 2 })));
     const unmarked = await database.query('select is_project from "yu_inventory"."items" where id = any($1::uuid[])', [ids]);
     expect(unmarked.rows.every(row => row.is_project === false)).toBe(true);
     const audits = await database.query('select action from "yu_inventory"."audit_records" where subject_id = any($1::uuid[]) and action = $2', [ids, "item.project_updated"]);
@@ -81,8 +132,48 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     const created = await service.createItem({ name: "Cable numbered", category: "components", roomId, inventoryNumber: "COMP-" + randomUUID() }, actor);
     const cleared = await service.updateProtected(created.id, { version: created.version, roomId, inventoryNumber: "", status: "active" }, actor);
     expect(cleared.inventoryNumber).toBe("");
+    const previousNumbers = await database.query('select kind,value,replaced_at,reason from "yu_inventory"."item_inventory_number_history" where item_id = $1', [created.id]);
+    expect(previousNumbers.rows).toEqual([expect.objectContaining({ kind: "official", value: created.inventoryNumber, replaced_at: expect.any(Date), reason: expect.any(String) })]);
     expect((await database.query('select * from "yu_inventory"."barcode_registry" where item_id = $1 and kind = $2', [created.id, "official"])).rows).toHaveLength(0);
     expect((await database.query('select * from "yu_inventory"."item_inventory_number_history" where item_id = $1 and value = $2', [created.id, ""])).rows).toHaveLength(0);
+  });
+  it.each(["official", "temporary"] as const)("preserves the original %s number and its replacement independently of the item name", async (kind) => {
+    const adminId = randomUUID(); const roomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID()); await seedRoom(adminId, randomUUID(), roomId);
+    const actor = { userId: adminId, role: "admin" as const }; const service = createService(runtimeDatabase);
+    const created = await service.createItem({ name: "Projector", category: "electronics", roomId,
+      ...(kind === "official" ? { inventoryNumber: "INV-" + randomUUID() } : {}) }, actor);
+    const originalHistory = await database.query('select kind,value,assigned_at,replaced_at from "yu_inventory"."item_inventory_number_history" where item_id=$1', [created.id]);
+    expect(originalHistory.rows).toEqual([{ kind, value: created.inventoryNumber, assigned_at: new Date(created.createdAt), replaced_at: null }]);
+    const nextNumber = "INV-" + randomUUID();
+    const updated = await service.updateProtected(created.id, { version: created.version, roomId, inventoryNumber: nextNumber, status: "active" }, actor);
+    await service.updateContent(created.id, { version: updated.version, name: "Renamed projector", category: "electronics" }, actor);
+    const history = await database.query('select kind,value,replaced_at,reason from "yu_inventory"."item_inventory_number_history" where item_id=$1 order by assigned_at,id', [created.id]);
+    expect(history.rows).toHaveLength(2);
+    expect(history.rows).toContainEqual(expect.objectContaining({ kind, value: created.inventoryNumber, replaced_at: expect.any(Date), reason: expect.any(String) }));
+    expect(history.rows).toContainEqual({ kind: "official", value: nextNumber, replaced_at: null, reason: null });
+    expect((await service.findItem(created.id, actor)).inventoryNumber).toBe(nextNumber);
+  });
+  it.each(["inventoryNumber", "barcode"] as const)("keeps the submitted %s through creation, renaming, moving and status changes", async (field) => {
+    const adminId = randomUUID(); const roomId = randomUUID(); const nextRoomId = randomUUID();
+    await seedUsers(adminId, randomUUID(), randomUUID());
+    await seedRoom(adminId, randomUUID(), roomId); await seedRoom(adminId, randomUUID(), nextRoomId);
+    const actor = { userId: adminId, role: "admin" as const }; const service = createService(runtimeDatabase);
+    // Keep the slash and every leading zero, including after scanning Code 39.
+    const number = "001/000" + randomBytes(4).readUInt32BE(0);
+    const created = await service.createItem({ name: "Projector OPTOMA", category: "electronics", roomId,
+      [field]: field === "barcode" ? `*${number}*` : number }, actor);
+    expect(created.inventoryNumber).toBe(number); expect(created.inventoryNumberKind).toBe("official");
+    const renamed = await service.updateContent(created.id, { version: created.version, name: "Projector", category: "electronics" }, actor);
+    const moved = await service.updateProtected(created.id, { version: renamed.version, roomId: nextRoomId, inventoryNumber: renamed.inventoryNumber, status: "active" }, actor);
+    const changed = await service.changeStatus(created.id, { version: moved.version, status: "broken" }, actor);
+    const reloaded = await service.findItem(created.id, actor);
+    expect(changed.inventoryNumber).toBe(number); expect(reloaded.inventoryNumber).toBe(number);
+    expect(reloaded.room.id).toBe(nextRoomId);
+    expect((await database.query('select kind,value,replaced_at from "yu_inventory"."item_inventory_number_history" where item_id=$1', [created.id])).rows)
+      .toEqual([{ kind: "official", value: number, replaced_at: null }]);
+    expect((await database.query('select original_value from "yu_inventory"."barcode_registry" where item_id=$1 and kind=$2', [created.id, "official"])).rows)
+      .toEqual([{ original_value: number }]);
   });
   it("attack: broken status persists and warehouse restoration changes only status", async () => {
     const adminId = randomUUID(); const employeeId = randomUUID(); const otherId = randomUUID(); const roomId = randomUUID(); await seedUsers(adminId, employeeId, otherId); await seedRoom(adminId, randomUUID(), roomId);
@@ -100,7 +191,7 @@ describe("PostgreSQL adversarial inventory status and category policy", () => {
     const service = createService(runtimeDatabase);
     const item = await service.createItem({ name: "Dormitory broken component", category: "components", roomId, status: "broken" }, { userId: adminId, role: "admin" });
     const repository = createPostgresDormitoryAssetRepository(runtimeDatabase);
-    const rows = await repository.listItems({ limit: 100 });
+    const rows = await repository.listItems({ limit: 100, after: null });
     const asset = rows.find(row => row.id === item.id);
     expect(asset?.status).toBe("broken"); expect(asset?.inventoryNumber).toBe(""); expect(asset?.category).toBe("components");
   });

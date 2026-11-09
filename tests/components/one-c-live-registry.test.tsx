@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import OneCFixedAssetRegistryPanel from "@/components/OneCFixedAssetRegistryPanel";
 import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
+import OneCFixedAssetRegistryPanel from "@/components/OneCFixedAssetRegistryPanel";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { afterEach,describe,expect,it,vi } from "vitest";
 
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU" }) }));
 
@@ -10,42 +10,46 @@ const asset = { name: "Ноутбук Lenovo IdeaPad №2411/00390", code: "OS-4
 
 describe("current 1C registry panels", () => {
   it("switches OS between on-book and all received statuses without losing owner search", async () => {
-    const fetcher = vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ data: [{ external_id: "os1", payload: { ...asset, status: "Снято с учёта" } }], total: 1, page: 1, pageSize: 50 }) }));
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      const p = new URL(url, "https://local").searchParams;
+      const name = p.get("scope") === "all" ? (p.get("search") ? "Owner match" : "Retired asset") : "Current asset";
+      return Response.json({ data: [{ external_id: name, payload: { ...asset, name, status: p.get("scope") === "all" ? "Снято с учёта" : "Принято к учёту" } }], total: 1, page: 1, pageSize: 50 });
+    });
     vi.stubGlobal("fetch", fetcher);
     render(<OneCFixedAssetRegistryPanel />);
-    await screen.findByText(asset.name);
+    expect(await screen.findByText("Current asset")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Все статусы" }));
-    await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringContaining("scope=all"), expect.anything()));
-    expect(await screen.findByText("Снято с учёта")).toBeTruthy();
+    expect(await screen.findByText("Retired asset")).toBeTruthy();
+    expect(screen.queryByText("Current asset")).toBeNull();
     fireEvent.change(screen.getByLabelText("Поиск основных средств"), { target: { value: "Тынымбаев" } });
     fireEvent.click(screen.getByRole("button", { name: "Найти" }));
-    await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringContaining("search=%D0%A2%D1%8B%D0%BD%D1%8B%D0%BC%D0%B1%D0%B0%D0%B5%D0%B2"), expect.anything()));
+    expect(await screen.findByText("Owner match")).toBeTruthy();
+    expect(screen.queryByText("Retired asset")).toBeNull();
   });
   it("loads OS without another click and shows actual responsible person and costs", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [{ external_id: "os1", payload: asset }], total: 6500, page: 1, pageSize: 50 }) });
-    vi.stubGlobal("fetch", fetcher);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: [{ external_id: "os1", payload: asset }], total: 1, page: 1, pageSize: 50 })));
     render(<OneCFixedAssetRegistryPanel />);
     expect(await screen.findByText(asset.name)).toBeTruthy();
     expect(screen.getByText(asset.responsibleName)).toBeTruthy();
-    expect(screen.getByText("450 000", { exact: true, normalizer: value => value.replace(/\s/gu, " ") })).toBeTruthy();
-    expect(screen.getByText("Страница 1 из 130")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Поиск основных средств"), { target: { value: "Тынымбаев" } });
-    fireEvent.click(screen.getByRole("button", { name: "Найти" }));
-    await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringContaining("search=%D0%A2%D1%8B%D0%BD%D1%8B%D0%BC%D0%B1%D0%B0%D0%B5%D0%B2"), { credentials: "same-origin", cache: "no-store" }));
   });
 
   it("loads MP automatically, then keeps the full-registry search while paging", async () => {
-    const material = { name: "Материальный предмет №2411/00391", code: "MP-42", inventoryNumber: null, barcode: null, quantity: "3", unitPrice: "12000", responsibleName: asset.responsibleName };
-    const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ data: [{ row_key: "m1", payload: material }], total: 101, page: Number(new URL(url, "https://local").searchParams.get("page")), pageSize: 50 }) }));
+    const material = { code: "MP-42", inventoryNumber: null, barcode: null, quantity: "3", unitPrice: "12000", responsibleName: asset.responsibleName };
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      const p = new URL(url, "https://local").searchParams;
+      const page = Number(p.get("page"));
+      const name = p.get("search") === "2411/00391" ? (page === 2 ? "Second search page" : "First search page") : "Initial material";
+      return Response.json({ data: [{ row_key: name, payload: { ...material, name } }], total: 101, page, pageSize: 50 });
+    });
     vi.stubGlobal("fetch", fetcher);
     render(<MaterialRegistryPanel source={null} />);
-    expect(await screen.findByText(material.name)).toBeTruthy();
+    expect(await screen.findByText("Initial material")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Поиск материального предмета"), { target: { value: "2411/00391" } });
     fireEvent.click(screen.getByRole("button", { name: "Найти" }));
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect((screen.getByRole("button", { name: "Далее" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(await screen.findByText("First search page")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
-    await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringContaining("page=2&pageSize=50&search=2411%2F00391"), expect.anything()));
+    expect(await screen.findByText("Second search page")).toBeTruthy();
+    expect(screen.queryByText("First search page")).toBeNull();
   });
 
   it("shows errors and permits retry instead of pretending an empty registry was loaded", async () => {

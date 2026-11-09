@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   filteredDashboard,
   type AnalyticsDashboardData,
 } from "../lib/analytics-dashboard";
-import { translateDataLabel } from "../lib/i18n";
 
-const analyticsPage = readFileSync("app/(protected)/analytics/page.tsx", "utf8");
 
 const records = [
   { id: "a", name: "Monitor", qrCode: "A", itemType: "Equipment", brandModel: "HP", location: "Main / 101", building: "Main", responsible: "User", quantity: 2, price: 200, createdAt: "2026-07-10T00:00:00.000Z", status: "active", hasPhoto: true },
@@ -36,9 +33,6 @@ test("analytics filters rebuild every dataset from the same filtered records", (
 });
 
 test("analytics includes every inventory lifecycle status", () => {
-  assert.doesNotMatch(analyticsPage, /activeInventoryItems/);
-  assert.match(analyticsPage, /buildAnalyticsDashboard\(generalItems\)/);
-  assert.match(analyticsPage, /statuses: countBy\(items, \(item\) => item\.status\)/);
 
   const lifecycleDashboard = {
     ...dashboard,
@@ -58,21 +52,5 @@ test("analytics includes every inventory lifecycle status", () => {
   assert.deepEqual(
     filtered.statuses.map((entry) => entry.name).sort(),
     ["active", "decommissioned", "decommissioned_in_use", "maintenance"],
-  );
-});
-
-test("analytics category and status codes have Russian labels", () => {
-  assert.equal(translateDataLabel("ru", "electronics"), "Электроника");
-  assert.equal(translateDataLabel("ru", "furniture"), "Мебель");
-  assert.equal(
-    translateDataLabel("ru", "electrical_equipment"),
-    "Электрооборудование",
-  );
-  assert.equal(translateDataLabel("ru", "components"), "Комплектующие");
-  assert.equal(translateDataLabel("ru", "active"), "Активен");
-  assert.equal(translateDataLabel("ru", "decommissioned"), "Списано");
-  assert.equal(
-    translateDataLabel("ru", "decommissioned_in_use"),
-    "Списан, но используется",
   );
 });

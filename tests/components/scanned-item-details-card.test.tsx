@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 
 import ScannedItemDetailsCard from "@/components/ScannedItemDetailsCard";
 import type { QrResolutionDto } from "@/lib/contracts/qr-resolution";

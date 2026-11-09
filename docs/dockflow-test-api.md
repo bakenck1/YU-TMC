@@ -30,10 +30,10 @@ assignment and quantity data is read from PostgreSQL and joined by that IIN.
 The Yessenov service token is not accepted from Dockflow callers and is never
 returned to the browser.
 
-The fixture demonstrates the marking and quantity model: one batch card and
-one barcode cover 50 chairs. Assignments may contain any positive quantities
-for any number of recipients, and `availableQuantity` is calculated as the
-unassigned remainder. The fixture values are examples, not a fixed 7/3 rule.
+For example, one batch card and one barcode can cover 50 chairs. Assignments
+may contain any positive quantities for any number of recipients, and
+`availableQuantity` is calculated as the unassigned remainder. These are
+examples of the quantity model; runtime values come from PostgreSQL.
 `markingType` has the values `individual`, `batch`, and
 `package_or_storage`.
 
@@ -99,7 +99,7 @@ API.
    настройте `DATABASE_URL` перед `npm run dev:next`.
 
 3. Открыть в браузере `http://localhost:3000/api`.
-4. Нажать **Authorize**, вставить `<ваш DOCKFLOW_TEST_API_KEY>` без слова
+4. Нажать **Authorize**, вставить `<ваш DOCKFLOW_API_KEY>` без слова
    `Bearer`, затем выполнить любой метод через **Try it out**.
 
 Проверка без Swagger:

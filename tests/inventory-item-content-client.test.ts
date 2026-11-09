@@ -4,11 +4,11 @@ import test from "node:test";
 import type { InventoryItemDto } from "../lib/contracts/inventory-items";
 import { updateItemContentWithRefresh } from "../lib/inventory-item-content-client";
 
-const ITEM: InventoryItemDto = {
+const ITEM = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Monitor",
   description: "Office display",
-  category: "electronics",
+  category: "electronics" as const,
   itemType: "electronics",
   itemSection: "general",
   brand: null,
@@ -32,7 +32,7 @@ const ITEM: InventoryItemDto = {
   createdAt: "2026-09-09T00:00:00.000Z",
   updatedAt: "2026-09-09T00:00:00.000Z",
   archivedAt: null,
-};
+} satisfies InventoryItemDto;
 
 test("refreshes stale content and preserves unrelated concurrent changes", async () => {
   const latestItem = {

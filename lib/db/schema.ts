@@ -65,6 +65,24 @@ import { PASSPORT_STATUSES, PASSPORT_REJECTION_REASONS } from "@/lib/contracts/r
  */
 export const inventorySchema = pgSchema("yu_inventory");
 
+const transactionId = customType<{ data: string; driverData: string }>({
+  dataType: () => "xid8",
+});
+export const integrationEventsTable = inventorySchema.table("integration_events", {
+  id: bigint({ mode: "bigint" }).primaryKey().generatedAlwaysAsIdentity(),
+  transactionId: transactionId().notNull().default(sql`pg_current_xact_id()`),
+  entity: varchar({ length: 40 }).notNull(),
+  operation: varchar({ length: 8 }).notNull(),
+  recordId: uuid().notNull(),
+  payload: jsonb(),
+  occurredAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}, (table) => [
+  index("integration_events_transaction_cursor_idx").on(table.transactionId, table.id),
+  index("integration_events_record_revision_idx").on(table.entity, table.recordId, table.id),
+  check("integration_events_operation_check", sql`${table.operation} in ('upsert', 'delete')`),
+  check("integration_events_payload_check", sql`(${table.operation} = 'delete' and ${table.payload} is null) or (${table.operation} = 'upsert' and ${table.payload} is not null)`),
+]);
+
 export const oneCMaterialImportBatchesTable = inventorySchema.table("one_c_material_import_batches", {
   id: uuid().primaryKey(),
   requestId: uuid().notNull(),

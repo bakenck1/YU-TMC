@@ -10,6 +10,11 @@ import { currentRequestId } from "@/lib/server/observability";
 import { MAX_ONE_C_MATERIALS_RECORDS, MAX_ONE_C_MATERIALS_XML_BYTES, OneCMaterialsContractError, parseOneCMaterials } from "@/lib/server/integrations/one-c-materials";
 
 const MEDIA_TYPES = ["application/xml", "text/xml"];
+const UNIT_PRICE_REQUIREMENT = {
+  field: "UnitPrice", requiredFor: "positive_quantity", exclusiveMinimum: 0, currency: "KZT",
+  maximumIntegerDigits: 12, maximumFractionDigits: 2,
+  description: "Полная учётная цена за одну единицу данной позиции материала, отдельно по складу, счёту и МОЛ. Не общая сумма остатка.",
+} as const;
 type Dependencies = {
   service: { importSnapshot(snapshot: OneCMaterialsSnapshot, metadata: OneCMaterialsImportMetadata): Promise<OneCMaterialsImportResult> };
   apiKey?: () => string | undefined;
@@ -25,6 +30,7 @@ export function getOneCMaterialsCapability(apiKey = process.env.ONE_C_MATERIALS_
     snapshotAtRequired: true, warehouseUnknownAllowed: true, automaticPublication: false,
     schemaVersions: [1, 2], recommendedSchemaVersion: 2,
     version2BalanceDimensions: ["material", "account", "warehouse", "responsible"],
+    pricing: UNIT_PRICE_REQUIREMENT,
   });
 }
 
@@ -52,6 +58,14 @@ export function createOneCMaterialsPostHandler(dependencies: Dependencies) {
       try { xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
       catch { throw new OneCMaterialsContractError("invalid_utf8"); }
       const snapshot = parseOneCMaterials(xml);
+      const priceErrors = validateUnitPrices(snapshot);
+      if (priceErrors.total > 0) return json({
+        success: false, error: "unit_price_required",
+        message: "Для каждой позиции с положительным остатком передайте положительную цену за единицу UnitPrice. Пакет не сохранён. Нулевые остатки допускаются без цены.",
+        pricing: UNIT_PRICE_REQUIREMENT,
+        invalidRecords: priceErrors.total, issues: priceErrors.issues,
+        issuesTruncated: priceErrors.total > priceErrors.issues.length,
+      }, 422);
       const result = await dependencies.service.importSnapshot(snapshot, {
         sourceSha256: createHash("sha256").update(bytes).digest("hex"), requestId,
         sourceFilename: normalizedFilename(request.headers.get("x-source-filename")),
@@ -79,6 +93,30 @@ export function createOneCMaterialsPostHandler(dependencies: Dependencies) {
       else console.error("1C materials import failed", event);
     }
   };
+}
+
+function validateUnitPrices(snapshot: OneCMaterialsSnapshot) {
+  const issues: {
+    row: number; code: string; warehouseCode: string | null; accountCode: string | null;
+    responsibleCode: string | null; responsibleExternalId: string | null;
+    field: "UnitPrice"; reason: string;
+  }[] = [];
+  let total = 0;
+  for (const [index, material] of snapshot.materials.entries()) {
+    if (!(Number(material.quantity) > 0)) continue;
+    const value = material.unitPrice;
+    const reason = value == null ? "missing_unit_price"
+      : Number(value) === 0 ? "zero_unit_price"
+        : !/^\d{1,12}(?:\.\d{1,2})?$/u.test(value) ? "invalid_unit_price" : null;
+    if (!reason) continue;
+    total++;
+    if (issues.length < 100) issues.push({
+      row: index + 1, code: material.code, warehouseCode: material.warehouseCode,
+      accountCode: material.accountCode ?? null, responsibleCode: material.responsibleCode ?? null,
+      responsibleExternalId: material.responsibleExternalId ?? null, field: "UnitPrice", reason,
+    });
+  }
+  return { total, issues };
 }
 
 function normalizedFilename(value: string | null) {

@@ -31,11 +31,9 @@ function createItemService(items: InventoryItemRepository = {} as InventoryItemR
 }
 
 test("warehouse creation is server-limited to basic item fields", async () => {
-  let inserted: InsertInventoryItemRecord | null = null;
   const items = {
     roomExists: async () => true,
     insertItem: async (input: InsertInventoryItemRecord) => {
-      inserted = input;
       return {
         ...input,
         roomDesignation: "101",
@@ -70,14 +68,14 @@ test("warehouse creation is server-limited to basic item fields", async () => {
     barcode: null,
   };
 
-  await service.createItem(basicInput, actor);
+  const created = await service.createItem(basicInput, actor);
 
-  assert.equal(inserted?.name, basicInput.name);
-  assert.equal(inserted?.description, basicInput.description);
-  assert.equal(inserted?.quantity, 1);
-  assert.equal(inserted?.unitPrice, 0);
-  assert.equal(inserted?.brand, null);
-  assert.equal(inserted?.model, null);
+  assert.equal(created.name, basicInput.name);
+  assert.equal(created.description, basicInput.description);
+  assert.equal(created.quantity, 1);
+  assert.equal(created.unitPrice, 0);
+  assert.equal(created.brand, null);
+  assert.equal(created.model, null);
 
   await assert.rejects(
     service.createItem({ ...basicInput, unitPrice: 100 }, actor),

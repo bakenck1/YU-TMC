@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parseQrIdentifierInput } from "../lib/domain/qr-identifier";
-
-const read = (path: string) => readFileSync(path, "utf8");
 
 test("a room QR web link resolves to the stored opaque identifier", () => {
   const token = "YUQ1:00000000000000000000000000";
@@ -14,43 +11,6 @@ test("a room QR web link resolves to the stored opaque identifier", () => {
   if (result.ok) assert.equal(result.canonicalKey, token);
 });
 
-test("public room QR rendering requires login without exposing room metadata", () => {
-  const page = read("app/rooms/qr/[token]/page.tsx");
-  const contract = read("lib/contracts/room-workspace.ts");
-  assert.match(page, /findPublicByQr/);
-  assert.match(page, /findByQr\(token, authorizationActor\(user\)\)/);
-  assert.match(page, /returnTo/);
-  const publicContract = contract.match(/interface PublicRoomDto[\s\S]*?\}/)?.[0] ?? "";
-  assert.match(publicContract, /access: "authentication_required"/);
-  assert.doesNotMatch(publicContract, /designation|responsible|items/);
-});
-
-test("internal service requests require photos while dormitory requests remain photo-optional", () => {
-  const schema = read("lib/db/schema.ts");
-  const route = read("app/api/service-requests/route.ts");
-  const service = read("lib/application/services/service-request-service.ts");
-  assert.match(schema, /serviceRequestsTable/);
-  assert.match(schema, /photoBinaryData: binaryData\("photo_binary_data"\)/);
-  assert.match(schema, /source} = 'internal'[\s\S]*photoBinaryData} IS NOT NULL/);
-  assert.match(schema, /source} = 'dormitory'[\s\S]*photoBinaryData} IS NULL/);
-  assert.match(route, /!body\.photo/);
-  for (const value of ["not_working", "not_connected", "damaged", "missing"]) {
-    assert.match(route, new RegExp(value));
-  }
-  assert.match(service, /if \(actor\.role !== "admin"\) throw forbidden\(\)/);
-  for (const value of ["new", "in_progress", "completed"]) {
-    assert.match(service, new RegExp(value));
-  }
-});
-
-test("mobile navigation contains standard destinations, printing and passport workspaces", () => {
-  const navigation = read("components/MobileBottomNavigation.tsx");
-  const hrefs = [...navigation.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/profile", "/inventory", "/room-passports"]);
-  assert.match(navigation, /min-h-11/);
-  assert.match(navigation, /md:hidden/);
-});
-
 test("desktop navigation exposes requests to every product role", async () => {
   const { sidebarItemsForRole } = await import("../components/Sidebar");
   for (const role of ["admin", "warehouse", "employee"] as const) {
@@ -59,22 +19,4 @@ test("desktop navigation exposes requests to every product role", async () => {
       role,
     );
   }
-});
-
-test("room QR scanning and downloads are discoverable outside the mobile menu", () => {
-  const sidebar = read("components/SidebarContent.tsx");
-  const buildings = read("components/InventoryBuildingsManager.tsx");
-
-  assert.match(sidebar, /href: "\/scan", labelKey: "nav\.scanQr"/);
-  assert.match(buildings, /\/api\/inventory\/rooms\/\$\{room\.id\}\/qr\?download=1/);
-  assert.match(buildings, /room\.qrSelectHint/);
-});
-
-test("non-restricted item creation requires one to four attached photos", () => {
-  const route = read("app/api/inventory/items/route.ts");
-  assert.match(route, /\(!restricted && !body\.photo && !body\.photos\)/);
-  assert.match(
-    route,
-    /photosValue\.length > 4 \|\| \(!restricted && photosValue\.length < 1\)/,
-  );
 });

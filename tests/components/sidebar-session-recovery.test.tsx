@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import SidebarContent from "@/components/SidebarContent";
 import { translate } from "@/lib/i18n";
 import type { AuthenticatedUser } from "@/lib/security/authorization";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 const session = vi.hoisted(() => ({ user: null as AuthenticatedUser | null, loading: false,
   sessionError: false, refreshSession: vi.fn(), logout: vi.fn() }));

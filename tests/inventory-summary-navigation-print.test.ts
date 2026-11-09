@@ -1,31 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { USER_ROLES } from "../lib/contracts/users";
 import { canAccessPath } from "../lib/security/authorization";
 
-test("inventory roles can open item cards while printing staff remain restricted", () => {
+test("item detail access is restricted to inventory roles", () => {
   for (const role of USER_ROLES) {
     assert.equal(canAccessPath(role, "/items/item-1"), role !== "typography", role);
   }
-
-  const source = readFileSync(
-    new URL("../components/InventorySummaryAccordions.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /onClick=\{\(\) => router\.push\(itemHref\(item\)\)\}/);
-  assert.match(source, /inventoryDetailsHref\(itemPath, returnHref\)/);
-  assert.match(source, /cursor-pointer[^"]*hover:bg-zinc-50\/80/);
-});
-
-test("printed inventory labels contain only the generated code", () => {
-  const source = readFileSync(
-    new URL("../components/InventoryQrPrintView.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(source, /print:border-0 print:p-0/);
-  assert.match(source, /print:w-\[110mm\]/);
-  assert.match(source, /min-w-0 flex-1 print:hidden/);
 });

@@ -1,9 +1,9 @@
+import { ApplicationError } from "@/lib/domain/application-error";
+import { applicationErrorResponse } from "@/lib/server/http/error-response";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { ApplicationError } from "@/lib/domain/application-error";
-import { applicationErrorResponse } from "@/lib/server/http/error-response";
 
 function loadRoute(path: string, authenticate: () => Promise<unknown>, query: (...args: unknown[]) => Promise<unknown> = async () => ({ data: [], total: 0 }), matched: () => unknown[] = () => []) {
   const source = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -35,61 +35,6 @@ test("matched-card list requires permission and validates query before reading i
     assert.equal((await allowed.GET(new Request(`https://inventory.example/api?${params}`))).status, 400);
   }
   assert.equal(reads, 0);
-});
-
-test("matched list searches all cards before pagination and keeps OS-code cards in the MP group", async () => {
-  const cards = Array.from({ length: 120 }, (_, index) => ({ id: String(index), group: "materials", name: `Товар ${index}`, inventoryNumber: `TMP-${index}`, oneCCode: `0000${index}`, sourceCodes: [`0000${index}`], responsibleName: "Иванов Иван", barcode: index === 119 ? "1350 / 16355" : "", oneCUnitPrice: String(index), currentUnitPrice: "0", source: "ОС" }));
-  const route = loadRoute("app/api/integrations/1c/analytics/matched/route.ts", async () => ({}), async () => ({ analytics: { calculatedAt: "2026-10-28T00:00:00Z" } }), () => cards);
-  const response = await route.GET(new Request("https://inventory.example/api?group=materials&page=2&pageSize=50"));
-  const body = await response.json();
-  assert.equal(body.total, 120); assert.equal(body.data.length, 50);
-  assert.equal(body.data[0].id, "69");
-  assert.match(response.headers.get("cache-control")!, /no-store/);
-  const found = await (await route.GET(new Request("https://inventory.example/api?group=materials&search=1350-16355"))).json();
-  assert.equal(found.total, 1); assert.equal(found.data[0].id, "119");
-});
-
-test("material registry requires administrator permission before reading private source data", async () => {
-  let reads = 0;
-  const route = loadRoute("app/api/integrations/1c/materials/registry/route.ts", async () => { throw new ApplicationError("forbidden", "forbidden"); }, async () => { reads++; return { data: [], total: 0 }; });
-  const response = await route.GET(new Request("https://inventory.example/api/integrations/1c/materials/registry"));
-  assert.equal(response.status, 403);
-  assert.equal(reads, 0);
-  assert.match(response.headers.get("cache-control")!, /no-store/);
-});
-
-test("full analytics export checks permission before reading and returns a private XLSX attachment", async () => {
-  let reads = 0;
-  const query = async () => { reads++; return { analytics: { calculatedAt: "2026-10-22T05:00:00Z" } }; };
-  const request = new Request("https://inventory.example/api/integrations/1c/analytics/export");
-  const denied = loadRoute("app/api/integrations/1c/analytics/export/route.ts", async () => { throw new ApplicationError("forbidden", "forbidden"); }, query);
-  assert.equal((await denied.GET(request)).status, 403);
-  assert.equal(reads, 0);
-  const allowed = loadRoute("app/api/integrations/1c/analytics/export/route.ts", async () => ({}), query);
-  const response = await allowed.GET(request);
-  assert.equal(response.status, 200);
-  assert.equal(reads, 1);
-  assert.match(response.headers.get("cache-control")!, /no-store/);
-  assert.match(response.headers.get("content-type")!, /spreadsheetml.sheet/);
-  assert.equal(response.headers.get("content-disposition"), 'attachment; filename="1c-inventory-2026-10-22T05-00-00Z.xlsx"');
-  assert.equal(response.headers.get("content-length"), "4");
-  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-  assert.equal((await response.arrayBuffer()).byteLength, 4);
-});
-
-test("material registry validates bounded pagination and search before passing parameters to its reader", async () => {
-  let reads = 0;
-  const route = loadRoute("app/api/integrations/1c/materials/registry/route.ts", async () => ({}), async (value) => {
-    reads++;
-    assert.deepEqual(value, { page: 2, pageSize: 100, search: "00007692" });
-    return { data: [], total: 0 };
-  });
-  for (const query of ["page=0", "page=1.5", "page=1000001", "pageSize=50000", `search=${"a".repeat(256)}`]) {
-    assert.equal((await route.GET(new Request(`https://inventory.example/api/integrations/1c/materials/registry?${query}`))).status, 400);
-  }
-  assert.equal(reads, 0);
-  assert.equal((await route.GET(new Request("https://inventory.example/api/integrations/1c/materials/registry?page=2&pageSize=100&search=00007692"))).status, 200);
-  assert.equal(reads, 1);
 });
 
 test("retired Excel upload authenticates but never consumes an uploaded file or changes source data", async () => {

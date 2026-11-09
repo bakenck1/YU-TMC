@@ -18,7 +18,7 @@ import {
 } from "@/lib/inventory-list";
 import { addSearchHistoryEntry, parseSearchHistory } from "@/lib/search-history";
 import { normalizeInventorySearchText } from "@/lib/inventory-search";
-import { normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
+import { compareInventoryRoomDesignations, normalizeInventoryRoomSearch } from "@/lib/inventory-room-floors";
 import {
   DEFAULT_INVENTORY_COLUMNS,
   INVENTORY_COLUMN_KEYS,
@@ -211,7 +211,7 @@ export default function ItemsTable({
   bulkActions,
   locations,
   invoiceActions,
-  initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  initialViewState,
   stateUrlPath,
   stateUrlParams,
   itemReturnHref,
@@ -255,6 +255,11 @@ export default function ItemsTable({
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
   const [startingViewState] = useState(() => {
+    // Server props can contain a normalized redirect destination before the
+    // browser history has caught up. Keep that authoritative initial state.
+    if (initialViewState) {
+      return { ...initialViewState, filters: { ...initialViewState.filters } };
+    }
     if (
       typeof window !== "undefined" &&
       stateUrlPath &&
@@ -265,8 +270,8 @@ export default function ItemsTable({
       );
     }
     return {
-      ...initialViewState,
-      filters: { ...initialViewState.filters },
+      ...DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+      filters: { ...DEFAULT_INVENTORY_TABLE_VIEW_STATE.filters },
     };
   });
   const [query, setQuery] = useState(startingViewState.query);
@@ -439,7 +444,7 @@ export default function ItemsTable({
     buildingRoomOptions
       .filter((room) => selectedFloorNumber === undefined || room.floorNumber === selectedFloorNumber)
       .map((room) => room.designation),
-  )].sort(compareLocationValues);
+  )].sort(compareInventoryRoomDesignations);
   const searchItems = useMemo(
     () => filterInventoryItems(items, { ...filters, query: "" }),
     [items, filters],
@@ -604,6 +609,17 @@ export default function ItemsTable({
     setDraftFilters((current) => ({ ...current, [name]: value }));
   }
 
+  function roomQueryMatcher(value: string) {
+    const query = normalizeInventoryRoomSearch(value);
+    const hasExactMatch = items.some(
+      (item) => normalizeInventoryRoomSearch(item.room ?? item.location.split("/").at(-1) ?? "") === query,
+    );
+    return (designation: string) => {
+      const candidate = normalizeInventoryRoomSearch(designation);
+      return hasExactMatch ? candidate === query : candidate.includes(query);
+    };
+  }
+
   function updateBuildingFilter(value: string) {
     setDraftFilters((current) => {
       const selectedBuilding = locationDirectory.buildingNames.find(
@@ -630,9 +646,10 @@ export default function ItemsTable({
             (room) => `${room.floorNumber} ${t("inventory.floorShort")}` === location,
           )?.floorNumber;
       const currentRoom = current.room ?? "";
+      const matchesRoom = roomQueryMatcher(currentRoom);
       const room = currentRoom && !compatibleRooms.some(
         (option) =>
-          normalizedLocationValue(option.designation) === normalizedLocationValue(currentRoom) &&
+          matchesRoom(option.designation) &&
           (compatibleFloor === undefined || option.floorNumber === compatibleFloor),
       )
         ? ""
@@ -651,10 +668,11 @@ export default function ItemsTable({
       if (selectedFloor === undefined || !currentRoom) {
         return { ...current, location: nextLocation };
       }
+      const matchesRoom = roomQueryMatcher(currentRoom);
       const room = buildingRoomOptions.some(
         (option) =>
           option.floorNumber === selectedFloor &&
-          normalizedLocationValue(option.designation) === normalizedLocationValue(currentRoom),
+          matchesRoom(option.designation),
       )
         ? currentRoom
         : "";

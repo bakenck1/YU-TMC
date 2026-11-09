@@ -79,10 +79,10 @@ test("zero balance and legacy Excel are not evidence of the current material-cod
   }
 });
 
-test("code-only nomenclature matching never assigns a physical card's responsible person", () => {
+test("exact saved material code fills an empty assignment from a unique responsible account", () => {
   const { audit, plan } = review([item], [{ ...material, responsibleName: "Бауыржан Анесович" }]);
   addOneCResponsibilityProposals(plan, audit.rows, new Map(), [{ id: "user", fullName: "Бауыржан Анесович", active: true, deleted: false, role: "employee" }], [{ itemId: item.id, userId: null, name: null, pendingTransfer: false, unavailable: false }]);
-  assert.equal(plan.rows[0].responsibility?.changed, false);
+  assert.equal(plan.rows[0].responsibility?.changed, true);
 });
 
 test("Excel shows a code-matched temporary card as found in MP on both Inventory sheets", async () => {

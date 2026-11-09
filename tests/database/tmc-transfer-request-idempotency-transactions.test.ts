@@ -23,6 +23,8 @@ describe("TMC transfer request transactions", () => {
       comment: "A idempotent transfer",
     }, actor, "tmc-db-replay-001");
     expect(first.kind).toBe("completed");
+    expect(first.status).toBe(201);
+    expect(first.resourceId).toBe(first.result.request?.id);
     expect(replay).toEqual({ ...first, kind: "replayed" });
     expect(await requestCount()).toBe(requestsBefore + 1);
 
@@ -30,6 +32,12 @@ describe("TMC transfer request transactions", () => {
       recipientId: fixture.recipientIds[0]!,
       itemIds: [randomUUID()],
     }, actor, "tmc-db-no-resource-1");
+    const requestsBeforeReplay = await requestCount();
+    const noResourceReplay = await createService().createIdempotent({
+      recipientId: fixture.recipientIds[0]!, itemIds: noResource.result.items.map(item => item.itemId),
+    }, actor, "tmc-db-no-resource-1");
+    expect(noResourceReplay).toEqual({ ...noResource, kind: "replayed" });
+    expect(await requestCount()).toBe(requestsBeforeReplay);
     const retention = await database.query<{
       idempotency_key: string;
       is_infinite: boolean;

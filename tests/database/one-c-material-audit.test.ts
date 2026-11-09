@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import type { Pool } from "pg";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
@@ -19,6 +20,7 @@ import { exportOneCAnalyticsExcel } from "@/lib/server/excel/one-c-analytics-exc
 import { workbookCell, workbookRow } from "../helpers/one-c-workbook";
 import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
 import { buildOneCReconciliationReport } from "@/lib/one-c-reconciliation-report";
+import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -304,7 +306,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await pool.query("select one_c_code,unit_price from yu_inventory.items where id=$1",[f.itemId])).rows[0]).toEqual({one_c_code:null,unit_price:"100.00"});
     const workbook = new Workbook();
     const bytes = await exportOneCAnalyticsExcel(snapshot);
-    await workbook.xlsx.load(Buffer.from(bytes));
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
     expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(5);
     expect(workbookCell(workbook.getWorksheet("Временные")!, "Результат сверки").value).toBe("Не найдено");
   });
@@ -547,33 +549,192 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(workbookCell(workbook.getWorksheet("Временные")!, "ID карточки").value).toBe(tempId);
   });
 
-  it("assigns only the two allowed people across OS and MP, with complete owner history and replay", async () => {
+  it("runs the maintenance CLI as preview or apply and reports missing accounts without silently assigning them", async () => {
     const f = await seed();
-    const bau = await addUser("Садыков Бауыржан Анесович");
+    const recipient = await addUser("Иванов Иван Иванович");
+    await save([{ ...base, responsibleName: "Иванов Иван Иванович\nмол" }]);
+    const run = (...args: string[]) => spawnSync(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/db/fill-one-c-responsibles.ts", "--target=test", ...args], { encoding: "utf8", windowsHide: true });
+    const preview = run();
+    expect(preview.status, preview.stderr).toBe(0);
+    expect(JSON.parse(preview.stdout)).toMatchObject({ mode: "preview", actorId: f.actor.userId, checked: 1, updated: 0, remainingReady: 1 });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods`)).rows[0].count).toBe(0);
+    const denied = run("--apply", `--actor-id=${recipient}`);
+    expect(denied.status).toBe(1);
+    expect(denied.stderr).toContain("active_admin_required");
+    const applied = run("--apply", `--actor-id=${f.actor.userId}`);
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(JSON.parse(applied.stdout)).toMatchObject({ mode: "apply", updated: 1, remainingReady: 0, responsibilityCounts: { unchanged: 1 }, missingAccounts: [] });
+    const repeated = run("--apply");
+    expect(repeated.status, repeated.stderr).toBe(0);
+    expect(JSON.parse(repeated.stdout).updated).toBe(0);
+    await pool.query(`update yu_inventory.items set inventory_number='1350/55555',inventory_number_key='1350/55555' where id=$1`, [f.itemId]);
+    const unowned = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,'Предмет без аккаунта',1,100,room_id,'official','1350/14444','1350/14444',created_by,updated_by from yu_inventory.items where id=$2`, [unowned, f.itemId]);
+    await save([{ ...base, responsibleName: "Нет Такого Аккаунта\nмол" }], "2026-10-20T01:00:00Z");
+    const missing = run("--apply");
+    expect(missing.status, missing.stderr).toBe(0);
+    expect(JSON.parse(missing.stdout)).toMatchObject({ updated: 0, remainingReady: 0, responsibilityCounts: { unchanged: 1, user_missing: 1 }, missingAccounts: [{ sourceName: "Нет Такого Аккаунта\nмол", items: 1 }] });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods where item_id=$1`, [unowned])).rows[0].count).toBe(0);
+  });
+
+  it.each([["OS", "general"], ["MP", "general"], ["OS", "it"], ["MP", "it"]] as const)("backfills a %s MOL-labelled owner in %s by complete number without changing other card fields", async (source, section) => {
+    const f = await seed();
+    const name = "Мустапаева Сезим Нурахметовна";
+    const recipient = await addUser(name);
+    await pool.query(`update yu_inventory.items set name='Монитор',item_section=$2,inventory_number='2411/0725',inventory_number_key='2411/0725' where id=$1`, [f.itemId, section]);
+    if (source === "OS") {
+      const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, code: "000006283", inventoryNumber: "2411/0725", name: "Монитор 2411/0725 от 10.05.2023", responsibleName: name + "\nмол", initialCost: 50000 }], metadata());
+    } else {
+      await save([{ ...base, code: "000006283", inventoryNumber: "2411/0725", name: "Монитор 2411/0725 от 10.05.2023", responsibleName: name + " (МОЛ)" }]);
+    }
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewMissingResponsibilities(f.actor);
+    expect(preview.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(preview.rows[0]).toMatchObject({ nextName: "Монитор", nextCode: null, responsibility: { nextUserId: recipient } });
+    expect((await pool.query(`select count(*)::int count from yu_inventory.responsibility_periods`)).rows[0].count).toBe(0);
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 1 });
+    expect((await pool.query(`select name,one_c_code,unit_price,inventory_number,item_section,version from yu_inventory.items where id=$1`, [f.itemId])).rows[0])
+      .toEqual({ name: "Монитор", one_c_code: null, unit_price: "100.00", inventory_number: "2411/0725", item_section: section, version: 2 });
+    const repository = createPostgresInventoryItemRepositories(pool).items;
+    const visible = section === "general" ? await repository.listItemsAssignedTo(recipient) : await repository.listItItems();
+    expect(visible.find(item => item.id === f.itemId)).toMatchObject({ responsibleId: recipient, responsibleName: name });
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 0, unchanged: 1, responsibilityCounts: { unchanged: 1 } });
+    expect((await pool.query(`select responsible_user_id from yu_inventory.responsibility_periods where item_id=$1 and ended_at is null`, [f.itemId])).rows).toEqual([{ responsible_user_id: recipient }]);
+    expect((await pool.query(`select after_values->>'origin' as origin from yu_inventory.audit_records where subject_kind='responsibility'`)).rows).toEqual([{ origin: "one_c_responsibility_backfill" }]);
+  });
+
+  it.each(["OS", "MP"] as const)("excludes only the selected system units from %s backfill and leaves a shared-number monitor assignable", async source => {
+    const f = await seed();
+    const fullName = "Тестовый Бывший Сотрудник";
+    const recipient = await addUser(fullName);
+    const ids: string[] = [];
+    for (const number of ["123/357", "123/358", "123/353"]) {
+      const id = randomUUID();ids.push(id);
+      await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+        select $1,'Системный блок в сборе Intel','electronics',1,24850,room_id,'official',$3::text,$3::text,created_by,updated_by from yu_inventory.items where id=$2`, [id, f.itemId, number]);
+    }
+    await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics',inventory_number='123/357',inventory_number_key='123/357' where id=$1`, [f.itemId]);
+    if (source === "OS") {
+      const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+      await new PostgresOneCFixedAssetRepository(pool).saveBatch(["123/357", "123/358", "123/353"].map(number => ({ ...original, externalId: randomUUID(), inventoryNumber: number, responsibleName: fullName })), metadata());
+    } else await save(["123/357", "123/358", "123/353"].map(number => ({ ...base, code: number, name: "Устройство", inventoryNumber: number, responsibleName: fullName })));
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewMissingResponsibilities(f.actor);
+    for (const id of ids) expect(preview.rows.find(row => row.itemId === id)?.responsibility).toMatchObject({ changed: false, nextUserId: null, status: "not_allowed" });
+    expect(preview.rows.find(row => row.itemId === f.itemId)?.responsibility).toMatchObject({ changed: true, nextUserId: recipient });
+    expect(await service.fillMissingResponsibilities(f.actor)).toMatchObject({ updated: 1 });
+    expect((await pool.query(`select item_id from yu_inventory.responsibility_periods where ended_at is null`)).rows).toEqual([{ item_id: f.itemId }]);
+    for (const id of ids) expect((await pool.query(`select unit_price from yu_inventory.items where id=$1`, [id])).rows[0].unit_price).toBe("24850.00");
+  });
+
+  it("fills both vacant owners for a shared monitor/system number without renaming either card", async () => {
+    const f = await seed();
+    const recipient = await addUser("Сотрудник Полное Имя");
+    await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics' where id=$1`, [f.itemId]);
+    const second = randomUUID();
+    await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+      select $1,'Системный блок','electronics',1,100,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by from yu_inventory.items where id=$2`, [second, f.itemId]);
+    const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, inventoryNumber: "1350/14444", name: "Монитор", responsibleName: "Сотрудник Полное Имя мол" }], metadata());
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.counts).toEqual({ ready: 2, unchanged: 0, skipped: 0 });
+    expect(preview.rows.every(row => row.nextName === row.currentName && row.nextCode === null && row.responsibility?.nextUserId === recipient)).toBe(true);
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(2);
+    expect((await createPostgresInventoryItemRepositories(pool).items.listItemsAssignedTo(recipient)).map(item => item.id).sort()).toEqual([f.itemId, second].sort());
+  });
+
+  it.each(["name_invalid", "shared_number_conflict"] as const)("keeps an independently confirmed owner when renaming is blocked by %s", async reason => {
+    const f = await seed();
+    const recipient = await addUser("Сотрудник Полное Имя");
+    if (reason === "shared_number_conflict") {
+      await pool.query(`update yu_inventory.items set name='Монитор',item_type='electronics' where id=$1`, [f.itemId]);
+      await pool.query(`insert into yu_inventory.items(id,name,item_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,archived_at,archived_by,created_by,updated_by)
+        select $1,'Системный блок','electronics',1,100,room_id,inventory_number_kind,inventory_number,inventory_number_key,now(),created_by,created_by,updated_by from yu_inventory.items where id=$2`, [randomUUID(), f.itemId]);
+    }
+    const original = (await pool.query(`select payload from yu_inventory.one_c_fixed_asset_inbox`)).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, inventoryNumber: "1350/14444", name: reason === "name_invalid" ? "Длинное название ".repeat(15) : "Стол", responsibleName: "Сотрудник Полное Имя\nМОЛ" }], metadata());
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0]).toMatchObject({ eligible: true, changed: true, nextName: reason === "name_invalid" ? "Наше название" : "Монитор", nextCode: null, responsibility: { status: "ready", nextUserId: recipient } });
+    expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
+    expect((await pool.query(`select name,one_c_code from yu_inventory.items where id=$1`, [f.itemId])).rows[0]).toEqual({ name: preview.rows[0].currentName, one_c_code: null });
+  });
+
+  it("fills missing owners across OS and MP, preserving assigned cards and replaying safely", async () => {
+    const f = await seed();
+    const bau = await addUser("Тынымбаев Бауыржан Анесович");
     const ermek = await addUser("Нурмаганбет Ермек Талантович");
     const old = await addUser("Текущий сотрудник");
     const osId = randomUUID();
     await pool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
       select $1,'Наше ОС',1,250,room_id,'official','999/999','999/999',created_by,updated_by from yu_inventory.items where id=$2`, [osId, f.itemId]);
     await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'admin_override',$4)`, [randomUUID(), f.itemId, old, f.actor.userId]);
-    await pool.query(`update yu_inventory.one_c_fixed_asset_inbox set payload=jsonb_set(payload,'{responsibleName}',to_jsonb($1::text))`, ["Бауыржан Анесович"]);
+    await pool.query(`update yu_inventory.one_c_fixed_asset_inbox set payload=jsonb_set(payload,'{responsibleName}',to_jsonb($1::text))`, ["Тынымбаев Бауыржан Анесович"]);
     await save([{ ...base, responsibleName: "Нурмаганбет Ермек Талантович" }]);
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
     expect(preview.rows.find(row => row.itemId === osId)?.responsibility).toMatchObject({ changed: true, nextUserId: bau });
-    expect(preview.rows.find(row => row.itemId === f.itemId)?.responsibility).toMatchObject({ currentUserId: old, changed: true, nextUserId: ermek });
+    expect(preview.rows.find(row => row.itemId === f.itemId)?.responsibility).toMatchObject({ currentUserId: old, changed: false, nextUserId: old });
     expect((await service.applyCurrent(preview, f.actor)).updated).toBe(2);
     expect((await service.applyCurrent(preview, f.actor)).updated).toBe(2);
     const periods = (await pool.query('select * from yu_inventory.responsibility_periods order by item_id,started_at')).rows;
-    expect(periods).toHaveLength(3);
-    expect(periods.find(row => row.responsible_user_id === old)).toMatchObject({ ended_by: f.actor.userId });
-    expect(periods.filter(row => row.ended_at === null).map(row => row.responsible_user_id).sort()).toEqual([bau, ermek].sort());
+    expect(periods).toHaveLength(2);
+    expect(periods.find(row => row.responsible_user_id === old)).toMatchObject({ ended_by: null });
+    expect(periods.filter(row => row.ended_at === null).map(row => row.responsible_user_id).sort()).toEqual([bau, old].sort());
+    expect((await createPostgresInventoryItemRepositories(pool).items.listItemsAssignedTo(ermek))).toHaveLength(0);
     const audits = (await pool.query(`select action,before_values,after_values from yu_inventory.audit_records where subject_kind='responsibility'`)).rows;
-    expect(audits).toHaveLength(2);
+    expect(audits).toHaveLength(1);
     expect(audits.every(row => row.action === "responsibility.admin_override")).toBe(true);
     const next = await service.previewCurrent(f.actor);
     expect(next.counts.ready).toBe(0);
     expect(next.rows.every(row => row.responsibility?.status === "unchanged")).toBe(true);
+  });
+
+  it("never assigns a grouped chair card through either current enrichment or missing-owner backfill", async () => {
+    const f = await seed();
+    const fullName = "Иванов Иван Иванович";
+    await addUser(fullName);
+    await pool.query(`update yu_inventory.items set name='Стул',quantity=500 where id=$1`, [f.itemId]);
+    await save([{ ...base, name: "Стул офисный", responsibleName: fullName }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    const chair = preview.rows.find(row => row.itemId === f.itemId)!;
+    expect(chair.responsibility).toMatchObject({ changed: false, nextUserId: null, status: "not_allowed" });
+    expect(chair.nextCode).toBe(base.code);
+    expect((await service.fillMissingResponsibilities(f.actor)).updated).toBe(0);
+    await service.applyCurrent(preview, f.actor);
+    const saved = (await pool.query('select name,one_c_code,quantity from yu_inventory.items where id=$1', [f.itemId])).rows[0];
+    expect(saved).toMatchObject({ name: "Стул офисный", one_c_code: base.code, quantity: 500 });
+    expect((await pool.query('select id from yu_inventory.responsibility_periods where item_id=$1', [f.itemId])).rows).toHaveLength(0);
+    expect((await service.previewCurrent(f.actor)).rows.find(row => row.itemId === f.itemId)?.responsibility?.changed).toBe(false);
+  });
+
+  it.each(["OS", "MP"] as const)("fills an empty responsibility from exact %s code and exposes the item in the recipient account", async source => {
+    const f = await seed();
+    const fullName = "Иванов Иван Иванович";
+    const recipient = await addUser(fullName);
+    await pool.query(`update yu_inventory.items set inventory_number_kind='temporary',inventory_number='TMP-2026-OWNER',inventory_number_key='tmp-2026-owner',one_c_code=$2 where id=$1`, [f.itemId, source === "OS" ? "OTHER" : base.code]);
+    if (source === "OS") {
+      await pool.query(`update yu_inventory.one_c_fixed_asset_inbox set payload=jsonb_set(payload,'{responsibleName}',to_jsonb($1::text))`, [fullName]);
+    } else {
+      await save([{ ...base, responsibleName: fullName }]);
+    }
+    const repository = createPostgresInventoryItemRepositories(pool).items;
+    expect(await repository.listItemsAssignedTo(recipient)).toHaveLength(0);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0].responsibility).toMatchObject({ currentUserId: null, nextUserId: recipient, changed: true, status: "ready" });
+    await service.applyCurrent(preview, f.actor);
+    await service.applyCurrent(preview, f.actor);
+    const periods = (await pool.query(`select responsible_user_id,ended_at from yu_inventory.responsibility_periods where item_id=$1`, [f.itemId])).rows;
+    expect(periods).toEqual([{ responsible_user_id: recipient, ended_at: null }]);
+    expect((await repository.listItemsAssignedTo(recipient)).find(item => item.id === f.itemId)).toMatchObject({ responsibleId: recipient });
+    const next = await service.previewCurrent(f.actor);
+    expect(next.rows[0].responsibility).toMatchObject({ changed: false, currentUserId: recipient, nextUserId: recipient });
+    expect(next.counts.ready).toBe(0);
   });
 
   it("source names and barcode tokens update general and IT cards without structured source numbers", async () => {
@@ -584,7 +745,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const preview = await service.previewCurrent(f.actor);
     expect(preview.counts.ready).toBe(1);
     expect(preview.rows[0].identityEvidence).toBe("1350/14444");
-    expect(preview.rows[0].responsibility?.status).toBe("not_allowed");
+    expect(preview.rows[0].responsibility?.status).toBe("user_missing");
     await service.applyCurrent(preview, f.actor);
     expect((await pool.query('select name,item_section,one_c_code from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toMatchObject({ name: "Принтер *YUB-1350/14444*", item_section: "it", one_c_code: base.code });
   });
@@ -596,11 +757,11 @@ describe("live materials API replaces Excel as audit input", () => {
     await save([{ ...base, responsibleName: "Иванов Иван Иванович" }]);
     const service = new InventoryAuditEnrichmentService(pool);
     const other = await service.previewCurrent(f.actor);
-    expect(other.rows[0].responsibility).toMatchObject({ status: "not_allowed", changed: false, nextUserId: bau });
+    expect(other.rows[0].responsibility).toMatchObject({ status: "unchanged", changed: false, nextUserId: bau });
     await service.applyCurrent(other, f.actor);
     await save([{ ...base, responsibleName: "Бауыржан Анесович" }, { ...base, responsibleCode: "002", responsibleName: "Нурмаганбет Ермек Талантович" }], "2026-10-21T01:00:00Z");
     const ambiguous = await service.previewCurrent(f.actor);
-    expect(ambiguous.rows[0].responsibility).toMatchObject({ status: "ambiguous", changed: false, nextUserId: bau });
+    expect(ambiguous.rows[0].responsibility).toMatchObject({ status: "unchanged", changed: false, nextUserId: bau });
     expect((await pool.query('select count(*)::int count from yu_inventory.responsibility_periods where ended_at is null')).rows[0].count).toBe(1);
   });
 
@@ -616,7 +777,22 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await pool.query('select count(*)::int count from yu_inventory.responsibility_periods')).rows[0].count).toBe(0);
   });
 
-  it("a responsibility-only proposal changes once and pending transfers preserve the current owner", async () => {
+  it("does not overwrite an owner assigned after the integration preview", async () => {
+    const f = await seed();
+    await addUser("Иванов Иван Иванович");
+    const manual = await addUser("Петров Петр Петрович");
+    await save([{ ...base, responsibleName: "Иванов Иван Иванович" }]);
+    const service = new InventoryAuditEnrichmentService(pool);
+    const preview = await service.previewCurrent(f.actor);
+    expect(preview.rows[0].responsibility?.changed).toBe(true);
+    const periodId = randomUUID();
+    await pool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by) values($1,$2,$3,'admin_override',$4)`, [periodId, f.itemId, manual, f.actor.userId]);
+    await expect(service.applyCurrent(preview, f.actor)).rejects.toMatchObject({ publicCode: "inventory_audit_enrichment_stale" });
+    expect((await pool.query(`select id,responsible_user_id,ended_at from yu_inventory.responsibility_periods where item_id=$1`, [f.itemId])).rows).toEqual([{ id: periodId, responsible_user_id: manual, ended_at: null }]);
+    expect((await service.previewCurrent(f.actor)).rows[0].responsibility).toMatchObject({ changed: false, currentUserId: manual, nextUserId: manual });
+  });
+
+  it("existing responsibilities stay unchanged during and after pending transfers", async () => {
     const f = await seed();
     const bau = await addUser("Бауыржан Анесович");
     const old = await addUser("Прежний сотрудник");
@@ -628,13 +804,13 @@ describe("live materials API replaces Excel as audit input", () => {
     const service = new InventoryAuditEnrichmentService(pool);
     const pending = await service.previewCurrent(f.actor);
     expect(pending.counts).toEqual({ ready: 0, unchanged: 1, skipped: 0 });
-    expect(pending.rows[0].responsibility?.status).toBe("pending_transfer");
+    expect(pending.rows[0].responsibility?.status).toBe("unchanged");
     await pool.query(`update yu_inventory.transfers set status='cancelled',closed_at=now(),closed_by=$1`, [bau]);
     const ready = await service.previewCurrent(f.actor);
-    expect(ready.counts).toEqual({ ready: 1, unchanged: 0, skipped: 0 });
+    expect(ready.counts).toEqual({ ready: 0, unchanged: 1, skipped: 0 });
     await service.applyCurrent(ready, f.actor);
-    expect((await pool.query('select name,one_c_code,version from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: base.name, one_c_code: base.code, version: 2 });
-    expect((await pool.query('select responsible_user_id from yu_inventory.responsibility_periods where ended_at is null')).rows[0].responsible_user_id).toBe(bau);
+    expect((await pool.query('select name,one_c_code,version from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: base.name, one_c_code: base.code, version: 1 });
+    expect((await pool.query('select responsible_user_id from yu_inventory.responsibility_periods where ended_at is null')).rows[0].responsible_user_id).toBe(old);
   });
 
   it("preserves an owner during a current TMC request while still updating the confirmed name and price", async () => {
@@ -648,7 +824,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await addPendingTmcRequest(f.itemId, old, bau, periodId);
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
-    expect(preview.rows[0].responsibility).toMatchObject({ changed: false, status: "pending_transfer", currentUserId: old, nextUserId: old });
+    expect(preview.rows[0].responsibility).toMatchObject({ changed: false, status: "unchanged", currentUserId: old, nextUserId: old });
     expect(preview.rows[0].price).toMatchObject({ changed: true, nextUnitPrice: "9100.00" });
     expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
     expect((await pool.query('select name,unit_price from yu_inventory.items where id=$1', [f.itemId])).rows[0]).toEqual({ name: base.name, unit_price: "9100.00" });
@@ -666,7 +842,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await save([{ ...base, responsibleName: "Тынымбаев Бауыржан Анесович" }]);
     const service = new InventoryAuditEnrichmentService(pool);
     const ready = await service.previewCurrent(f.actor);
-    expect(ready.rows[0].responsibility?.changed).toBe(true);
+    expect(ready.rows[0].responsibility?.changed).toBe(false);
     const requestId = await addPendingTmcRequest(f.itemId, old, bau, periodId);
     await expect(service.applyCurrent(ready, f.actor)).rejects.toMatchObject({ publicCode: "inventory_audit_enrichment_stale" });
     const pending = await service.previewCurrent(f.actor);
@@ -820,7 +996,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const exported = await service.exportInventoryAudit(f.batchId);
     const bytes = await exportInventorySourceAuditExcel(exported);
     const workbook = new Workbook();
-    await workbook.xlsx.load(Buffer.from(bytes));
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
     expect(workbook.getWorksheet("Только материалы")).toBeTruthy();
     const details = workbook.getWorksheet("Все совпадения материалов")!;
     expect(details.rowCount).toBe(3);
@@ -839,7 +1015,7 @@ async function seed() {
   await pool.query('insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by) values($1,\'Наше название\',1,100,$2,\'official\',$3::text,$3::text,$4,$4)', [itemId, roomId, "1350/14444", userId]);
   const asset: OneCFixedAsset = { externalId: randomUUID(), code: "OTHER", inventoryNumber: "999/999", barcode: null, name: "Другое ОС", category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null };
   const source = metadata();
-  await new PostgresOneCFixedAssetRepository(pool).saveBatch([asset], { sourceSha256: source.sourceSha256, sourceFilename: "audit.xml" });
+  await new PostgresOneCFixedAssetRepository(pool).saveBatch([asset], { requestId: randomUUID(),  sourceSha256: source.sourceSha256, sourceFilename: "audit.xml" });
   const batch = (await pool.query('select id from "yu_inventory"."one_c_import_batches" where source_sha256=$1', [source.sourceSha256])).rows[0];
   return { batchId: batch.id as string, itemId, actor: { userId, role: "admin" as const, sessionVersion: 1 } };
 }

@@ -117,7 +117,7 @@ test("POST accepts explicit JSON charset and mixed-case media type while rejecti
     assert.equal(response.status, 200);
   }
   for (const contentType of [null, "text/plain", "application/x-www-form-urlencoded", "application/jsonp"]) {
-    const headers = contentType ? { "content-type": contentType } : {};
+    const headers: HeadersInit = contentType ? { "content-type": contentType } : {};
     const response = await handlers.POST(new Request(URL, { method: "POST", headers, body: new TextEncoder().encode(JSON.stringify(INPUT)) }), CONTEXT);
     assert.equal(response.status, 415, String(contentType));
     assert.deepEqual(await response.json(), { error: "unsupported_media_type" });

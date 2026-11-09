@@ -13,6 +13,5 @@
     "../../lib/server/persistence/postgres/postgres-inventory-responsibility-repositories.ts",
     "../inventory-transfer-override-bola.test.ts",
     "../inventory-transfer-override-route.test.ts",
-    "../inventory-responsibility-repositories.test.ts"
   ]
 }

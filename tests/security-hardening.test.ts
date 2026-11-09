@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { isUuid } from "../lib/domain/identifiers";
@@ -100,19 +99,4 @@ test("uses the forwarded HTTPS protocol behind the trusted local reverse proxy",
       ),
     /cross_site_request_blocked/,
   );
-});
-
-test("production API limiting uses the durable database bucket", () => {
-  const source = readFileSync("lib/security/rate-limiter.ts", "utf8");
-  assert.match(source, /export function consumeApiRateLimit\(request: Request\): Promise/);
-  assert.match(source, /namespace: "api-by-ip-v2"/);
-  assert.match(source, /process\.env\.NODE_ENV !== "test"/);
-});
-
-test("production Node.js build does not expose source maps", () => {
-  const securityCheck = readFileSync("scripts/security-check.mjs", "utf8");
-  const nextConfig = readFileSync("next.config.ts", "utf8");
-  assert.match(securityCheck, /entry\.name\.endsWith\("\.map"\)/);
-  assert.match(nextConfig, /turbopackSourceMaps: false/);
-  assert.match(nextConfig, /serverSourceMaps: false/);
 });

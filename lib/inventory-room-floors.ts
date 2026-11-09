@@ -17,7 +17,7 @@ export const MAIN_CAMPUS_WINGS = [
 export type MainCampusWingCode = (typeof MAIN_CAMPUS_WINGS)[number]["code"];
 
 export interface InventoryRoomWing {
-  code: MainCampusWingCode;
+  code: string;
   label: string;
   rooms: RoomDto[];
 }
@@ -73,10 +73,62 @@ export function groupInventoryRoomsByMainCampusWing(
   };
 }
 
-/** Cyrillic К and Latin K must match in room filters and suggestions. */
+/** Engineering wings are discovered from saved rooms, without a fixed list. */
+export function engineeringFacultyWingFromDesignation(
+  designation: string,
+): string | null {
+  const normalized = designation.normalize("NFKC").trim().toLocaleUpperCase();
+  return normalized.match(/^(\p{L})\s*[-–—./]?\s*\d/u)?.[1]
+    ?? normalized.match(/^\d[\d\s./-]*[-–—]?\s*(\p{L})$/u)?.[1]
+    ?? normalized.match(/(?:^|\s|[-–—./])(\p{L})$/u)?.[1]
+    ?? normalized.match(/^(\p{L})\s+(?:КОРПУС|КОРПУСЫ|BLOCK)$/u)?.[1]
+    ?? null;
+}
+
+/** Group a floor by letter only when at least two rooms share that letter. */
+export function groupInventoryRoomsByEngineeringFacultyWing(
+  rooms: readonly RoomDto[],
+): { wings: InventoryRoomWing[]; unassignedRooms: RoomDto[] } {
+  const roomsByWing = new Map<string, RoomDto[]>();
+  const unassignedRooms: RoomDto[] = [];
+
+  for (const room of rooms) {
+    const code = engineeringFacultyWingFromDesignation(room.designation);
+    if (!code) {
+      unassignedRooms.push(room);
+      continue;
+    }
+    const wingRooms = roomsByWing.get(code) ?? [];
+    wingRooms.push(room);
+    roomsByWing.set(code, wingRooms);
+  }
+
+  const wings: InventoryRoomWing[] = [];
+  for (const [code, wingRooms] of roomsByWing) {
+    // A single lettered room stays directly on its floor until it has a peer.
+    if (wingRooms.length < 2) {
+      unassignedRooms.push(...wingRooms);
+    } else {
+      wings.push({ code, label: code, rooms: naturallySortRooms(wingRooms) });
+    }
+  }
+
+  return {
+    wings: wings.sort((left, right) => left.code.localeCompare(right.code, "ru", { numeric: true })),
+    unassignedRooms: naturallySortRooms(unassignedRooms),
+  };
+}
+
+const ROOM_SEARCH_LOOKALIKE_LETTERS: Readonly<Record<string, string>> = {
+  а: "a", в: "b", е: "e", к: "k", м: "m", н: "h", о: "o",
+  р: "p", с: "c", т: "t", у: "y", х: "x", і: "i",
+};
+
+/** Compare visually matching Cyrillic/Latin letters without changing room names. */
 export function normalizeInventoryRoomSearch(value: string): string {
-  return value.normalize("NFKC").trim().toLocaleLowerCase()
-    .replace(/к/g, "k").replace(/\s+/g, " ");
+  return value.normalize("NFKC").trim().toLowerCase()
+    .replace(/[авекмнорстухі]/g, (letter) => ROOM_SEARCH_LOOKALIKE_LETTERS[letter] ?? letter)
+    .replace(/\s+/g, " ");
 }
 
 export function mainCampusWingFromDesignation(
@@ -151,12 +203,23 @@ function naturallySortRooms(rooms: readonly RoomDto[]): RoomDto[] {
   return rooms.toSorted(naturalRoomDesignationCompare);
 }
 
+const ROOM_DESIGNATION_COLLATOR = new Intl.Collator("ru", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+/** Use the same Cyrillic/Latin equivalence as room search when ordering labels. */
+export function compareInventoryRoomDesignations(left: string, right: string): number {
+  return ROOM_DESIGNATION_COLLATOR.compare(
+    normalizeInventoryRoomSearch(left),
+    normalizeInventoryRoomSearch(right),
+  ) || ROOM_DESIGNATION_COLLATOR.compare(left, right)
+    || (left < right ? -1 : left > right ? 1 : 0);
+}
+
 function naturalRoomDesignationCompare(
   left: Pick<RoomDto, "designation">,
   right: Pick<RoomDto, "designation">,
 ): number {
-  return left.designation.localeCompare(right.designation, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  return compareInventoryRoomDesignations(left.designation, right.designation);
 }

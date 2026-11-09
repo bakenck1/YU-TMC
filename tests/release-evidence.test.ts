@@ -132,7 +132,7 @@ async function validPack() {
   return pack;
 }
 
-function run(file: string, extraEnv: NodeJS.ProcessEnv = {}) {
+function run(file: string, extraEnv: Record<string, string | undefined> = {}) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(process.execPath, [script, "--file", file], {
       cwd: process.cwd(),

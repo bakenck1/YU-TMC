@@ -19,9 +19,9 @@ const CONFIG = {
 };
 
 test("Google SSO requires a complete and safe web-server configuration", () => {
-  assert.equal(googleSsoConfig({}), null);
+  assert.equal(googleSsoConfig({ NODE_ENV: "test", }), null);
   assert.equal(
-    googleSsoConfig({
+    googleSsoConfig({ NODE_ENV: "test",
       GOOGLE_CLIENT_ID: CONFIG.clientId,
       GOOGLE_CLIENT_SECRET: CONFIG.clientSecret,
       GOOGLE_REDIRECT_URI:
@@ -30,7 +30,7 @@ test("Google SSO requires a complete and safe web-server configuration", () => {
     null,
   );
   assert.equal(
-    googleSsoConfig({
+    googleSsoConfig({ NODE_ENV: "test",
       GOOGLE_CLIENT_ID: CONFIG.clientId,
       GOOGLE_CLIENT_SECRET: CONFIG.clientSecret,
       GOOGLE_REDIRECT_URI: CONFIG.redirectUri,
@@ -39,7 +39,7 @@ test("Google SSO requires a complete and safe web-server configuration", () => {
     null,
   );
   assert.deepEqual(
-    googleSsoConfig({
+    googleSsoConfig({ NODE_ENV: "test",
       GOOGLE_CLIENT_ID: CONFIG.clientId,
       GOOGLE_CLIENT_SECRET: CONFIG.clientSecret,
       GOOGLE_REDIRECT_URI: CONFIG.redirectUri,
@@ -90,7 +90,7 @@ test("OAuth transaction cookie is signed, expiring, and tamper-evident", () => {
 });
 
 test("ID token verification checks signature and the Workspace domain claim", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetGoogleSigningKeysForTests();
   const { privateKey, publicKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,

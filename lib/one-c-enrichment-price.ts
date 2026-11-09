@@ -60,7 +60,9 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
     } else continue;
     if (!claims.length || claims.some(value => value == null || value === "")) { row.price.status = "missing"; continue; }
     const prices = claims.map(enrichmentMoney);
-    if (prices.some(value => value === null)) { row.price.status = "invalid"; continue; }
+    // Historical exports may contain zero prices. Never replace a card's price
+    // with that zero, including for fully depreciated assets.
+    if (prices.some(value => value === null || value === "0.00")) { row.price.status = "invalid"; continue; }
     const distinct = [...new Set(prices)];
     if (distinct.length !== 1) { row.price.status = "ambiguous"; continue; }
     row.price.nextUnitPrice = distinct[0]!;
@@ -97,7 +99,7 @@ function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: Audi
       .map(entry => assets.get(entry.externalId)).filter((asset): asset is OneCFixedAsset => Boolean(asset && asset.quantity === 1 && exactMaterialCode(asset.code) === code));
     const known = sources.filter(asset => asset.initialCost != null);
     const costs = known.map(asset => enrichmentMoney(asset.initialCost));
-    if (!known.length || costs.some(cost => cost === null) || new Set(costs).size !== 1) continue;
+    if (!known.length || costs.some(cost => cost === null || cost === "0.00") || new Set(costs).size !== 1) continue;
     const current = enrichmentMoney(savedItems.get(row.itemId)?.unitPrice) ?? "0.00";
     row.eligible = true;
     row.nextName = row.currentName;

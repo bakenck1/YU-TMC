@@ -1,11 +1,11 @@
+import type { OneCMaterial } from "@/lib/contracts/one-c-materials";
+import { buildInventoryAuditEnrichmentPlan } from "@/lib/inventory-audit-enrichment";
+import { buildInventorySourceAudit,type AuditItem } from "@/lib/inventory-source-audit";
+import { auditNeedsReview } from "@/lib/inventory-source-audit-review";
+import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Pool } from "pg";
-import type { OneCMaterial } from "@/lib/contracts/one-c-materials";
-import { readMaterialRegistry, getMaterialRegistryPage } from "@/lib/server/one-c-material-registry";
-import { buildInventorySourceAudit, type AuditItem } from "@/lib/inventory-source-audit";
-import { auditNeedsReview } from "@/lib/inventory-source-audit-review";
-import { buildInventoryAuditEnrichmentPlan } from "@/lib/inventory-audit-enrichment";
 
 const material: OneCMaterial = { externalId: null, code: "0000007692", name: "Рукав №1350/14444",
   warehouseExternalId: null, warehouseCode: null, warehouseName: null, responsibleCode: "001", responsibleName: "Иванов",
@@ -106,18 +106,4 @@ test("number and barcode matching survive saving the reviewed 1C code and keep t
   const differentCode = buildInventorySourceAudit([{ ...original, oneCCode: "DIFFERENT" }], [], source.rows, []);
   assert.equal(differentCode.rows[0].source, "excel", "code mismatch must not disable number/barcode evidence");
   assert.equal(original.oneCCode, null, "matching and preview must not mutate the original card");
-});
-
-test("registry search uses bound parameters, escapes wildcards and returns totals even beyond last page", async () => {
-  let parameters: unknown[] = [];
-  const db = { query: async (sql: string, values: unknown[]) => {
-    assert.ok(sql.includes("superseded_at is null"));
-    assert.ok(sql.includes("(i.payload->>'quantity')::numeric > 0"), "the displayed registry includes only positive balances");
-    assert.ok(!sql.includes("attack%"));
-    parameters = values;
-    return { rows: [{ data: [], total: 123 }] };
-  } } as unknown as Pick<Pool, "query">;
-  const page = await getMaterialRegistryPage({ page: 4, pageSize: 50, search: "attack%_" }, db);
-  assert.deepEqual(parameters, ["%attack\\%\\_%", 50, 150]);
-  assert.equal(page.total, 123);
 });

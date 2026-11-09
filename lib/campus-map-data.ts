@@ -1,3 +1,4 @@
+import { compareInventoryRoomDesignations } from "@/lib/inventory-room-floors";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
 import {
@@ -63,7 +64,7 @@ export function buildCampusMapData(
     const floors = campusBuildingFloorNumbers(preset).map((floorNumber) => {
       const floorRooms = buildingRooms
         .filter((room) => room.floorNumber === floorNumber)
-        .sort((left, right) => left.designation.localeCompare(right.designation, "ru"));
+        .sort((left, right) => compareInventoryRoomDesignations(left.designation, right.designation));
       const mappedRooms = floorRooms.map((room) => {
         const mappedItems = (roomItems.get(room.id) ?? []).map((item) => {
           const mapped = toCampusItem(item, preset.id);

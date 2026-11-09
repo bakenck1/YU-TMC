@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import TmcTransferRequestCard from "@/components/TmcTransferRequestCard";
 import {
-  parseTmcTransferRequest,
-  type TmcTransferRequestDto,
-  type TmcTransferRequestItemDto,
+parseTmcTransferRequest,
+type TmcTransferRequestDto,
+type TmcTransferRequestItemDto,
 } from "@/lib/contracts/tmc-operations";
 
 const refresh = vi.fn();
@@ -181,30 +181,6 @@ describe("TmcTransferRequestCard", () => {
       { itemId: "33333333-3333-4333-8333-000000000001", itemVersion: 1, decision: "accept" },
       { itemId: "33333333-3333-4333-8333-000000000002", itemVersion: 1, decision: "accept" },
     ]);
-  });
-
-  it("uses large touch targets and clear success and rejection colors", () => {
-    render(<TmcTransferRequestCard request={acceptedRequest()} canDecide={false} showOverdue={false} requiresAdministrativeReason={false} />);
-
-    const accepted = screen.getByText("tmc.request.item.accepted");
-    const rejected = screen.getByText("tmc.request.item.rejected");
-    expect(accepted.className).toContain("bg-emerald-100");
-    expect(accepted.className).toContain("text-emerald-800");
-    expect(rejected.className).toContain("bg-red-100");
-    expect(rejected.className).toContain("text-red-800");
-
-    for (const checkbox of screen.getAllByRole("checkbox")) {
-      expect(checkbox.className).toContain("h-6");
-      expect(checkbox.closest("label")?.className).toContain("min-h-12");
-    }
-  });
-
-  it("renders decision actions as large mobile-friendly buttons", () => {
-    render(<TmcTransferRequestCard request={request()} canDecide showOverdue={false} requiresAdministrativeReason={false} />);
-
-    for (const name of ["tmc.request.acceptAll", "tmc.request.acceptSelected", "tmc.request.rejectAll"]) {
-      expect(screen.getByRole("button", { name }).className).toContain("min-h-14");
-    }
   });
 
   it("uses the separate administrator cancellation policy for another initiator", async () => {

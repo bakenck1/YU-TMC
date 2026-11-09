@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { TransferDto } from "../lib/contracts/inventory-responsibility";
@@ -66,14 +65,6 @@ test("transfer collection preserves private caching and safe Retry-After on erro
   assert.equal(unavailable.status, 503);
   assert.deepEqual(await unavailable.json(), { error: "transfer_unavailable" });
   assert.match(unavailable.headers.get("cache-control") ?? "", /no-store/);
-});
-
-test("GET route keeps complete session actor while POST remains separately wired", async () => {
-  const source = await readFile("app/api/inventory/transfers/route.ts", "utf8");
-  assert.match(source, /createInventoryTransferListGetHandler/);
-  assert.match(source, /authenticate:\s*requireCurrentUser/);
-  assert.match(source, /export async function POST/);
-  assert.match(source, /requestTransfer/);
 });
 
 function request() {

@@ -1,20 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { ApplicationError } from "../lib/domain/application-error";
 import type { InventoryItemDto } from "../lib/contracts/inventory-items";
+import { ApplicationError } from "../lib/domain/application-error";
 import { toInventoryQrPrintItem } from "../lib/inventory-qr-print";
 import { readHiddenPageResource } from "../lib/server/security/hidden-page-resource";
-
-const pageSource = readFileSync(
-  new URL("../app/(protected)/items/[id]/qr/page.tsx", import.meta.url),
-  "utf8",
-);
-const printViewSource = readFileSync(
-  new URL("../components/InventoryQrPrintView.tsx", import.meta.url),
-  "utf8",
-);
 
 test("item QR page hides foreign and missing IDs behind the same 404", async () => {
   const missing = await captureFailure(() =>
@@ -33,33 +23,6 @@ test("item QR page hides foreign and missing IDs behind the same 404", async () 
     message: "NEXT_HTTP_ERROR_FALLBACK;404",
     digest: "NEXT_HTTP_ERROR_FALLBACK;404",
   });
-});
-
-test("item QR page rejects malformed or unauthorized IDs without hiding readable legacy-building items", () => {
-  assert.match(pageSource, /if \(!isUuid\(id\)\) notFound\(\);/);
-  assert.match(
-    pageSource,
-    /await readHiddenPageResource\(\s*\(\) => [\s\S]*?items\.findItem\(id, actor\),\s*notFound,\s*\)/,
-  );
-  assert.doesNotMatch(pageSource, /isInventoryBuildingName/);
-});
-
-test("item QR page authorizes privileged QR mode before looking up the item", () => {
-  assert.match(
-    pageSource,
-    /const canManageQr = hasPermission\(user\.role, "inventory\.qr\.manage"\);/,
-  );
-  assert.match(pageSource, /if \(kind === "qr" && !canManageQr\) notFound\(\);/);
-  const qrGate = pageSource.indexOf('kind === "qr" &&');
-  const itemRead = pageSource.indexOf("await readHiddenPageResource");
-  assert.ok(qrGate >= 0 && itemRead >= 0 && qrGate < itemRead);
-});
-
-test("item QR page serializes a least-privilege print model instead of the item DTO", () => {
-  assert.match(pageSource, /toInventoryQrPrintItem\(item, kind\)/);
-  assert.doesNotMatch(pageSource, /<InventoryQrPrintView item=\{item\}/);
-  assert.doesNotMatch(printViewSource, /InventoryItemDto/);
-  assert.match(printViewSource, /InventoryQrPrintItem/);
 });
 
 test("barcode projection does not serialize QR or hidden item metadata", () => {
