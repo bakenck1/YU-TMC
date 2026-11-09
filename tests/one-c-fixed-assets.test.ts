@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe,it } from "node:test";
@@ -73,7 +73,7 @@ describe("1C fixed assets HTTP boundary", () => {
     });
     assert.equal(pricing.field, "InitialCost");
     assert.equal(pricing.required, true);
-    assert.equal(pricing.exclusiveMinimum, 0);
+    assert.equal(pricing.minimum, 0);
     assert.equal(pricing.currency, "KZT");
   });
 

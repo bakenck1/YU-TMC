@@ -56,10 +56,10 @@ for service in fixed-assets materials; do
       process.stdin.on("end", () => {
         const result = JSON.parse(input);
         const field = process.argv[1] === "fixed-assets" ? "InitialCost" : "UnitPrice";
-        if (!result.configured || result.pricing?.field !== field || result.pricing?.exclusiveMinimum !== 0) {
+        if (!result.configured || result.pricing?.field !== field || result.pricing?.minimum !== 0) {
           console.error("API pricing contract or integration key is not configured: " + process.argv[1]);
           process.exitCode = 1;
-        } else console.log(process.argv[1] + ": configured; " + field + " must be positive");
+        } else console.log(process.argv[1] + ": configured; " + field + " accepts zero and positive values");
       });' "$service"
 done
 

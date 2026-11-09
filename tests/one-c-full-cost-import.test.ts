@@ -39,7 +39,7 @@ function boundary() {
   };
 }
 
-test("missing or zero initial costs reject the whole batch with object identities and release the lease", async () => {
+test("missing initial costs reject the whole batch with object identities and release the lease", async () => {
   const api = boundary();
   const response = await api.send(row(GUID, "<InitialCost>186990.00</InitialCost>")
     + row(SECOND_GUID, "<Code>00012</Code><ResidualValue>0</ResidualValue>"));
@@ -52,7 +52,7 @@ test("missing or zero initial costs reject the whole batch with object identitie
   assert.deepEqual(api.batches, []);
   assert.equal(api.releases(), 1);
 
-  for (const fields of ["<InitialCost/>", "<InitialCost>0</InitialCost>", "<ResidualValue>186990</ResidualValue>"]) {
+  for (const fields of ["<InitialCost/>", "<ResidualValue>186990</ResidualValue>"]) {
     const rejected = await api.send(row(GUID, fields));
     assert.equal(rejected.status, 422);
   }
@@ -60,7 +60,7 @@ test("missing or zero initial costs reject the whole batch with object identitie
   const corrected = await api.send(row(GUID, "<InitialCost>186990.00</InitialCost><ResidualValue>0</ResidualValue>"));
   assert.equal(corrected.status, 200);
   assert.equal(api.batches.length, 1);
-  assert.equal(api.releases(), 5);
+  assert.equal(api.releases(), 4);
 });
 
 test("unusable or invalid initial costs never reach persistence", async () => {
@@ -74,14 +74,14 @@ test("unusable or invalid initial costs never reach persistence", async () => {
 
 test("large incomplete exports report total problems and bound issue details", async () => {
   const api = boundary();
-  const rows = Array.from({ length: 105 }, (_, index) => row(`00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, "<InitialCost>0</InitialCost>")).join("");
+  const rows = Array.from({ length: 105 }, (_, index) => row(`00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, "")).join("");
   const response = await api.send(rows);
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.invalidRecords, 105);
   assert.equal(body.issues.length, 100);
   assert.equal(body.issuesTruncated, true);
-  assert.equal(body.issues[0].reason, "zero_initial_cost");
+  assert.equal(body.issues[0].reason, "missing_initial_cost");
   assert.deepEqual(api.batches, []);
 });
 
@@ -137,12 +137,12 @@ function materialsBoundary() {
   })) };
 }
 
-test("materials require a positive usable unit price for every positive balance and identify the exact MOL", async () => {
+test("materials require a nonnegative usable unit price for every positive balance and identify the exact MOL", async () => {
   const capability = await getOneCMaterialsCapability("").json();
   assert.equal(capability.pricing.field, "UnitPrice");
   assert.equal(capability.pricing.requiredFor, "positive_quantity");
   const api = materialsBoundary();
-  for (const [field, reason] of [["", "missing_unit_price"], ["<UnitPrice/>", "missing_unit_price"], ["<UnitPrice>0</UnitPrice>", "zero_unit_price"], ["<UnitPrice>1000000000000</UnitPrice>", "invalid_unit_price"]]) {
+  for (const [field, reason] of [["", "missing_unit_price"], ["<UnitPrice/>", "missing_unit_price"], ["<UnitPrice>1000000000000</UnitPrice>", "invalid_unit_price"]]) {
     const response = await api.send(materialRow("00012", `<Quantity>1</Quantity><ResponsibleCode>001</ResponsibleCode>${field}`));
     assert.equal(response.status, 422);
     const body = await response.json();
@@ -205,4 +205,14 @@ test("material unit prices stay separate by MOL without using the total balance 
   assert.deepEqual(plan.rows.map(item => [item.itemId, item.price?.nextUnitPrice, item.price?.source]), [
     ["card-0", "9100.50", "material_unit_price"], ["card-1", "12000.25", "material_unit_price"],
   ]);
+});
+
+
+test("zero prices are accepted for fixed assets and positive material balances", async () => {
+  const assets = boundary();
+  assert.equal((await assets.send(row(GUID, "<InitialCost>0</InitialCost>") + row(SECOND_GUID, "<InitialCost>100</InitialCost>"))).status, 200);
+  assert.deepEqual(assets.batches[0].map(asset => asset.initialCost), [0, 100]);
+  const materials = materialsBoundary();
+  assert.equal((await materials.send(materialRow("zero", "<Quantity>1</Quantity><UnitPrice>0</UnitPrice>") + materialRow("priced", "<Quantity>1</Quantity><UnitPrice>100</UnitPrice>"))).status, 200);
+  assert.deepEqual(materials.snapshots[0].materials.map(material => material.unitPrice), ["0", "100"]);
 });
