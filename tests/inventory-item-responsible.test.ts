@@ -155,6 +155,8 @@ test("changing the responsible person closes the old period before assigning the
     inventoryNumberKind: "temporary",
     inventoryNumber: "TMP-1",
     inventoryNumberKey: "TMP-1",
+    itemSection: "general",
+    itType: null,
     actorId: ADMIN_ID,
     occurredAt: now,
   }, EMPLOYEE_ID);

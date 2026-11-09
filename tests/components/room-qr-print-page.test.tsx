@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
 import RoomQrPrintPage from "@/app/inventory/rooms/qr-print/page";
-import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
-import QRCode from "qrcode";
+import type { BuildingDto,RoomDto } from "@/lib/contracts/inventory-locations";
+import { decodeQrImage } from "../helpers/decode-qr";
 
 const { authorize, listBuildings, listRooms } = vi.hoisted(() => ({
   authorize: vi.fn(),
@@ -61,9 +61,8 @@ describe("room QR printing authorization and selection", () => {
     expect(page.props.rooms).toEqual(ROOMS);
     expect(page.props.buildings).toEqual([BUILDING]);
     expect(Object.keys(page.props.qrImages)).toHaveLength(125);
-    for (const room of ROOMS) {
-      const svg = await QRCode.toString(`https://inventory.yu.edu.kz/rooms/qr/${encodeURIComponent(room.qrCode)}`, { type: "svg", errorCorrectionLevel: "M", margin: 4, width: 768 });
-      expect(page.props.qrImages[room.id]).toBe(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+    for (const room of [ROOMS[0], ROOMS[Math.floor(ROOMS.length / 2)], ROOMS.at(-1)!]) {
+      expect(await decodeQrImage(page.props.qrImages[room.id])).toBe(`https://inventory.yu.edu.kz/rooms/qr/${encodeURIComponent(room.qrCode)}`);
     }
   });
 
@@ -78,8 +77,7 @@ describe("room QR printing authorization and selection", () => {
     vi.stubEnv("APP_PUBLIC_ORIGIN", "");
     listRooms.mockResolvedValue([ROOMS[0]]);
     const page = await RoomQrPrintPage({ searchParams: Promise.resolve({ all: "1" }) });
-    const svg = await QRCode.toString("http://localhost:3000/rooms/qr/ROOM-0", { type: "svg", errorCorrectionLevel: "M", margin: 4, width: 768 });
-    expect(page.props.qrImages[ROOMS[0].id]).toBe(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+    expect(await decodeQrImage(page.props.qrImages[ROOMS[0].id])).toBe("http://localhost:3000/rooms/qr/ROOM-0");
   });
 
   it("rejects a missing public production origin instead of printing internal links", async () => {

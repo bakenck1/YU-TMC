@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { materialIdentityKey, type OneCMaterialsSnapshot, type OneCMaterialsImportMetadata } from "@/lib/contracts/one-c-materials";
+import { materialIdentityKey, type OneCMaterial, type OneCMaterialsSnapshot, type OneCMaterialsImportMetadata } from "@/lib/contracts/one-c-materials";
 import { OneCMaterialsImportError } from "@/lib/application/ports/one-c-materials-repository";
 import { createOneCMaterialsPostHandler, getOneCMaterialsCapability } from "@/lib/server/http/one-c-materials-handler";
 import { MAX_ONE_C_MATERIALS_RECORDS, MAX_ONE_C_MATERIALS_XML_BYTES, parseOneCMaterials } from "@/lib/server/integrations/one-c-materials";
@@ -29,7 +29,8 @@ describe("1C materials XML contract", () => {
     assert.equal(parsed.materials[0].responsibleCode, "001");
     assert.equal(parsed.materials[0].accountCode, "1317");
     assert.equal(parsed.materials[0].balanceSchemaVersion, 2);
-    assert.equal(materialIdentityKey(parsed.materials[0]), materialIdentityKey({ ...parsed.materials[0], responsibleName: "Переименован" }));
+    const renamed: OneCMaterial = { ...parsed.materials[0], responsibleName: "Переименован" };
+    assert.equal(materialIdentityKey(parsed.materials[0]), materialIdentityKey(renamed));
     assert.throws(() => parseOneCMaterials(xmlV2(row("1317", "001", "Иванов") + row("1317", "001", "Другое ФИО"))), /duplicate_material_balance/);
   });
   it("supports MOL GUID without a code and true absence of MOL, but rejects name-only version 2", () => {

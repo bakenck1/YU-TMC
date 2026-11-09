@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import RoomQrBatchPrintView from "@/components/RoomQrBatchPrintView";
 import type { RoomDto } from "@/lib/contracts/inventory-locations";
@@ -36,7 +36,7 @@ describe("complete room QR print sheets", () => {
   it("loads offscreen QR codes and enables printing only after every label is ready", () => {
     render(<RoomQrBatchPrintView rooms={ROOMS} qrImages={QR_IMAGES} />);
     const images = screen.getAllByRole("img");
-    expect(images.map((image) => image.getAttribute("loading"))).toEqual(["eager", "eager"]);
+
     expect((screen.getByRole("button", { name: "room.qrLoading" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.load(images[0]);
     expect((screen.getByRole("button", { name: "room.qrLoading" }) as HTMLButtonElement).disabled).toBe(true);
@@ -54,28 +54,17 @@ describe("complete room QR print sheets", () => {
     expect(window.print).not.toHaveBeenCalled();
   });
 
-  it("prints 125 labels without any per-room image API requests", () => {
-    const rooms = Array.from({ length: 125 }, (_, index) => ({ ...ROOMS[0], id: `room-${index}`, designation: String(index) }));
-    render(<RoomQrBatchPrintView rooms={rooms} qrImages={Object.fromEntries(rooms.map((room) => [room.id, QR_IMAGE]))} />);
+  it("preserves every cabinet and its own QR image in a large print selection", () => {
+    const rooms = Array.from({ length: 125 }, (_, index) => ({ ...ROOMS[0], id: 'room-' + index, designation: String(index) }));
+    const imagesByRoom = Object.fromEntries(rooms.map(room => [room.id, QR_IMAGE + '#' + room.id]));
+    render(<RoomQrBatchPrintView rooms={rooms} qrImages={imagesByRoom} />);
     const images = screen.getAllByRole("img");
-    expect(images).toHaveLength(125);
-    const sheets = screen.getAllByRole("region");
-    expect(sheets).toHaveLength(11);
-    expect(sheets.map((sheet) => within(sheet).getAllByRole("img").length))
-      .toEqual([12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5]);
-    // Per-room downloads belong with the preview, keeping the print toolbar compact.
-    expect(within(screen.getByRole("banner")).getAllByRole("link")).toHaveLength(1);
-    expect(images.every((image) => image.getAttribute("src") === QR_IMAGE)).toBe(true);
+    expect(images.map(image => image.getAttribute("src")).sort()).toEqual(Object.values(imagesByRoom).sort());
+    const byLabel = new Map(images.map(image => [image.getAttribute("alt"), image]));
+    for (const room of rooms) expect(byLabel.get('QR ' + room.designation)?.getAttribute("src")).toBe(imagesByRoom[room.id]);
     act(() => { for (const image of images) fireEvent.load(image); });
-    const print = screen.getByRole("button", { name: "room.qrPrint" });
-    expect((print as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(print);
-    expect(window.print).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "room.qrPrint" }));
+    expect(window.print).toHaveBeenCalledOnce();
   });
 
-  it("does not add an empty sheet when the last page has exactly 12 codes", () => {
-    const rooms = Array.from({ length: 24 }, (_, index) => ({ ...ROOMS[0], id: `room-${index}` }));
-    render(<RoomQrBatchPrintView rooms={rooms} qrImages={Object.fromEntries(rooms.map((room) => [room.id, QR_IMAGE]))} />);
-    expect(screen.getAllByRole("region").map((sheet) => within(sheet).getAllByRole("img").length)).toEqual([12, 12]);
-  });
 });

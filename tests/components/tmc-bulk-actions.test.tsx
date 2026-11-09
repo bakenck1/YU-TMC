@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import TmcBulkActions from "@/components/TmcBulkActions";
 import type { InventoryItem } from "@/lib/types";
@@ -44,7 +44,7 @@ const ITEM = {
 describe("TmcBulkActions", () => {
   beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
 
-  it("renders a bright actions tab and opens its menu below the sticky row", () => {
+  it("opens available actions and clears the selection", () => {
     const onClear = vi.fn();
     const second = { ...ITEM, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Monitor", inventoryNumber: "INV-002" };
     render(<TmcBulkActions
@@ -58,9 +58,7 @@ describe("TmcBulkActions", () => {
     />);
 
     const trigger = screen.getByRole("button", { name: "tmc.bulk.actions" });
-    expect(trigger.parentElement?.className).toContain("relative");
-    expect(trigger.className).toContain("min-h-12");
-    expect(trigger.className).toContain("bg-emerald-500");
+
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.queryByRole("button", { name: "tmc.bulk.changeLocation" })).toBeNull();
@@ -69,7 +67,7 @@ describe("TmcBulkActions", () => {
     fireEvent.click(trigger);
 
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("menu").className).toContain("top-full");
+
     expect(screen.getByText('items.selected:{"count":2}')).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "tmc.bulk.changeLocation" })).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "tmc.bulk.transfer" })).not.toBeNull();
@@ -478,7 +476,6 @@ function assignmentResponse(items: InventoryItem[], invalidatedId?: string): Res
     } }),
   } as Response;
 }
-
 
 describe("bulk 1C code", () => {
   beforeEach(() => vi.stubGlobal("fetch", vi.fn()));

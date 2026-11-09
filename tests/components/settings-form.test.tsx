@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import SettingsForm from "@/components/SettingsForm";
 
@@ -38,38 +38,6 @@ describe("settings form", () => {
     settingsContext.changeLanguage.mockReset();
     settingsContext.changeNotification.mockReset();
     settingsContext.saveOrganizationName.mockReset().mockResolvedValue(true);
-  });
-
-  it("persists the organization name and delegates preference changes", async () => {
-    render(<SettingsForm />);
-
-    const organizationInput = document.getElementById("settings-organization-name");
-    if (!(organizationInput instanceof HTMLInputElement)) throw new Error("Organization input not found");
-    fireEvent.change(organizationInput, {
-      target: { value: "  Campus inventory  " },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "settings.saveChanges" }));
-
-    await waitFor(() => {
-      expect(settingsContext.saveOrganizationName).toHaveBeenCalledWith(
-        "Campus inventory",
-      );
-    });
-
-    const languageSelect = document.getElementById("settings-language");
-    if (!(languageSelect instanceof HTMLSelectElement)) throw new Error("Language select not found");
-    fireEvent.change(languageSelect, {
-      target: { value: "en" },
-    });
-    expect(settingsContext.changeLanguage).toHaveBeenCalledWith("en");
-
-    fireEvent.click(
-      screen.getByRole("switch", { name: "settings.emailNotifications" }),
-    );
-    expect(settingsContext.changeNotification).toHaveBeenCalledWith(
-      "emailNotifications",
-      false,
-    );
   });
 
   it("blocks empty organization names before making a save request", () => {

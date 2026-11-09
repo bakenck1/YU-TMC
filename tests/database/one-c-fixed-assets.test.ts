@@ -1,3 +1,4 @@
+import { auditCount, auditTotal } from "../helpers/audit-total";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -114,8 +115,8 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await uploadMaterialSnapshot("материалы 2026.xls", Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" })), userId, runtimePool);
 
     const oneCAsset: OneCFixedAsset = { ...asset, externalId, code: null, inventoryNumber: null, barcode: localBarcode, name: "Ноутбук" };
-    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([oneCAsset], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "audit.xml" });
-    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...oneCAsset, barcode: "DIFFERENT", inventoryNumber: "OTHER-NUMBER" }], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "newer.xml" });
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([oneCAsset], { requestId: randomUUID(),  sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "audit.xml" });
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...oneCAsset, barcode: "DIFFERENT", inventoryNumber: "OTHER-NUMBER" }], { requestId: randomUUID(),  sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "newer.xml" });
     const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_filename='audit.xml'`);
     const reconciliation = new OneCReconciliationService(runtimePool);
     await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
@@ -126,7 +127,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(found?.oneC[0]?.matchedBarcodes).toContain(localBarcode);
     expect(found?.oneC[0]?.origins).toEqual(["selected_batch"]);
     expect(found?.excel).toEqual([]);
-    expect(audit.run.counts.total).toBe(audit.data.length);
+    expect(auditTotal(audit.run.counts)).toBe(audit.data.length);
     const searched = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50, search: localBarcode });
     expect(searched.data.map((entry) => entry.itemId)).toContain(itemId);
     const planRow = await runtimePool.query<{ proposed_action: string; matched_item_id: string | null }>(
@@ -145,7 +146,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const repeated = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
     expect(repeated.run.id).not.toBe(audit.run.id);
     expect(repeated.data.find((entry) => entry.itemId === itemId)).toEqual(found);
-    expect(repeated.run.inventory).toMatchObject({ currentTotal: repeated.run.counts.total, added: 0, removed: 0, changed: 0, stale: false });
+    expect(repeated.run.inventory).toMatchObject({ currentTotal: auditTotal(repeated.run.counts), added: 0, removed: 0, changed: 0, stale: false });
     const savedCounts = repeated.run.counts;
     const nextItemId = randomUUID();
     const number = `NEW-${nextItemId.slice(0, 8)}`;
@@ -153,7 +154,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
       values($1,'Added after audit',3,100,$2,'official',$3::text,lower($3::text),$4,$4)`, [nextItemId, roomId, number, userId]);
     const afterAdd = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
     expect(afterAdd.run.counts).toEqual(savedCounts);
-    expect(afterAdd.run.inventory).toMatchObject({ currentTotal: Number(savedCounts.total) + 1, added: 1, removed: 0, stale: true });
+    expect(afterAdd.run.inventory).toMatchObject({ currentTotal: Number(auditTotal(savedCounts)) + 1, added: 1, removed: 0, stale: true });
     expect(afterAdd.run.inventory.currentActive).toBe(repeated.run.inventory.currentActive + 1);
     expect(afterAdd.run.inventory.currentActiveQuantity).toBe(repeated.run.inventory.currentActiveQuantity + 3);
     // Barcode changes also invalidate the saved evidence without relying on an item version bump.
@@ -163,11 +164,11 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await runtimePool.query(`update "yu_inventory"."items" set archived_at=now(),archived_by=$2,version=version+1 where id=$1`, [itemId, userId]);
     const afterReplacement = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
     expect(afterReplacement.run.counts).toEqual(savedCounts);
-    expect(afterReplacement.run.inventory).toMatchObject({ currentTotal: Number(savedCounts.total), added: 1, removed: 1, changed: 0, stale: true });
+    expect(afterReplacement.run.inventory).toMatchObject({ currentTotal: Number(auditTotal(savedCounts)), added: 1, removed: 1, changed: 0, stale: true });
     const beforeRefresh = await reconciliation.getBatch(batch.rows[0]!.id);
     await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: Number(beforeRefresh.version) });
     const currentAudit = await reconciliation.getInventoryAuditPage(batch.rows[0]!.id, { page: 1, pageSize: 50 });
-    expect(currentAudit.run.inventory).toMatchObject({ currentTotal: currentAudit.run.counts.total, added: 0, removed: 0, changed: 0, stale: false });
+    expect(currentAudit.run.inventory).toMatchObject({ currentTotal: auditTotal(currentAudit.run.counts), added: 0, removed: 0, changed: 0, stale: false });
     expect(currentAudit.data.map((entry) => entry.itemId)).toContain(nextItemId);
     expect(currentAudit.data.map((entry) => entry.itemId)).not.toContain(itemId);
   });
@@ -189,7 +190,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([header, row]), "Лист_1");
     await uploadMaterialSnapshot("slash-audit.xls", Buffer.from(XLSX.write(workbook, { bookType: "biff8", type: "buffer" })), userId, runtimePool);
 
-    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, externalId, code: null, inventoryNumber: "123759", barcode: null, name: "Лабораторный стенд" }], { sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "slash-audit.xml" });
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, externalId, code: null, inventoryNumber: "123759", barcode: null, name: "Лабораторный стенд" }], { requestId: randomUUID(),  sourceSha256: randomUUID().replaceAll("-", "").padEnd(64, "0"), sourceFilename: "slash-audit.xml" });
     const batch = await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_filename='slash-audit.xml'`);
     const reconciliation = new OneCReconciliationService(runtimePool);
     const plan = await reconciliation.analyzeBatch(batch.rows[0]!.id, { version: batch.rows[0]!.version });
@@ -198,7 +199,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(found?.source).toBe("1c");
     expect(found?.oneC[0]?.inventoryNumber).toBe("123759");
     expect(found?.oneC[0]?.matchedBy).toContain("number_without_slash");
-    expect(audit.run.counts.possible).toBeGreaterThanOrEqual(1);
+    expect(auditCount(audit.run.counts, "possible")).toBeGreaterThanOrEqual(1);
     expect(plan.create).toBe(0);
     const batchRow = await runtimePool.query<{ review_state: string }>(`select review_state from "yu_inventory"."one_c_import_batch_rows" where batch_id=$1 and external_id=$2`, [batch.rows[0]!.id, externalId]);
     expect(batchRow.rows[0]?.review_state).toBe("blocked");
@@ -240,7 +241,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const beforeItems = await runtimePool.query(`select id,inventory_number,version from "yu_inventory"."items" where id=any($1::uuid[]) order by id`, [[...itemIds.values()]]);
     const importer = new PostgresOneCFixedAssetRepository(runtimePool);
     const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
-    await importer.saveBatch([{ ...asset, externalId: randomUUID(), code: null, inventoryNumber: "UNRELATED-DESCRIPTION", barcode: null, name: "Другой предмет" }], { sourceSha256, sourceFilename: "description.xml" });
+    await importer.saveBatch([{ ...asset, externalId: randomUUID(), code: null, inventoryNumber: "UNRELATED-DESCRIPTION", barcode: null, name: "Другой предмет" }], { requestId: randomUUID(),  sourceSha256, sourceFilename: "description.xml" });
     const batch = (await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_sha256=$1`, [sourceSha256])).rows[0]!;
     const oldRunId = randomUUID();
     const oldPlateEvidence = [{ rowNumber: 3, nomenclature: descriptions[1], inventoryNumber: "206/486-487 15", endingBalance: "0", matchedBy: ["site_number"], matchedBarcodes: [] }];
@@ -319,7 +320,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
       { ...asset, externalId: closestExternalId, code: null, inventoryNumber: "123768", barcode: null, name: "Лабораторный стенд" },
       { ...asset, externalId: printerExternalId, code: null, inventoryNumber: "№050-0002224", barcode: null, name: "Принтер" },
       { ...asset, externalId: descriptionExternalId, code: null, inventoryNumber: null, barcode: null, name: "Принтер дополнительный инв. №555/00099" },
-    ], { sourceSha256, sourceFilename: "broad-search.xml" });
+    ], { requestId: randomUUID(),  sourceSha256, sourceFilename: "broad-search.xml" });
     const batch = (await runtimePool.query<{ id: string; version: number }>(`select id,version from "yu_inventory"."one_c_import_batches" where source_sha256=$1`, [sourceSha256])).rows[0]!;
     const reconciliation = new OneCReconciliationService(runtimePool);
     const plan = await reconciliation.analyzeBatch(batch.id, { version: batch.version });
@@ -393,6 +394,13 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
       expect(published.rows[0]?.review_state).toBe("published");
       const itemId = published.rows[0]!.published_item_id;
       if (expectedItemId) expect(itemId).toBe(expectedItemId);
+      if (action === "create") {
+        const history = await runtimePool.query(`select kind,value,assigned_at,replaced_at from "yu_inventory"."item_inventory_number_history" where item_id=$1`, [itemId]);
+        const item = await runtimePool.query(`select created_at from "yu_inventory"."items" where id=$1`, [itemId]);
+        expect(history.rows).toEqual([{ kind: "official", value: inventoryNumber, assigned_at: item.rows[0].created_at, replaced_at: null }]);
+        const audit = await runtimePool.query(`select after_values from "yu_inventory"."audit_records" where subject_id=$1 and action='item.one_c_created'`, [itemId]);
+        expect(audit.rows).toEqual([{ after_values: { externalId, batchId, name: importedAsset.name, inventoryNumber, inventoryNumberKind: "official" } }]);
+      }
       // A fresh XML upload updates the inbox, but remains outside the published catalogue.
       await upload({ ...importedAsset, barcode: `UNPUBLISHED-${action}`, code: `UNPUBLISHED-CODE-${action}`, name: `Unpublished accounting name ${action}` });
       const repositories = createPostgresInventoryItemRepositories(runtimePool);

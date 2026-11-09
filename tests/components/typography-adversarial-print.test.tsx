@@ -1,11 +1,8 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BinaryBitmap,HybridBinarizer,QRCodeReader,RGBLuminanceSource } from "@zxing/library";
 import sharp from "sharp";
-import { BinaryBitmap, HybridBinarizer, QRCodeReader, RGBLuminanceSource } from "@zxing/library";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
 import RoomQrPrintPage from "@/app/inventory/rooms/qr-print/page";
-import RoomQrBatchPrintView from "@/components/RoomQrBatchPrintView";
-import config from "../../next.config";
 
 const { authorize, listBuildings, listRooms } = vi.hoisted(() => ({ authorize: vi.fn(), listBuildings: vi.fn(), listRooms: vi.fn() }));
 vi.mock("@/lib/server/security/page-access", () => ({ requireAuthorizedPage: authorize }));
@@ -38,20 +35,6 @@ describe("adversarial typography print integration", () => {
     const source = new RGBLuminanceSource(new Uint8ClampedArray(data), info.width, info.height);
     const decoded = new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(source)));
     expect(decoded.getText()).toBe(`https://inventory.yu.edu.kz/rooms/qr/${room.qrCode}`);
-  });
-
-  it("passes data SVG directly through the actual Next Image component under the application CSP", async () => {
-    const page = await RoomQrPrintPage({ searchParams: Promise.resolve({ all: "1" }) });
-    const markup = renderToStaticMarkup(<RoomQrBatchPrintView {...page.props} />);
-    const document = new DOMParser().parseFromString(markup, "text/html");
-    const image = document.querySelector("img");
-    expect(image?.getAttribute("src")).toBe(page.props.qrImages[room.id]);
-    expect(image?.getAttribute("srcset")).toBeNull();
-    expect(image?.getAttribute("loading")).toBe("eager");
-    expect(markup).not.toContain("/_next/image");
-    const rules = await config.headers!();
-    const csp = rules.flatMap((rule) => rule.headers).find((header) => header.key === "Content-Security-Policy")!.value;
-    expect(csp.split(";").find((directive) => directive.trim().startsWith("img-src "))!.split(/\s+/)).toContain("data:");
   });
 
   it("does not disclose or print rooms merely because their IDs appear in the URL", async () => {

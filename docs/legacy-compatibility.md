@@ -69,7 +69,7 @@ legacy permission IDs и QR formats, новые файлы старого transf
   announcement, green role/authorization regression run и подтверждение owner.
 - **Regression:** `tests/role-model.test.ts`,
   `tests/users-collection-authorization.test.ts`,
-  `tests/users-id-authorization.test.ts`, `tests/settings-toggle.test.ts`.
+  `tests/users-id-authorization.test.ts`, `tests/components/settings-form.test.tsx`.
 - **Minimum support:** не менее одного полного 90-дневного review cycle; до
   `2026-11-12` запись остаётся `supported` независимо от локального grep.
 
@@ -135,7 +135,7 @@ legacy permission IDs и QR formats, новые файлы старого transf
   owner. До этого старый alias считается поддерживаемым.
 - **Regression:** `tests/code-resolution.test.ts`,
   `tests/tmc-qr-flow.test.ts`, `tests/item-qr-page-idor.test.ts`,
-  `tests/inventory-item-qr-size.test.ts`, `tests/database/tmc-operation-migration.test.ts`.
+  `tests/components/inventory-policy-details-adversarial.test.tsx`, `tests/database/tmc-operation-migration.test.ts`.
 - **Minimum support:** минимум один 90-дневный physical-label migration cycle;
   не сокращать поддержку только из-за того, что seed fixture больше не меняется.
 

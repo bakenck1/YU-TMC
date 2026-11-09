@@ -18,9 +18,9 @@ const CONFIG = {
 };
 
 test("Yessenov SSO requires a complete confidential-client configuration", () => {
-  assert.equal(yessenovSsoConfig({}), null);
+  assert.equal(yessenovSsoConfig({ NODE_ENV: "test", }), null);
   assert.equal(
-    yessenovSsoConfig({
+    yessenovSsoConfig({ NODE_ENV: "test",
       YESSENOV_OIDC_CLIENT_ID: CONFIG.clientId,
       YESSENOV_OIDC_CLIENT_SECRET: CONFIG.clientSecret,
       YESSENOV_OIDC_REDIRECT_URI: "http://inventory.yu.edu.kz/api/auth/yessenov/callback",
@@ -28,7 +28,7 @@ test("Yessenov SSO requires a complete confidential-client configuration", () =>
     null,
   );
   assert.deepEqual(
-    yessenovSsoConfig({
+    yessenovSsoConfig({ NODE_ENV: "test",
       YESSENOV_OIDC_CLIENT_ID: CONFIG.clientId,
       YESSENOV_OIDC_CLIENT_SECRET: CONFIG.clientSecret,
       YESSENOV_OIDC_REDIRECT_URI: CONFIG.redirectUri,
@@ -58,7 +58,7 @@ test("Yessenov authorization request uses code flow, nonce, and signed state", (
 });
 
 test("Yessenov ID token accepts only signed, verified personnel identities", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   resetYessenovSigningKeysForTests();
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const jwk = publicKey.export({ format: "jwk" });

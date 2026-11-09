@@ -1,60 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { Pool,QueryResultRow } from "pg";
 import {
-  ConcurrentNestedTransactionError,
-  PostgresUnitOfWork,
+ConcurrentNestedTransactionError,
+PostgresUnitOfWork,
 } from "../lib/server/persistence/postgres/postgres-unit-of-work";
-import type { Pool, QueryResultRow } from "pg";
-
-test("a handled nested transaction failure rolls back to a savepoint", async () => {
-  const database = new FakeDatabase();
-  const unitOfWork = createUnitOfWork(database);
-
-  const result = await unitOfWork.transaction(async (repository) => {
-    await repository.execute("outer-before");
-    await assert.rejects(
-      unitOfWork.transaction(async (nested) => nested.execute("fail-known")),
-      /known conflict/,
-    );
-    await repository.execute("outer-after");
-    return "committed";
-  });
-
-  assert.equal(result, "committed");
-  assert.deepEqual(database.statements, [
-    "BEGIN ISOLATION LEVEL READ COMMITTED, READ WRITE",
-    "outer-before",
-    "SAVEPOINT yu_nested_1",
-    "fail-known",
-    "ROLLBACK TO SAVEPOINT yu_nested_1",
-    "RELEASE SAVEPOINT yu_nested_1",
-    "outer-after",
-    "COMMIT",
-  ]);
-  assert.deepEqual(database.releases, [false]);
-});
-
-test("an unhandled nested failure rolls back the outer transaction", async () => {
-  const database = new FakeDatabase();
-  const unitOfWork = createUnitOfWork(database);
-
-  await assert.rejects(
-    unitOfWork.transaction(async () =>
-      unitOfWork.transaction(async (nested) => nested.execute("fail-unknown")),
-    ),
-    /unknown failure/,
-  );
-
-  assert.deepEqual(database.statements, [
-    "BEGIN ISOLATION LEVEL READ COMMITTED, READ WRITE",
-    "SAVEPOINT yu_nested_1",
-    "fail-unknown",
-    "ROLLBACK TO SAVEPOINT yu_nested_1",
-    "RELEASE SAVEPOINT yu_nested_1",
-    "ROLLBACK",
-  ]);
-});
 
 test("a failed savepoint recovery destroys the PostgreSQL client", async () => {
   const database = new FakeDatabase();

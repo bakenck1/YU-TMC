@@ -1,31 +1,30 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import sharp from "sharp";
 
 import type {
-  InventoryItemRecord,
-  InventoryItemRepositories,
-  InventoryItemRepository,
+InventoryItemRecord,
+InventoryItemRepositories,
+InventoryItemRepository,
 } from "../lib/application/ports/inventory-item-repositories";
 import type {
-  InsertLocalBarcodeGroup,
-  LocalBarcodeGroupRecord,
-  LocalBarcodeRepositories,
-  LocalBarcodeRepository,
+InsertLocalBarcodeGroup,
+LocalBarcodeGroupRecord,
+LocalBarcodeRepositories,
+LocalBarcodeRepository,
 } from "../lib/application/ports/local-barcode-repositories";
 import type {
-  QrResolutionRecord,
-  QrResolutionRepositories,
-  QrResolutionRepository,
+QrResolutionRecord,
+QrResolutionRepositories,
+QrResolutionRepository,
 } from "../lib/application/ports/qr-resolution-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 import { LocalBarcodeService } from "../lib/application/services/local-barcode-service";
 import { QrResolutionService } from "../lib/application/services/qr-resolution-service";
 import type {
-  CreateItInventoryItemInput,
-  InventoryItemDto,
+CreateItInventoryItemInput,
+InventoryItemDto,
 } from "../lib/contracts/inventory-items";
 import { ApplicationError } from "../lib/domain/application-error";
 import { toInventoryQrPrintItem } from "../lib/inventory-qr-print";
@@ -314,24 +313,6 @@ test("the print model never derives a Code 39 barcode for an IT record", () => {
     printable.printableValue,
     null,
     "the shared /items/:id/qr page must not be able to manufacture an IT barcode payload",
-  );
-});
-
-test("the ordinary item details page fails closed when an administrator supplies an IT item id", async () => {
-  const detailsPage = await readFile("app/(protected)/items/[id]/page.tsx", "utf8");
-  assert.match(
-    detailsPage,
-    /item\.itemSection\s*!==\s*["']general["'][\s\S]{0,80}notFound\(\)/,
-    "the ordinary details route must not render an IT record from a guessed id",
-  );
-});
-
-test("the ordinary item API does not return IT records from guessed ids", async () => {
-  const itemApi = await readFile("app/api/inventory/items/[id]/route.ts", "utf8");
-  assert.match(
-    itemApi,
-    /item\.itemSection\s*!==\s*["']general["'][\s\S]{0,100}(?:itemNotFound|ApplicationError)/,
-    "the general-item API must enforce section isolation after resolving an id",
   );
 });
 

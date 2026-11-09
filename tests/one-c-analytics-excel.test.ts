@@ -12,7 +12,7 @@ const material: AuditMatch["excel"][number] = { sourceKind: "materials_api", sou
 const row = (id: string, rest: Partial<AuditMatch> = {}): AuditMatch => ({ itemId: id, itemName: "Стол", siteNumber: "0000123", siteBarcodes: [], numberKind: "official", itemVersion: 1, result: "matched", source: null, oneC: [], excel: [], ...rest });
 const mp: OneCMaterial = { code: "00002", name: "Материал", externalId: null, warehouseExternalId: null, warehouseCode: null, warehouseName: null, inventoryNumber: "0000123", barcode: null, unit: "шт", quantity: "2.5", unitPrice: "100.25", currency: "KZT" };
 
-function snapshot() {
+function snapshot(): Parameters<typeof exportOneCAnalyticsExcel>[0] {
   const rows = [
     row("os", { oneC: [asset] }),
     row("mp", { siteNumber: "0000456", excel: [material, { ...material, rowNumber: 2, sourceKey: "mp2" }] }),
@@ -24,7 +24,7 @@ function snapshot() {
     analytics: { calculatedAt: "2026-10-22T05:00:00Z", assets: { total: 3, active: 3, retired: 0, other: 0, receivedAt: "2026-10-22T05:00:00Z" }, inventory: { total: 5, active: 5, quantity: 10 }, reconciliation: summarizeOneCAudit(rows, ["os1", "os2", "weak-os"], ["mp1", "mp2", "mp3"]) },
     materials: { kind: "materials_api" as const, batchId: "b", receivedAt: null, snapshotAt: null, sha256: "test", rowCount: 3, materialCount: 2, positiveRows: 3, nonPositiveRows: 0 },
     rows, inventory: rows.map(item => ({ id: item.itemId, quantity: 2, status: "active", oneCCode: null as string | null, unitPrice: "123.45", responsibleName: "Ответственный Inventory" })),
-    assets: rows.flatMap(row => row.oneC.map(source => ({ externalId: source.externalId, origins: ["current_registry" as const], asset: { externalId: source.externalId, code: source.code, inventoryNumber: source.inventoryNumber, name: source.name, barcode: source.barcode, category: null, location: null, status: source.status, responsibleName: null, responsibleExternalId: null, quantity: 1, initialCost: "900.5", residualCost: "450.25", acceptedAt: null, updatedAt: null } }))),
+    assets: rows.flatMap(row => row.oneC.map(source => ({ externalId: source.externalId, origins: ["current_registry" as const], asset: { externalId: source.externalId, code: source.code, inventoryNumber: source.inventoryNumber, name: source.name, barcode: source.barcode, category: null, location: null, status: source.status, responsibleName: null, responsibleExternalId: null, quantity: 1, initialCost: 900.5, residualCost: 450.25, acceptedAt: null, updatedAt: null } }))),
     materialRecords: [{ key: "mp1", material: { ...mp, inventoryNumber: "0000456" } }, { key: "mp2", material: { ...mp, inventoryNumber: "0000456", quantity: "1", warehouseCode: "002", unitPrice: "101.25" } }, { key: "mp3", material: { ...mp, code: "00003", inventoryNumber: "0000789", quantity: "1" } }],
   };
 }
@@ -150,8 +150,8 @@ test("temporary sheet keeps saved 1C codes beside owner, price and name as text,
 test("add-to-database sheet includes every absent active source, preserves balances and excludes even weak candidates", async () => {
   const data = snapshot();
   data.assets.push(
-    { ...data.assets[0], externalId: "absent-os", asset: { ...data.assets[0].asset, externalId: "absent-os", code: "00000099", name: "Новое Основные средства", responsibleName: "Алия Иванова", initialCost: "900.50" } },
-    { ...data.assets[0], externalId: "aggregate-os", asset: { ...data.assets[0].asset, externalId: "aggregate-os", code: "00000100", name: "Групповое Основные средства", responsibleName: "Алия Иванова", quantity: 2, initialCost: "5000" } },
+    { ...data.assets[0], externalId: "absent-os", asset: { ...data.assets[0].asset, externalId: "absent-os", code: "00000099", name: "Новое Основные средства", responsibleName: "Алия Иванова", initialCost: 900.50 } },
+    { ...data.assets[0], externalId: "aggregate-os", asset: { ...data.assets[0].asset, externalId: "aggregate-os", code: "00000100", name: "Групповое Основные средства", responsibleName: "Алия Иванова", quantity: 2, initialCost: 5000 } },
   );
   data.materialRecords.push(
     { key: "absent-mp-1", material: { ...mp, code: "00000088", name: "Новый МП", responsibleName: "Борис Иванов", quantity: "2.5", unitPrice: "200" } },
@@ -178,7 +178,7 @@ test("add-to-database sheet includes every absent active source, preserves balan
 test("all sheets group owners then descending prices, retain zero prices and put unassigned records last", async () => {
   const data = snapshot();
   data.materialRecords = [
-    { key: "unassigned", material: { ...mp, code: "001", responsibleName: null, unitPrice: "999999" } },
+    { key: "unassigned", material: { ...mp, code: "001", responsibleName: undefined, unitPrice: "999999" } },
     { key: "low", material: { ...mp, code: "002", responsibleName: "Алия Иванова", unitPrice: "0" } },
     { key: "high", material: { ...mp, code: "003", responsibleName: "Алия Иванова", unitPrice: "300.25" } },
     { key: "middle", material: { ...mp, code: "004", responsibleName: "Алия Иванова", unitPrice: "100" } },

@@ -50,6 +50,9 @@ describe("PostgreSQL asset-loss vertical", () => {
     );
     expect(photos.rows.map((row) => row.status).sort()).toEqual(["attached", "superseded"]);
     expect(photos.rows.find((row) => row.status === "attached")?.value).toBe(2);
+    expect((await migrationPool.query('select status from "yu_inventory"."asset_loss_cases" where id=$1', [created.id])).rows).toEqual([{ status: "accounting_review" }]);
+    const edges = await migrationPool.query('select from_status,to_status from "yu_inventory"."asset_loss_case_events" where loss_case_id=$1 and from_status=\'rejected\'', [created.id]);
+    expect(edges.rows).toEqual([{ from_status: "rejected", to_status: "accounting_review" }]);
   });
 
   it("approval rejects same-employee ABA responsibility and leaves the replacement period open", async () => {

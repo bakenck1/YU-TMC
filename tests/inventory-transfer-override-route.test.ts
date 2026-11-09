@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { TransferDto } from "../lib/contracts/inventory-responsibility";
@@ -194,16 +193,6 @@ test("legacy override bounds JSON, preserves no-store and sanitizes Retry-After"
   }), TRANSFER_ID);
   assert.equal(oversized.status, 413);
   assert.equal(oversized.headers.get("cache-control"), "no-store");
-});
-
-test("legacy override route keeps CSRF/rate/session authentication and does not drop sessionVersion", async () => {
-  const source = await readFile(
-    "app/api/inventory/transfers/[id]/override/route.ts",
-    "utf8",
-  );
-  assert.match(source, /createInventoryTransferOverridePostHandler/);
-  assert.match(source, /authenticate:\s*requireCurrentUser/);
-  assert.doesNotMatch(source, /authorizationActor/);
 });
 
 function releaseRequest() {

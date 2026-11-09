@@ -1,14 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import PushNotificationControl from "@/components/PushNotificationControl";
 import {
-  currentPushSubscription,
-  disablePushNotifications,
-  enablePushNotifications,
-  fetchPushConfiguration,
-  supportsWebPush,
+currentPushSubscription,
+disablePushNotifications,
+enablePushNotifications,
+fetchPushConfiguration,
+supportsWebPush,
 } from "@/lib/client-push-subscription";
 
 vi.mock("@/components/AppSettingsProvider", () => ({
@@ -60,6 +60,9 @@ describe("PushNotificationControl", () => {
     fireEvent.click(button);
     await screen.findByText("push.dismissed");
     expect(enablePushNotifications).toHaveBeenCalledTimes(1);
+    vi.mocked(enablePushNotifications).mockResolvedValue(undefined as never);
+    fireEvent.click(button);
+    await screen.findByRole("button", { name: "push.enabled" });
   });
 
   it("discards a stale initialization after the language changes", async () => {

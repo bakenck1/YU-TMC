@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
 
 import manifest from "../app/manifest";
 import {
-  startBarcodeScanner,
-  type BarcodeDecoderStarter,
+startBarcodeScanner,
+type BarcodeDecoderStarter,
 } from "../lib/browser-barcode-scanner";
-import { translate } from "../lib/i18n";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -41,74 +39,6 @@ test("publishes an installable standalone manifest with phone-sized icons", asyn
   assert.deepEqual(await pngSize("public/icons/icon-192.png"), [192, 192]);
   assert.deepEqual(await pngSize("public/icons/icon-512.png"), [512, 512]);
   assert.deepEqual(await pngSize("public/icons/icon-maskable-512.png"), [512, 512]);
-});
-
-test("registers a notification worker and leaves network requests to the browser", async () => {
-  const [registration, worker, layout] = await Promise.all([
-    source("components/PwaRegistration.tsx"),
-    source("public/sw.js"),
-    source("app/layout.tsx"),
-  ]);
-
-  assert.match(registration, /serviceWorker\.register\("\/sw\.js"/);
-  assert.match(registration, /window\.isSecureContext/);
-  const events = new Set<string>();
-  runInNewContext(worker, { self: { addEventListener: (name: string) => events.add(name) } });
-  for (const event of ["install", "activate", "push", "notificationclick"]) assert.ok(events.has(event));
-  assert.equal(events.has("fetch"), false, "network requests must bypass the worker");
-  assert.doesNotMatch(worker, /\bcaches\./);
-  assert.match(layout, /<PwaRegistration \/>/);
-  assert.match(layout, /export const viewport: Viewport/);
-});
-
-test("supports university linear barcode formats and reserves QR for rooms", async () => {
-  const [scanner, inspections, itemScanner, roomScanner, transfers, packageJson] =
-    await Promise.all([
-      source("lib/browser-barcode-scanner.ts"),
-      source("components/InventoryInspectionsManager.tsx"),
-      source("components/InventoryItemCodeScanner.tsx"),
-      source("components/InventoryRoomQrScanner.tsx"),
-      source("components/InventoryTransfersManager.tsx"),
-      source("package.json"),
-    ]);
-
-  assert.match(scanner, /import\("@zxing\/browser"\)/);
-  assert.match(scanner, /BarcodeFormat\.CODE_39/);
-  assert.match(scanner, /BarcodeFormat\.CODE_93/);
-  assert.match(scanner, /BarcodeFormat\.CODE_128/);
-  assert.match(scanner, /BarcodeFormat\.CODABAR/);
-  assert.match(scanner, /BarcodeFormat\.QR_CODE/);
-  assert.match(scanner, /facingMode: \{ ideal: facingMode \}/);
-  assert.match(inspections, /format: "code_39"/);
-  assert.match(inspections, /&kind=barcode/);
-  assert.doesNotMatch(inspections, /format: "qr_code"|<QrCode/);
-  assert.match(inspections, /startBarcodeScanner\(\{/);
-  assert.match(itemScanner, /startBarcodeScanner\(\{/);
-  assert.match(itemScanner, /format: "code_39"/);
-  assert.doesNotMatch(itemScanner, /format: "qr_code"|<QrCode|qr-only/);
-  assert.match(roomScanner, /startBarcodeScanner\(\{/);
-  assert.match(roomScanner, /format: "qr_code"/);
-  assert.match(roomScanner, /&kind=qr&target=room/);
-  assert.match(transfers, /&kind=barcode/);
-  assert.doesNotMatch(transfers, /kind=auto|kind=qr|<QrCode/);
-  assert.match(
-    roomScanner,
-    /function stopCamera\(\)[\s\S]*?setCameraState\("idle"\)/,
-  );
-  const dependencies = (
-    JSON.parse(packageJson) as { dependencies?: Record<string, string> }
-  ).dependencies;
-  assert.equal(dependencies?.["@zxing/browser"], "^0.2.1");
-  assert.equal(dependencies?.["@zxing/library"], "^0.23.0");
-});
-
-test("labels the inventory scanner as barcode scanning in every language", () => {
-  assert.equal(translate("ru", "createItem.scan"), "Сканировать штрих-код");
-  assert.equal(translate("ru", "scanner.itemTitle"), "Сканировать штрих-код");
-  assert.equal(translate("kk", "createItem.scan"), "Штрих-кодты сканерлеу");
-  assert.equal(translate("kk", "scanner.itemTitle"), "Штрих-кодты сканерлеу");
-  assert.equal(translate("en", "createItem.scan"), "Scan barcode");
-  assert.equal(translate("en", "scanner.itemTitle"), "Scan barcode");
 });
 
 test("camera decoding is one-shot and cleanup is idempotent", async () => {
@@ -165,10 +95,6 @@ test("stops decoder when a result races decoder session assignment", async () =>
     assert.equal(video.srcObject, null);
   });
 });
-
-async function source(relativePath: string) {
-  return readFile(new URL(relativePath, ROOT), "utf8");
-}
 
 async function pngSize(relativePath: string): Promise<[number, number]> {
   const bytes = await readFile(new URL(relativePath, ROOT));

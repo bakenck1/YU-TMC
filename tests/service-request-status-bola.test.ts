@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
-  ServiceRequestAuthorizationUser,
-  ServiceRequestRecord,
-  ServiceRequestRepositories,
-  ServiceRequestRepository,
+ServiceRequestAuthorizationUser,
+ServiceRequestRecord,
+ServiceRequestRepositories,
+ServiceRequestRepository,
 } from "../lib/application/ports/service-request-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { ServiceRequestService } from "../lib/application/services/service-request-service";
 import { ApplicationError } from "../lib/domain/application-error";
-import { createPostgresServiceRequestRepositories } from "../lib/server/persistence/postgres/postgres-service-request-repositories";
-import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 
 const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_REQUEST_ID = "22222222-2222-4222-8222-222222222222";
@@ -212,98 +210,6 @@ test("a concurrent ownership change neither grants non-admin access nor replaces
   assert.deepEqual(employeeHarness.calls, []);
 });
 
-test("Postgres status authorization and request lookup lock exact rows", async () => {
-  const source = new QueryQueue([
-    { rows: [authorizationRow()] },
-    { rows: [requestRow()] },
-  ]);
-  const repository = createPostgresServiceRequestRepositories(
-    source.asSource(),
-  ).requests;
-
-  const actor = await repository.findAuthorizationUserForUpdate(ADMIN_ID);
-  const request = await repository.findByIdForUpdate(REQUEST_ID);
-
-  assert.equal(actor?.id, ADMIN_ID);
-  assert.equal(request?.id, REQUEST_ID);
-  assert.deepEqual(source.calls[0]?.values, [ADMIN_ID]);
-  assert.match(source.calls[0]!.text, /where id = \$1\s+for update/i);
-  assert.deepEqual(source.calls[1]?.values, [REQUEST_ID]);
-  assert.match(source.calls[1]!.text, /where request\.id = \$1/i);
-  assert.match(source.calls[1]!.text, /for update of request/i);
-});
-
-test("Postgres status CAS repeats ID, state, version and live session-bound admin scope", async () => {
-  const occurredAt = new Date("2026-08-14T08:00:00.000Z");
-  const source = new QueryQueue([
-    { rows: [], rowCount: 1 },
-    {
-      rows: [requestRow({
-        status: "in_progress",
-        version: 2,
-        updated_at: occurredAt,
-      })],
-    },
-  ]);
-  const repository = createPostgresServiceRequestRepositories(
-    source.asSource(),
-  ).requests;
-
-  const updated = await repository.updateStatus({
-    id: REQUEST_ID,
-    status: "in_progress",
-    expectedStatus: "new",
-    actorId: ADMIN_ID,
-    actorRole: "admin",
-    actorSessionVersion: 7,
-    expectedVersion: 1,
-    occurredAt,
-  });
-
-  assert.equal(updated?.status, "in_progress");
-  assert.deepEqual(source.calls[0]?.values, [
-    REQUEST_ID,
-    "in_progress",
-    ADMIN_ID,
-    occurredAt,
-    1,
-    "new",
-    "admin",
-    7,
-  ]);
-  const sql = source.calls[0]!.text;
-  assert.match(sql, /request\.id = \$1/i);
-  assert.match(sql, /request\.version = \$5/i);
-  assert.match(sql, /request\.status = \$6/i);
-  assert.match(sql, /authorized_actor\.id = \$3/i);
-  assert.match(sql, /authorized_actor\.role = \$7/i);
-  assert.match(sql, /authorized_actor\.is_active = true/i);
-  assert.match(sql, /authorized_actor\.deleted_at is null/i);
-  assert.match(sql, /authorized_actor\.version = \$8/i);
-  assert.deepEqual(source.calls[1]?.values, [REQUEST_ID]);
-});
-
-test("a lost Postgres status CAS performs no disclosure lookup", async () => {
-  const source = new QueryQueue([{ rows: [], rowCount: 0 }]);
-  const repository = createPostgresServiceRequestRepositories(
-    source.asSource(),
-  ).requests;
-
-  const result = await repository.updateStatus({
-    id: REQUEST_ID,
-    status: "completed",
-    expectedStatus: "in_progress",
-    actorId: ADMIN_ID,
-    actorRole: "admin",
-    actorSessionVersion: 7,
-    expectedVersion: 2,
-    occurredAt: new Date("2026-08-14T08:00:00.000Z"),
-  });
-
-  assert.equal(result, null);
-  assert.equal(source.calls.length, 1);
-});
-
 function createHarness(options: {
   initial?: ServiceRequestRecord;
   updated?: ServiceRequestRecord;
@@ -407,6 +313,7 @@ function requestRecord(
   overrides: Partial<ServiceRequestRecord> = {},
 ): ServiceRequestRecord {
   return {
+    source: "internal", externalRequestId: null, requestedAction: null,
     id: REQUEST_ID,
     itemId: ITEM_ID,
     itemName: "Laptop",
@@ -425,71 +332,6 @@ function requestRecord(
     status: "new",
     createdAt: new Date("2026-08-14T07:00:00.000Z"),
     updatedAt: new Date("2026-08-14T07:00:00.000Z"),
-    version: 1,
-    ...overrides,
-  };
-}
-
-interface QueryCall {
-  text: string;
-  values: readonly unknown[] | undefined;
-}
-
-class QueryQueue {
-  readonly calls: QueryCall[] = [];
-
-  constructor(
-    private readonly responses: Array<{ rows: unknown[]; rowCount?: number }>,
-  ) {}
-
-  readonly query = async (text: string, values?: readonly unknown[]) => {
-    this.calls.push({ text, values });
-    const response = this.responses.shift();
-    if (!response) throw new Error("unexpected_query");
-    return {
-      command: "SELECT",
-      fields: [],
-      oid: 0,
-      rowCount: response.rowCount ?? response.rows.length,
-      rows: response.rows,
-    };
-  };
-
-  asSource() {
-    return { query: this.query } as unknown as PostgresRepositorySource;
-  }
-}
-
-function authorizationRow() {
-  return {
-    id: ADMIN_ID,
-    role: "admin",
-    is_active: true,
-    deleted_at: null,
-    version: ACTOR.sessionVersion,
-  };
-}
-
-function requestRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: REQUEST_ID,
-    item_id: ITEM_ID,
-    item_name: "Laptop",
-    inventory_number: "INV-1",
-    room_id: ROOM_ID,
-    room_designation: "101",
-    building_name: "Main",
-    author_id: RESPONSIBLE_ID,
-    author_name: "Employee",
-    responsible_id: RESPONSIBLE_ID,
-    responsible_name: "Employee",
-    room_responsible_id: RESPONSIBLE_ID,
-    item_responsible_id: null,
-    type: "damaged",
-    description: "Screen damage",
-    status: "new",
-    created_at: new Date("2026-08-14T07:00:00.000Z"),
-    updated_at: new Date("2026-08-14T07:00:00.000Z"),
     version: 1,
     ...overrides,
   };

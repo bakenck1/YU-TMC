@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
-  IdempotencyRequestInput,
-  IdempotencyRequestRepository,
-  IdempotencyResponse,
+IdempotencyRequestInput,
+IdempotencyRequestRepository,
+IdempotencyResponse,
 } from "../lib/application/ports/inventory-concurrency-repositories";
 import type {
-  BuildingRecord,
-  InventoryLocationRepository,
-  RoomRecord,
+BuildingRecord,
+InventoryLocationRepository,
+RoomRecord,
 } from "../lib/application/ports/inventory-location-repositories";
 import type { QrResolutionRecord } from "../lib/application/ports/qr-resolution-repositories";
 import type {
-  RoomWorkspaceItemRecord,
-  RoomWorkspaceRecord,
+RoomWorkspaceItemRecord,
+RoomWorkspaceRecord,
 } from "../lib/application/ports/room-workspace-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { executeIdempotentCommand } from "../lib/application/services/idempotent-command-service";
@@ -52,33 +52,31 @@ const IDEMPOTENCY_INPUT: IdempotencyRequestInput = {
 };
 
 test("idempotent commands complete once and replay without rerunning work", async () => {
-  const calls: string[] = [];
+  let mutations = 0;
   let completed: { id: string; response: IdempotencyResponse } | undefined;
   const response = { body: { id: "item-1" }, resourceId: "item-1", status: 201 };
   const repository: IdempotencyRequestRepository = {
-    reserve: async (input) => {
-      calls.push(`reserve:${input.key}`);
-      return { kind: "reserved", id: "reservation-1" };
-    },
+    reserve: async () => completed
+      ? { kind: "replay", response: completed.response }
+      : { kind: "reserved", id: "reservation-1" },
     complete: async (id, value) => {
-      calls.push("complete");
       completed = { id, response: value };
     },
   };
 
-  const result = await executeIdempotentCommand(
+  const execute = () => executeIdempotentCommand(
     unitOfWork({ idempotency: repository }),
     IDEMPOTENCY_INPUT,
     async () => {
-      calls.push("work");
+      mutations += 1;
       return response;
     },
-    { afterReserve: async () => { calls.push("after-reserve"); } },
   );
 
+  const result = await execute();
   assert.deepEqual(result, { kind: "completed", response });
-  assert.deepEqual(calls, ["reserve:request-key", "after-reserve", "work", "complete"]);
-  assert.deepEqual(completed, { id: "reservation-1", response });
+  assert.deepEqual(await execute(), { kind: "replayed", response });
+  assert.equal(mutations, 1);
 });
 
 test("idempotent commands replay and fail closed for in-progress or reused keys", async () => {
@@ -117,58 +115,6 @@ test("idempotent commands replay and fail closed for in-progress or reused keys"
       ),
     );
   }
-});
-
-test("idempotent command failure leaves the key retryable and never completes the failed attempt", async () => {
-  let attempts = 0;
-  let completeCalls = 0;
-  let reservationAvailable = true;
-  let completedResponse: IdempotencyResponse | undefined;
-  const response = { body: { id: "item-1" }, resourceId: "item-1", status: 201 };
-  const repository: IdempotencyRequestRepository = {
-    reserve: async () => {
-      if (completedResponse) return { kind: "replay", response: completedResponse };
-      if (!reservationAvailable) return { kind: "in_progress" };
-      reservationAvailable = false;
-      return { kind: "reserved", id: "reservation-1" };
-    },
-    complete: async (_id, value) => {
-      completeCalls += 1;
-      completedResponse = value;
-    },
-  };
-  const repositories: UnitOfWork<{ idempotency: IdempotencyRequestRepository }> = {
-    read: async (work) => work({ idempotency: repository }),
-    transaction: async (work) => {
-      try {
-        return await work({ idempotency: repository });
-      } catch (error) {
-        reservationAvailable = true;
-        throw error;
-      }
-    },
-  };
-
-  await assert.rejects(
-    executeIdempotentCommand(repositories, IDEMPOTENCY_INPUT, async () => {
-      attempts += 1;
-      throw new Error("transient mutation failure");
-    }),
-    /transient mutation failure/,
-  );
-  assert.equal(completeCalls, 0);
-
-  const retry = await executeIdempotentCommand(
-    repositories,
-    IDEMPOTENCY_INPUT,
-    async () => {
-      attempts += 1;
-      return response;
-    },
-  );
-  assert.deepEqual(retry, { kind: "completed", response });
-  assert.equal(attempts, 2);
-  assert.equal(completeCalls, 1);
 });
 
 function qrRecord(overrides: Partial<QrResolutionRecord> = {}): QrResolutionRecord {

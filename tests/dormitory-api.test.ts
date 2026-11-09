@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import type { DormitoryAsset, DormitoryAssetRepository } from "../lib/contracts/dormitory-api";
-import { dormitoryAuthCheck, listDormitoryAssets } from "../lib/dormitory-api";
+import type { DormitoryAsset,DormitoryAssetRepository } from "../lib/contracts/dormitory-api";
+import { dormitoryAuthCheck,listDormitoryAssets } from "../lib/dormitory-api";
 
 const API_KEY = "dormitory-key-for-automated-tests";
 
@@ -126,14 +125,4 @@ test("returns a controlled dependency error without leaking database details", a
   assert.equal(response.status, 503);
   assert.equal(response.headers.get("retry-after"), "5");
   assert.doesNotMatch(await response.text(), /password|private/i);
-});
-
-test("PostgreSQL projection is restricted to the maintained dormitory name set", () => {
-  const source = readFileSync(
-    "lib/server/persistence/postgres/postgres-dormitory-asset-repository.ts",
-    "utf8",
-  );
-  assert.match(source, /b\.name = any\(\$1::text\[\]\)/);
-  assert.match(source, /off-campus-dormitory-/);
-  assert.match(source, /decommissioned_in_use[^]*written_off/);
 });

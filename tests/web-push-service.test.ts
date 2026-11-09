@@ -397,6 +397,7 @@ test("accepts only complete valid VAPID configuration", () => {
   const publicKey = Buffer.alloc(65, 1).toString("base64url");
   const privateKey = Buffer.alloc(32, 2).toString("base64url");
   const complete = {
+    NODE_ENV: "test" as const,
     WEB_PUSH_VAPID_PUBLIC_KEY: publicKey,
     WEB_PUSH_VAPID_PRIVATE_KEY: privateKey,
     WEB_PUSH_VAPID_SUBJECT: "mailto:inventory@example.com",
@@ -408,7 +409,7 @@ test("accepts only complete valid VAPID configuration", () => {
     subject: complete.WEB_PUSH_VAPID_SUBJECT,
   });
   assert.equal(
-    readWebPushConfiguration({
+    readWebPushConfiguration({ NODE_ENV: "test",
       WEB_PUSH_VAPID_PUBLIC_KEY: publicKey,
     }),
     null,

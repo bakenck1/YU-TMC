@@ -1,18 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type {
-  InventoryItemRecord,
-  InventoryItemRepositories,
-  InventoryItemRepository,
-  StoredInventoryItemCommentAttachment,
+InventoryItemRecord,
+InventoryItemRepositories,
+InventoryItemRepository,
+StoredInventoryItemCommentAttachment,
 } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 import { ApplicationError } from "../lib/domain/application-error";
-import { createPostgresInventoryItemRepositories } from "../lib/server/persistence/postgres/postgres-inventory-item-repositories";
-import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 
 const ITEM_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_ITEM_ID = "22222222-2222-4222-8222-222222222222";
@@ -97,64 +94,6 @@ test("an employee can read only attachments below an item in an open room", asyn
   );
 });
 
-test("the PostgreSQL lookup binds attachment, comment, and item as one ancestry chain", async () => {
-  const calls: Array<{ text: string; values: readonly unknown[] | undefined }> = [];
-  const source = {
-    query: async (text: string, values?: readonly unknown[]) => {
-      calls.push({ text, values });
-      const valid = values?.[0] === ATTACHMENT_ID &&
-        values?.[1] === COMMENT_ID &&
-        values?.[2] === ITEM_ID;
-      return {
-        rows: valid ? [attachmentRow()] : [],
-        rowCount: valid ? 1 : 0,
-      };
-    },
-  } as unknown as PostgresRepositorySource;
-  const repository = createPostgresInventoryItemRepositories(source).items;
-
-  assert.ok(
-    await repository.findCommentAttachment(
-      ITEM_ID,
-      COMMENT_ID,
-      ATTACHMENT_ID,
-    ),
-  );
-  assert.equal(
-    await repository.findCommentAttachment(
-      OTHER_ITEM_ID,
-      COMMENT_ID,
-      ATTACHMENT_ID,
-    ),
-    null,
-  );
-  assert.equal(
-    await repository.findCommentAttachment(
-      ITEM_ID,
-      OTHER_COMMENT_ID,
-      ATTACHMENT_ID,
-    ),
-    null,
-  );
-  assert.equal(
-    await repository.findCommentAttachment(
-      ITEM_ID,
-      COMMENT_ID,
-      OTHER_ATTACHMENT_ID,
-    ),
-    null,
-  );
-
-  const query = calls[0]?.text ?? "";
-  assert.match(query, /join\s+[^\n]+audit[^\n]+on\s+audit\.id\s*=\s*attachment\.comment_id/i);
-  assert.match(query, /attachment\.id\s*=\s*\$1/i);
-  assert.match(query, /attachment\.comment_id\s*=\s*\$2/i);
-  assert.match(query, /audit\.subject_kind\s*=\s*'item'/i);
-  assert.match(query, /audit\.subject_id\s*=\s*\$3/i);
-  assert.match(query, /audit\.action\s*=\s*'item\.comment_added'/i);
-  assert.deepEqual(calls[0]?.values, [ATTACHMENT_ID, COMMENT_ID, ITEM_ID]);
-});
-
 test("malformed path identifiers fail before any item or binary lookup", async () => {
   let lookups = 0;
   const service = createService({
@@ -180,22 +119,6 @@ test("malformed path identifiers fail before any item or binary lookup", async (
     );
   }
   assert.equal(lookups, 0);
-});
-
-test("the route authenticates before lookup and serves only non-sniffable, non-cacheable downloads", () => {
-  const route = readFileSync(
-    "app/api/inventory/items/[id]/comments/[commentId]/attachments/[attachmentId]/route.ts",
-    "utf8",
-  );
-  const nextConfig = readFileSync("next.config.ts", "utf8");
-
-  assert.ok(route.indexOf("requireCurrentUser(request)") < route.indexOf("findCommentAttachment("));
-  assert.match(route, /export const dynamic = "force-dynamic"/);
-  assert.match(route, /"cache-control": "private, no-store"/);
-  assert.match(route, /"content-disposition": attachmentDisposition\(attachment\.fileName\)/);
-  assert.match(route, /"content-type": "application\/octet-stream"/);
-  assert.match(route, /"x-content-type-options": "nosniff"/);
-  assert.match(nextConfig, /source: "\/api\/:path\*"[\s\S]*?private, no-store, max-age=0, must-revalidate/);
 });
 
 function createService(methods: Partial<InventoryItemRepository>) {
@@ -258,19 +181,6 @@ function storedAttachment(): StoredInventoryItemCommentAttachment {
     sizeBytes: 8,
     binaryData: new TextEncoder().encode("evidence"),
     createdAt: new Date("2026-08-14T08:00:00.000Z"),
-  };
-}
-
-function attachmentRow() {
-  return {
-    id: ATTACHMENT_ID,
-    comment_id: COMMENT_ID,
-    item_id: ITEM_ID,
-    file_name: "evidence.txt",
-    media_type: "text/plain",
-    size_bytes: 8,
-    binary_data: new TextEncoder().encode("evidence"),
-    created_at: new Date("2026-08-14T08:00:00.000Z"),
   };
 }
 

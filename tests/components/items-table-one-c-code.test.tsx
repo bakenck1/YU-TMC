@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import ItemsTable from "@/components/ItemsTable";
 import type { InventoryColumnVisibility } from "@/lib/inventory-columns";
@@ -36,6 +36,7 @@ const ITEM: InventoryItem = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Ноутбук Lenovo IdeaPad",
   inventoryNumber: "2411/00388",
+  qrCode: "YUQ1:00000000000000000000000000",
   oneCCode: "000003254",
   category: "electronics",
   location: "Main / 101",
@@ -69,19 +70,11 @@ describe("ItemsTable 1C code column", () => {
     window.history.replaceState({}, "", "/items");
   });
 
-  it("shows the code after the name, preserves leading zeroes and uses a dash for an absent code", () => {
-    render(<ItemsTable items={[ITEM, { ...ITEM, id: "22222222-2222-4222-8222-222222222222", name: "Без кода", oneCCode: undefined }]} canViewOneCCode />);
-
-    const table = screen.getByRole("table");
-    const headers = within(table).getAllByRole("columnheader").map((cell) => cell.textContent);
-    const nameIndex = headers.indexOf("items.name");
-    expect(headers.slice(nameIndex, nameIndex + 3)).toEqual(["items.name", "Код 1С", "items.type"]);
-    const rows = table.querySelectorAll("tbody tr");
-    expect(within(rows[0] as HTMLElement).getAllByRole("cell")[nameIndex + 1]?.textContent).toBe("000003254");
-    expect(within(rows[1] as HTMLElement).getAllByRole("cell")[nameIndex + 1]?.textContent).toBe("—");
-    const cards = screen.getAllByRole("article");
-    expect(within(cards[0]!).getByText("000003254")).not.toBeNull();
-    expect(within(cards[0]!).getByText("Код 1С")).not.toBeNull();
+  it("preserves the supplied code zeroes and does not invent an absent code", () => {
+    render(<ItemsTable items={[ITEM, { ...ITEM, id: "missing-code", oneCCode: undefined }]} canViewOneCCode />);
+    expect(within(screen.getByRole("table")).getByText("000003254")).not.toBeNull();
+    expect(within(screen.getAllByRole("article")[0]).getByText("000003254")).not.toBeNull();
+    expect(within(screen.getAllByRole("article")[1]).queryByText("000003254")).toBeNull();
   });
 
   it("adds the default code column to old preferences while keeping the user's existing choices", async () => {

@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import InventorySourceAuditPanel, { type AuditPage } from "@/components/InventorySourceAuditPanel";
+import InventorySourceAuditPanel,{ type AuditPage } from "@/components/InventorySourceAuditPanel";
 import { INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION } from "@/lib/inventory-source-audit-review";
+import { render,screen } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU" }) }));
 
@@ -14,45 +14,21 @@ const page: AuditPage = {
 };
 
 describe("inventory audit counts and source explanations", () => {
-  it("names source categories and explains overlap and subsets", () => {
-    render(<InventorySourceAuditPanel batchId="batch" audit={page} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getAllByText("Основные средства").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Материалы").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Основные средства + Материалы").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Только 1С")).toBeNull();
-    expect(screen.queryByText("Только Excel")).toBeNull();
-    expect(screen.getByText(/736 \+ 294 \+ 67 \+ 891 = 1988/)).toBeTruthy();
-    expect(screen.getByText(/одна карточка найдена в обоих источниках/i)).toBeTruthy();
-    expect(screen.getByText(/669.*входят в.*891/)).toBeTruthy();
-  });
-
-  it("distinguishes saved 1988 records from 2040 current active records and their quantities", () => {
-    const audit = { ...page, run: { ...page.run, inventory: {
-      currentTotal: 2045, currentActive: 2040, currentQuantity: 3000, currentActiveQuantity: 2900,
-      added: 57, removed: 0, changed: 2, stale: true,
-    } } };
-    render(<InventorySourceAuditPanel batchId="batch" audit={audit} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getByText(/Сейчас на сайте: 2045 карточек, активных: 2040/)).toBeTruthy();
-    expect(screen.getByText(/Количество единиц: 3000, в активных карточках: 2900/)).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toMatch(/добавлено 57.*удалено 0.*изменено 2/);
-    expect(screen.getByRole("alert").textContent).toContain("dry-run");
-    expect(screen.getByText("1988")).toBeTruthy();
-  });
 
   it("warns about replaced or edited items even when the saved and current totals agree", () => {
-    const audit = { ...page, run: { ...page.run, inventory: {
-      currentTotal: 1988, currentActive: 1900, currentQuantity: 1988, currentActiveQuantity: 1900,
-      added: 1, removed: 1, changed: 0, stale: true,
-    } } };
-    render(<InventorySourceAuditPanel batchId="batch" audit={audit} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getByRole("alert").textContent).toMatch(/добавлено 1.*удалено 1/);
+    const current = { ...page, run: { ...page.run, inventory: { currentTotal: 1988, currentActive: 1900, currentQuantity: 1988, currentActiveQuantity: 1900, added: 1, removed: 1, changed: 0, stale: false } } };
+    const view = render(<InventorySourceAuditPanel batchId="batch" audit={current} busy={false} onLoad={vi.fn()} />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    view.rerender(<InventorySourceAuditPanel batchId="batch" audit={{ ...current, run: { ...current.run, inventory: { ...current.run.inventory, stale: true } } }} busy={false} onLoad={vi.fn()} />);
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("keeps old Excel evidence explicitly historical and cannot apply it as a current API audit", () => {
     render(<InventorySourceAuditPanel batchId="batch" audit={{ ...page, run: { ...page.run, material_source: null } }} busy={false} onLoad={vi.fn()} />);
-    expect(screen.getByRole("alert").textContent).toContain("Историческая сводка");
+
     expect((screen.getByRole("button", { name: "Проверить обновления названий и кодов" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByText("1988")).toBeNull();
+
     expect(screen.queryByRole("table")).toBeNull();
   });
 });

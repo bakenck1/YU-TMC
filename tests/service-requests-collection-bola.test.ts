@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type {
-  ServiceRequestRecord,
-  ServiceRequestRepository,
+ServiceRequestRecord,
+ServiceRequestRepository,
 } from "../lib/application/ports/service-request-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { ServiceRequestService } from "../lib/application/services/service-request-service";
@@ -203,29 +202,6 @@ test("employee ownership is revalidated under the POST transaction lock", async 
   assert.equal(insertCalls, 0);
 });
 
-test("Postgres list and create authorization are bound to current DB state", async () => {
-  const source = await readFile(
-    "lib/server/persistence/postgres/postgres-service-request-repositories.ts",
-    "utf8",
-  );
-
-  assert.match(source, /authorized_actor\.version\s*=\s*\$\$\{actorVersionIndex\}/);
-  assert.match(source, /authorized_actor\.role\s*=\s*\$\$\{actorRoleIndex\}/);
-  assert.match(source, /authorized_actor\.is_active\s*=\s*true/);
-  assert.match(source, /authorized_actor\.deleted_at\s+is\s+null/);
-  assert.match(source, /findCreateAuthorizationForUpdate/);
-  assert.match(source, /from \$\{USERS\}[\s\S]*for update/);
-  assert.match(source, /for update of i, r/);
-  assert.match(source, /ended_at is null[\s\S]*for update/);
-});
-
-test("collection responses explicitly prevent authenticated PII caching", async () => {
-  const route = await readFile("app/api/service-requests/route.ts", "utf8");
-
-  assert.match(route, /private, no-store, max-age=0, must-revalidate/);
-  assert.match(route, /applicationErrorResponse\(error, PRIVATE_RESPONSE_HEADERS\)/);
-});
-
 function createService(overrides: Record<string, unknown>) {
   const repository = {
     list: async () => [],
@@ -268,6 +244,7 @@ function input() {
 
 function record(): ServiceRequestRecord {
   return {
+    source: "internal", externalRequestId: null, requestedAction: null,
     id: "66666666-6666-4666-8666-666666666666",
     itemId: ITEM_ID,
     itemName: "Laptop",

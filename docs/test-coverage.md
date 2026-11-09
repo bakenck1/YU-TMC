@@ -5,6 +5,16 @@ It is contract-oriented: a route test proves the server boundary, a service
 test proves orchestration and projection, and a PostgreSQL suite proves SQL
 constraints, transaction rollback and privilege-sensitive behavior.
 
+After the [2026-11-09 test review](test-cleanup-2026-11-09.md), source-text and
+mock-transcript checks are replaced by additional endpoint/PostgreSQL suites:
+[inventory](../tests/database/inventory-http-regressions.test.ts),
+[1C registry](../tests/database/one-c-registry-http.test.ts),
+[authentication](../tests/database/auth-http.test.ts),
+[route authorization](../tests/database/route-authorization-http.test.ts) and
+[workflows](../tests/database/workflow-http.test.ts).
+The [production browser journeys](../tests/browser/critical-journeys.spec.ts)
+also exercise page privacy and QR printing under the application CSP.
+
 ## Matrix
 
 Уровни: **R** — выполненный route/HTTP boundary, **A** — application/service,
@@ -97,6 +107,7 @@ presented as a green full run in CI.
 
 ```text
 npm run test:all
+npm run test:all:local
 npm run test:database:local
 npm run lint
 npm run ui:check
@@ -105,3 +116,16 @@ npm run ui:check
 `npm run test:all` is the fast default. PostgreSQL guarantees require
 `TEST_DATABASE_URL` and `TEST_DATABASE_MIGRATOR_URL`; CI supplies both roles
 and fails closed when either is absent.
+
+On Windows x64, `npm run test:all:local` provisions disposable PostgreSQL with separate runtime
+and migrator roles and runs the complete `test:all` pipeline, including the
+database lane. `test:database:local` runs only the database suites. Both runners
+discover nested `tests/database/**/*.test.ts` files; Vitest excludes temporary
+copies and worktrees through its explicit include pattern. Per-suite execution
+reports are written to `.artifacts/database-tests`.
+
+The [backend comparison](backend-test-review-2026-11-09.md),
+[scenario matrix](backend-test-matrix-2026-11-09.json) and
+[execution evidence](backend-test-execution-2026-11-09.json) distinguish related
+database coverage from full replacement. A PostgreSQL check in this table does
+not imply that every HTTP authorization/validation scenario uses a real database.

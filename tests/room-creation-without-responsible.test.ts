@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { RoomDto } from "../lib/contracts/inventory-locations";
 import { ApplicationError } from "../lib/domain/application-error";
 import { createInventoryRoomPostHandler } from "../lib/server/http/inventory-room-handler";
 
-const ROOT = new URL("../", import.meta.url);
 const BUILDING_ID = "11111111-1111-4111-8111-111111111111";
 const ACTOR = {
   userId: "22222222-2222-4222-8222-222222222222",
@@ -102,24 +100,6 @@ test("room POST returns a conflict when the cabinet number already exists", asyn
   );
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { error: "room_already_exists" });
-});
-
-test("the Next route delegates room POST to the tested handler", async () => {
-  const [form, route] = await Promise.all([
-    readFile(new URL("components/InventoryRoomFormModal.tsx", ROOT), "utf8"),
-    readFile(
-      new URL("app/api/inventory/buildings/[id]/rooms/route.ts", ROOT),
-      "utf8",
-    ),
-  ]);
-
-  assert.match(form, /primaryResponsibleId: responsible\?\.id \?\? null/);
-  assert.doesNotMatch(form, /!responsible/);
-  assert.match(
-    route,
-    /createInventoryRoomPostHandler/,
-  );
-  assert.match(route, /return post\(request, \(await params\)\.id\)/);
 });
 
 function jsonRequest(body: unknown) {

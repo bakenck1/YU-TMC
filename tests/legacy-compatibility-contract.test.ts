@@ -1,54 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
+cpSync,
+existsSync,
+mkdirSync,
+mkdtempSync,
+readFileSync,
+rmSync,
+writeFileSync,
 } from "node:fs";
-import { readFile as readFileAsync } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
-
-test("legacy compatibility policy is discoverable and part of the CI contract", async () => {
-  const [documentation, usageReport, task, backlog, workflow, packageJson] = await Promise.all([
-    readFileAsync("docs/legacy-compatibility.md", "utf8"),
-    readFileAsync("docs/legacy-usage-report.md", "utf8"),
-    readFileAsync("tech_debt/14-p1-observability-and-legacy-evidence.md", "utf8"),
-    readFileAsync("tech_debt/00-index.md", "utf8"),
-    readFileAsync(".github/workflows/tests.yml", "utf8"),
-    readFileAsync("package.json", "utf8"),
-  ]);
-
-  for (const entry of [
-    "LEGACY-PERMISSIONS",
-    "LEGACY-TRANSFER-ROUTES",
-    "LEGACY-QR-ALIASES",
-    "LEGACY-AUTH-IMPORT",
-    "LEGACY-COOKIE-CONTRACT",
-    "LEGACY-SEED-DATA",
-  ]) {
-    assert.match(documentation, new RegExp(`^### ${entry}$`, "m"));
-  }
-  assert.match(documentation, /90 (?:days|дней)/);
-  assert.match(documentation, /evidence_status=unknown/);
-  assert.match(documentation, /это не начало и не\s+окончание production evidence window/);
-  assert.match(usageReport, /Production observation period: not established/);
-  assert.match(task, /Дата начала production-наблюдения пока не подтверждена/);
-  assert.match(backlog, /старт production window не подтверждён/);
-  assert.doesNotMatch(task, /Текущий интервал начат 2026-08-14/);
-  assert.doesNotMatch(backlog, /production interval завершится не раньше 2026-11-12/);
-  assert.doesNotMatch(
-    usageReport,
-    /Period: 2026-08-14T00:00:00\.000Z — 2026-09-08T00:00:00\.000Z/,
-  );
-  assert.match(workflow, /npm run legacy:check/);
-  assert.match(packageJson, /"legacy:check"\s*:/);
-});
 
 test("the retired 21-110 demo dataset cannot return as a parallel inventory source", () => {
   assert.equal(existsSync("lib/items-21-110.ts"), false);
@@ -185,7 +148,7 @@ function createCheckerFixture() {
   return fixtureRoot;
 }
 
-function runChecker(fixtureRoot) {
+function runChecker(fixtureRoot: string) {
   return spawnSync(
     process.execPath,
     ["scripts/check-legacy-compatibility.mjs", "--root", fixtureRoot],

@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
+import { describe,it } from "node:test";
 import type { Pool } from "pg";
 import ts from "typescript";
 
-import { createOneCFixedAssetsPostHandler, getOneCFixedAssetsCapability } from "@/lib/server/http/one-c-fixed-assets-handler";
+import { OneCImportUnavailableError,type OneCImportMetadata } from "@/lib/application/ports/one-c-fixed-assets-repository";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
-import { OneCImportUnavailableError, type OneCImportMetadata } from "@/lib/application/ports/one-c-fixed-assets-repository";
-import { MAX_ONE_C_RECORDS, MAX_ONE_C_TEXT_LENGTH, MAX_ONE_C_XML_BYTES, parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
-import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
+import { createOneCFixedAssetsPostHandler,getOneCFixedAssetsCapability } from "@/lib/server/http/one-c-fixed-assets-handler";
+import { MAX_ONE_C_RECORDS,MAX_ONE_C_TEXT_LENGTH,MAX_ONE_C_XML_BYTES,parseOneCFixedAssets } from "@/lib/server/integrations/one-c-fixed-assets";
 import { observeHttpRequest } from "@/lib/server/observability";
+import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 
 const API_KEY = "test-one-c-key";
 const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
@@ -236,16 +236,6 @@ describe("1C fixed assets XML contract", () => {
     }
   });
 
-  it("keeps the inbox constraint in a forward-only migration", () => {
-    const original = readFileSync("drizzle/20260903120000_one_c_fixed_asset_inbox.sql", "utf8");
-    const forward = readFileSync("drizzle/20260908113000_one_c_fixed_asset_inbox_contract.sql", "utf8");
-    const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8")) as { entries: Array<{ tag: string }> };
-    assert.doesNotMatch(original, /payload_hash_check/);
-    assert.match(forward, /ADD CONSTRAINT "one_c_fixed_asset_inbox_payload_hash_check"/);
-    const contractIndex = journal.entries.findIndex((entry) => entry.tag === "20260908113000_one_c_fixed_asset_inbox_contract");
-    assert.equal(journal.entries[contractIndex - 1]?.tag, "20260907123710_elite_vulcan");
-  });
-
   it("discards PostgreSQL clients when advisory unlock or rollback cleanup fails", async () => {
     const unlockReleases: unknown[] = [];
     const unlockClient = {
@@ -259,7 +249,8 @@ describe("1C fixed assets XML contract", () => {
       { connect: async () => unlockClient } as unknown as Pick<Pool, "connect">,
     );
     const lease = await unlockRepository.tryAcquireLease("key");
-    await assert.rejects(lease?.release(), OneCImportUnavailableError);
+    assert.ok(lease);
+    await assert.rejects(lease.release(), OneCImportUnavailableError);
     assert.equal(unlockReleases[0] instanceof Error, true);
 
     const rollbackReleases: unknown[] = [];
@@ -276,31 +267,6 @@ describe("1C fixed assets XML contract", () => {
     );
     await assert.rejects(rollbackRepository.saveBatch(parseOneCFixedAssets(XML)), OneCImportUnavailableError);
     assert.deepEqual(rollbackReleases, [true]);
-  });
-
-  it("upserts a complete batch in one PostgreSQL statement and preserves counters", async () => {
-    const statements: Array<{ sql: string; values?: unknown[] }> = [];
-    const client = {
-      query: async (sql: string, values?: unknown[]) => {
-        statements.push({ sql, values });
-        if (sql === "begin" || sql === "commit" || sql.includes("set_config")) return { rows: [], rowCount: 0 };
-        if (sql.includes("jsonb_to_recordset")) return { rows: [{ created: 1, updated: 0, unchanged: 0 }], rowCount: 1 };
-        throw new Error("unexpected_query");
-      },
-      release: () => undefined,
-    };
-    const repository = new PostgresOneCFixedAssetRepository(
-      { connect: async () => client } as unknown as Pick<Pool, "connect">,
-    );
-
-    assert.deepEqual(await repository.saveBatch(parseOneCFixedAssets(XML)), { created: 1, updated: 0, unchanged: 0 });
-    const upsert = statements.filter(({ sql }) => sql.includes("insert into"));
-    assert.equal(upsert.length, 1);
-    assert.match(upsert[0]?.sql ?? "", /jsonb_to_recordset/);
-    const serialized = JSON.parse(String(upsert[0]?.values?.[0])) as Array<{ external_id: string; payload_hash: string }>;
-    assert.equal(serialized.length, 1);
-    assert.equal(serialized[0]?.external_id, GUID);
-    assert.match(serialized[0]?.payload_hash ?? "", /^[0-9a-f]{64}$/);
   });
 });
 

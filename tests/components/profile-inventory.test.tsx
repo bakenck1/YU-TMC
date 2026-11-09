@@ -1,15 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { render,screen,within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnchorHTMLAttributes } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import ProfilePage from "@/app/(protected)/profile/page";
 import UserProfileCard from "@/components/UserProfileCard";
 import type { UserDto } from "@/lib/contracts/users";
-import type { InventoryItem } from "@/lib/types";
 import { toInventoryItemView } from "@/lib/inventory-item-view";
-import { STORY_ITEM_DTO } from "@/stories/inventory-fixtures";
+import type { InventoryItem } from "@/lib/types";
 import { USERS } from "@/stories/fixtures";
+import { STORY_ITEM_DTO } from "@/stories/inventory-fixtures";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -65,19 +65,16 @@ const items: InventoryItem[] = [
 describe("personal inventory cards", () => {
   it("opens the list directly after the selected card and switches immediately", async () => {
     const user = userEvent.setup();
-    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
     render(<UserProfileCard profile={USERS[2]} items={items} />);
     const totalValue = screen.getByRole("button", { name: /items.summaryTotalValue/ });
     await user.click(totalValue);
     const valuePanel = screen.getByRole("region", { name: "items.summaryTotalValue" });
-    expect(totalValue.nextElementSibling).toBe(valuePanel);
-    expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" });
+    expect(within(valuePanel).getByRole("link", { name: "Active item" })).toBeTruthy();
 
     const maintenance = screen.getByRole("button", { name: /items.summaryMaintenance/ });
     await user.click(maintenance);
     expect(screen.queryByRole("region", { name: "items.summaryTotalValue" })).toBeNull();
     const servicePanel = screen.getByRole("region", { name: "items.summaryMaintenance" });
-    expect(maintenance.nextElementSibling).toBe(servicePanel);
     expect(within(servicePanel).getAllByRole("link")).toHaveLength(1);
     expect(within(servicePanel).getByRole("link", { name: "Service item" })).toBeTruthy();
     await user.click(within(servicePanel).getByRole("button", { name: "common.close" }));
@@ -158,13 +155,14 @@ describe("profile inventory loading", () => {
     mocks.listActiveGroupsAssignedTo.mockResolvedValue([group]);
 
     const result = await ProfilePage();
-    expect(mocks.requireAuthorizedPage).toHaveBeenCalledWith("/profile");
-    expect(mocks.getProfile).toHaveBeenCalledWith(profile.id);
-    expect(mocks.listOwnItems).toHaveBeenCalledWith(actor);
-    expect(mocks.listActiveGroupsAssignedTo).toHaveBeenCalledWith(actor);
-    expect(mocks.getDistribution).toHaveBeenCalledWith("remaining", actor);
-    expect(result.props.items.map((item: InventoryItem) => [item.id, item.quantity])).toEqual([
-      ["remaining", 3], ["own-group", 2],
+    render(result);
+    await userEvent.click(screen.getByRole("button", { name: /items.summaryTotalItems/ }));
+    const list = screen.getByRole("region", { name: "items.summaryTotalItems" });
+    const links = within(list).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(links).toEqual([
+      "/items/remaining?returnTo=%2Fprofile", "/local-barcodes/own-group?returnTo=%2Fprofile",
     ]);
+    expect(within(list).getByRole("link", { name: "Own allocation" })).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: /items.summaryTotalItems/ })).getByText("5 common.unitShort")).toBeTruthy();
   });
 });

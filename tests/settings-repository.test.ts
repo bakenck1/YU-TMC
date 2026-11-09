@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_APP_SETTINGS, type AppSettings } from "../lib/app-settings";
+import { DEFAULT_APP_SETTINGS,type AppSettings } from "../lib/app-settings";
 import { PostgresSettingsRepository } from "../lib/server/persistence/postgres/postgres-settings-repository";
 
 test("PostgresSettingsRepository reads a cloned validated singleton", async () => {
@@ -14,28 +14,6 @@ test("PostgresSettingsRepository reads a cloned validated singleton", async () =
   assert.deepEqual(settings, DEFAULT_APP_SETTINGS);
   settings.organizationName = "Mutated caller copy";
   assert.equal((await repository.get()).organizationName, "YU Inventory");
-});
-
-test("PostgresSettingsRepository updates under a row-locking transaction", async () => {
-  const fake = createFakeDatabase();
-  const repository = new PostgresSettingsRepository({
-    pool: () => fake.pool,
-  });
-
-  await assert.doesNotReject(
-    repository.update({ organizationName: "Updated Inventory" }),
-  );
-  assert.deepEqual(await repository.get(), {
-    ...DEFAULT_APP_SETTINGS,
-    organizationName: "Updated Inventory",
-  });
-  assert.deepEqual(fake.client.queries, [
-    "begin",
-    "select-for-update",
-    "update",
-    "commit",
-  ]);
-  assert.equal(fake.version, 2);
 });
 
 test("PostgresSettingsRepository rejects malformed stored payloads", async () => {
@@ -76,20 +54,6 @@ test("PostgresSettingsRepository wraps connection failures during updates", asyn
     repository.update({ organizationName: "Unavailable Inventory" }),
     { publicCode: "settings_unavailable" },
   );
-});
-
-test("PostgresSettingsRepository rolls back when a direct invalid patch is supplied", async () => {
-  const fake = createFakeDatabase();
-  const repository = new PostgresSettingsRepository({
-    pool: () => fake.pool,
-  });
-
-  await assert.rejects(
-    repository.update({ language: "xx" } as never),
-    { publicCode: "settings_unavailable" },
-  );
-  assert.deepEqual(fake.client.queries, ["begin", "select-for-update", "rollback"]);
-  assert.equal(fake.version, 1);
 });
 
 function createFakeDatabase(

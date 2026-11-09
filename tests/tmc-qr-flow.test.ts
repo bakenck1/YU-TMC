@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { QrResolutionDto } from "../lib/contracts/qr-resolution";
-import { translate } from "../lib/i18n";
 import { classifyTmcQrResolution } from "../lib/tmc-qr-flow";
 import {
   TmcItemQrResolverController,
@@ -96,39 +94,6 @@ test("accepts transferable lifecycle states and rejects final write-offs and inv
     classifyTmcQrResolution({ ...ACTIVE_ITEM, qrStatus: "revoked" }),
     { kind: "error", reason: "invalid_code" },
   );
-});
-
-test("TMC operation shell uses barcode-only scanning and sends each confirmed operation to its bounded API", () => {
-  const shell = readFileSync("components/TmcOperationShell.tsx", "utf8");
-  const flow = readFileSync("components/TmcItemQrFlow.tsx", "utf8");
-  const scanner = readFileSync("components/InventoryItemCodeScanner.tsx", "utf8");
-  const resolver = readFileSync("lib/tmc-qr-resolver.ts", "utf8");
-
-  assert.match(shell, /<TmcItemQrFlow[\s\S]*operation=\{operation\}/);
-  assert.match(flow, /InventoryItemCodeScanner/);
-  assert.doesNotMatch(flow, /mode="qr-only"|<QrCode/);
-  assert.match(flow, /TmcItemQrResolverController/);
-  assert.match(flow, /useEffect\(\(\) =>\s*installTmcQrResolverController/);
-  assert.match(resolver, /\/api\/inventory\/qr\/resolve\?value=\$\{encodeURIComponent\(normalized\)\}&kind=barcode&target=item&multiple=1/);
-  assert.match(resolver, /credentials: "same-origin"/);
-  assert.match(resolver, /cache: "no-store"/);
-  assert.match(resolver, /classifyTmcQrResolution/);
-  assert.doesNotMatch(scanner, /qr-only|format === "qr_code"|<QrCode/);
-  assert.match(scanner, /format: "code_39"/);
-  assert.match(scanner, /event\.key === "Escape"/);
-  assert.match(scanner, /event\.key !== "Tab"/);
-  assert.match(scanner, /max-h-\[100dvh\]/);
-  assert.match(scanner, /min-h-11 min-w-11/);
-  assert.match(scanner, /htmlFor=\{manualInputId\}/);
-  assert.match(scanner, /id=\{manualInputId\}/);
-  assert.match(scanner, /<video[^>]+aria-hidden="true"/);
-  assert.match(flow, /TmcUserPicker/);
-  assert.match(flow, /tmc\.operation\.acceptItem/);
-  assert.match(flow, /tmc\.operation\.sendRequest/);
-  assert.match(flow, /\/api\/inventory\/items\/\$\{encodeURIComponent\(item\.id\)\}\/responsibility\/accept/);
-  assert.match(flow, /\/api\/inventory\/transfer-requests/);
-  assert.match(flow, /"idempotency-key": createAttempt\.current\.key/);
-  assert.doesNotMatch(flow, /\/api\/inventory\/transfers/);
 });
 
 test("QR resolver coalesces duplicate scans and publishes one selected item", async () => {
@@ -288,54 +253,6 @@ test("Strict Mode effect replay replaces a disposed QR resolver", async () => {
   await pending;
   assert.equal(states.at(-1)?.status, "selected");
   secondCleanup();
-});
-
-test("barcode flow copy is complete in RU, KK and EN", () => {
-  const expected = {
-    "tmc.qr.scan": ["Сканировать штрих-код", "Штрих-кодты сканерлеу", "Scan barcode"],
-    "tmc.qr.scannerHint": [
-      "Наведите камеру на штрих-код ТМЦ или введите его вручную.",
-      "Камераны ТМҚ штрих-кодына бағыттаңыз немесе оны қолмен енгізіңіз.",
-      "Point the camera at the inventory barcode or enter it manually.",
-    ],
-    "tmc.qr.scanAgain": ["Сканировать снова", "Қайта сканерлеу", "Scan again"],
-    "tmc.qr.remove": ["Убрать ТМЦ", "ТМҚ-ны алып тастау", "Remove item"],
-    "tmc.qr.resolving": ["Проверяем штрих-код…", "Штрих-код тексерілуде…", "Checking barcode…"],
-    "tmc.qr.invalidCode": [
-      "Штрих-код не зарегистрирован или больше не действует.",
-      "Штрих-код тіркелмеген немесе енді жарамсыз.",
-      "This barcode is not registered or is no longer valid.",
-    ],
-    "tmc.qr.notItem": [
-      "Этот штрих-код не относится к ТМЦ.",
-      "Бұл штрих-код ТМҚ-ға тиесілі емес.",
-      "This barcode does not belong to an inventory item.",
-    ],
-    "tmc.qr.itemUnavailable": [
-      "Этот ТМЦ сейчас недоступен для операции.",
-      "Бұл ТМҚ қазір операция үшін қолжетімсіз.",
-      "This inventory item is currently unavailable for the operation.",
-    ],
-    "tmc.qr.requestFailed": [
-      "Не удалось проверить штрих-код. Повторите попытку.",
-      "Штрих-кодты тексеру мүмкін болмады. Қайталап көріңіз.",
-      "Could not check the barcode. Try again.",
-    ],
-    "tmc.qr.noResponsible": [
-      "Не закреплён",
-      "Жауапты тұлға бекітілмеген",
-      "Unassigned",
-    ],
-  } as const;
-
-  for (const [key, values] of Object.entries(expected)) {
-    assert.deepEqual(
-      (["ru", "kk", "en"] as const).map((language) =>
-        translate(language, key as keyof typeof expected),
-      ),
-      values,
-    );
-  }
 });
 
 interface ControlledRequest {

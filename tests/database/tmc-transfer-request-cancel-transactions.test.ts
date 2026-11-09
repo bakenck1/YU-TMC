@@ -22,8 +22,18 @@ describe("TMC transfer request transactions", () => {
       recipientId: fixture.recipientIds[1]!,
       itemIds: [fixture.itemIds[1]!],
     }, initiator)).request!;
+    const effects = async () => (await database.query(
+      `select
+        (select count(*)::int from yu_inventory.audit_records where subject_id=$1 or subject_id in
+          (select id from yu_inventory.tmc_transfer_request_items where request_id=$1)) as audits,
+        (select count(*)::int from yu_inventory.tmc_operation_notifications where request_id=$1) as notifications,
+        (select count(*)::int from yu_inventory.tmc_web_push_outbox o join yu_inventory.tmc_operation_notifications n
+          on n.notification_event_id=o.notification_event_id where n.request_id=$1) as outbox`, [requestA.id],
+    )).rows;
+    const beforeDenied = await effects();
 
     for (const [requestId, actor, key] of [
+      ["malformed", initiator, "tmc-db-cancel-malformed-1"],
       [randomUUID(), initiator, "tmc-db-cancel-missing-1"],
       [
         requestA.id,
@@ -52,8 +62,10 @@ describe("TMC transfer request transactions", () => {
       )).rejects.toMatchObject({
         kind: "not_found",
         publicCode: "request_not_found",
+        safeDetails: undefined,
       });
     }
+    expect(await effects()).toEqual(beforeDenied);
 
     await database.query(
       `update "yu_inventory"."users"
@@ -78,6 +90,7 @@ describe("TMC transfer request transactions", () => {
       currentInitiator,
       "tmc-db-cancel-session-1",
     );
+    const afterCompletion = await effects();
     const replayed = await createService().cancelIdempotent(
       requestA.id,
       { requestVersion: requestA.version },
@@ -86,6 +99,12 @@ describe("TMC transfer request transactions", () => {
     );
     expect(completed.kind).toBe("completed");
     expect(replayed).toEqual({ ...completed, kind: "replayed" });
+    expect(await effects()).toEqual(afterCompletion);
+    const cancellationNotice = await database.query(
+      `select e.type from yu_inventory.notification_events e join yu_inventory.tmc_operation_notifications n
+       on n.notification_event_id=e.id where n.request_id=$1 and e.type='tmc_transfer.cancelled'`, [requestA.id],
+    );
+    expect(cancellationNotice.rows).toEqual([{ type: "tmc_transfer.cancelled" }]);
 
     const parentScoped = await database.query<{
       request_id: string;

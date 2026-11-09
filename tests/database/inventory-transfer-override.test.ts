@@ -13,12 +13,16 @@ import {
   type PostgresRepositorySource,
 } from "@/lib/server/persistence/postgres/postgres-unit-of-work";
 import type { Pool } from "pg";
+import { POST as override } from "@/app/api/inventory/transfers/[id]/override/route";
+import { resetApplicationServicesForTests } from "@/lib/server/application";
+import { authenticatedRequest } from "./support/http-request";
 
 let migrationConfig: DatabaseConfig;
 let database: Pool;
 
 describe("PostgreSQL inventory transfer override security", () => {
   beforeAll(async () => {
+    resetApplicationServicesForTests();
     migrationConfig = readDatabaseConfig({ purpose: "migration", target: "test" });
     await resetSchemas(migrationConfig);
     await migrateDatabase(migrationConfig);
@@ -26,6 +30,7 @@ describe("PostgreSQL inventory transfer override security", () => {
   });
 
   afterAll(async () => {
+    resetApplicationServicesForTests();
     await database?.end();
     await closeDatabase();
     await resetSchemas(migrationConfig);
@@ -33,16 +38,15 @@ describe("PostgreSQL inventory transfer override security", () => {
 
   it("commits only a transfer-bound live-admin assignment and its audit", async () => {
     const fixture = await seedFixture();
-    const result = await createService().overrideTransfer(
-      fixture.transferId,
-      {
+    const response = await override(authenticatedRequest(`/api/inventory/transfers/${fixture.transferId}/override`,
+      { userId: fixture.adminId, role: "admin", sessionVersion: 1 }, { body: {
         version: 1,
         reason: "  Emergency compliance assignment  ",
         outcome: "assigned",
         responsibleUserId: fixture.targetId,
-      },
-      { userId: fixture.adminId, role: "admin", sessionVersion: 1 },
-    );
+      } }), { params: Promise.resolve({ id: fixture.transferId }) });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const { transfer: result } = await response.json();
 
     expect(result).toMatchObject({
       id: fixture.transferId,

@@ -25,8 +25,10 @@ type Story = StoryObj<typeof meta>;
 export const ComingSoon: Story = { args: { booking: { status: "coming_soon" } } };
 export const Available: Story = { args: { booking: available } };
 export const RoomBeforeLaunch: Story = {
+  args: { booking: { status: "hidden" } },
   render: () => <RoomWorkspaceView room={room} authenticated returnTo="/rooms/qr/demo" booking={{ status: "hidden" }} />,
 };
 export const RoomWithBooking: Story = {
+  args: { booking: available },
   render: () => <RoomWorkspaceView room={room} authenticated returnTo="/rooms/qr/demo" booking={available} />,
 };

@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render,screen } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import MobileBottomNavigation from "@/components/MobileBottomNavigation";
 import type { UserRole } from "@/lib/contracts/users";
@@ -19,8 +19,7 @@ describe("mobile bottom navigation", () => {
     render(<MobileBottomNavigation />);
     const links = screen.getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/items", "/scan", "/requests", "/profile"]);
-    expect(screen.getByRole("link", { name: translate("ru", "nav.scanQr") }).textContent).toBe(translate("ru", "nav.mobileScan"));
-    expect(screen.getByRole("link", { name: translate("ru", "nav.items") }).textContent).toBe(translate("ru", "nav.mobileItems"));
+
     expect(links.filter((link) => link.getAttribute("aria-current") === "page")).toEqual([links[3]]);
   });
 

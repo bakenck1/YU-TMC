@@ -11,7 +11,7 @@ const card = { id: "card", name: "Наш товар", inventoryNumber: "011-0013
 const asset: OneCFixedAsset = { externalId: "os", code: "000003966", name: "Процессор 3.1 инв№011-00134", inventoryNumber: "011 00134", barcode: null, quantity: 1, initialCost: null, residualCost: 0, status: "Снято с учёта", category: null, location: null, responsibleName: null, responsibleExternalId: null, acceptedAt: null, updatedAt: null };
 const material: ExcelSourceRow = { sourceKind: "materials_api", sourceKey: "mp", rowNumber: 1, oneCCode: "MP-134", nomenclature: "Процессор №011-00134", inventoryNumber: "", explicitInventoryNumber: null, barcode: null, endingBalance: "1", unitPrice: "27440" };
 const options = { descriptionBarcodes: true, formattedNumbers: true, exactNames: true, allowDescriptionIdentity: true, includeIt: true, allowSourceCode: true };
-function review(item = card, os: OneCFixedAsset[] = [asset], mp: ExcelSourceRow[] = [material]) {
+function review(item: typeof card & { responsibleName?: string } = card, os: OneCFixedAsset[] = [asset], mp: ExcelSourceRow[] = [material]) {
   const audit = buildInventorySourceAudit([item], os.map(asset => ({ externalId: asset.externalId, asset })), mp, [], options);
   const plan = buildInventoryAuditEnrichmentPlan(audit.rows, [item], options);
   addOneCPriceProposals(plan, audit.rows, new Map(os.map(asset => [asset.externalId, asset])), [item], { independentSources: true });

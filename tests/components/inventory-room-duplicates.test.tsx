@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { afterEach,expect,it,vi } from "vitest";
 
 import InventoryRoomFormModal from "@/components/InventoryRoomFormModal";
 import type { BuildingDto } from "@/lib/contracts/inventory-locations";

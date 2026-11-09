@@ -327,6 +327,7 @@ function historyItem(ownerId: string, name: string, inventoryNumber: string): Tm
     ? "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     : "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
   return {
+    requestedQuantity: null, sourceLocalGroupId: null, sourceVersion: null,
     id: ownerId === USER_ID
       ? "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
       : "ffffffff-ffff-4fff-8fff-ffffffffffff",

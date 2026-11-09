@@ -14,6 +14,7 @@
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "test:all": "node scripts/test-all.mjs",
+    "test:all:local": "node scripts/test-database-local.mjs --all",
     "test:browser-smoke": "node scripts/browser-smoke.mjs",
     "capacity:baseline": "node --conditions=react-server --import tsx scripts/capacity/measure.mjs",
     "capacity:baseline:local": "npm run build && node scripts/capacity/run-local.mjs",

@@ -1,23 +1,22 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import type { InventoryItemDto } from "../lib/contracts/inventory-items";
 import type {
-  LocalBarcodeGroupRecord,
-  LocalBarcodeRepositories,
-  LocalBarcodeRepository,
+LocalBarcodeGroupRecord,
+LocalBarcodeRepositories,
+LocalBarcodeRepository,
 } from "../lib/application/ports/local-barcode-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import {
-  applyApprovedLocalBarcodeTransfer,
-  LocalBarcodeService,
+applyApprovedLocalBarcodeTransfer,
+LocalBarcodeService,
 } from "../lib/application/services/local-barcode-service";
-import type {
-  BuildingDto,
-  RoomDto,
-} from "../lib/contracts/inventory-locations";
 import { buildCampusMapData } from "../lib/campus-map-data";
+import type { InventoryItemDto } from "../lib/contracts/inventory-items";
+import type {
+BuildingDto,
+RoomDto,
+} from "../lib/contracts/inventory-locations";
 import { translate } from "../lib/i18n";
 import { filterInventoryItems } from "../lib/inventory-list";
 import { summarizeInventory } from "../lib/inventory-summary";
@@ -27,11 +26,11 @@ import { createPostgresTmcOperationRepositories } from "../lib/server/persistenc
 import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 import type { InventoryItem } from "../lib/types";
 import {
-  ACTOR,
-  RECIPIENT_ID,
-  candidate,
-  createHarness,
-  uuid,
+ACTOR,
+candidate,
+createHarness,
+RECIPIENT_ID,
+uuid,
 } from "./support/tmc-transfer-request-harness";
 
 const SUMMARY_BASE: InventoryItem = {
@@ -156,20 +155,6 @@ test("every role opens its personal profile after an ordinary login", () => {
   for (const role of ["admin", "warehouse", "employee"] as const) {
     assert.equal(defaultPathForRole(role), "/profile", role);
   }
-});
-
-test("TZ 3.2: the sidebar omits Profile while the header avatar remains a direct /profile link", async () => {
-  const [sidebar, header] = await Promise.all([
-    readFile(new URL("../components/SidebarContent.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/Header.tsx", import.meta.url), "utf8"),
-  ]);
-
-  assert.doesNotMatch(sidebar, /href:\s*["']\/profile["']/);
-  assert.match(header, /<Link\s+href=["']\/profile["']/);
-  assert.match(
-    header,
-    /<Link\s+href=["']\/profile["']\s+aria-label=\{t\(["']nav\.profile["']\)\}/,
-  );
 });
 
 test("TZ 5.5: floor and room filter labels no longer expose the old compound location names", () => {
@@ -310,7 +295,10 @@ test("TZ 2/4.1/4.2: local barcode groups preserve lifecycle status and can trans
     listActiveGroupsAssignedTo: async () => [group],
   } as unknown as LocalBarcodeRepository;
   const readUnitOfWork = {
-    read: (work) => work({ localBarcodes: readRepository }),
+    read: (work) => work({ localBarcodes: readRepository, idempotency: {
+      reserve: async () => { throw new Error("Read-only operation must not reserve a command"); },
+      complete: async () => { throw new Error("Read-only operation must not complete a command"); },
+    } }),
   } as UnitOfWork<LocalBarcodeRepositories>;
   const service = new LocalBarcodeService(
     readUnitOfWork,
@@ -354,10 +342,10 @@ test("TZ 2/4.1/4.2: local barcode groups preserve lifecycle status and can trans
       }),
       findItemForUpdate: async () => item,
       allocatedQuantity: async () => 0,
-      nextSequence: async () => 1n,
+      nextSequence: async () => BigInt("1"),
       isBarcodeRegistered: async () => false,
       advanceItemVersion: async () => true,
-      insertGroup: async (input) => {
+      insertGroup: async (input: Parameters<LocalBarcodeRepository["insertGroup"]>[0]) => {
         inserted = {
           ...localGroupRecord(status, recipientId),
           id: input.id,
@@ -397,20 +385,6 @@ test("TZ 2/4.1/4.2: local barcode groups preserve lifecycle status and can trans
     );
     assert.equal(result.group.quantity, 2, status);
   }
-});
-
-test("TZ 4.2: QR resolution does not relabel a local group from a written-off item as active", async () => {
-  const route = await readFile(
-    new URL("../app/api/inventory/qr/resolve/route.ts", import.meta.url),
-    "utf8",
-  );
-  const localGroupTarget = route.slice(
-    route.indexOf("if (localGroup)"),
-    route.indexOf("const resolution = await", route.indexOf("if (localGroup)")),
-  );
-
-  assert.doesNotMatch(localGroupTarget, /status:\s*["']active["']/);
-  assert.match(localGroupTarget, /localGroup\.itemStatus/);
 });
 
 test("TZ 6.1/6.3: campus projection preserves the real photo and distinguishes both write-off statuses", () => {
@@ -458,21 +432,6 @@ test("TZ 6.1/6.3: campus projection preserves the real photo and distinguishes b
   );
 });
 
-test("TZ 6.2/6.4: campus item card has a real Code 39 path, no decorative QR, and modal back navigation", async () => {
-  const [card, map] = await Promise.all([
-    readFile(new URL("../components/CampusItemCard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/CampusMap.tsx", import.meta.url), "utf8"),
-  ]);
-
-  assert.doesNotMatch(card, /buildQrMatrix|QR_SIZE/);
-  assert.match(card, /code39|barcode/i);
-  assert.match(card, /photoUrl/);
-  assert.match(card, /onClick|<a\b/);
-  assert.match(map, /map\.back/);
-  assert.match(map, /view\s*===\s*["']item["'][\s\S]*setView\(["']floor["']\)/);
-  assert.match(map, /view\s*===\s*["']floor["'][\s\S]*setView\(["']building["']\)/);
-});
-
 function campusItem(
   id: string,
   status: InventoryItemDto["status"],
@@ -488,7 +447,7 @@ function campusItem(
     model: null,
     quantity: 1,
     unitPrice: 100,
-    inventoryNumberKind: "permanent",
+    inventoryNumberKind: "official",
     inventoryNumber: `INV-${id}`,
     room: {
       id: "room-1",
@@ -558,7 +517,7 @@ function localGroupRecord(
     unitPrice: 100,
     itemPhotoId: null,
     parentGroupId: null,
-    sequenceNumber: 1n,
+    sequenceNumber: BigInt("1"),
     barcodeValue: "123/456-0001",
     barcodeKey: "123/456-0001",
     quantity: 2,

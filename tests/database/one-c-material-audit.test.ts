@@ -99,7 +99,7 @@ describe("live materials API replaces Excel as audit input", () => {
         inventoryNumber: "011/00134", barcode: null, responsibleName: source === "GUID" ? null : fullName + "\nМОЛ",
         responsibleExternalId: null, status: "Принято к учёту", quantity: 1, initialCost: 7000, residualCost: 500,
         category: null, location: null, acceptedAt: null, updatedAt: null,
-      }], { sourceSha256: metadata().sourceSha256, sourceFilename: "temporary.xml" });
+      }], { requestId: randomUUID(), sourceSha256: metadata().sourceSha256, sourceFilename: "temporary.xml" });
       if (source === "GUID") await pool.query(`insert into yu_inventory.item_one_c_links
         (external_id,item_id,source_code,linked_by,link_method,last_batch_id,last_payload_hash)
         select external_id,$2,'001234',$3,'manual',last_batch_id,payload_hash
@@ -390,7 +390,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await pool.query("select one_c_code,unit_price from yu_inventory.items where id=$1",[f.itemId])).rows[0]).toEqual({one_c_code:null,unit_price:"100.00"});
     const workbook = new Workbook();
     const bytes = await exportOneCAnalyticsExcel(snapshot);
-    await workbook.xlsx.load(Buffer.from(bytes));
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
     expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(5);
     expect(workbookCell(workbook.getWorksheet("Временные")!, "Результат сверки").value).toBe("Не найдено");
   });
@@ -1080,7 +1080,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const exported = await service.exportInventoryAudit(f.batchId);
     const bytes = await exportInventorySourceAuditExcel(exported);
     const workbook = new Workbook();
-    await workbook.xlsx.load(Buffer.from(bytes));
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
     expect(workbook.getWorksheet("Только материалы")).toBeTruthy();
     const details = workbook.getWorksheet("Все совпадения материалов")!;
     expect(details.rowCount).toBe(3);
@@ -1099,7 +1099,7 @@ async function seed() {
   await pool.query('insert into "yu_inventory"."items"(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by) values($1,\'Наше название\',1,100,$2,\'official\',$3::text,$3::text,$4,$4)', [itemId, roomId, "1350/14444", userId]);
   const asset: OneCFixedAsset = { externalId: randomUUID(), code: "OTHER", inventoryNumber: "999/999", barcode: null, name: "Другое Основные средства", category: null, location: null, status: "Принято к учёту", responsibleName: null, responsibleExternalId: null, quantity: 1, residualCost: 100, acceptedAt: null, updatedAt: null };
   const source = metadata();
-  await new PostgresOneCFixedAssetRepository(pool).saveBatch([asset], { sourceSha256: source.sourceSha256, sourceFilename: "audit.xml" });
+  await new PostgresOneCFixedAssetRepository(pool).saveBatch([asset], { requestId: randomUUID(),  sourceSha256: source.sourceSha256, sourceFilename: "audit.xml" });
   const batch = (await pool.query('select id from "yu_inventory"."one_c_import_batches" where source_sha256=$1', [source.sourceSha256])).rows[0];
   return { batchId: batch.id as string, itemId, actor: { userId, role: "admin" as const, sessionVersion: 1 } };
 }

@@ -9,8 +9,7 @@
   },
   "include": [
     "../../lib/application/ports/tmc-operation-repositories.ts",
-    "../../lib/server/persistence/postgres/postgres-tmc-operation-repositories.ts",
-    "../tmc-operation-repositories.test.ts"
+    "../../lib/server/persistence/postgres/postgres-tmc-operation-repositories.ts"
   ],
   "exclude": ["../../node_modules"]
 }

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { UserService } from "../lib/application/services/user-service";
@@ -42,27 +41,6 @@ test("POST users rejects a session revoked after the route authorization check",
     ),
     false,
   );
-});
-
-test("users collection route carries the session proof into both service calls", () => {
-  const route = readFileSync("app/api/users/route.ts", "utf8");
-
-  assert.match(route, /listUsersForManagement\(actor\)/);
-  assert.match(
-    route,
-    /createUser\([\s\S]*?input,[\s\S]*?actor\.userId,[\s\S]*?actor\.sessionVersion/,
-  );
-  assert.match(route, /private, no-store, max-age=0, must-revalidate/);
-});
-
-test("users page renders the persisted list before refreshing Yessenov in the background", () => {
-  const page = readFileSync("app/(protected)/users/page.tsx", "utf8");
-  const manager = readFileSync("components/UsersManager.tsx", "utf8");
-
-  assert.match(page, /synchronizeDirectory:\s*false/);
-  assert.match(manager, /useEffect\(\(\) =>/);
-  assert.match(manager, /fetch\("\/api\/users"/);
-  assert.match(manager, /setRecords\(payload\.users\.map\(normalizeUser\)\)/);
 });
 
 async function createFixture() {

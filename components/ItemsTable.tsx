@@ -211,7 +211,7 @@ export default function ItemsTable({
   bulkActions,
   locations,
   invoiceActions,
-  initialViewState = DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+  initialViewState,
   stateUrlPath,
   stateUrlParams,
   itemReturnHref,
@@ -255,6 +255,11 @@ export default function ItemsTable({
   const { t, dataLabel } = useAppSettings();
   const router = useRouter();
   const [startingViewState] = useState(() => {
+    // Server props can contain a normalized redirect destination before the
+    // browser history has caught up. Keep that authoritative initial state.
+    if (initialViewState) {
+      return { ...initialViewState, filters: { ...initialViewState.filters } };
+    }
     if (
       typeof window !== "undefined" &&
       stateUrlPath &&
@@ -265,8 +270,8 @@ export default function ItemsTable({
       );
     }
     return {
-      ...initialViewState,
-      filters: { ...initialViewState.filters },
+      ...DEFAULT_INVENTORY_TABLE_VIEW_STATE,
+      filters: { ...DEFAULT_INVENTORY_TABLE_VIEW_STATE.filters },
     };
   });
   const [query, setQuery] = useState(startingViewState.query);

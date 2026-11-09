@@ -20,6 +20,7 @@ describe("TMC transfer request transactions", () => {
       itemIds: [fixture.itemIds[0]!],
     }, { userId: fixture.initiatorId, role: "warehouse" });
     expect(warehouseResult).toMatchObject({ included: 1, problems: 0 });
+    expect(warehouseResult.request?.initiator.id).toBe(fixture.initiatorId);
     await database.query(
       `update "yu_inventory"."users" set role = 'employee' where id = $1`,
       [fixture.initiatorId],
@@ -56,14 +57,14 @@ describe("TMC transfer request transactions", () => {
     const requestsBeforeUnavailableBatch = await requestCount();
     const unavailableResult = await createService().create({
       recipientId: fixture.recipientIds[1]!,
-      itemIds: [fixture.itemIds[3]!],
+      itemIds: [fixture.itemIds[2]!, fixture.itemIds[3]!],
     }, { userId: fixture.initiatorId, role: "employee" });
     expect(unavailableResult).toMatchObject({
       request: null,
       included: 0,
-      problems: 1,
+      problems: 2,
     });
-    expect(unavailableResult.items[0]).toMatchObject({ problem: "item_unavailable" });
+    expect(unavailableResult.items.map(item => item.outcome === "problem" ? item.problem : item.outcome)).toEqual(["item_unavailable", "item_unavailable"]);
     expect(await requestCount()).toBe(requestsBeforeUnavailableBatch);
 
     const requestsBeforeStaleAdmin = await requestCount();
@@ -72,6 +73,7 @@ describe("TMC transfer request transactions", () => {
       itemIds: [fixture.itemIds[3]!],
     }, { userId: fixture.initiatorId, role: "admin" });
     expect(staleAdminResult.items[0]).toMatchObject({ problem: "item_unavailable" });
+    expect(staleAdminResult).toMatchObject({ request: null, included: 0, problems: 1 });
     expect(await requestCount()).toBe(requestsBeforeStaleAdmin);
 
     await database.query(

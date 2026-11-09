@@ -7,14 +7,17 @@ import path from "node:path";
 import { initdb, pg_ctl } from "@embedded-postgres/windows-x64";
 import pg from "pg";
 
-import { getDatabaseTestFiles } from "./database-test-files.mjs";
+import { databaseTestArguments, getDatabaseTestFiles } from "./database-test-files.mjs";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("This local PostgreSQL runner supports Windows x64 only.");
 }
 
 const root = process.cwd();
-const requestedTests = process.argv.slice(2);
+const runnerArguments = process.argv.slice(2);
+const runAll = runnerArguments.includes("--all");
+const requestedTests = runnerArguments.filter(argument => argument !== "--all");
+if (runAll && requestedTests.length) throw new Error("--all cannot be combined with individual database test files.");
 const availableTests = getDatabaseTestFiles(root);
 const selectedTests = requestedTests.length ? availableTests.filter(file => requestedTests.includes(path.basename(file))) : availableTests;
 for (const requested of requestedTests) {
@@ -49,6 +52,10 @@ const processEnvironment = {
 let started = false;
 
 try {
+  run(process.execPath, [
+    path.join(root, "node_modules/typescript/bin/tsc"),
+    "--project", "tests/typecheck/tsconfig.database-http.json", "--pretty", "false",
+  ]);
   mkdirSync(data, { recursive: true });
   writeFileSync(passwordFile, `${migratorPassword}\n`, { mode: 0o600 });
   run(localInitdb, [
@@ -87,18 +94,16 @@ try {
     TEST_DATABASE_MIGRATOR_URL:
       `postgresql://${migrator}:${migratorPassword}@127.0.0.1:${port}/${database}`,
   };
-  for (const databaseTest of selectedTests) {
-    run(process.execPath, [
-      path.join(root, "node_modules/vitest/vitest.mjs"),
-      "run",
-      databaseTest,
-      "--dir",
-      path.join("tests", "database"),
-      "--exclude",
-      "**/.claude/**",
-      "--exclude",
-      "**/.agents/**",
-    ], testEnvironment);
+  if (runAll) {
+    // test-all applies react-server only to the server and database children;
+    // client tests and jsdom must start with the caller's original conditions.
+    run(process.execPath, [path.join(root, "scripts/test-all.mjs")], {
+      ...testEnvironment, NODE_OPTIONS: process.env.NODE_OPTIONS ?? "",
+    });
+  } else {
+    for (const databaseTest of selectedTests) {
+      run(process.execPath, databaseTestArguments(root, databaseTest), testEnvironment);
+    }
   }
 } finally {
   if (started) {

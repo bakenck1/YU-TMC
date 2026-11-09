@@ -1,25 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { TmcTransferRequestDto } from "../lib/contracts/tmc-operations";
 import { toTmcTransferRequestCardView } from "../lib/tmc-transfer-request-detail-view";
-
-const pageSource = readFileSync(
-  new URL("../app/(protected)/tmc/transfer-requests/[id]/page.tsx", import.meta.url),
-  "utf8",
-);
-const cardSource = readFileSync(
-  new URL("../components/TmcTransferRequestCard.tsx", import.meta.url),
-  "utf8",
-);
-
-test("transfer request detail page does not serialize the domain DTO into the client RSC payload", () => {
-  assert.match(pageSource, /toTmcTransferRequestCardView\(request\)/);
-  assert.doesNotMatch(pageSource, /request=\{request\}/);
-  assert.doesNotMatch(cardSource, /TmcTransferRequestDto/);
-  assert.match(cardSource, /TmcTransferRequestCardView/);
-});
 
 test("transfer request card projection keeps only rendered and mutation-required fields", () => {
   const request: TmcTransferRequestDto = {
@@ -126,31 +109,4 @@ test("transfer request card projection keeps only rendered and mutation-required
       version: 4,
     }],
   });
-});
-
-test("transfer request detail page derives actions from the authenticated actor and authorized aggregate", () => {
-  assert.match(
-    pageSource,
-    /const canDecide = user\.role === "admin" \|\| request\.recipient\.id === user\.userId/,
-  );
-  assert.match(
-    pageSource,
-    /const canCancel = user\.role === "admin" \|\| request\.initiator\.id === user\.userId/,
-  );
-  assert.match(
-    pageSource,
-    /requiresAdministrativeReason=\{user\.role === "admin" && request\.recipient\.id !== user\.userId\}/,
-  );
-  assert.match(
-    pageSource,
-    /requiresCancellationReason=\{user\.role === "admin" && request\.initiator\.id !== user\.userId\}/,
-  );
-});
-
-test("transfer request detail page uses the shared hidden-object boundary", () => {
-  assert.match(
-    pageSource,
-    /readHiddenPageResource\([\s\S]*?tmcTransferRequests\.getById\([\s\S]*?notFound/,
-  );
-  assert.doesNotMatch(pageSource, /error\.kind === "not_found"/);
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import { getRoomBooking } from "../lib/server/room-booking";
-import type { VisibleRoomWorkspaceDto } from "../lib/contracts/room-workspace";
+import type { PublicRoomDto, RoomWorkspaceDto, VisibleRoomWorkspaceDto } from "../lib/contracts/room-workspace";
 
 const room: VisibleRoomWorkspaceDto = {
   access: "full", id: "11111111-1111-4111-8111-111111111111",
@@ -22,7 +22,7 @@ afterEach(() => {
   mock.restoreAll();
   for (const key of keys) {
     if (saved[key] === undefined) delete process.env[key];
-    else process.env[key] = saved[key];
+    else Object.assign(process.env, { [key]: saved[key] });
   }
 });
 
@@ -37,7 +37,8 @@ test("prelaunch never contacts the unlaunched booking service", async () => {
 
 test("anonymous, denied and invalid rooms never contact booking or expose a link", async () => {
   const fetchMock = mock.method(globalThis, "fetch", async () => { throw new Error("unexpected request"); });
-  for (const value of [{ access: "authentication_required" } as const, { access: "denied", items: [] } as const, { ...room, id: "invalid" }]) {
+  const rooms: Array<PublicRoomDto | RoomWorkspaceDto> = [{ access: "authentication_required" }, { access: "denied", items: [] }, { ...room, id: "invalid" }];
+  for (const value of rooms) {
     assert.deepEqual(await getRoomBooking(value), { status: "hidden" });
   }
   assert.equal(fetchMock.mock.callCount(), 0);

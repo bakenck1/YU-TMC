@@ -148,7 +148,7 @@ test("batch addition rejects unauthorized and malformed selections before access
     userId: "employee", role: "employee",
   }), /forbidden/);
   for (const selection of [[], null, "invalid", [123]]) {
-    await assert.rejects(service.addComponents(IDS[0], selection as string[], admin), /invalid_request/);
+    await assert.rejects(service.addComponents(IDS[0], selection as unknown as string[], admin), /invalid_request/);
   }
   await assert.rejects(service.addComponents(IDS[0], [IDS[1], "invalid"], admin), /invalid_id/);
   await assert.rejects(service.addComponents(IDS[0], [IDS[1], IDS[0]], admin), /item_cannot_contain_itself/);
@@ -546,8 +546,8 @@ test("comment attachments are normalized, stored atomically, and exposed to read
   const attachments: Array<Record<string, unknown>> = [];
   const service = createService({
     findItemById: async () => current,
-    appendAudit: async (record) => audits.push(record as unknown as Record<string, unknown>),
-    insertCommentAttachment: async (record) => attachments.push(record as unknown as Record<string, unknown>),
+    appendAudit: async (record) => { audits.push(record as unknown as Record<string, unknown>); },
+    insertCommentAttachment: async (record) => { attachments.push(record as unknown as Record<string, unknown>); },
     listComments: async () => [{
       id: String(audits[0]?.id ?? "comment-1"),
       authorName: "Employee",

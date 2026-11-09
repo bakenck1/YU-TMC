@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "incremental": false, "noEmit": true },
+  "include": [],
+  "files": [
+    "../database/tmc-http-behavior.test.ts",
+    "../database/legacy-transfer-http.test.ts",
+    "../database/one-c-reconciliation-http.test.ts",
+    "../database/maintenance-resolution.test.ts",
+    "../database/inventory-transfer-override.test.ts"
+  ]
+}

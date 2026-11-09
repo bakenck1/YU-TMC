@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 
 import InventoryInvoiceActions from "@/components/InventoryInvoiceActions";
 import type { InventoryItem } from "@/lib/types";

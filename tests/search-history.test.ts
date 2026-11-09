@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  SEARCH_HISTORY_LIMIT,
-  addSearchHistoryEntry,
-  parseSearchHistory,
+SEARCH_HISTORY_LIMIT,
+addSearchHistoryEntry,
+parseSearchHistory,
 } from "../lib/search-history";
 
 test("search history keeps the newest unique trimmed queries", () => {
@@ -44,23 +43,4 @@ test("search history deduplicates Unicode and repeated whitespace without losing
     addSearchHistoryEntry(["Моноблок  Lenovo", "MONOBLOCK", "00123"], " моноблок Lenovo "),
     ["моноблок Lenovo", "MONOBLOCK", "00123"],
   );
-});
-
-test("search history menu retains keyboard focus and supports Escape", async () => {
-  const source = await Promise.all([
-    "../components/ItemsTable.tsx",
-    "../components/InventoryFilterInput.tsx",
-  ].map((relativePath) => readFile(new URL(relativePath, import.meta.url), "utf8"))).then((sources) => sources.join("\n"));
-  assert.match(source, /currentTarget\.contains\(event\.relatedTarget\)/);
-  assert.match(source, /event\.key === "Escape"/);
-  assert.match(source, /event\.key === "Enter"/);
-  assert.match(source, /visibleSearchHistory/);
-  assert.match(source, /normalizedLocationValue\(entry\)\.includes\(normalizedQuery\)/);
-  assert.match(source, /function InventoryFilterInput/);
-  assert.match(source, /item-filter-history:v1/);
-  assert.match(source, /historyStorageKey=\{filterHistoryStorageKey/);
-  assert.match(source, /onClick=\{\(\) => setSearchFocused\(true\)\}/);
-  assert.match(source, /role="combobox"/);
-  assert.match(source, /aria-autocomplete="list"/);
-  assert.match(source, /role="listbox"/);
 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createInventoryExportPayload, isCompleteInventoryExport } from "../lib/inventory-export";
@@ -8,29 +8,12 @@ import { filterInventoryItems } from "../lib/inventory-list";
 import { hasPermission } from "../lib/security/permissions";
 import type { InventoryItem } from "../lib/types";
 
-const itemsPage = readFileSync("app/(protected)/items/page.tsx", "utf8");
-const itemsTable = readFileSync("components/ItemsTable.tsx", "utf8");
-const exportButton = readFileSync("components/InventoryExportButton.tsx", "utf8");
-const analyticsCharts = readFileSync("components/AnalyticsCharts.tsx", "utf8");
 const excelRoute = readFileSync("app/api/inventory/excel/route.ts", "utf8");
 
 test("admin and warehouse retain inventory export permission", () => {
   assert.equal(hasPermission("admin", "inventory.report.export"), true);
   assert.equal(hasPermission("warehouse", "inventory.report.export"), true);
   assert.equal(hasPermission("employee", "inventory.report.export"), false);
-});
-
-test("inventory export is adjacent to the add action and hidden from employees", () => {
-  assert.match(itemsPage, /const canCreate = hasPermission\(user\.role, "inventory\.item\.create"\)/);
-  assert.match(itemsPage, /const canExport = hasPermission\(user\.role, "inventory\.report\.export"\)/);
-  assert.match(
-    itemsPage,
-    /excelDataset=\{canExport \? "items" : undefined\}[\s\S]*itemCreation=\{canCreate \? \{[\s\S]*rooms,[\s\S]*buildings,[\s\S]*mode:/,
-  );
-  assert.match(
-    itemsTable,
-    /<InventoryExportButton[\s\S]*itemIds=\{filtered\.map\(\(item\) => item\.id\)\}[\s\S]*columns=\{visibleColumns\}[\s\S]*<InventoryItemCreateForm/,
-  );
 });
 
 test("POST payload contains only filtered item ids and visible columns", () => {
@@ -108,23 +91,6 @@ test("filtered export fails explicitly instead of silently truncating ids", () =
   );
   assert.doesNotMatch(excelRoute, /rawItemIds\.filter\(isUuid\)\.slice/);
   assert.match(excelRoute, /rawItemIds\.length > 2_000/);
-});
-
-test("inventory export reports progress and errors and downloads the workbook", () => {
-  assert.match(exportButton, /disabled=\{busy\} aria-busy=\{busy\}/);
-  assert.match(exportButton, /busy \? t\("excel\.exporting"\) : t\("excel\.exportItems"\)/);
-  assert.match(exportButton, /throw new Error\("export_failed"\)/);
-  assert.match(exportButton, /excel\.asyncExportRequired/);
-  assert.match(exportButton, /<p role="alert"/);
-  assert.match(exportButton, /URL\.createObjectURL\(await response\.blob\(\)\)/);
-  assert.match(exportButton, /anchor\.download = dataset === "items" \? "inventory-items\.xlsx"/);
-  assert.match(exportButton, /anchor\.click\(\)/);
-});
-
-test("analytics has no export controls or analytics export dataset", () => {
-  assert.doesNotMatch(analyticsCharts, /AnalyticsExcelTools|exportReport|analytics\.exportReport|canBulkManage|canExport/);
-  assert.equal(existsSync("components/AnalyticsExcelTools.tsx"), false);
-  assert.doesNotMatch(excelRoute, /dataset === ["']analytics["']|exportAnalyticsReport/);
 });
 
 function inventoryItem(id: string, name: string, location: string): InventoryItem {

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
-import AppSettingsProvider from "@/components/AppSettingsProvider";
+import AppSettingsProvider,{ useAppSettings } from "@/components/AppSettingsProvider";
 import SettingsForm from "@/components/SettingsForm";
 import type { AppSettings } from "@/lib/app-settings";
 import { translate } from "@/lib/i18n";
@@ -52,6 +52,22 @@ describe("AppSettingsProvider persistence", () => {
     vi.unstubAllGlobals();
   });
 
+  it("restores the device language, persists a change locally and keeps server preferences independent", async () => {
+    window.localStorage.setItem("yu-inventory-settings-v1", JSON.stringify({ ...serverSettings, language: "en" }));
+    function LanguageControl() {
+      const { language, changeLanguage } = useAppSettings();
+      return <><output aria-label="active language">{language}</output><button onClick={() => void changeLanguage("kk")}>Choose Kazakh</button></>;
+    }
+    const view = render(<AppSettingsProvider><LanguageControl /></AppSettingsProvider>);
+    await waitFor(() => expect(screen.getByLabelText("active language").textContent).toBe("en"));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Kazakh" }));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("yu-inventory-settings-v1")!).language).toBe("kk"));
+    expect(serverSettings.language).toBe("ru");
+    view.unmount();
+    render(<AppSettingsProvider><LanguageControl /></AppSettingsProvider>);
+    await waitFor(() => expect(screen.getByLabelText("active language").textContent).toBe("kk"));
+  });
+
   it("persists organization and notification settings through the real provider", async () => {
     render(
       <AppSettingsProvider>
@@ -92,6 +108,6 @@ describe("AppSettingsProvider persistence", () => {
         organizationName: "Campus inventory",
         emailNotifications: false,
       });
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(2);
+    expect(serverSettings).toMatchObject({ organizationName: "Campus inventory", emailNotifications: false });
   });
 });

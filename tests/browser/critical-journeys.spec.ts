@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { decodeQrImage } from "../helpers/decode-qr";
 
 const password = requiredEnvironment("BROWSER_SMOKE_PASSWORD");
 const adminEmail = requiredEnvironment("BROWSER_SMOKE_ADMIN_EMAIL");
@@ -8,6 +9,59 @@ const recipientEmail = requiredEnvironment("BROWSER_SMOKE_RECIPIENT_EMAIL");
 const inventoryNumber = requiredEnvironment("BROWSER_SMOKE_INVENTORY_NUMBER");
 
 test.describe.serial("critical production journeys", () => {
+  // Each journey represents a separate client; shared runner IP must not spend
+  // the next journey's production API budget.
+  test.beforeEach(async ({ context }, info) => {
+    await context.setExtraHTTPHeaders({ "x-real-ip": `192.0.2.${info.parallelIndex + info.line % 200 + 1}` });
+  });
+  test("item pages hide foreign and IT objects and barcode printing omits private metadata", async ({ page }) => {
+    await login(page, ownerEmail);
+    await page.goto("/items?tab=maintenance");
+    await expect(page).toHaveURL(/status=lifecycle%3Amaintenance/);
+    for (const path of ["/items/10000000-0000-4000-8000-000000000011", "/items/10000000-0000-4000-8000-000000000099", "/items/10000000-0000-4000-8000-000000000006/qr?kind=qr"]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: "404", exact: true })).toBeVisible();
+      await expect(page.getByText("Hidden cabinet evidence", { exact: true })).toHaveCount(0);
+    }
+    const barcode = await page.request.get("/items/10000000-0000-4000-8000-000000000006/qr?kind=barcode");
+    expect(barcode.status()).toBe(200);
+    const payload = await barcode.text();
+    for (const field of ["unitPrice", "servicePhotoUrl", "responsibilityPeriodIdAtRequest"]) expect(payload).not.toContain(field);
+    await logout(page);
+    await login(page, adminEmail);
+    for (const suffix of ["", "/qr?kind=barcode"]) {
+      await page.goto("/items/10000000-0000-4000-8000-000000000009" + suffix);
+      await expect(page.getByRole("heading", { name: "404", exact: true })).toBeVisible();
+      await expect(page.getByText("Private IT camera", { exact: true })).toHaveCount(0);
+    }
+  });
+
+  test("printed room QR images load under production CSP and encode the actual cabinet links", async ({ page }) => {
+    await login(page, "browser-smoke-printer@example.invalid", "/inventory");
+    const apiImages: string[] = [];
+    page.on("request", request => { if (/\/api\/inventory\/rooms\/[^/]+\/qr/.test(request.url())) apiImages.push(request.url()); });
+    await page.goto("/inventory/rooms/qr-print?all=1");
+    const images = page.getByRole("img", { name: /^QR / });
+    await expect(images).toHaveCount(2);
+    for (const image of await images.all()) {
+      await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      const encoded = await decodeQrImage((await image.getAttribute("src"))!);
+      expect(new URL(encoded).pathname).toMatch(/^\/rooms\/qr\//);
+    }
+    expect(apiImages).toEqual([]);
+    await expect(page.getByRole("button", { name: "Печать QR-кодов", exact: true })).toBeEnabled();
+  });
+  test("campus map can be scrolled horizontally on a narrow screen", async ({ page }) => {
+    await login(page, adminEmail);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const map = page.getByTestId("campus-map-scroll");
+    await expect(map).toBeVisible();
+    await map.hover();
+    await page.mouse.wheel(600, 0);
+    await expect.poll(() => map.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  });
+
   test("room QR links and the mobile scanner open the cabinet", async ({ page }) => {
     const qrPath = "/rooms/qr/YUQ1%3A00000000000000000000000000";
     await page.goto(qrPath);
@@ -95,18 +149,6 @@ test.describe.serial("critical production journeys", () => {
       await page.getByRole("button", { name: /Общая стоимость/ }).click();
       const valueList = page.getByRole("region", { name: "Общая стоимость", exact: true });
       await expect(valueList).toBeVisible();
-      await expect.poll(async () => {
-        return valueList.evaluate((panel) => {
-          const rect = panel.getBoundingClientRect();
-          const mainTop = panel.closest("main")!.getBoundingClientRect().top;
-          const navigationTop = document.querySelector("nav.fixed")!.getBoundingClientRect().top;
-          const list = panel.querySelector("table")!.parentElement!;
-          return rect.top >= mainTop && rect.bottom <= navigationTop && list.scrollWidth <= list.clientWidth;
-        });
-      }).toBe(true);
-      const nextMetric = await page.getByRole("button", { name: /Всего ТМЦ/ }).boundingBox();
-      const valueListBox = await valueList.boundingBox();
-      expect(valueListBox!.y + valueListBox!.height).toBeLessThanOrEqual(nextMetric!.y);
       await page.screenshot({ path: ".artifacts/profile-mobile-expanded.png" });
       await valueList.getByRole("button", { name: "Закрыть", exact: true }).click();
       await page.getByRole("button", { name: /Всего ТМЦ/ }).click();
@@ -134,6 +176,12 @@ test.describe.serial("critical production journeys", () => {
       await expect(requestLink).toBeVisible();
       const requestPath = await requestLink.getAttribute("href");
       expect(requestPath).toMatch(/^\/tmc\/transfer-requests\/[0-9a-f-]{36}$/);
+      for (const path of [requestPath!, "/tmc/history"]) {
+        const response = await page.request.get(path);
+        expect(response.status()).toBe(200);
+        const serialized = await response.text();
+        for (const field of ["responsibilityPeriodIdAtRequest", "currentResponsibleIdAtRequest", "unitPrice"]) expect(serialized).not.toContain(field);
+      }
 
       await logout(page);
       await login(page, recipientEmail);
@@ -167,12 +215,12 @@ test.describe.serial("critical production journeys", () => {
   });
 });
 
-async function login(page: Page, email: string) {
+async function login(page: Page, email: string, destination = "/profile") {
   await page.goto("/login?manual=1");
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Пароль", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Войти", exact: true }).click();
-  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page).toHaveURL(new RegExp(`${destination}$`));
 }
 
 async function logout(page: Page) {

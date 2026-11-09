@@ -1,24 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { TmcTransferHistoryDto } from "../lib/contracts/tmc-operations";
 import { toTmcHistoryPageView } from "../lib/tmc-history-view";
-
-const page = readFileSync(
-  new URL("../app/(protected)/tmc/history/page.tsx", import.meta.url),
-  "utf8",
-);
-const component = readFileSync(
-  new URL("../components/TmcHistory.tsx", import.meta.url),
-  "utf8",
-);
-
-test("history page does not serialize the full transfer request DTO into the client RSC payload", () => {
-  assert.doesNotMatch(page, /requests=\{result\.requests\}/);
-  assert.doesNotMatch(component, /TmcTransferRequestDto/);
-  assert.match(page, /toTmcHistoryPageView/);
-});
 
 test("history client projection omits unused identities, prices, photos, versions, and authorization snapshots", () => {
   const history = {

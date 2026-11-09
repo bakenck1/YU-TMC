@@ -21,7 +21,7 @@ const firstDate = "2026-10-14T01:00:00.000Z";
 const secondDate = "2026-10-15T01:00:00.000Z";
 const balance: OneCMaterial = { ...material, balanceSchemaVersion: 2, accountCode: "1317", responsibleCode: "000001", responsibleName: "Иванов Иван Иванович" };
 const snapshot = (materials = [material], snapshotAt = firstDate): OneCMaterialsSnapshot => ({ snapshotAt, materials });
-const metadata = (source = randomUUID()) => ({
+const metadata = (source: string = randomUUID()) => ({
   sourceSha256: createHash("sha256").update(source).digest("hex"), requestId: randomUUID(), sourceFilename: "materials.xml",
 });
 const count = async (table: string) => (await runtimePool.query<{ count: number }>(`select count(*)::int count from "yu_inventory"."${table}"`)).rows[0].count;

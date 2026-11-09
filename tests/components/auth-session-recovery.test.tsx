@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import AuthProvider, { useAuth } from "@/components/AuthProvider";
+import AuthProvider,{ useAuth } from "@/components/AuthProvider";
+import { act,fireEvent,render,screen } from "@testing-library/react";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
 vi.mock("@/lib/client-push-subscription", () => ({ removePushSubscriptionBeforeLogout: async () => undefined }));
 vi.mock("@/lib/search-history", () => ({ clearSensitiveSearchStorage: () => undefined }));

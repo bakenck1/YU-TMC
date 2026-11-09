@@ -106,8 +106,7 @@ test("a suffixed spaced numeric token never supplies a truncated marked or unmar
       const description = `Ноутбук ${marker}2411 00388 0001${suffix}`;
       const references = extractExcelInventoryReferences(description);
       assert.deepEqual(references, [], description);
-      const row = buildInventorySourceAudit([item("241100388")], [asset(null, description)],
-        references.map((entry) => ({ rowNumber: 2, nomenclature: description, ...entry, endingBalance: "1" })), []).rows[0];
+      const row = buildInventorySourceAudit([item("241100388")], [asset(null, description)], [], []).rows[0];
       assert.equal(row.source, null, description);
     }
   }

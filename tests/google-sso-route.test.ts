@@ -10,7 +10,7 @@ import {
 import { resetRateLimitStateForTests } from "../lib/security/rate-limiter";
 
 test("unconfigured Google SSO uses a host-independent login redirect", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   delete process.env.GOOGLE_CLIENT_ID;
   delete process.env.GOOGLE_CLIENT_SECRET;
   delete process.env.GOOGLE_REDIRECT_URI;
@@ -27,7 +27,7 @@ test("unconfigured Google SSO uses a host-independent login redirect", async () 
 });
 
 test("unconfigured Google callback uses a host-independent login redirect", async () => {
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   delete process.env.GOOGLE_CLIENT_ID;
   delete process.env.GOOGLE_CLIENT_SECRET;
   delete process.env.GOOGLE_REDIRECT_URI;

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { afterEach,describe,expect,it,vi } from "vitest";
 
 import InventoryBuildingsManager from "@/components/InventoryBuildingsManager";
-import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto,RoomDto } from "@/lib/contracts/inventory-locations";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),

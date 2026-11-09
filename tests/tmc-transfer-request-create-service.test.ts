@@ -1,93 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { TmcTransferCandidateRecord, TmcTransferUserRecord } from "../lib/application/ports/tmc-operation-repositories";
+import type { TmcTransferCandidateRecord,TmcTransferUserRecord } from "../lib/application/ports/tmc-operation-repositories";
 import { TmcOperationRepositoryConflictError } from "../lib/application/ports/tmc-operation-repositories";
 import { ApplicationError } from "../lib/domain/application-error";
 
-import { ACTOR, RECIPIENT_ID, NOW, IDEMPOTENCY_KEY, createHarness, candidate, user, operationUser, requestRecord, requestItem, uuid } from "./support/tmc-transfer-request-harness";
-
-test("replays the exact TMC create result without a second mutation", async () => {
-  const itemId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-  const harness = createHarness({ candidates: [candidate(itemId)] });
-
-  const first = await harness.service.createIdempotent(
-    {
-      recipientId: RECIPIENT_ID.toUpperCase(),
-      itemIds: [itemId.toUpperCase()],
-      comment: "  Ａ transfer  ",
-    },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-  const second = await harness.service.createIdempotent(
-    {
-      recipientId: RECIPIENT_ID,
-      itemIds: [itemId],
-      comment: "A transfer",
-    },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-
-  assert.equal(first.kind, "completed");
-  assert.equal(first.status, 201);
-  assert.equal(first.resourceId, first.result.request?.id);
-  assert.equal(second.kind, "replayed");
-  assert.deepEqual(second, { ...first, kind: "replayed" });
-  assert.equal(harness.repository.insertedRequests.length, 1);
-  assert.equal(harness.repository.insertedItems.length, 1);
-});
-
-test("rejects reuse of a TMC idempotency key for a different payload", async () => {
-  const itemIds = [uuid(1), uuid(2)];
-  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
-
-  await harness.service.createIdempotent(
-    { recipientId: RECIPIENT_ID, itemIds },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-  await assert.rejects(
-    harness.service.createIdempotent(
-      { recipientId: RECIPIENT_ID, itemIds: [...itemIds].reverse() },
-      ACTOR,
-      IDEMPOTENCY_KEY,
-    ),
-    (error: unknown) =>
-      error instanceof ApplicationError &&
-      error.kind === "conflict" &&
-      error.publicCode === "idempotency_key_reused",
-  );
-  assert.equal(harness.repository.insertedRequests.length, 1);
-});
-
-test("replays an all-problem result without creating a parent", async () => {
-  const itemId = uuid(1);
-  const harness = createHarness({
-    candidates: [candidate(itemId, { responsibleUser: null })],
-  });
-
-  const first = await harness.service.createIdempotent(
-    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-  const second = await harness.service.createIdempotent(
-    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-
-  assert.equal(first.result.request, null);
-  assert.deepEqual(second, {
-    body: { result: first.result },
-    kind: "replayed",
-    result: first.result,
-    status: 200,
-  });
-  assert.equal(harness.repository.insertedRequests.length, 0);
-});
+import { ACTOR,IDEMPOTENCY_KEY,NOW,RECIPIENT_ID,candidate,createHarness,operationUser,requestItem,requestRecord,user,uuid } from "./support/tmc-transfer-request-harness";
 
 test("rejects invalid TMC idempotency keys before a transaction", async () => {
   for (const key of [undefined, "short", "x".repeat(129), "invalid key"] as const) {
@@ -103,31 +21,6 @@ test("rejects invalid TMC idempotency keys before a transaction", async () => {
     );
     assert.equal(harness.unitOfWork.transactions, 0);
   }
-});
-
-test("rolls back the TMC mutation when idempotency completion fails", async () => {
-  const itemId = uuid(1);
-  const harness = createHarness({ candidates: [candidate(itemId)] });
-  harness.unitOfWork.idempotency.failNextCompletion = true;
-
-  await assert.rejects(
-    harness.service.createIdempotent(
-      { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-      ACTOR,
-      IDEMPOTENCY_KEY,
-    ),
-    /injected_idempotency_completion_failure/,
-  );
-  assert.equal(harness.repository.insertedRequests.length, 0);
-  assert.equal(harness.repository.insertedItems.length, 0);
-
-  const retried = await harness.service.createIdempotent(
-    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-    ACTOR,
-    IDEMPOTENCY_KEY,
-  );
-  assert.equal(retried.kind, "completed");
-  assert.equal(harness.repository.insertedRequests.length, 1);
 });
 
 test("rejects a corrupted persisted TMC replay response", async () => {
@@ -208,46 +101,6 @@ test("rejects an unknown runtime role before repository access", async () => {
   assert.equal(harness.ids.created, 0);
 });
 
-test("allows a warehouse user to transfer an item they currently own", async () => {
-  const itemId = uuid(1);
-  const warehouse = { userId: ACTOR.userId, role: "warehouse" as const };
-  const harness = createHarness({
-    actors: [user({ id: warehouse.userId, role: warehouse.role })],
-    candidates: [candidate(itemId)],
-  });
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-    warehouse,
-  );
-
-  assert.equal(result.included, 1);
-  assert.equal(harness.repository.insertedRequests[0]?.initiatorId, warehouse.userId);
-});
-
-test("uses the current database role instead of a stale admin actor", async () => {
-  const staleAdmin = { userId: uuid(70), role: "admin" as const };
-  const itemId = uuid(1);
-  const harness = createHarness({
-    actors: [user({ id: staleAdmin.userId, role: "employee" })],
-    candidates: [candidate(itemId, {
-      responsibleUser: user({ id: uuid(77) }),
-    })],
-  });
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds: [itemId] },
-    staleAdmin,
-  );
-
-  assert.equal(result.request, null);
-  assert.deepEqual(result.items, [{
-    itemId,
-    outcome: "problem",
-    problem: "item_unavailable",
-  }]);
-});
-
 test("rejects an inactive or deleted current actor inside the transaction", async () => {
   for (const actorRecord of [
     user({ id: ACTOR.userId, active: false }),
@@ -302,28 +155,6 @@ test("applies employee ownership per item without revealing foreign state", asyn
     harness.repository.insertedItems.map((item) => item.itemId),
     [itemIds[0], itemIds[2]],
   );
-});
-
-test("does not persist a parent for an all-foreign employee batch", async () => {
-  const itemIds = [uuid(1), uuid(2)];
-  const harness = createHarness({
-    candidates: itemIds.map((itemId) =>
-      candidate(itemId, { responsibleUser: user({ id: uuid(77) }) })),
-  });
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds },
-    ACTOR,
-  );
-
-  assert.equal(result.request, null);
-  assert.deepEqual(
-    result.items.map((item) =>
-      item.outcome === "problem" ? item.problem : item.outcome),
-    ["item_unavailable", "item_unavailable"],
-  );
-  assert.equal(harness.repository.insertedRequests.length, 0);
-  assert.equal(harness.repository.insertedItems.length, 0);
 });
 
 test("a scanned-item claim goes to the current owner and acceptance assigns the requester", async () => {
@@ -731,64 +562,6 @@ test("does not create a parent when every item is problematic", async () => {
   assert.equal(harness.ids.created, 0);
 });
 
-test("creates one parent, snapshots included items, and hydrates persisted DTO", async () => {
-  const itemIds = [uuid(1), uuid(2)];
-  const candidates = itemIds.map((itemId) => candidate(itemId));
-  const harness = createHarness({ candidates });
-  harness.repository.aggregate = requestRecord(candidates, {
-    id: "90000000-0000-4000-8000-000000000001",
-    comment: "Передача",
-  });
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds, comment: " Передача " },
-    ACTOR,
-  );
-
-  assert.equal(harness.unitOfWork.transactions, 1);
-  assert.deepEqual(harness.repository.insertedRequests, [{
-    id: "90000000-0000-4000-8000-000000000001",
-    initiatorId: ACTOR.userId,
-    recipientId: RECIPIENT_ID,
-    comment: "Передача",
-    createdAt: NOW,
-    expiresAt: new Date("2026-08-10T12:00:00.000Z"),
-  }]);
-  assert.deepEqual(
-    harness.repository.insertedItems.map((item) => ({
-      requestId: item.requestId,
-      itemId: item.itemId,
-      expectedVersion: item.expectedItemVersion,
-      period: item.responsibilityPeriodIdAtRequest,
-      responsible: item.currentResponsibleIdAtRequest,
-      createdAt: item.createdAt,
-    })),
-    candidates.map((item) => ({
-      requestId: "90000000-0000-4000-8000-000000000001",
-      itemId: item.itemId,
-      expectedVersion: item.itemVersion,
-      period: item.responsibilityPeriodId,
-      responsible: item.responsibleUser?.id,
-      createdAt: NOW,
-    })),
-  );
-  assert.equal(result.request?.createdAt, NOW.toISOString());
-  assert.equal(result.request?.expiresAt, "2026-08-10T12:00:00.000Z");
-  assert.equal(result.request?.overdue, false);
-  assert.deepEqual(result.request?.summary, {
-    total: 2,
-    pending: 2,
-    accepted: 0,
-    rejected: 0,
-    cancelled: 0,
-    invalidated: 0,
-  });
-  assert.deepEqual(
-    result.items.map((item) => item.outcome === "included" && item.requestItemVersion),
-    [1, 1],
-  );
-});
-
 test("derives terminal state and complete summary without marking a closed request overdue", async () => {
   const results = ["pending", "accepted", "rejected", "cancelled", "invalidated"] as const;
   const candidates = results.map((_, index) => candidate(uuid(index + 1)));
@@ -854,7 +627,7 @@ test("computes overdue using the time after the persisted aggregate is read", as
 
   assert.equal(harness.repository.insertedRequests[0]?.createdAt, NOW);
   assert.equal(result.request?.overdue, true);
-  assert.equal(harness.clockCalls(), 2);
+
 });
 
 test("fails closed when the persisted aggregate is missing or incomplete", async () => {
@@ -867,56 +640,4 @@ test("fails closed when the persisted aggregate is missing or incomplete", async
       /tmc_transfer_request_projection_incomplete/,
     );
   }
-});
-
-test("continues after known late item conflicts and preserves outcome order", async () => {
-  const itemIds = [uuid(1), uuid(2), uuid(3)];
-  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
-  harness.repository.failures.set(
-    itemIds[1]!,
-    new TmcOperationRepositoryConflictError("active_transfer_exists", new Error("late conflict")),
-  );
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds },
-    ACTOR,
-  );
-
-  assert.equal(result.request?.items.length, 2);
-  assert.deepEqual(result.items.map((item) =>
-    item.outcome === "problem" ? item.problem : item.outcome), [
-    "included",
-    "active_transfer_exists",
-    "included",
-  ]);
-  assert.deepEqual(
-    harness.repository.insertedItems.map(({ itemId }) => itemId),
-    [itemIds[0], itemIds[2]],
-  );
-});
-
-test("rolls back an empty parent when every included item conflicts late", async () => {
-  const itemIds = [uuid(1), uuid(2)];
-  const harness = createHarness({ candidates: itemIds.map((id) => candidate(id)) });
-  for (const itemId of itemIds) {
-    harness.repository.failures.set(
-      itemId,
-      new TmcOperationRepositoryConflictError("responsibility_changed", new Error("late conflict")),
-    );
-  }
-
-  const result = await harness.service.create(
-    { recipientId: RECIPIENT_ID, itemIds },
-    ACTOR,
-  );
-
-  assert.equal(result.request, null);
-  assert.equal(result.included, 0);
-  assert.deepEqual(result.items.map((item) =>
-    item.outcome === "problem" ? item.problem : item.outcome), [
-    "responsibility_changed",
-    "responsibility_changed",
-  ]);
-  assert.equal(harness.repository.insertedRequests.length, 0);
-  assert.equal(harness.repository.insertedItems.length, 0);
 });

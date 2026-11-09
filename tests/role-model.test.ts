@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { USER_ROLES } from "../lib/contracts/users";
 import { translate } from "../lib/i18n";
 import {
-  canAccessPath,
-  defaultPathForRole,
-  isAuthRole,
+canAccessPath,
+defaultPathForRole,
+isAuthRole,
 } from "../lib/security/authorization";
 import {
-  canManageUser,
-  hasPermission,
-  APP_PERMISSIONS,
+APP_PERMISSIONS,
+canManageUser,
+hasPermission,
 } from "../lib/security/permissions";
 
 test("exposes the product roles, including passport staff", () => {
@@ -124,27 +123,4 @@ test("employee retains assigned-session permissions without direct inspection ro
   assert.equal(canAccessPath("warehouse", "/"), true);
   assert.equal(canAccessPath("employee", "/inventory"), true);
   assert.equal(canAccessPath("employee", "/locations"), true);
-});
-
-test("role migration converts active owners before replacing the auth enum", () => {
-  const migration = readFileSync(
-    new URL(
-      "../drizzle/20260731092658_dashing_scarlet_spider.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const convertIndex = migration.indexOf(
-    `UPDATE "yu_inventory"."users" SET "role" = 'admin' WHERE "role" = 'owner'`,
-  );
-  const dropIndex = migration.indexOf(
-    `DROP TYPE "yu_inventory"."auth_role"`,
-  );
-
-  assert.ok(convertIndex >= 0);
-  assert.ok(dropIndex > convertIndex);
-  assert.match(
-    migration,
-    /CREATE TYPE "yu_inventory"\."auth_role" AS ENUM\('admin', 'warehouse', 'employee'\)/,
-  );
 });

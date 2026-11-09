@@ -1,24 +1,23 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import type {
-  InsertLocalBarcodeGroup,
-  LocalBarcodeActorRecord,
-  LocalBarcodeEventRecord,
-  LocalBarcodeGroupRecord,
-  LocalBarcodeRepositories,
-  LocalBarcodeRepository,
+InsertLocalBarcodeGroup,
+LocalBarcodeActorRecord,
+LocalBarcodeEventRecord,
+LocalBarcodeGroupRecord,
+LocalBarcodeRepositories,
+LocalBarcodeRepository,
 } from "../lib/application/ports/local-barcode-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import {
-  applyApprovedLocalBarcodeTransfer,
-  LocalBarcodeService,
+applyApprovedLocalBarcodeTransfer,
+LocalBarcodeService,
 } from "../lib/application/services/local-barcode-service";
-import { parseCode39ScanInput, renderCode39Svg } from "../lib/domain/code39";
+import { parseCode39ScanInput,renderCode39Svg } from "../lib/domain/code39";
 import {
-  buildLocalBarcode,
-  formatLocalBarcodeSuffix,
-  localBarcodeComparisonKey,
+buildLocalBarcode,
+formatLocalBarcodeSuffix,
+localBarcodeComparisonKey,
 } from "../lib/domain/local-barcode";
 
 const ITEM_ID = "10000000-0000-4000-8000-000000000001";
@@ -329,19 +328,6 @@ test("partial local transfer keeps the old code, whole transfer keeps its code, 
   }
 });
 
-test("migration reserves a global namespace, preserves cancelled codes and defers quantity checks", async () => {
-  const migration = await readFile(
-    "drizzle/20260831130000_local_item_barcodes.sql",
-    "utf8",
-  );
-  assert.match(migration, /CREATE SEQUENCE .*local_barcode_sequence/);
-  assert.match(migration, /CREATE TABLE .*barcode_registry/);
-  assert.match(migration, /local_item_groups_barcode_registry_insert/);
-  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
-  assert.match(migration, /status = 'cancelled'/);
-  assert.doesNotMatch(migration, /DELETE FROM .*local_item_groups/i);
-});
-
 test("a foreign local group follows its cabinet access mode on direct links", async () => {
   const recipients = new Map([
     [USER_B_ID, recipient(USER_B_ID, "Employee B", ROOM_B_ID)],
@@ -350,7 +336,7 @@ test("a foreign local group follows its cabinet access mode on direct links", as
     id: GROUP_ID,
     itemId: ITEM_ID,
     parentGroupId: null,
-    sequenceNumber: 1n,
+    sequenceNumber: BigInt("1"),
     barcodeValue: "1234/5678-0001",
     barcodeKey: "1234/5678-0001",
     quantity: 1,

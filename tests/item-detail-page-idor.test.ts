@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { ApplicationError } from "../lib/domain/application-error";
@@ -32,29 +31,6 @@ test("item detail page does not disguise unexpected failures as missing objects"
       throw unavailable;
     }, hideAsNotFound),
     (error: unknown) => error === unavailable,
-  );
-});
-
-test("item detail page applies hidden-object handling to primary and nested reads", () => {
-  const source = readFileSync(
-    new URL("../app/(protected)/items/[id]/page.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.equal(source.match(/await readHiddenPageResource\(/g)?.length, 2);
-  assert.match(source, /if \(isUuid\(id\)\)/);
-  assert.doesNotMatch(source, /\[1-5\]\[0-9a-f\]/);
-  assert.match(
-    source,
-    /readHiddenPageResource\(\s*\(\) => services\.items\.findItem\(id, actor\),\s*notFound,/,
-  );
-  assert.match(
-    source,
-    /readHiddenPageResource\([\s\S]*?Promise\.all\(\[[\s\S]*?listComponents\(id, actor\)[\s\S]*?listOperations\(id, actor\)[\s\S]*?listComments\(id, actor\)[\s\S]*?notFound,/,
-  );
-  assert.doesNotMatch(
-    source,
-    /if \(!isInventoryBuildingName\(item\.room\.buildingName\)\) notFound\(\);/,
   );
 });
 

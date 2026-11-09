@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { TmcOperationUserDto } from "../lib/contracts/tmc-operations";
 import { ApplicationError } from "../lib/domain/application-error";
 import { createTmcRecipientCandidatesGetHandler } from "../lib/server/http/tmc-recipient-candidates-handler";
-import { hasPermission } from "../lib/security/permissions";
 
 const ACTOR = {
   userId: "11111111-1111-4111-8111-111111111111",
@@ -13,17 +11,6 @@ const ACTOR = {
   sessionVersion: 7,
 };
 const RESULT: TmcOperationUserDto = { id: "22222222-2222-4222-8222-222222222222", fullName: "Demo User 5", email: "demo-user-5@example.test", role: "admin" };
-
-test("recipient route uses the TMC permission without widening the admin users endpoint", () => {
-  const route = readFileSync("app/api/inventory/transfer-recipient-candidates/route.ts", "utf8");
-  const legacyUsersRoute = readFileSync("app/api/users/route.ts", "utf8");
-  assert.match(route, /requirePermission\(request, "inventory\.tmc\.transfer_request\.create"\)/);
-  assert.match(route, /searchTmcRecipients\(query, actor, options\)/);
-  assert.match(legacyUsersRoute, /requirePermission\(request, "legacy\.users\.read"\)/);
-  for (const role of ["admin", "warehouse", "employee"] as const) {
-    assert.equal(hasPermission(role, "inventory.tmc.transfer_request.create"), true);
-  }
-});
 
 test("recipient endpoint authenticates actor, preserves the full session proof and returns private DTOs", async () => {
   const calls: unknown[][] = [];

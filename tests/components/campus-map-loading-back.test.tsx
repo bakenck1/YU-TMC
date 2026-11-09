@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act,fireEvent,render,screen } from "@testing-library/react";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
 import CampusMap from "@/components/CampusMap";
 import { buildCampusMapData } from "@/lib/campus-map-data";
@@ -25,6 +25,16 @@ describe("campus modal back navigation while a level is loading", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("does not open inventory when the KGISE landmark is clicked", () => {
+    render(<CampusMap data={campusData()} />);
+    fireEvent.click(screen.getByText("Kazakh-German Institute of Sustainable Engineering"));
+    act(() => vi.advanceTimersByTime(600));
+    expect(screen.queryByRole("button", { name: "map.back" })).toBeNull();
+    fireEvent.click(screen.getByText("The Main Campus"));
+    act(() => vi.advanceTimersByTime(600));
+    expect(screen.getByRole("button", { name: "map.back" })).toBeTruthy();
   });
 
   it("does not close the entire modal when Back is pressed while an item is loading", () => {

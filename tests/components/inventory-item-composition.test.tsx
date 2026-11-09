@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act,fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 
 import InventoryItemComposition from "@/components/InventoryItemComposition";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";

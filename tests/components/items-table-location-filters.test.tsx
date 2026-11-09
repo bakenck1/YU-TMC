@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import ItemsTable from "@/components/ItemsTable";
-import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto,RoomDto } from "@/lib/contracts/inventory-locations";
 import type { InventoryItem } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({

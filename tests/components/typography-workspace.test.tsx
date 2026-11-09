@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import InventoryBuildingsManager from "@/components/InventoryBuildingsManager";
 import MobileBottomNavigation from "@/components/MobileBottomNavigation";
-import type { BuildingDto, RoomDto } from "@/lib/contracts/inventory-locations";
+import type { BuildingDto,RoomDto } from "@/lib/contracts/inventory-locations";
 
 vi.mock("@/components/AppSettingsProvider", () => ({
   useAppSettings: () => ({ language: "ru", t: (key: string) => key }),

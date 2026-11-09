@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import path from "node:path";
 import test from "node:test";
 
 import type { CreateTmcTransferRequestResultDto } from "../lib/contracts/tmc-operations";
@@ -30,33 +27,6 @@ const PROBLEM_RESULT: CreateTmcTransferRequestResultDto = {
   problems: 1,
   items: [{ itemId: ITEM_ID, outcome: "problem", problem: "item_unavailable" }],
 };
-
-test("TMC transfer request server boundary type-checks and wires only idempotent create", () => {
-  const result = spawnSync(
-    process.execPath,
-    [
-      path.join("node_modules", "typescript", "bin", "tsc"),
-      "--project",
-      path.join("tests", "typecheck", "tsconfig.tmc-transfer-request-route.json"),
-      "--pretty",
-      "false",
-    ],
-    { cwd: process.cwd(), encoding: "utf8" },
-  );
-  assert.equal(
-    result.status,
-    0,
-    [result.stdout, result.stderr].filter(Boolean).join("\n"),
-  );
-
-  const route = readFileSync(
-    path.join("app", "api", "inventory", "transfer-requests", "route.ts"),
-    "utf8",
-  );
-  assert.match(route, /tmcTransferRequests\.createIdempotent\(/);
-  assert.doesNotMatch(route, /tmcTransferRequests\.create\(/);
-  assert.doesNotMatch(route, /export .*createTmcTransferRequestPostHandler/);
-});
 
 test("POST transfer-requests forwards only authenticated server identity and exact command input", async () => {
   const calls: unknown[][] = [];

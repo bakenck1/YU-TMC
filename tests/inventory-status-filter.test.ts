@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import type { InventoryListFilters } from "../lib/inventory-list";
 import {
-  filterInventoryItems,
-  inventoryStatusOptions,
+filterInventoryItems,
+inventoryStatusOptions,
 } from "../lib/inventory-list";
 import { toLocalBarcodeInventoryItem } from "../lib/local-barcode-item-view";
 import type { InventoryItem } from "../lib/types";
-import type { InventoryListFilters } from "../lib/inventory-list";
 
 const BASE_ITEM: InventoryItem = {
   id: "active",
@@ -247,15 +246,4 @@ test("floor range also finds locally distributed inventory through the database 
     }).map((item) => item.id),
     ["local-group-15"],
   );
-});
-
-test("filter panel keeps draft state separate and restores focus after apply", async () => {
-  const source = await readFile(new URL("../components/ItemsTable.tsx", import.meta.url), "utf8");
-  assert.match(source, /setFilters\(draftFilters\)/);
-  assert.match(source, /setPage\(1\)/);
-  assert.match(source, /setFilterPanelOpen\(false\)/);
-  assert.match(source, /filterButtonRef\.current\?\.focus\(\)/);
-  assert.match(source, /if \(!filterPanelOpen\) setDraftFilters\(filters\)/);
-  assert.match(source, /setDraftFilters\(EMPTY_TABLE_FILTERS\)[\s\S]*setFilters\(EMPTY_TABLE_FILTERS\)/);
-  assert.match(source, /aria-controls="inventory-advanced-filters"/);
 });

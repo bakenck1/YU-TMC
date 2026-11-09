@@ -1,0 +1,2746 @@
+{
+  "date": "2026-11-09",
+  "command": "npm run test:all:local",
+  "environment": "Windows, disposable local PostgreSQL, separate migrator/runtime roles",
+  "discoveredFiles": 34,
+  "passed": 255,
+  "failed": 0,
+  "skipped": 0,
+  "sourceDeclarations": 234,
+  "nodeSummaries": [
+    1376,
+    17
+  ],
+  "suites": [
+    {
+      "file": "tests/database/asset-loss-upgrade.test.ts",
+      "passed": 5,
+      "startTime": 1794203043415,
+      "declarations": [
+        {
+          "title": "backfills the exact responsibility snapshot for an existing open case",
+          "line": 33,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "aborts atomically when an open legacy case has no safe responsibility snapshot",
+          "line": 39,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "aborts on a discontinuous legacy financial event chain",
+          "line": 45,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "applies case-event consistency after the original event migration is already recorded",
+          "line": 50,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "refuses to install case-event consistency when deployed data already drifted",
+          "line": 69,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "backfills the exact responsibility snapshot for an existing open case",
+          "status": "passed"
+        },
+        {
+          "title": "aborts atomically when an open legacy case has no safe responsibility snapshot",
+          "status": "passed"
+        },
+        {
+          "title": "aborts on a discontinuous legacy financial event chain",
+          "status": "passed"
+        },
+        {
+          "title": "applies case-event consistency after the original event migration is already recorded",
+          "status": "passed"
+        },
+        {
+          "title": "refuses to install case-event consistency when deployed data already drifted",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/asset-loss.test.ts",
+      "passed": 8,
+      "startTime": 1794203048138,
+      "declarations": [
+        {
+          "title": "serializes concurrent create and keeps a single open case",
+          "line": 30,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "supersedes a rejected receipt in the same state transition",
+          "line": 42,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "approval rejects same-employee ABA responsibility and leaves the replacement period open",
+          "line": 58,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls responsibility closure back if the guarded case update fails",
+          "line": 70,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps the financial event log append-only and rejects discontinuous edges",
+          "line": 86,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a case status change that omits its matching event",
+          "line": 94,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows multiple fully-evented transitions in one transaction",
+          "line": 113,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "serializes concurrent accounting decisions to one terminal edge",
+          "line": 160,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "serializes concurrent create and keeps a single open case",
+          "status": "passed"
+        },
+        {
+          "title": "supersedes a rejected receipt in the same state transition",
+          "status": "passed"
+        },
+        {
+          "title": "approval rejects same-employee ABA responsibility and leaves the replacement period open",
+          "status": "passed"
+        },
+        {
+          "title": "rolls responsibility closure back if the guarded case update fails",
+          "status": "passed"
+        },
+        {
+          "title": "keeps the financial event log append-only and rejects discontinuous edges",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a case status change that omits its matching event",
+          "status": "passed"
+        },
+        {
+          "title": "allows multiple fully-evented transitions in one transaction",
+          "status": "passed"
+        },
+        {
+          "title": "serializes concurrent accounting decisions to one terminal edge",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/dockflow-api.test.ts",
+      "passed": 1,
+      "startTime": 1794203052531,
+      "declarations": [
+        {
+          "title": "projects individual and local-group assignments through runtime grants and excludes inactive data",
+          "line": 32,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "projects individual and local-group assignments through runtime grants and excludes inactive data",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/dormitory-requests.test.ts",
+      "passed": 2,
+      "startTime": 1794203054320,
+      "declarations": [
+        {
+          "title": "creates one visible request, moves the dormitory item to maintenance, and replays safely",
+          "line": 29,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects an item outside the maintained dormitory list",
+          "line": 66,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "creates one visible request, moves the dormitory item to maintenance, and replays safely",
+          "status": "passed"
+        },
+        {
+          "title": "rejects an item outside the maintained dormitory list",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/integration-api.test.ts",
+      "passed": 8,
+      "startTime": 1794203056085,
+      "declarations": [
+        {
+          "title": "all snapshots use explicit matching allowlists and never expose employee contacts or internal data",
+          "line": 42,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "paginates change batches and checkpoints without dropping rows",
+          "line": 53,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "holds back newer commits until every older writer completes, even when sequence allocation is reversed",
+          "line": 66,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls events back with their operation and emits deletion tombstones",
+          "line": 83,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "never sends an obsolete record state when an older XID writes after a newer XID",
+          "line": 95,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "prevents the runtime role from tampering with the event journal while allowing trigger writes",
+          "line": 113,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "publishes responsibility changes and transfers made inside Inventory",
+          "line": 119,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "enforces a durable per-key stream quota across IP addresses and returns retry headers",
+          "line": 134,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "all snapshots use explicit matching allowlists and never expose employee contacts or internal data",
+          "status": "passed"
+        },
+        {
+          "title": "paginates change batches and checkpoints without dropping rows",
+          "status": "passed"
+        },
+        {
+          "title": "holds back newer commits until every older writer completes, even when sequence allocation is reversed",
+          "status": "passed"
+        },
+        {
+          "title": "rolls events back with their operation and emits deletion tombstones",
+          "status": "passed"
+        },
+        {
+          "title": "never sends an obsolete record state when an older XID writes after a newer XID",
+          "status": "passed"
+        },
+        {
+          "title": "prevents the runtime role from tampering with the event journal while allowing trigger writes",
+          "status": "passed"
+        },
+        {
+          "title": "publishes responsibility changes and transfers made inside Inventory",
+          "status": "passed"
+        },
+        {
+          "title": "enforces a durable per-key stream quota across IP addresses and returns retry headers",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/inventory-audit-enrichment.test.ts",
+      "passed": 32,
+      "startTime": 1794203058371,
+      "declarations": [
+        {
+          "title": "uses material API and fixed asset evidence, previews without edits, and persists the agreed code and source name atomically",
+          "line": 52,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reproduces the old 1C foreign-key deletion failure without changing the migrated schema",
+          "line": 76,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "administrator deletes a 1C matched card, including a published link: %s",
+          "line": 95,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "rolls back the complete deletion when another selected card has protected local history",
+          "line": 123,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "refuses deletion by a non-administrator before changing 1C references",
+          "line": 142,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "a previously approved 1C link cannot recreate or publish a deleted target",
+          "line": 148,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "retains the card and financial case with a specific deletion conflict",
+          "line": 163,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls back item deletion and detached 1C references if writing its audit fails",
+          "line": 189,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "skips a rename that breaks a shared monitor/system-unit number, including an archived peer, without blocking other cards",
+          "line": 206,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows a compatible shared-number rename or code-only update: $sourceName",
+          "line": 224,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "persists both preferred 1C values even when Excel supplies a different code",
+          "line": 236,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "applies a materials API-only name and code, audits its source, and replays once",
+          "line": 247,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "applies a 1C-only name and code without depending on Excel confirmation",
+          "line": 260,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reviews and audits replacement of an existing code with the preferred source code",
+          "line": 269,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists the agreed name and code from the selected 1C batch and Excel when there is no current-registry copy",
+          "line": 282,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not choose between conflicting selected and current names even when the codes and numbers agree",
+          "line": 298,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "checks a contradictory current 1C copy even when its changed identifier no longer matches any card",
+          "line": 309,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "checks a contradictory selected 1C copy even when only the current registry matches the card",
+          "line": 322,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "only the administrator receives the saved code while warehouse searches keep published numbers and barcodes",
+          "line": 335,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "skips duplicate 1C identifiers rather than selecting the first source",
+          "line": 362,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a stale item after preview and never overwrites a newer administrator edit",
+          "line": 372,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a changed material API source even when its identifiers still agree",
+          "line": 382,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a changed current 1C registry while keeping the reviewed batch immutable",
+          "line": 392,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects an employee actor for both preview and apply",
+          "line": 402,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rechecks a revoked administrator's persisted role inside the mutation",
+          "line": 412,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects an outdated session even while the persisted user remains an administrator",
+          "line": 422,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "replays the exact applied plan after a lost response without changing the item or duplicating audit records",
+          "line": 432,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls the item update back when its audit record cannot be persisted",
+          "line": 445,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "returns a recoverable domain conflict if the duplicate policy rejects an apply, with all changes rolled back",
+          "line": 469,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "serializes simultaneous applications of the same reviewed plan and safely replays after settlement",
+          "line": 493,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "uses material API and fixed asset evidence, previews without edits, and persists the agreed code and source name atomically",
+          "status": "passed"
+        },
+        {
+          "title": "reproduces the old 1C foreign-key deletion failure without changing the migrated schema",
+          "status": "passed"
+        },
+        {
+          "title": "administrator deletes a 1C matched card, including a published link: false",
+          "status": "passed"
+        },
+        {
+          "title": "administrator deletes a 1C matched card, including a published link: true",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back the complete deletion when another selected card has protected local history",
+          "status": "passed"
+        },
+        {
+          "title": "refuses deletion by a non-administrator before changing 1C references",
+          "status": "passed"
+        },
+        {
+          "title": "a previously approved 1C link cannot recreate or publish a deleted target",
+          "status": "passed"
+        },
+        {
+          "title": "retains the card and financial case with a specific deletion conflict",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back item deletion and detached 1C references if writing its audit fails",
+          "status": "passed"
+        },
+        {
+          "title": "skips a rename that breaks a shared monitor/system-unit number, including an archived peer, without blocking other cards",
+          "status": "passed"
+        },
+        {
+          "title": "allows a compatible shared-number rename or code-only update: 'Монитор Dell №2411/00388'",
+          "status": "passed"
+        },
+        {
+          "title": "allows a compatible shared-number rename or code-only update: 'Монитор'",
+          "status": "passed"
+        },
+        {
+          "title": "persists both preferred 1C values even when Excel supplies a different code",
+          "status": "passed"
+        },
+        {
+          "title": "applies a materials API-only name and code, audits its source, and replays once",
+          "status": "passed"
+        },
+        {
+          "title": "applies a 1C-only name and code without depending on Excel confirmation",
+          "status": "passed"
+        },
+        {
+          "title": "reviews and audits replacement of an existing code with the preferred source code",
+          "status": "passed"
+        },
+        {
+          "title": "persists the agreed name and code from the selected 1C batch and Excel when there is no current-registry copy",
+          "status": "passed"
+        },
+        {
+          "title": "does not choose between conflicting selected and current names even when the codes and numbers agree",
+          "status": "passed"
+        },
+        {
+          "title": "checks a contradictory current 1C copy even when its changed identifier no longer matches any card",
+          "status": "passed"
+        },
+        {
+          "title": "checks a contradictory selected 1C copy even when only the current registry matches the card",
+          "status": "passed"
+        },
+        {
+          "title": "only the administrator receives the saved code while warehouse searches keep published numbers and barcodes",
+          "status": "passed"
+        },
+        {
+          "title": "skips duplicate 1C identifiers rather than selecting the first source",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a stale item after preview and never overwrites a newer administrator edit",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a changed material API source even when its identifiers still agree",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a changed current 1C registry while keeping the reviewed batch immutable",
+          "status": "passed"
+        },
+        {
+          "title": "rejects an employee actor for both preview and apply",
+          "status": "passed"
+        },
+        {
+          "title": "rechecks a revoked administrator's persisted role inside the mutation",
+          "status": "passed"
+        },
+        {
+          "title": "rejects an outdated session even while the persisted user remains an administrator",
+          "status": "passed"
+        },
+        {
+          "title": "replays the exact applied plan after a lost response without changing the item or duplicating audit records",
+          "status": "passed"
+        },
+        {
+          "title": "rolls the item update back when its audit record cannot be persisted",
+          "status": "passed"
+        },
+        {
+          "title": "returns a recoverable domain conflict if the duplicate policy rejects an apply, with all changes rolled back",
+          "status": "passed"
+        },
+        {
+          "title": "serializes simultaneous applications of the same reviewed plan and safely replays after settlement",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/inventory-collection-cursor.test.ts",
+      "passed": 5,
+      "startTime": 1794203069577,
+      "declarations": [
+        {
+          "title": "does not skip the 501st row when a page boundary has microsecond precision",
+          "line": 31,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "applies direct, room, and decommissioned assignment scopes before hydration",
+          "line": 68,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows only one monitor/system-unit pair and keeps duplicate scans unambiguous",
+          "line": 142,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "hydrates closed-cabinet scope for scanned items and component history",
+          "line": 227,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "commits a batch composition atomically and rolls back relations and audits on a later conflict",
+          "line": 333,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "does not skip the 501st row when a page boundary has microsecond precision",
+          "status": "passed"
+        },
+        {
+          "title": "applies direct, room, and decommissioned assignment scopes before hydration",
+          "status": "passed"
+        },
+        {
+          "title": "allows only one monitor/system-unit pair and keeps duplicate scans unambiguous",
+          "status": "passed"
+        },
+        {
+          "title": "hydrates closed-cabinet scope for scanned items and component history",
+          "status": "passed"
+        },
+        {
+          "title": "commits a batch composition atomically and rolls back relations and audits on a later conflict",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/inventory-policy-adversarial.test.ts",
+      "passed": 10,
+      "startTime": 1794203071794,
+      "declarations": [
+        {
+          "title": "bulk 1C code persists with leading zeroes, reloads in cards and rolls back an incomplete batch",
+          "line": 40,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "bulk project flag persists for all selected items and rolls back a batch with an unavailable item",
+          "line": 74,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "attack: two components with empty numbers insert and edit without duplicate or registry constraint failure",
+          "line": 117,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "attack: clearing a component number removes official barcode without persisting blank history",
+          "line": 129,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves the original %s number and its replacement independently of the item name",
+          "line": 140,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "keeps the submitted %s through creation, renaming, moving and status changes",
+          "line": 157,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "attack: broken status persists and warehouse restoration changes only status",
+          "line": 178,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "attack: dormitory asset SQL projection keeps broken status and empty number",
+          "line": 188,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "bulk 1C code persists with leading zeroes, reloads in cards and rolls back an incomplete batch",
+          "status": "passed"
+        },
+        {
+          "title": "bulk project flag persists for all selected items and rolls back a batch with an unavailable item",
+          "status": "passed"
+        },
+        {
+          "title": "attack: two components with empty numbers insert and edit without duplicate or registry constraint failure",
+          "status": "passed"
+        },
+        {
+          "title": "attack: clearing a component number removes official barcode without persisting blank history",
+          "status": "passed"
+        },
+        {
+          "title": "preserves the original official number and its replacement independently of the item name",
+          "status": "passed"
+        },
+        {
+          "title": "preserves the original temporary number and its replacement independently of the item name",
+          "status": "passed"
+        },
+        {
+          "title": "keeps the submitted inventoryNumber through creation, renaming, moving and status changes",
+          "status": "passed"
+        },
+        {
+          "title": "keeps the submitted barcode through creation, renaming, moving and status changes",
+          "status": "passed"
+        },
+        {
+          "title": "attack: broken status persists and warehouse restoration changes only status",
+          "status": "passed"
+        },
+        {
+          "title": "attack: dormitory asset SQL projection keeps broken status and empty number",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/inventory-source-audit-metadata-attacks.test.ts",
+      "passed": 2,
+      "startTime": 1794203074373,
+      "declarations": [
+        {
+          "title": "invalidates saved missing evidence when a new GUID link changes a later dry-run without bumping the item version",
+          "line": 33,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves the saved total and reports every removal when no live cards remain",
+          "line": 57,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "invalidates saved missing evidence when a new GUID link changes a later dry-run without bumping the item version",
+          "status": "passed"
+        },
+        {
+          "title": "preserves the saved total and reports every removal when no live cards remain",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/inventory-transfer-override.test.ts",
+      "passed": 4,
+      "startTime": 1794203076320,
+      "declarations": [
+        {
+          "title": "commits only a transfer-bound live-admin assignment and its audit",
+          "line": 39,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a stale transfer whose open responsibility belongs to a sibling owner",
+          "line": 128,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "SQL CAS rejects spoofed/revoked admins and an inactive assignment target",
+          "line": 150,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls back the transfer update when the responsibility close CAS loses",
+          "line": 205,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "commits only a transfer-bound live-admin assignment and its audit",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a stale transfer whose open responsibility belongs to a sibling owner",
+          "status": "passed"
+        },
+        {
+          "title": "SQL CAS rejects spoofed/revoked admins and an inactive assignment target",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back the transfer update when the responsibility close CAS loses",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/item-responsible-form.test.ts",
+      "passed": 6,
+      "startTime": 1794203079309,
+      "declarations": [
+        {
+          "title": "creates and replaces the open responsibility period in the item transaction",
+          "line": 41,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows an administrator to correct an official number and preserves its history",
+          "line": 164,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows the restricted runtime role to change an official number",
+          "line": 253,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "records decommissioned use without optional evidence and restores the item only through audited actions",
+          "line": 291,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "saves printer models in the same room across lifecycle states without false version conflicts",
+          "line": 371,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "returns the responsible employee name immediately after a room assignment",
+          "line": 421,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "creates and replaces the open responsibility period in the item transaction",
+          "status": "passed"
+        },
+        {
+          "title": "allows an administrator to correct an official number and preserves its history",
+          "status": "passed"
+        },
+        {
+          "title": "allows the restricted runtime role to change an official number",
+          "status": "passed"
+        },
+        {
+          "title": "records decommissioned use without optional evidence and restores the item only through audited actions",
+          "status": "passed"
+        },
+        {
+          "title": "saves printer models in the same room across lifecycle states without false version conflicts",
+          "status": "passed"
+        },
+        {
+          "title": "returns the responsible employee name immediately after a room assignment",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/legacy-transfer-http.test.ts",
+      "passed": 5,
+      "startTime": 1794203081704,
+      "declarations": [
+        {
+          "title": "shows transfers only to participants and hides foreign decisions like missing IDs",
+          "line": 34,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows only one concurrent confirmation and persists one handoff with its audit",
+          "line": 52,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves ownership after rejection and saves the normalized reason",
+          "line": 64,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a changed owner snapshot without changing responsibility or writing an audit",
+          "line": 75,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "lets the requester cancel once while foreign users cannot cancel or reveal the transfer",
+          "line": 85,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "shows transfers only to participants and hides foreign decisions like missing IDs",
+          "status": "passed"
+        },
+        {
+          "title": "allows only one concurrent confirmation and persists one handoff with its audit",
+          "status": "passed"
+        },
+        {
+          "title": "preserves ownership after rejection and saves the normalized reason",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a changed owner snapshot without changing responsibility or writing an audit",
+          "status": "passed"
+        },
+        {
+          "title": "lets the requester cancel once while foreign users cannot cancel or reveal the transfer",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/local-barcodes.test.ts",
+      "passed": 1,
+      "startTime": 1794203084643,
+      "declarations": [
+        {
+          "title": "enforces the shared namespace, active quantity bound, append-only history and non-reused sequence",
+          "line": 26,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "enforces the shared namespace, active quantity bound, append-only history and non-reused sequence",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/maintenance-resolution.test.ts",
+      "passed": 5,
+      "startTime": 1794203086623,
+      "declarations": [
+        {
+          "title": "resolves a maintenance item to %s and returns its new state",
+          "line": 32,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "rejects a formerly privileged user's repair request after demotion to %s",
+          "line": 60,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "rejects resolution after an item has left maintenance without writing an audit",
+          "line": 72,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "resolves a maintenance item to active and returns its new state",
+          "status": "passed"
+        },
+        {
+          "title": "resolves a maintenance item to decommissioned and returns its new state",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a formerly privileged user's repair request after demotion to employee",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a formerly privileged user's repair request after demotion to warehouse",
+          "status": "passed"
+        },
+        {
+          "title": "rejects resolution after an item has left maintenance without writing an audit",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/one-c-fixed-assets.test.ts",
+      "passed": 13,
+      "startTime": 1794203089263,
+      "declarations": [
+        {
+          "title": "declares the migrated table contract and grants runtime write access",
+          "line": 50,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "stores an uploaded XLS privately, selects it for dry-run, and reuses identical bytes",
+          "line": 67,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "runs the real dry-run with an active site barcode while ignoring retired Excel input",
+          "line": 94,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reports a slashless 1C number as a possible match while keeping publication blocked",
+          "line": 176,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reparses an immutable old XLS snapshot, recovers description numbers and preserves saved evidence",
+          "line": 208,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "recovers all number references from an old XLS and ranks duplicate source names without changing publication",
+          "line": 277,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "searches published 1C identifiers for created and linked items while ignoring later unpublished imports",
+          "line": 353,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "creates an immutable, idempotent import snapshot alongside the inbox projection",
+          "line": 429,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "holds the per-key import lease across independent pool clients",
+          "line": 449,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "classifies concurrent create, unchanged replay, and update without a pre-select race",
+          "line": 461,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "replays differently-cased UUIDs into one canonical inbox row",
+          "line": 475,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls the entire batch back when a later record cannot be serialized",
+          "line": 488,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "cancels and rolls back an import that exceeds the whole transaction deadline",
+          "line": 494,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "declares the migrated table contract and grants runtime write access",
+          "status": "passed"
+        },
+        {
+          "title": "stores an uploaded XLS privately, selects it for dry-run, and reuses identical bytes",
+          "status": "passed"
+        },
+        {
+          "title": "runs the real dry-run with an active site barcode while ignoring retired Excel input",
+          "status": "passed"
+        },
+        {
+          "title": "reports a slashless 1C number as a possible match while keeping publication blocked",
+          "status": "passed"
+        },
+        {
+          "title": "reparses an immutable old XLS snapshot, recovers description numbers and preserves saved evidence",
+          "status": "passed"
+        },
+        {
+          "title": "recovers all number references from an old XLS and ranks duplicate source names without changing publication",
+          "status": "passed"
+        },
+        {
+          "title": "searches published 1C identifiers for created and linked items while ignoring later unpublished imports",
+          "status": "passed"
+        },
+        {
+          "title": "creates an immutable, idempotent import snapshot alongside the inbox projection",
+          "status": "passed"
+        },
+        {
+          "title": "holds the per-key import lease across independent pool clients",
+          "status": "passed"
+        },
+        {
+          "title": "classifies concurrent create, unchanged replay, and update without a pre-select race",
+          "status": "passed"
+        },
+        {
+          "title": "replays differently-cased UUIDs into one canonical inbox row",
+          "status": "passed"
+        },
+        {
+          "title": "rolls the entire batch back when a later record cannot be serialized",
+          "status": "passed"
+        },
+        {
+          "title": "cancels and rolls back an import that exceeds the whole transaction deadline",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/one-c-material-audit.test.ts",
+      "passed": 60,
+      "startTime": 1794203092112,
+      "declarations": [
+        {
+          "title": "moves all six code-confirmed temporary examples into MP after %s import and reduces unmatched without modifying cards",
+          "line": 46,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "saves the exact current MOL's MP price when the same code has a different price under another owner",
+          "line": 105,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "lists and exports temporary OS code matches in MP and saves a unanimous price shared by several OS GUIDs",
+          "line": 121,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reviews and updates all current OS and MP without any batch analysis, with atomic audit and replay",
+          "line": 144,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "applies a matched MP price even when the name and code come from OS without an initial cost",
+          "line": 171,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "writes only price when OS and MP share a permanent card's code and the available price agrees",
+          "line": 184,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "matches multiple temporary cards by full name and current non-whitelisted owner, then updates the selected MP code/name/price",
+          "line": 198,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "selects an active priced source across OS and MP and keeps its price with its code",
+          "line": 226,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "invalidates a name-owner preview when the current owner's full name changes without an item version change",
+          "line": 243,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "writes the chosen OS code, full source name and initial cost from a matching current owner",
+          "line": 258,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not use matching full names with missing or different source owner %s",
+          "line": 280,
+          "parameterized": true,
+          "executedVariants": 3
+        },
+        {
+          "title": "keeps anonymous temporary %s unmatched across analytics, export and apply",
+          "line": 293,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "does not confirm or change price from a unique material name without an identifier",
+          "line": 314,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "writes the reported cabinet code and price when its identifier is in the site name",
+          "line": 326,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "confirms and updates temporary cards from their exact MP code without inventory identifiers",
+          "line": 338,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "checks all temporary cards against OS and MP and applies each register's own name and price",
+          "line": 352,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects whole-registry changes after preview, including source-only changes",
+          "line": 382,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves conflicting material metadata while allowing a unanimous price for the identified code",
+          "line": 395,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "previews and applies exact unit prices with audit, while stale site prices cannot be overwritten",
+          "line": 403,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "maps complete MOL names to the approved short site user for all matching material cards",
+          "line": 422,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "uses initial OS cost for one asset and preserves price when only residual cost is supplied",
+          "line": 440,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "only active cards enter proposals while the whole current OS register is searched",
+          "line": 456,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "counts live sources and distinct cards without saving a dry-run or adding balances to card totals",
+          "line": 467,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reconciles only active Inventory cards against all OS records",
+          "line": 496,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "updates a uniquely identified MP despite spaces and punctuation, and keeps unmatched temporary cards separate",
+          "line": 532,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "runs the maintenance CLI as preview or apply and reports missing accounts without silently assigning them",
+          "line": 552,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "backfills a %s MOL-labelled owner in %s by complete number without changing other card fields",
+          "line": 581,
+          "parameterized": true,
+          "executedVariants": 4
+        },
+        {
+          "title": "excludes only the selected system units from %s backfill and leaves a shared-number monitor assignable",
+          "line": 608,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "fills both vacant owners for a shared monitor/system number without renaming either card",
+          "line": 632,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps an independently confirmed owner when renaming is blocked by %s",
+          "line": 649,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "fills missing owners across OS and MP, preserving assigned cards and replaying safely",
+          "line": 666,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "never assigns a grouped chair card through either current enrichment or missing-owner backfill",
+          "line": 696,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "fills an empty responsibility from exact %s code and exposes the item in the recipient account",
+          "line": 715,
+          "parameterized": true,
+          "executedVariants": 2
+        },
+        {
+          "title": "source names and barcode tokens update general and IT cards without structured source numbers",
+          "line": 740,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves responsibility for any other person and for contradictory MOL balances",
+          "line": 753,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "blocks stale recipient or responsibility changes and leaves all card fields untouched",
+          "line": 768,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not overwrite an owner assigned after the integration preview",
+          "line": 780,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "existing responsibilities stay unchanged during and after pending transfers",
+          "line": 795,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves an owner during a current TMC request while still updating the confirmed name and price",
+          "line": 816,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a reviewed owner proposal after a current TMC request starts or changes version",
+          "line": 835,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls back owner history and card updates together if the responsibility audit cannot be saved",
+          "line": 857,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "represents absent materials as an unavailable source and counts temporary cards separately",
+          "line": 876,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "creates dry-run without Excel and keeps all MOL balances, source fields and fingerprints",
+          "line": 884,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "blocks enrichment when a nonmatching MOL balance contradicts the chosen material's %s",
+          "line": 925,
+          "parameterized": true,
+          "executedVariants": 3
+        },
+        {
+          "title": "invalidates a reviewed proposal after a material API update without requiring an Excel upload",
+          "line": 946,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "ignores archived Excel bytes, zero/negative balances and superseded aggregate rows",
+          "line": 965,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "still runs fixed-asset audit before materials arrive, without requiring any Excel",
+          "line": 981,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "exports API provenance, all balances, prices and MOL without relabelling historic XLS reports",
+          "line": 991,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "moves all six code-confirmed temporary examples into MP after OS import and reduces unmatched without modifying cards",
+          "status": "passed"
+        },
+        {
+          "title": "moves all six code-confirmed temporary examples into MP after MP import and reduces unmatched without modifying cards",
+          "status": "passed"
+        },
+        {
+          "title": "saves the exact current MOL's MP price when the same code has a different price under another owner",
+          "status": "passed"
+        },
+        {
+          "title": "lists and exports temporary OS code matches in MP and saves a unanimous price shared by several OS GUIDs",
+          "status": "passed"
+        },
+        {
+          "title": "reviews and updates all current OS and MP without any batch analysis, with atomic audit and replay",
+          "status": "passed"
+        },
+        {
+          "title": "applies a matched MP price even when the name and code come from OS without an initial cost",
+          "status": "passed"
+        },
+        {
+          "title": "writes only price when OS and MP share a permanent card's code and the available price agrees",
+          "status": "passed"
+        },
+        {
+          "title": "matches multiple temporary cards by full name and current non-whitelisted owner, then updates the selected MP code/name/price",
+          "status": "passed"
+        },
+        {
+          "title": "selects an active priced source across OS and MP and keeps its price with its code",
+          "status": "passed"
+        },
+        {
+          "title": "invalidates a name-owner preview when the current owner's full name changes without an item version change",
+          "status": "passed"
+        },
+        {
+          "title": "writes the chosen OS code, full source name and initial cost from a matching current owner",
+          "status": "passed"
+        },
+        {
+          "title": "does not use matching full names with missing or different source owner null",
+          "status": "passed"
+        },
+        {
+          "title": "does not use matching full names with missing or different source owner ",
+          "status": "passed"
+        },
+        {
+          "title": "does not use matching full names with missing or different source owner Петров Петр Петрович",
+          "status": "passed"
+        },
+        {
+          "title": "keeps anonymous temporary Стол unmatched across analytics, export and apply",
+          "status": "passed"
+        },
+        {
+          "title": "keeps anonymous temporary шкаф 800*400*2000 от 09.10.24 unmatched across analytics, export and apply",
+          "status": "passed"
+        },
+        {
+          "title": "does not confirm or change price from a unique material name without an identifier",
+          "status": "passed"
+        },
+        {
+          "title": "writes the reported cabinet code and price when its identifier is in the site name",
+          "status": "passed"
+        },
+        {
+          "title": "confirms and updates temporary cards from their exact MP code without inventory identifiers",
+          "status": "passed"
+        },
+        {
+          "title": "checks all temporary cards against OS and MP and applies each register's own name and price",
+          "status": "passed"
+        },
+        {
+          "title": "rejects whole-registry changes after preview, including source-only changes",
+          "status": "passed"
+        },
+        {
+          "title": "preserves conflicting material metadata while allowing a unanimous price for the identified code",
+          "status": "passed"
+        },
+        {
+          "title": "previews and applies exact unit prices with audit, while stale site prices cannot be overwritten",
+          "status": "passed"
+        },
+        {
+          "title": "maps complete MOL names to the approved short site user for all matching material cards",
+          "status": "passed"
+        },
+        {
+          "title": "uses initial OS cost for one asset and preserves price when only residual cost is supplied",
+          "status": "passed"
+        },
+        {
+          "title": "only active cards enter proposals while the whole current OS register is searched",
+          "status": "passed"
+        },
+        {
+          "title": "counts live sources and distinct cards without saving a dry-run or adding balances to card totals",
+          "status": "passed"
+        },
+        {
+          "title": "reconciles only active Inventory cards against all OS records",
+          "status": "passed"
+        },
+        {
+          "title": "updates a uniquely identified MP despite spaces and punctuation, and keeps unmatched temporary cards separate",
+          "status": "passed"
+        },
+        {
+          "title": "runs the maintenance CLI as preview or apply and reports missing accounts without silently assigning them",
+          "status": "passed"
+        },
+        {
+          "title": "backfills a OS MOL-labelled owner in general by complete number without changing other card fields",
+          "status": "passed"
+        },
+        {
+          "title": "backfills a MP MOL-labelled owner in general by complete number without changing other card fields",
+          "status": "passed"
+        },
+        {
+          "title": "backfills a OS MOL-labelled owner in it by complete number without changing other card fields",
+          "status": "passed"
+        },
+        {
+          "title": "backfills a MP MOL-labelled owner in it by complete number without changing other card fields",
+          "status": "passed"
+        },
+        {
+          "title": "excludes only the selected system units from OS backfill and leaves a shared-number monitor assignable",
+          "status": "passed"
+        },
+        {
+          "title": "excludes only the selected system units from MP backfill and leaves a shared-number monitor assignable",
+          "status": "passed"
+        },
+        {
+          "title": "fills both vacant owners for a shared monitor/system number without renaming either card",
+          "status": "passed"
+        },
+        {
+          "title": "keeps an independently confirmed owner when renaming is blocked by name_invalid",
+          "status": "passed"
+        },
+        {
+          "title": "keeps an independently confirmed owner when renaming is blocked by shared_number_conflict",
+          "status": "passed"
+        },
+        {
+          "title": "fills missing owners across OS and MP, preserving assigned cards and replaying safely",
+          "status": "passed"
+        },
+        {
+          "title": "never assigns a grouped chair card through either current enrichment or missing-owner backfill",
+          "status": "passed"
+        },
+        {
+          "title": "fills an empty responsibility from exact OS code and exposes the item in the recipient account",
+          "status": "passed"
+        },
+        {
+          "title": "fills an empty responsibility from exact MP code and exposes the item in the recipient account",
+          "status": "passed"
+        },
+        {
+          "title": "source names and barcode tokens update general and IT cards without structured source numbers",
+          "status": "passed"
+        },
+        {
+          "title": "preserves responsibility for any other person and for contradictory MOL balances",
+          "status": "passed"
+        },
+        {
+          "title": "blocks stale recipient or responsibility changes and leaves all card fields untouched",
+          "status": "passed"
+        },
+        {
+          "title": "does not overwrite an owner assigned after the integration preview",
+          "status": "passed"
+        },
+        {
+          "title": "existing responsibilities stay unchanged during and after pending transfers",
+          "status": "passed"
+        },
+        {
+          "title": "preserves an owner during a current TMC request while still updating the confirmed name and price",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a reviewed owner proposal after a current TMC request starts or changes version",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back owner history and card updates together if the responsibility audit cannot be saved",
+          "status": "passed"
+        },
+        {
+          "title": "represents absent materials as an unavailable source and counts temporary cards separately",
+          "status": "passed"
+        },
+        {
+          "title": "creates dry-run without Excel and keeps all MOL balances, source fields and fingerprints",
+          "status": "passed"
+        },
+        {
+          "title": "blocks enrichment when a nonmatching MOL balance contradicts the chosen material's name",
+          "status": "passed"
+        },
+        {
+          "title": "blocks enrichment when a nonmatching MOL balance contradicts the chosen material's number",
+          "status": "passed"
+        },
+        {
+          "title": "blocks enrichment when a nonmatching MOL balance contradicts the chosen material's barcode",
+          "status": "passed"
+        },
+        {
+          "title": "invalidates a reviewed proposal after a material API update without requiring an Excel upload",
+          "status": "passed"
+        },
+        {
+          "title": "ignores archived Excel bytes, zero/negative balances and superseded aggregate rows",
+          "status": "passed"
+        },
+        {
+          "title": "still runs fixed-asset audit before materials arrive, without requiring any Excel",
+          "status": "passed"
+        },
+        {
+          "title": "exports API provenance, all balances, prices and MOL without relabelling historic XLS reports",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/one-c-materials.test.ts",
+      "passed": 23,
+      "startTime": 1794203115101,
+      "declarations": [
+        {
+          "title": "grants runtime upsert privileges and protects immutable source rows",
+          "line": 47,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps one material's prices separate by warehouse and never changes fixed assets or Inventory",
+          "line": 60,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps null price distinct from zero and exact signed decimal balances",
+          "line": 74,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "stores 7, 15 and 1 at different MOLs separately, including independent accounts and warehouses",
+          "line": 88,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "stores maximal encoded dimension keys, including escaped characters, without index overflow",
+          "line": 113,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows renaming a MOL but retains known GUID and rejects changed or reused person identity",
+          "line": 126,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not merge identical names with different MOL GUIDs or a genuinely unspecified MOL",
+          "line": 139,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "moves quantities only via explicit zero updates and cannot replay an old balance over newer quantities",
+          "line": 149,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "requires an explicit newer legacy transition, archives the aggregate, and cannot restore it by replay",
+          "line": 161,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects mixed-version packets, conflicting MOL GUIDs and duplicate complete keys atomically",
+          "line": 180,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "stores responsible source details in current and historical rows without duplicating the position",
+          "line": 189,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "replays XML accepted before responsible fields existed with the same payload hash",
+          "line": 208,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "replays an accepted XML without reverting balances from a newer snapshot",
+          "line": 218,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "accepts changed values only on newer snapshots and distinguishes changed versus unchanged",
+          "line": 228,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects stale new XML and competing values at an equal snapshot date atomically",
+          "line": 236,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects GUID contradictions, duplicate keys, and reused hashes with other payloads",
+          "line": 244,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps known GUID identity when a later packet omits GUID and rejects contradictory codes",
+          "line": 254,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls back all rows if one row conflicts and retains balances omitted from later files",
+          "line": 268,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "fails quickly on concurrent imports without holding an extra lease connection",
+          "line": 277,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "works with a runtime pool of one connection",
+          "line": 290,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rolls back source snapshots and balances when a statement exceeds its deadline",
+          "line": 300,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "overrides the pool's client query timeout for a supported longer import",
+          "line": 313,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "imports 50,000 rows in one transaction without per-row SQL",
+          "line": 328,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "grants runtime upsert privileges and protects immutable source rows",
+          "status": "passed"
+        },
+        {
+          "title": "keeps one material's prices separate by warehouse and never changes fixed assets or Inventory",
+          "status": "passed"
+        },
+        {
+          "title": "keeps null price distinct from zero and exact signed decimal balances",
+          "status": "passed"
+        },
+        {
+          "title": "stores 7, 15 and 1 at different MOLs separately, including independent accounts and warehouses",
+          "status": "passed"
+        },
+        {
+          "title": "stores maximal encoded dimension keys, including escaped characters, without index overflow",
+          "status": "passed"
+        },
+        {
+          "title": "allows renaming a MOL but retains known GUID and rejects changed or reused person identity",
+          "status": "passed"
+        },
+        {
+          "title": "does not merge identical names with different MOL GUIDs or a genuinely unspecified MOL",
+          "status": "passed"
+        },
+        {
+          "title": "moves quantities only via explicit zero updates and cannot replay an old balance over newer quantities",
+          "status": "passed"
+        },
+        {
+          "title": "requires an explicit newer legacy transition, archives the aggregate, and cannot restore it by replay",
+          "status": "passed"
+        },
+        {
+          "title": "rejects mixed-version packets, conflicting MOL GUIDs and duplicate complete keys atomically",
+          "status": "passed"
+        },
+        {
+          "title": "stores responsible source details in current and historical rows without duplicating the position",
+          "status": "passed"
+        },
+        {
+          "title": "replays XML accepted before responsible fields existed with the same payload hash",
+          "status": "passed"
+        },
+        {
+          "title": "replays an accepted XML without reverting balances from a newer snapshot",
+          "status": "passed"
+        },
+        {
+          "title": "accepts changed values only on newer snapshots and distinguishes changed versus unchanged",
+          "status": "passed"
+        },
+        {
+          "title": "rejects stale new XML and competing values at an equal snapshot date atomically",
+          "status": "passed"
+        },
+        {
+          "title": "rejects GUID contradictions, duplicate keys, and reused hashes with other payloads",
+          "status": "passed"
+        },
+        {
+          "title": "keeps known GUID identity when a later packet omits GUID and rejects contradictory codes",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back all rows if one row conflicts and retains balances omitted from later files",
+          "status": "passed"
+        },
+        {
+          "title": "fails quickly on concurrent imports without holding an extra lease connection",
+          "status": "passed"
+        },
+        {
+          "title": "works with a runtime pool of one connection",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back source snapshots and balances when a statement exceeds its deadline",
+          "status": "passed"
+        },
+        {
+          "title": "overrides the pool's client query timeout for a supported longer import",
+          "status": "passed"
+        },
+        {
+          "title": "imports 50,000 rows in one transaction without per-row SQL",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/one-c-reconciliation-http.test.ts",
+      "passed": 5,
+      "startTime": 1794203124922,
+      "declarations": [
+        {
+          "title": "finds batch rows by each supported identifier, location and responsible person",
+          "line": 49,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps approval guards after analysis: verified=$verified blocked=$blocked",
+          "line": 64,
+          "parameterized": true,
+          "executedVariants": 4
+        }
+      ],
+      "results": [
+        {
+          "title": "finds batch rows by each supported identifier, location and responsible person",
+          "status": "passed"
+        },
+        {
+          "title": "keeps approval guards after analysis: verified=false blocked=true",
+          "status": "passed"
+        },
+        {
+          "title": "keeps approval guards after analysis: verified=false blocked=false",
+          "status": "passed"
+        },
+        {
+          "title": "keeps approval guards after analysis: verified=true blocked=true",
+          "status": "passed"
+        },
+        {
+          "title": "keeps approval guards after analysis: verified=true blocked=false",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/persistent-users.test.ts",
+      "passed": 10,
+      "startTime": 1794203128067,
+      "declarations": [
+        {
+          "title": "permits exactly one concurrent bootstrap and survives a pool restart",
+          "line": 45,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "assigns unique server codes and enforces normalized unique email",
+          "line": 77,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists and refreshes Yessenov personnel claims without granting a role",
+          "line": 98,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps at least one active admin under concurrent deactivation",
+          "line": 152,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "cannot race employee authorization against an admin promotion",
+          "line": 200,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "reloads actor authority after a concurrent demotion commits",
+          "line": 241,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "keeps credentials attached to committed users",
+          "line": 282,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "grants runtime deletion only for ephemeral security data",
+          "line": 309,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "enforces and clears a durable cross-instance rate limit",
+          "line": 332,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows a profile without a phone across reconnection",
+          "line": 358,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "permits exactly one concurrent bootstrap and survives a pool restart",
+          "status": "passed"
+        },
+        {
+          "title": "assigns unique server codes and enforces normalized unique email",
+          "status": "passed"
+        },
+        {
+          "title": "persists and refreshes Yessenov personnel claims without granting a role",
+          "status": "passed"
+        },
+        {
+          "title": "keeps at least one active admin under concurrent deactivation",
+          "status": "passed"
+        },
+        {
+          "title": "cannot race employee authorization against an admin promotion",
+          "status": "passed"
+        },
+        {
+          "title": "reloads actor authority after a concurrent demotion commits",
+          "status": "passed"
+        },
+        {
+          "title": "keeps credentials attached to committed users",
+          "status": "passed"
+        },
+        {
+          "title": "grants runtime deletion only for ephemeral security data",
+          "status": "passed"
+        },
+        {
+          "title": "enforces and clears a durable cross-instance rate limit",
+          "status": "passed"
+        },
+        {
+          "title": "allows a profile without a phone across reconnection",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/photo-contracts.test.ts",
+      "passed": 5,
+      "startTime": 1794203130696,
+      "declarations": [
+        {
+          "title": "enforces the inspection/dispute photo size and pixel envelope",
+          "line": 40,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "requires object keys and attached preview metadata",
+          "line": 75,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "enforces attached, superseded, and removed lifecycle transitions",
+          "line": 128,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "can reapply the lifecycle migration without duplicate triggers",
+          "line": 316,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists and reads service-request bytea through the PostgreSQL repository",
+          "line": 343,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "enforces the inspection/dispute photo size and pixel envelope",
+          "status": "passed"
+        },
+        {
+          "title": "requires object keys and attached preview metadata",
+          "status": "passed"
+        },
+        {
+          "title": "enforces attached, superseded, and removed lifecycle transitions",
+          "status": "passed"
+        },
+        {
+          "title": "can reapply the lifecycle migration without duplicate triggers",
+          "status": "passed"
+        },
+        {
+          "title": "persists and reads service-request bytea through the PostgreSQL repository",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/room-duplicate-prevention.test.ts",
+      "passed": 3,
+      "startTime": 1794203133510,
+      "declarations": [
+        {
+          "title": "recognizes an existing cabinet even with an old designation key",
+          "line": 44,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "creates one cabinet when two administrators submit equivalent names together",
+          "line": 67,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "serializes a room creation against a rename to the same cabinet",
+          "line": 87,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "recognizes an existing cabinet even with an old designation key",
+          "status": "passed"
+        },
+        {
+          "title": "creates one cabinet when two administrators submit equivalent names together",
+          "status": "passed"
+        },
+        {
+          "title": "serializes a room creation against a rename to the same cabinet",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/room-passports.test.ts",
+      "passed": 9,
+      "startTime": 1794203135220,
+      "declarations": [
+        {
+          "title": "includes empty rooms for passport roles and keeps employee room restrictions",
+          "line": 36,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "publishes only approval and immediately revokes published and replaced URLs",
+          "line": 44,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "notifies active reviewers and the current sender, with no duplicates on retries",
+          "line": 75,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "denies closed room PDF to unassigned staff and allows limited access",
+          "line": 107,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "serializes first starts, concurrent changes and stale reviews",
+          "line": 122,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "preserves the current file on parser failure, DB failure and session revocation",
+          "line": 136,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows one concurrent replacement and prevents a parsed upload from restoring a deleted file",
+          "line": 154,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects a stale review after withdrawal, replacement and resubmission",
+          "line": 183,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "stores a real parsed PDF and preserves it when a later page is damaged",
+          "line": 197,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "includes empty rooms for passport roles and keeps employee room restrictions",
+          "status": "passed"
+        },
+        {
+          "title": "publishes only approval and immediately revokes published and replaced URLs",
+          "status": "passed"
+        },
+        {
+          "title": "notifies active reviewers and the current sender, with no duplicates on retries",
+          "status": "passed"
+        },
+        {
+          "title": "denies closed room PDF to unassigned staff and allows limited access",
+          "status": "passed"
+        },
+        {
+          "title": "serializes first starts, concurrent changes and stale reviews",
+          "status": "passed"
+        },
+        {
+          "title": "preserves the current file on parser failure, DB failure and session revocation",
+          "status": "passed"
+        },
+        {
+          "title": "allows one concurrent replacement and prevents a parsed upload from restoring a deleted file",
+          "status": "passed"
+        },
+        {
+          "title": "rejects a stale review after withdrawal, replacement and resubmission",
+          "status": "passed"
+        },
+        {
+          "title": "stores a real parsed PDF and preserves it when a later page is damaged",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/settings-persistence.test.ts",
+      "passed": 4,
+      "startTime": 1794203137622,
+      "declarations": [
+        {
+          "title": "creates exactly one default row and protects it from deletion",
+          "line": 49,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "provides read-after-write across separate runtime pool clients",
+          "line": 83,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "serializes concurrent updates instead of losing a write",
+          "line": 104,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "imports legacy settings once and leaves later explicit changes untouched",
+          "line": 136,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "creates exactly one default row and protects it from deletion",
+          "status": "passed"
+        },
+        {
+          "title": "provides read-after-write across separate runtime pool clients",
+          "status": "passed"
+        },
+        {
+          "title": "serializes concurrent updates instead of losing a write",
+          "status": "passed"
+        },
+        {
+          "title": "imports legacy settings once and leaves later explicit changes untouched",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-http-behavior.test.ts",
+      "passed": 7,
+      "startTime": 1794203139483,
+      "declarations": [
+        {
+          "title": "replays creation after a fresh HTTP request and rejects reuse for another payload",
+          "line": 56,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "hides another participant's request in detail and filtered history",
+          "line": 79,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "commits mixed decisions, replays them and changes only the accepted responsibility",
+          "line": 97,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "rejects foreign decisions and revoked sessions without changing responsibility",
+          "line": 126,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "cancels a pending request without undoing an earlier accepted transfer",
+          "line": 141,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "returns JPEG bytes only for a participant's item inside the specified request",
+          "line": 165,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists notification read state and prevents another user from marking it read",
+          "line": 189,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "replays creation after a fresh HTTP request and rejects reuse for another payload",
+          "status": "passed"
+        },
+        {
+          "title": "hides another participant's request in detail and filtered history",
+          "status": "passed"
+        },
+        {
+          "title": "commits mixed decisions, replays them and changes only the accepted responsibility",
+          "status": "passed"
+        },
+        {
+          "title": "rejects foreign decisions and revoked sessions without changing responsibility",
+          "status": "passed"
+        },
+        {
+          "title": "cancels a pending request without undoing an earlier accepted transfer",
+          "status": "passed"
+        },
+        {
+          "title": "returns JPEG bytes only for a participant's item inside the specified request",
+          "status": "passed"
+        },
+        {
+          "title": "persists notification read state and prevents another user from marking it read",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-operation-migration.test.ts",
+      "passed": 1,
+      "startTime": 1794203142838,
+      "declarations": [
+        {
+          "title": "enforces request snapshots, terminal states, and one active workflow",
+          "line": 50,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "enforces request snapshots, terminal states, and one active workflow",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-operation-repositories.test.ts",
+      "passed": 7,
+      "startTime": 1794203145314,
+      "declarations": [
+        {
+          "title": "persists, projects, detects conflicts, and rolls back through real SQL",
+          "line": 31,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "atomically accepts and rejects a mixed decision with one responsibility handoff",
+          "line": 223,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "hard deletes an item together with its TMC responsibility snapshot",
+          "line": 267,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists participant history, immutable audit, unread delivery, and read receipt",
+          "line": 343,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not let a snapshot participant filter a multi-owner request through a sibling item or location",
+          "line": 425,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "assigns an active item with no responsible user after recipient acceptance",
+          "line": 507,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "suppresses closed overdue notifications from feed, unread count, and push outbox",
+          "line": 579,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "persists, projects, detects conflicts, and rolls back through real SQL",
+          "status": "passed"
+        },
+        {
+          "title": "atomically accepts and rejects a mixed decision with one responsibility handoff",
+          "status": "passed"
+        },
+        {
+          "title": "hard deletes an item together with its TMC responsibility snapshot",
+          "status": "passed"
+        },
+        {
+          "title": "persists participant history, immutable audit, unread delivery, and read receipt",
+          "status": "passed"
+        },
+        {
+          "title": "does not let a snapshot participant filter a multi-owner request through a sibling item or location",
+          "status": "passed"
+        },
+        {
+          "title": "assigns an active item with no responsible user after recipient acceptance",
+          "status": "passed"
+        },
+        {
+          "title": "suppresses closed overdue notifications from feed, unread count, and push outbox",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-authorization-transactions.test.ts",
+      "passed": 1,
+      "startTime": 1794203147343,
+      "declarations": [
+        {
+          "title": "enforces employee ownership and the administrator override in PostgreSQL",
+          "line": 10,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "enforces employee ownership and the administrator override in PostgreSQL",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-cancel-transactions.test.ts",
+      "passed": 1,
+      "startTime": 1794203149258,
+      "declarations": [
+        {
+          "title": "fences cancellation BOLA, revoked sessions, parent scope, audit metadata, and overdue outbox in PostgreSQL",
+          "line": 10,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "fences cancellation BOLA, revoked sessions, parent scope, audit metadata, and overdue outbox in PostgreSQL",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-create-transactions.test.ts",
+      "passed": 2,
+      "startTime": 1794203151491,
+      "declarations": [
+        {
+          "title": "persists a whole-room administrator assignment for 50 mixed-quantity items and replays it safely",
+          "line": 11,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "isolates late item conflicts and rolls back an empty parent",
+          "line": 47,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "persists a whole-room administrator assignment for 50 mixed-quantity items and replays it safely",
+          "status": "passed"
+        },
+        {
+          "title": "isolates late item conflicts and rolls back an empty parent",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-decision-transactions.test.ts",
+      "passed": 1,
+      "startTime": 1794203153996,
+      "declarations": [
+        {
+          "title": "fences decision BOLA, revoked sessions, replays, and concurrent commits in PostgreSQL",
+          "line": 10,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "fences decision BOLA, revoked sessions, replays, and concurrent commits in PostgreSQL",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-idempotency-transactions.test.ts",
+      "passed": 1,
+      "startTime": 1794203155837,
+      "declarations": [
+        {
+          "title": "replays TMC create idempotently across PostgreSQL connections",
+          "line": 10,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "replays TMC create idempotently across PostgreSQL connections",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/tmc-transfer-request-race-transactions.test.ts",
+      "passed": 1,
+      "startTime": 1794203157750,
+      "declarations": [
+        {
+          "title": "serializes cancellation against decisions and duplicate cancellations in PostgreSQL",
+          "line": 10,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "serializes cancellation against decisions and duplicate cancellations in PostgreSQL",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/web-push-repositories.test.ts",
+      "passed": 3,
+      "startTime": 1794203159850,
+      "declarations": [
+        {
+          "title": "returns active subscriptions for admin, warehouse, and employee only",
+          "line": 28,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "atomically refuses to rebind an endpoint owned by another user",
+          "line": 45,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "allows only one owner when two users concurrently claim a new endpoint",
+          "line": 83,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "returns active subscriptions for admin, warehouse, and employee only",
+          "status": "passed"
+        },
+        {
+          "title": "atomically refuses to rebind an endpoint owned by another user",
+          "status": "passed"
+        },
+        {
+          "title": "allows only one owner when two users concurrently claim a new endpoint",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/database/whatsapp-notifications.test.ts",
+      "passed": 4,
+      "startTime": 1794203161926,
+      "declarations": [
+        {
+          "title": "enforces a 24-hour cooldown under concurrency and reconnection while isolating recipients and message kinds",
+          "line": 23,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "persists Retry-After and blocks all session calls without claiming a later notification",
+          "line": 44,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "checks registration before sending, suppresses repeats, and records successful delivery",
+          "line": 62,
+          "parameterized": false,
+          "executedVariants": 1
+        },
+        {
+          "title": "does not send to unregistered or inactive users and does not reject on unavailable gateway",
+          "line": 77,
+          "parameterized": false,
+          "executedVariants": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "enforces a 24-hour cooldown under concurrency and reconnection while isolating recipients and message kinds",
+          "status": "passed"
+        },
+        {
+          "title": "persists Retry-After and blocks all session calls without claiming a later notification",
+          "status": "passed"
+        },
+        {
+          "title": "checks registration before sending, suppresses repeats, and records successful delivery",
+          "status": "passed"
+        },
+        {
+          "title": "does not send to unregistered or inactive users and does not reject on unavailable gateway",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

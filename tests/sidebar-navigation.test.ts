@@ -26,15 +26,3 @@ test("warehouse sidebar exposes analytics and decommissioned items", () => {
   assert.deepEqual(hrefs, ["/", "/items", "/scan", "/requests", "/tmc", "/items/decommissioned", "/analytics"]);
 });
 //
-
-test("logout control calls the authenticated logout flow", async () => {
-  const source = await import("node:fs/promises").then(({ readFile }) =>
-    readFile(new URL("../components/SidebarContent.tsx", import.meta.url), "utf8"),
-  );
-
-  assert.match(source, /await logout\(\)/);
-  const logoutControl = source.match(/<button\b[^>]*onClick=\{handleLogout\}[\s\S]*?<\/button>/)?.[0];
-  assert.ok(logoutControl, "logout must invoke its button handler");
-  assert.match(logoutControl, /nav\.logout/);
-  assert.doesNotMatch(logoutControl, /href=/);
-});

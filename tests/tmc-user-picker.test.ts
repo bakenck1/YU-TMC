@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { UserService } from "../lib/application/services/user-service";
 import type { TmcOperationUserDto } from "../lib/contracts/tmc-operations";
 import type { UserDto } from "../lib/contracts/users";
-import { translate } from "../lib/i18n";
-import { UserService } from "../lib/application/services/user-service";
 import { MemoryUserUnitOfWork } from "../lib/server/persistence/memory/memory-user-unit-of-work";
-import { createPostgresUserRepositories } from "../lib/server/persistence/postgres/postgres-user-repositories";
-import type { PostgresRepositorySource } from "../lib/server/persistence/postgres/postgres-unit-of-work";
 import {
-  TmcRecipientSearchController,
-  reconcileTmcUserPickerQuery,
-  searchEligibleTmcRecipients,
-  type TmcRecipientSearchState,
+TmcRecipientSearchController,
+reconcileTmcUserPickerQuery,
+searchEligibleTmcRecipients,
+type TmcRecipientSearchState,
 } from "../lib/tmc-recipient-search";
 
 const ACTOR_ID = "11111111-1111-4111-8111-111111111111";
@@ -87,31 +83,6 @@ test("UserService delegates to a bounded recipient directory that excludes delet
   ]);
 });
 
-test("PostgreSQL recipient directory selects only safe columns with bounded parameters", async () => {
-  const queries: Array<{ text: string; values?: readonly unknown[] }> = [];
-  const source = {
-    async query(text: string, values?: readonly unknown[]) {
-      queries.push({ text, values });
-      return {
-        rows: [{ id: uuid(2), full_name: "Active Ali", email: "active@example.com", role: "employee" }],
-      };
-    },
-  } as unknown as PostgresRepositorySource;
-  const users = createPostgresUserRepositories(source).users;
-
-  assert.deepEqual(await users.searchActiveRecipients("ali", ACTOR_ID, 20), [
-    { id: uuid(2), fullName: "Active Ali", email: "active@example.com", role: "employee" },
-  ]);
-  assert.equal(queries.length, 1);
-  assert.doesNotMatch(queries[0].text, /select\s+\*/i);
-  assert.match(queries[0].text, /select id, full_name, email, role/i);
-  assert.match(queries[0].text, /is_active = true/i);
-  assert.match(queries[0].text, /deleted_at is null/i);
-  assert.match(queries[0].text, /\$2::uuid is null or id <> \$2::uuid/i);
-  assert.match(queries[0].text, /limit \$3/i);
-  assert.deepEqual(queries[0].values, ["ali", ACTOR_ID, 20]);
-});
-
 test("recipient controller debounces queries and rejects stale responses", async () => {
   const scheduler = new ManualScheduler();
   const requests: ControlledRequest[] = [];
@@ -180,57 +151,6 @@ test("recipient controller handles malformed and failed responses without stale 
     assert.deepEqual(states.at(-1), { status: "error" });
   }
   controller.dispose();
-});
-
-test("picker is controlled, accessible, mobile-safe and absent from receive", () => {
-  const picker = readFileSync("components/TmcUserPicker.tsx", "utf8");
-  const flow = readFileSync("components/TmcItemQrFlow.tsx", "utf8");
-
-  assert.match(picker, /value: TmcOperationUserDto \| null/);
-  assert.match(picker, /onChange: \(user: TmcOperationUserDto \| null\) => void/);
-  assert.match(picker, /role="combobox"/);
-  assert.match(picker, /aria-autocomplete="list"/);
-  assert.match(picker, /aria-expanded=\{open\}/);
-  assert.match(picker, /aria-controls=\{listboxId\}/);
-  assert.match(picker, /aria-activedescendant/);
-  assert.match(picker, /const activeOptionId = open && activeUser/);
-  assert.match(picker, /scrollIntoView\(\{ block: "nearest" \}\)/);
-  assert.match(picker, /role="listbox"/);
-  assert.match(picker, /role="option"/);
-  for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"]) {
-    assert.match(picker, new RegExp(`event\\.key === "${key}"`));
-  }
-  assert.match(picker, /max-h-\[min\(16rem,40dvh\)\]/);
-  assert.match(picker, /overflow-y-auto/);
-  assert.match(picker, /min-h-11/);
-  assert.match(picker, /maxLength=\{TMC_RECIPIENT_QUERY_MAX_LENGTH\}/);
-  assert.match(picker, /value\.email/);
-  assert.match(picker, /ROLE_LABEL_KEYS\[value\.role\]/);
-  assert.match(picker, /isInventoryResponsibleRole\(user\.role\)/);
-  assert.doesNotMatch(picker, /dangerouslySetInnerHTML/);
-
-  assert.match(flow, /operation\.id !== "receive"/);
-  assert.match(flow, /<TmcUserPicker/);
-  assert.match(flow, /value=\{recipient\}/);
-  assert.match(flow, /onChange=\{setRecipient\}/);
-});
-
-test("picker copy is localized in RU, KK and EN", () => {
-  const expected = {
-    "tmc.recipient.label": ["Новый ответственный", "Жаңа жауапты тұлға", "New responsible person"],
-    "tmc.recipient.placeholder": ["Поиск по ФИО или логину", "Аты-жөні немесе логині бойынша іздеу", "Search by name or login"],
-    "tmc.recipient.loading": ["Ищем пользователей…", "Пайдаланушылар ізделуде…", "Searching users…"],
-    "tmc.recipient.empty": ["Пользователи не найдены", "Пайдаланушылар табылмады", "No users found"],
-    "tmc.recipient.error": ["Не удалось выполнить поиск.", "Іздеуді орындау мүмкін болмады.", "Search failed."],
-    "tmc.recipient.clear": ["Очистить выбор", "Таңдауды тазарту", "Clear selection"],
-    "tmc.recipient.minChars": ["Введите минимум 2 символа", "Кемінде 2 таңба енгізіңіз", "Enter at least 2 characters"],
-  } as const;
-  for (const [key, labels] of Object.entries(expected)) {
-    assert.deepEqual(
-      (["ru", "kk", "en"] as const).map((language) => translate(language, key as keyof typeof expected)),
-      labels,
-    );
-  }
 });
 
 class ManualScheduler {

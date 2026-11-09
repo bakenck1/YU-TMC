@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach,describe,expect,it,vi } from "vitest";
 
 import PublicRoomQrPage from "@/app/rooms/qr/[token]/page";
+import type { RoomWorkspaceRecord,RoomWorkspaceRepositories } from "@/lib/application/ports/room-workspace-repositories";
 import { RoomWorkspaceService } from "@/lib/application/services/room-workspace-service";
-import type { RoomWorkspaceRepositories, RoomWorkspaceRecord } from "@/lib/application/ports/room-workspace-repositories";
 import { ApplicationError } from "@/lib/domain/application-error";
 
 const state = vi.hoisted(() => ({

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import InventoryItemDetails from "@/components/InventoryItemDetails";
 import type { InventoryItemDto } from "@/lib/contracts/inventory-items";
 import type { UserRole } from "@/lib/contracts/users";
+import { fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { afterEach,describe,expect,it,vi } from "vitest";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/image", () => ({ default: () => <span /> }));
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: "ru", locale: "ru-RU", t: (key: string) => key }) }));
@@ -19,6 +19,11 @@ const ITEM: InventoryItemDto = { id: "10000000-0000-4000-8000-000000000001", nam
 function view(role: UserRole = "warehouse", editing = false, item = ITEM, manageCode = false) { return render(<InventoryItemDetails initialItem={item} canEditContent={role === "admin" || role === "warehouse"} canSendToService={false} requiresServicePhoto={false} canManageCode={manageCode} operations={[]} initialComments={[]} canComment={false} canManageProtected={false} rooms={[]} initialComponents={[]} canManageComponents={false} actorId={ITEM.id} actorRole={role} hideComposition initialEditing={editing} />); }
 afterEach(() => vi.unstubAllGlobals());
 describe("adversarial legacy category and role repair UI", () => {
+  it.each(["general", "it"] as const)("keeps QR controls for %s and shows inventory numbers only for general items", (itemSection) => {
+    view("admin", false, { ...ITEM, itemSection, qrCode: "YUQ1:00000000000000000000000000" }, true);
+    expect(screen.getByRole("button", { name: "items.createQr" })).toBeTruthy();
+    expect(screen.queryAllByText(ITEM.inventoryNumber, { exact: true }).length > 0).toBe(itemSection === "general");
+  });
   it("shows the saved 1C code on an administrator's legacy-category card", () => {
     view("admin", false, { ...ITEM, oneCCode: "000014398" });
     expect(screen.getByText("000014398")).not.toBeNull();
@@ -77,8 +82,18 @@ describe("adversarial legacy category and role repair UI", () => {
   });
 });
 
-
 describe("item photo gallery capacity", () => {
+  it("opens the photo dialog and restores the trigger focus after Escape", async () => {
+    view("admin", false, { ...ITEM, photoUrl: "/private-photo" });
+    const trigger = screen.getByRole("button", { name: "itemDetails.openPhoto" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "itemDetails.photoFullSize" });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
   it.each([4, 9, 10])("shows all %i photos and offers uploads only below ten", (count) => {
     const photoUrls = Array.from({ length: count }, (_, i) => `/photo/${i + 1}`);
     view("admin", false, { ...ITEM, photoUrl: photoUrls[0], photoUrls });

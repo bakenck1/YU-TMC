@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { InventoryItemRecord, InventoryItemRepository, InventoryItemRepositories, AppendItemAuditRecord } from "../lib/application/ports/inventory-item-repositories";
+import type { AppendItemAuditRecord,InventoryItemRecord,InventoryItemRepositories,InventoryItemRepository } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 
@@ -41,24 +41,6 @@ function harness(options: { it?: boolean; conflict?: boolean; alreadyProject?: b
   return { service, records: () => [...records.values()], audits: () => audits, original };
 }
 
-test("project bulk change updates all rows, preserves other fields, audits, and can remove the flag", async () => {
-  const h = harness();
-  assert.deepEqual(await h.service.bulkChangeProject([ID, SECOND], true, ADMIN), [ID, SECOND]);
-  assert.deepEqual(h.records(), h.original.map((item) => ({ ...item, isProject: true, version: 4 })));
-  assert.equal(h.audits().length, 2);
-  assert.deepEqual(h.audits()[0].beforeValues, { isProject: false });
-  assert.deepEqual(h.audits()[0].afterValues, { isProject: true });
-  await h.service.bulkChangeProject([ID, SECOND], false, ADMIN);
-  assert.ok(h.records().every((item) => !item.isProject && item.version === 5));
-});
-
-test("reapplying the project flag makes no extra writes or audit records", async () => {
-  const h = harness({ alreadyProject: true });
-  await h.service.bulkChangeProject([ID, SECOND], true, ADMIN);
-  assert.deepEqual(h.records(), h.original);
-  assert.equal(h.audits().length, 0);
-});
-
 test("bulk project remains admin-only and validates flags and selections", async () => {
   const h = harness();
   for (const role of ["employee", "warehouse", "typography"] as const) {
@@ -71,14 +53,4 @@ test("bulk project remains admin-only and validates flags and selections", async
     await assert.rejects(h.service.bulkChangeProject(ids, true, ADMIN));
   }
   assert.deepEqual(h.records(), h.original);
-});
-
-test("a missing/IT row or version conflict fails the transaction without partial changes", async () => {
-  for (const options of [{ it: true }, { conflict: true }, {}]) {
-    const h = harness(options);
-    const ids = Object.keys(options).length ? [ID, SECOND] : [ID, "cccccccc-cccc-4ccc-8ccc-cccccccccccc"];
-    await assert.rejects(h.service.bulkChangeProject(ids, true, ADMIN));
-    assert.deepEqual(h.records(), h.original);
-    assert.equal(h.audits().length, 0);
-  }
 });

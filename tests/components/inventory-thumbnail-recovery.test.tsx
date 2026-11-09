@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
 import InventoryThumbnail from "@/components/InventoryThumbnail";
+import { fireEvent,render,screen } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ t: (key: string) => key }) }));
 const photo = "/api/inventory/items/11111111-1111-4111-8111-111111111111/photo";

@@ -1,40 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type {
-  InventoryItemRecord,
-  InventoryItemRepositories,
-  InventoryItemRepository,
-  InsertInventoryItemRecord,
+InsertInventoryItemRecord,
+InventoryItemRecord,
+InventoryItemRepositories,
+InventoryItemRepository,
 } from "../lib/application/ports/inventory-item-repositories";
 import type { UnitOfWork } from "../lib/application/ports/unit-of-work";
 import { InventoryItemService } from "../lib/application/services/inventory-item-service";
 import { parseCode39ScanInput } from "../lib/domain/code39";
-
-const ROOT = new URL("../", import.meta.url);
-
-test("barcode input is optional and components may retain a supplied number", async () => {
-  const form = await readFile(
-    new URL("components/InventoryItemCreateForm.tsx", ROOT),
-    "utf8",
-  );
-  const route = await readFile(
-    new URL("app/api/inventory/items/route.ts", ROOT), "utf8");
-
-  assert.match(form, /const \[barcode, setBarcode\] = useState\(""\)/);
-  assert.match(form, /barcode: restricted \? null : \(barcode\.trim\(\) \|\| null\)/);
-  assert.match(route, /actor\.role === "warehouse"/);
-  assert.match(form, /t\("createItem\.barcodeHint"\)/);
-  assert.match(route, /typeof body\.barcode !== "string"/);
-  assert.match(form, /t\("createItem\.barcodeOptionalHint"\)/);
-  assert.match(form, /t\("createItem\.componentsNoBarcode"\)/);
-  assert.doesNotMatch(form, /!barcode\.trim\(\)/);
-  assert.doesNotMatch(route, /body\.barcode\.trim\(\)\.length === 0/);
-  assert.match(form, /setBarcode\(value\)/);
-  assert.doesNotMatch(form, /if \(rooms\.length === 0\) return null/);
-  assert.match(form, /t\("createItem\.noRooms"\)/);
-});
 
 test("item creation keeps the 1C code for electrical equipment and furniture", async () => {
   let inserted: InventoryItemRecord | undefined;
