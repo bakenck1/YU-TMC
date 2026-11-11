@@ -738,7 +738,7 @@ describe("live materials API replaces Excel as audit input", () => {
     expect((await createPostgresInventoryItemRepositories(pool).items.listItemsAssignedTo(recipient)).map(item => item.id).sort()).toEqual([f.itemId, second].sort());
   });
 
-  it.each(["name_invalid", "shared_number_conflict"] as const)("keeps an independently confirmed owner when renaming is blocked by %s", async reason => {
+  it.each(["name_invalid", "shared_number_conflict"] as const)("enforces owner identity safety when renaming is blocked by %s", async reason => {
     const f = await seed();
     const recipient = await addUser("Сотрудник Полное Имя");
     if (reason === "shared_number_conflict") {
@@ -750,6 +750,15 @@ describe("live materials API replaces Excel as audit input", () => {
     await new PostgresOneCFixedAssetRepository(pool).saveBatch([{ ...original, inventoryNumber: "1350/14444", name: reason === "name_invalid" ? "Длинное название ".repeat(15) : "Стол", responsibleName: "Сотрудник Полное Имя\nМОЛ" }], metadata());
     const service = new InventoryAuditEnrichmentService(pool);
     const preview = await service.previewCurrent(f.actor);
+    if (reason === "shared_number_conflict") {
+      const before = (await pool.query(`select name,one_c_code,unit_price,version from yu_inventory.items where id=$1`, [f.itemId])).rows[0];
+      expect(preview.rows[0]).toMatchObject({ eligible: false, changed: false, reason,
+        nextName: "Монитор", nextCode: null, responsibility: { changed: false, status: "unconfirmed", nextUserId: null } });
+      expect((await service.applyCurrent(preview, f.actor)).updated).toBe(0);
+      expect((await pool.query(`select name,one_c_code,unit_price,version from yu_inventory.items where id=$1`, [f.itemId])).rows[0]).toEqual(before);
+      expect((await pool.query(`select id from yu_inventory.responsibility_periods where item_id=$1`, [f.itemId])).rows).toHaveLength(0);
+      return;
+    }
     expect(preview.rows[0]).toMatchObject({ eligible: true, changed: true, nextName: reason === "name_invalid" ? "Наше название" : "Монитор", nextCode: null, responsibility: { status: "ready", nextUserId: recipient } });
     expect((await service.applyCurrent(preview, f.actor)).updated).toBe(1);
     expect((await pool.query(`select name,one_c_code from yu_inventory.items where id=$1`, [f.itemId])).rows[0]).toEqual({ name: preview.rows[0].currentName, one_c_code: null });
