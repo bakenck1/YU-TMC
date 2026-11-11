@@ -6,6 +6,7 @@ import { ArrowUpRight, Download, RefreshCw } from "lucide-react";
 import OneCFixedAssetRegistryPanel from "@/components/OneCFixedAssetRegistryPanel";
 import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
 import OneCMatchedCards from "@/components/OneCMatchedCards";
+import OneCPossibleMatches from "@/components/OneCPossibleMatches";
 import { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { OneCAnalytics } from "@/lib/one-c-analytics";
@@ -46,7 +47,6 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const categories = [
     { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600" },
     { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500" },
-    { label: c.checkNumber, value: counts.possible, color: "bg-amber-400" },
     { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
     { label: c.missing, value: counts.missing, color: "bg-slate-300" },
   ].filter(entry => entry.value > 0);
@@ -116,12 +116,12 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
         </section>
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-900">{c.attention}</h2>
           <Attention title={c.temporaryUnmatched} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
-          {counts.possible > 0 ? <Attention title={c.checkNumber} value={hasSources ? counts.possible : null} detail={c.checkNumberHint} /> : null}
           <Attention title={c.assetsNoMatch} value={hasAssets ? counts.assetsWithoutCandidate : null} detail={c.onBooks} />
           <Attention title={c.materialsNoMatch} value={hasMaterials ? counts.materialBalancesWithoutCandidate : null} detail={c.positiveBalances} />
         </section>
       </div>
     </div> : null}
+    {tab === "overview" && counts.possible > 0 ? <OneCPossibleMatches /> : null}
     {tab !== "overview" ? <InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /> : null}
     {tab === "assets" ? <OneCFixedAssetRegistryPanel key={analytics.calculatedAt} /> : null}
     {tab === "materials" ? <><OneCMatchedCards group="materials" revision={analytics.calculatedAt} /><MaterialRegistryPanel key={materials.sha256} source={materials} /></> : null}
