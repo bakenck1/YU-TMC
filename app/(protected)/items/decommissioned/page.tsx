@@ -1,3 +1,4 @@
+import { InventoryDecommissionedEnrichment } from "@/components/InventoryAuditEnrichment";
 import DecommissionedItemsView from "@/components/DecommissionedItemsView";
 import DecommissionedRegistryTabs from "@/components/DecommissionedRegistryTabs";
 import OneCDecommissionedAssetsView from "@/components/OneCDecommissionedAssetsView";
@@ -40,6 +41,7 @@ export default async function DecommissionedItemsPage({ searchParams }: { search
   return (
     <Wrapper direction="column" gap="md">
       <DecommissionedRegistryTabs active="inventory" inventoryTotal={items.length} oneCTotal={oneCPreview?.total ?? null} />
+      {user.role === "admin" ? <InventoryDecommissionedEnrichment /> : null}
       <DecommissionedItemsView
         items={items.map(toDecommissionedInventoryItemView)}
         canExport={hasPermission(user.role, "inventory.report.export")}

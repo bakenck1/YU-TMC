@@ -172,7 +172,7 @@ function descriptionIdentity(item: InventoryAuditEnrichmentItem, description: st
 }
 
 /** Plans existing-card updates without mutating either live data or saved evidence. */
-export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean; allowTemporaryMaterialCode?: boolean; allowTemporaryAssetCode?: boolean; allowSourceCode?: boolean; priceOnly?: boolean } = {}): InventoryAuditEnrichmentPlan {
+export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch[], items: readonly InventoryAuditEnrichmentItem[], options: { allowDescriptionIdentity?: boolean; includeIt?: boolean; formattedNumbers?: boolean; allowTemporaryMaterialCode?: boolean; allowTemporaryAssetCode?: boolean; allowSourceCode?: boolean; priceOnly?: boolean; decommissionedOnly?: boolean } = {}): InventoryAuditEnrichmentPlan {
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const oneCOwners = new Map<string, Set<string>>();
   const excelOwners = new Map<string, Set<string>>();
@@ -207,7 +207,11 @@ export function buildInventoryAuditEnrichmentPlan(auditRows: readonly AuditMatch
       return result;
     };
     if (!item) return skip("item_not_found");
-    if (item.archivedAt || (item.status !== undefined && item.status !== "active") || (item.itemSection !== "general" && !(options.includeIt && item.itemSection === "it"))) return skip("item_ineligible");
+    const lifecycleEligible = options.decommissionedOnly
+      ? item.itemSection === "general" && (item.status === "decommissioned" || item.status === "decommissioned_in_use")
+      : !item.archivedAt && (item.status === undefined || item.status === "active")
+        && (item.itemSection === "general" || options.includeIt && item.itemSection === "it");
+    if (!lifecycleEligible) return skip("item_ineligible");
     if (item.version !== row.itemVersion || item.name !== row.itemName
       || (row.siteResponsibleName !== undefined && oneCResponsibleNameKey(item.responsibleName) !== oneCResponsibleNameKey(row.siteResponsibleName))
       || inventoryAuditNumberKey(item.inventoryNumber) !== inventoryAuditNumberKey(row.siteNumber)

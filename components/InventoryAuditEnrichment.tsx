@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { RefreshCw, Sparkles, ShieldCheck } from "lucide-react";
 import type { InventoryAuditEnrichmentRow } from "@/lib/inventory-audit-enrichment";
 import { useAppSettings } from "@/components/AppSettingsProvider";
@@ -13,15 +14,21 @@ const currentCopy = {
 } as const;
 
 type Plan = { runId: string; planHash: string; counts: { ready: number; unchanged: number; skipped: number }; rows: InventoryAuditEnrichmentRow[]; sources?: { fixedAssets: number; materials: number; materialBalances: number; cards: number } };
-type Props = { batchId: string; runId: string; blocked: boolean; currentRegistry?: boolean; temporaryOnly?: boolean; onApplied(): void };
+type Props = { batchId: string; runId: string; blocked: boolean; currentRegistry?: boolean; temporaryOnly?: boolean; decommissioned?: boolean; onApplied(): void };
+
+const decommissionedCopy = {
+  ru: { title: "Обновление списанных ТМЦ", subtitle: "Название · цена · пустое назначение ответственного", policy: "Название и цена берутся из подтверждённого совпадения с 1С. Ответственный заполняется, только если он не назначен. Связь с 1С не создаётся, данные в 1С не отправляются.", source: "Источник названия", applyScope: "Будут применены все готовые изменения списанных ТМЦ в этом плане, независимо от поиска и фильтров.", sharedConflict: "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и нажмите «Проверить изменения»." },
+  kk: { title: "Есептен шығарылған мүлікті жаңарту", subtitle: "Атауы · бағасы · тағайындалмаған жауапты тұлға", policy: "Атауы мен бағасы 1С-тегі расталған сәйкестіктен алынады. Жауапты тұлға тек тағайындалмаған кезде толтырылады. 1С-пен байланыс құрылмайды, 1С-ке деректер жіберілмейді.", source: "Атауының көзі", applyScope: "Іздеу мен сүзгілерге қарамастан, осы жоспардағы есептен шығарылған мүліктің барлық дайын өзгерістері қолданылады.", sharedConflict: "Жаңарту тоқтатылды: атау монитор мен жүйелік блоктың ортақ нөмірі ережесіне сәйкес емес. Бірдей нөмірлі карточкаларды тексеріп, «Өзгерістерді тексеру» түймесін басыңыз." },
+  en: { title: "Update written-off items", subtitle: "Name · price · vacant responsible person", policy: "Names and prices come from confirmed 1C matches. A responsible person is assigned only when unassigned. No 1C link is created and no data is sent to 1C.", source: "Name source", applyScope: "All ready changes to written-off items in this plan will be applied, regardless of search and filters.", sharedConflict: "Update cancelled: the name violates the shared-number rule for a monitor and system unit. Check cards with the same number and select Review changes." },
+} as const;
 
 const blockedMessage = "Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите сверку заново.";
 
-export function EnrichmentDescription({ currentRegistry = false }: { currentRegistry?: boolean }) {
+export function EnrichmentDescription({ currentRegistry = false, decommissioned = false }: { currentRegistry?: boolean; decommissioned?: boolean }) {
   const { language } = useAppSettings();
   const c = currentCopy[language];
   return <>
-    <div className="flex flex-wrap items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700"><Sparkles aria-hidden="true" className="h-5 w-5" /></span><div><h3 className="font-semibold text-slate-900">{currentRegistry ? c.title : "Названия и коды 1С в карточках ТМЦ"}</h3><p className="mt-0.5 text-xs text-teal-700">{currentRegistry ? c.subtitle : "Общий список · основные средства и материальные предметы"}</p></div></div>
+    <div className="flex flex-wrap items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700"><Sparkles aria-hidden="true" className="h-5 w-5" /></span><div><h3 className="font-semibold text-slate-900">{decommissioned ? decommissionedCopy[language].title : currentRegistry ? c.title : "Названия и коды 1С в карточках ТМЦ"}</h3><p className="mt-0.5 text-xs text-teal-700">{decommissioned ? decommissionedCopy[language].subtitle : currentRegistry ? c.subtitle : "Общий список · основные средства и материальные предметы"}</p></div></div>
   </>;
 }
 
@@ -30,11 +37,16 @@ export function InventoryCurrentEnrichment({ blocked = false, temporaryOnly = fa
   return <EnrichmentReview key={runId} batchId="" runId={runId} temporaryOnly={temporaryOnly} currentRegistry blocked={blocked} onApplied={onApplied} />;
 }
 
+export function InventoryDecommissionedEnrichment() {
+  const router = useRouter();
+  return <EnrichmentReview batchId="" runId="decommissioned-registry" currentRegistry decommissioned blocked={false} onApplied={() => router.refresh()} />;
+}
+
 export default function InventoryAuditEnrichment({ batchId, runId, blocked, onApplied }: Props) {
   return <EnrichmentReview key={`${batchId}:${runId}`} batchId={batchId} runId={runId} blocked={blocked} onApplied={onApplied} />;
 }
 
-export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = false, temporaryOnly = false, onApplied }: Props) {
+export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = false, temporaryOnly = false, decommissioned = false, onApplied }: Props) {
   const { language } = useAppSettings();
   const c = currentCopy[language];
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -64,7 +76,7 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
     let definitiveFailure = false;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(currentRegistry ? `/api/integrations/1c/enrichment${temporaryOnly ? "?scope=temporary" : ""}` : `/api/integrations/1c/batches/${batchId}/audit/enrichment`, {
+      const response = await fetch(decommissioned ? "/api/inventory/decommissioned/enrichment" : currentRegistry ? `/api/integrations/1c/enrichment${temporaryOnly ? "?scope=temporary" : ""}` : `/api/integrations/1c/batches/${batchId}/audit/enrichment`, {
         method: apply ? "POST" : "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal,
         ...(apply ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ runId: reviewedPlan!.runId, planHash: reviewedPlan!.planHash }) } : {}),
       });
@@ -74,7 +86,7 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
         if (response.status === 409) {
           definitiveFailure = true; setPlan(null); setUncertain(false);
           throw new Error(body.error === "inventory_audit_enrichment_shared_number_conflict"
-            ? "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и запустите dry-run заново."
+            ? decommissioned ? decommissionedCopy[language].sharedConflict : "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и запустите dry-run заново."
             : currentRegistry ? c.stale : "Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения.");
         }
         if (response.status === 401 || response.status === 403) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error(c.permission); }
@@ -97,6 +109,14 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
     } finally { if (current === generation.current) setBusy(false); }
   }
 
+  const loadInitialPreview = useEffectEvent(() => { void perform(false); });
+  useEffect(() => {
+    if (!decommissioned) return;
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) loadInitialPreview(); });
+    return () => { cancelled = true; };
+  }, [decommissioned]);
+
   const skippedReasons = new Map<string, { label: string; count: number }>();
   for (const row of plan?.rows ?? []) {
     if (row.eligible) continue;
@@ -117,9 +137,13 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
     return true;
   });
   const visibleRows = currentRegistry ? filteredRows.slice(0, visibleLimit) : filteredRows;
+  const columns = c.columns.slice(0, currentRegistry ? 7 : 5)
+    .filter((_, index) => !decommissioned || index !== 3)
+    .map((label, index) => decommissioned && index === 2 ? decommissionedCopy[language].source : label);
 
-  return <section className="space-y-4 rounded-2xl border border-teal-200/70 bg-gradient-to-br from-white via-teal-50/60 to-sky-50/60 p-5 shadow-sm shadow-teal-900/5 sm:p-6" aria-label={currentRegistry ? c.title : "Обновление названий и кодов 1С"}>
-    <EnrichmentDescription currentRegistry={currentRegistry} />
+  return <section className="space-y-4 rounded-2xl border border-teal-200/70 bg-gradient-to-br from-white via-teal-50/60 to-sky-50/60 p-5 shadow-sm shadow-teal-900/5 sm:p-6" aria-label={decommissioned ? decommissionedCopy[language].title : currentRegistry ? c.title : "Обновление названий и кодов 1С"}>
+    <EnrichmentDescription currentRegistry={currentRegistry} decommissioned={decommissioned} />
+    {decommissioned ? <p className="text-sm text-slate-600">{decommissionedCopy[language].policy}</p> : null}
     {temporaryOnly ? <p className="text-sm text-slate-600">{{
       ru: "Временный номер создаётся, когда при добавлении не указан официальный номер. Здесь проверяются только такие карточки. Подтверждённое совпадение с 1С даёт статус «Найдено»; временный номер сохраняется. Перед применением проверьте предлагаемые код, название и цену.",
       kk: "Уақытша нөмір ресми нөмір көрсетілмегенде жасалады. Мұнда тек осы карточкалар тексеріледі. Расталған 1С сәйкестігі «Табылды» мәртебесін береді; уақытша нөмір сақталады. Қолданар алдында кодты, атауды және бағаны тексеріңіз.",
@@ -132,6 +156,7 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
       <button disabled={busy || blocked || uncertain} onClick={() => void perform(false)} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800 disabled:opacity-50"><RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? c.checking : currentRegistry ? c.check : "Проверить обновления названий и кодов"}</button>
       {plan?.counts.ready ? <button disabled={busy || blocked} onClick={() => void perform(true)} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50">{uncertain ? c.retry : `${c.apply} ${plan.counts.ready} ${c.updates}`}</button> : null}
     </div>
+    {decommissioned && plan?.counts.ready ? <p className="text-sm text-slate-600">{decommissionedCopy[language].applyScope}</p> : null}
     {!plan ? <p className="flex items-center gap-1.5 text-xs text-slate-500"><ShieldCheck aria-hidden="true" className="h-4 w-4 text-teal-600" />{currentRegistry ? c.preview : "Сначала просмотр изменений, затем применение."}</p> : null}
     {plan ? <><p className="text-sm">{c.ready}: {plan.counts.ready}. {c.unchanged}: {plan.counts.unchanged}. {c.skipped}: {plan.counts.skipped}.</p>
       {currentRegistry ? <div className="flex flex-wrap gap-3 text-sm text-teal-800"><span>{c.priceChanges}: {plan.rows.filter(row => row.eligible && row.price?.changed).length}</span><span>{c.ownerChanges}: {plan.rows.filter(row => row.eligible && row.responsibility?.changed).length}</span></div> : null}
@@ -147,9 +172,9 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
           {reasonCounts.length ? <optgroup label={c.reasons}>{reasonCounts.map(([key, reason]) => <option key={key} value={`reason:${key}`}>{reason.label} ({reason.count})</option>)}</optgroup> : null}
         </select>
         {currentRegistry ? <p className="mt-2 text-xs text-slate-500">{c.shown} {visibleRows.length} {c.of} {filteredRows.length}. {c.searchScope}</p> : null}
-        <div className="mt-3 max-h-[32rem] overflow-auto rounded-xl border border-teal-100 bg-white/90"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-slate-600"><tr>{c.columns.slice(0, currentRegistry ? 7 : 5).map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible && row.nameSource ? row.nameSource === "materials_api" ? c.sourceMaterials : row.nameSource === "excel" ? "Excel" : currentRegistry ? c.sourceAssets : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">{c.matched}: {row.identityEvidence}</p> : null}</td><td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">{c.was}: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">{c.codeKept}: {localizedReason({ ...row, reason: row.codeStatus }, language, currentRegistry)}</p> : null}</td><td className="p-3">{row.temporaryMatch ? <TemporaryMatchPreview row={row} /> : null}{row.eligible ? row.changed ? c.readyToApply : c.unchanged : localizedReason(row, language, currentRegistry)}{currentRegistry && !row.eligible ? <SourceIdentityDetails row={row} /> : null}</td>{currentRegistry ? <><td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td><td className="min-w-48 p-3"><PricePreview row={row} /></td></> : null}</tr>)}
-            {!visibleRows.length ? <tr><td colSpan={currentRegistry ? 7 : 5} className="p-3 text-zinc-500">{c.empty}</td></tr> : null}
+        <div className="mt-3 max-h-[32rem] overflow-auto rounded-xl border border-teal-100 bg-white/90"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-slate-600"><tr>{columns.map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+          <tbody>{visibleRows.map((row) => <tr key={row.itemId} className="border-t border-teal-100 align-top"><td className="p-3"><Link href={`/items/${row.itemId}`} className="text-teal-800">{row.currentName}</Link>{currentRegistry && row.siteNumber ? <p className="mt-1 font-mono text-xs text-slate-500">{row.siteNumber}</p> : null}</td><td className="p-3">{row.eligible ? row.nextName : "—"}</td><td className="p-3">{row.eligible && row.nameSource ? row.nameSource === "materials_api" ? c.sourceMaterials : row.nameSource === "excel" ? "Excel" : currentRegistry ? c.sourceAssets : "1С" : "—"}{currentRegistry && row.identityEvidence ? <p className="mt-1 text-xs text-slate-500">{c.matched}: {row.identityEvidence}</p> : null}</td>{!decommissioned ? <td className="p-3"><span className="font-mono">{row.eligible ? row.nextCode ?? "—" : "—"}</span>{row.eligible && row.currentCode && row.currentCode !== row.nextCode ? <p className="mt-1 text-xs text-zinc-600">{c.was}: {row.currentCode}</p> : null}{row.eligible && row.codeStatus && row.codeStatus !== "confirmed" ? <p className="mt-1 text-xs text-zinc-600">{c.codeKept}: {localizedReason({ ...row, reason: row.codeStatus }, language, currentRegistry)}</p> : null}</td> : null}<td className="p-3">{row.temporaryMatch ? <TemporaryMatchPreview row={row} /> : null}{row.eligible ? row.changed ? c.readyToApply : c.unchanged : localizedReason(row, language, currentRegistry)}{currentRegistry && !row.eligible ? <SourceIdentityDetails row={row} /> : null}</td>{currentRegistry ? <><td className="min-w-64 p-3"><ResponsibilityPreview row={row} /></td><td className="min-w-48 p-3"><PricePreview row={row} /></td></> : null}</tr>)}
+            {!visibleRows.length ? <tr><td colSpan={columns.length} className="p-3 text-zinc-500">{c.empty}</td></tr> : null}
           </tbody></table></div>
         {currentRegistry && visibleRows.length < filteredRows.length ? <button type="button" onClick={() => setVisibleLimit(value => value + 100)} className="mt-3 rounded-xl border border-teal-200 bg-white px-4 py-2 text-sm text-teal-800">{c.more}</button> : null}
       </details></> : null}

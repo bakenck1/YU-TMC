@@ -91,8 +91,8 @@ test("ambiguous source names can supply a unanimous owner without renaming the c
   assert.equal(plan.rows[0].responsibility?.status, "ready");
   assert.deepEqual(plan.counts, { ready: 1, unchanged: 0, skipped: 0 });
 });
-test("a unanimous confirmed owner is independent of name length, source reuse and shared-number rename restrictions", () => {
-  for (const reason of ["source_reused", "name_invalid", "shared_number_conflict"] as const) {
+test("a unanimous confirmed owner is independent of name length and source reuse", () => {
+  for (const reason of ["source_reused", "name_invalid"] as const) {
     const plan = proposal({ ambiguous: true, reason });
     assert.equal(plan.rows[0].responsibility?.status, "ready");
     assert.equal(plan.rows[0].nextName, plan.rows[0].currentName);
@@ -102,7 +102,7 @@ test("a unanimous confirmed owner is independent of name length, source reuse an
   }
 });
 test("changed, missing, ineligible or conflicting card identities cannot be revived", () => {
-  for (const reason of ["item_not_found", "item_changed", "item_ineligible", "identity_conflict", "identity_missing", "sources_missing"] as const) {
+  for (const reason of ["item_not_found", "item_changed", "item_ineligible", "identity_conflict", "identity_missing", "sources_missing", "shared_number_conflict"] as const) {
     const plan = proposal({ ambiguous: true, reason });
     assert.equal(plan.rows[0].responsibility?.changed, false);
     assert.deepEqual(plan.counts, { ready: 0, unchanged: 0, skipped: 1 });

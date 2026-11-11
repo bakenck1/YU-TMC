@@ -1,9 +1,12 @@
-import InventoryAuditEnrichment,{ InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
+import InventoryAuditEnrichment,{ InventoryCurrentEnrichment, InventoryDecommissionedEnrichment } from "@/components/InventoryAuditEnrichment";
+import { StrictMode } from "react";
 import { act,fireEvent,render,screen,waitFor,within } from "@testing-library/react";
 import { afterEach,describe,expect,it,vi } from "vitest";
 
 const { appLanguage } = vi.hoisted(() => ({ appLanguage: { value: "ru" as "ru" | "kk" | "en" } }));
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("@/components/AppSettingsProvider", () => ({ useAppSettings: () => ({ language: appLanguage.value, locale: appLanguage.value === "en" ? "en-US" : "ru-RU" }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const batchId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
@@ -40,6 +43,93 @@ describe("reviewing and applying confirmed inventory codes", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
   
+
+  it("reviews written-off names, prices and missing owners through a separate endpoint and refreshes the list after applying", async () => {
+    const decommissionedPlan = { ...plan, runId: "decommissioned-registry", counts: { ready: 1, unchanged: 0, skipped: 0 }, rows: [{ ...plan.rows[0],
+      currentCode: "00003254", nextCode: "00003254", nameSource: "1c",
+      price: { currentUnitPrice: "100.00", nextUnitPrice: "9100.50", changed: true, status: "ready", source: "os_initial_cost" },
+      responsibility: { currentUserId: null, currentName: null, nextUserId: "owner", nextName: "Бауыржан Тынымбаев", changed: true, status: "ready" },
+    }] };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: decommissionedPlan }))
+      .mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 0 } }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryDecommissionedEnrichment />);
+    expect(screen.getByRole("region", { name: "Обновление списанных ТМЦ" })).toBeTruthy();
+    expect(screen.getByText(/Ответственный заполняется, только если он не назначен/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    const apply = await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(screen.getByText("Будут применены все готовые изменения списанных ТМЦ в этом плане, независимо от поиска и фильтров.")).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][0]).toBe("/api/inventory/decommissioned/enrichment");
+    expect(fetcher.mock.calls[0][1].method).toBe("GET");
+    const table = within(screen.getByRole("table"));
+    expect(table.getByRole("link", { name: "Ноутбук" })).toBeTruthy();
+    expect(table.getByText("Ноутбук Lenovo №2411/00388")).toBeTruthy();
+    expect(table.getByText("Бауыржан Тынымбаев")).toBeTruthy();
+    expect(table.getByText("Было: Не назначен")).toBeTruthy();
+    expect(table.getByText(/9.?100,5 ₸/)).toBeTruthy();
+    expect(table.queryByText("00003254")).toBeNull();
+    expect(table.getAllByRole("columnheader")).toHaveLength(6);
+    fireEvent.click(apply);
+    await screen.findByRole("status");
+    expect(fetcher.mock.calls[1][0]).toBe("/api/inventory/decommissioned/enrichment");
+    expect(fetcher.mock.calls[1][1].method).toBe("POST");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ runId: "decommissioned-registry", planHash: plan.planHash });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer applying written-off items when there are no changes", async () => {
+    const empty = { ...plan, runId: "decommissioned-registry", counts: { ready: 0, unchanged: 1, skipped: 0 }, rows: [{ ...plan.rows[0],
+      nextName: "Ноутбук", nextCode: null, changed: false, reason: "unchanged",
+      responsibility: { currentUserId: "existing", currentName: "Текущий ответственный", nextUserId: "existing", nextName: "Текущий ответственный", changed: false, status: "unchanged" },
+    }] };
+    const fetcher = vi.fn().mockResolvedValue(reply({ plan: empty }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryDecommissionedEnrichment />);
+    await screen.findByText("Можно обновить: 0. Без изменений: 1. Пропущено: 0.");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][0]).toBe("/api/inventory/decommissioned/enrichment");
+    expect(fetcher.mock.calls[0][1].method).toBe("GET");
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    expect(screen.getByText("Текущий ответственный")).toBeTruthy();
+    expect(screen.getByText("Уже назначен")).toBeTruthy();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("loads the initial written-off preview safely under Strict Mode without duplicated or automatic mutations", async () => {
+    const currentPlan = { ...plan, runId: "decommissioned-registry" };
+    const fetcher = vi.fn().mockResolvedValue(reply({ plan: currentPlan }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<StrictMode><InventoryDecommissionedEnrichment /></StrictMode>);
+    await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][1].signal.aborted).toBe(false);
+    expect(screen.getByRole("button", { name: "Применить 1 обновлений" })).toBeTruthy();
+    expect(fetcher.mock.calls.every(([, options]) => options.method === "GET")).toBe(true);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("offers the decommissioned review action after a shared-number conflict", async () => {
+    const currentPlan = { ...plan, runId: "decommissioned-registry" };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: currentPlan }))
+      .mockResolvedValueOnce(reply({ error: "inventory_audit_enrichment_shared_number_conflict" }, 409))
+      .mockResolvedValueOnce(reply({ plan: currentPlan }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryDecommissionedEnrichment />);
+    fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("нажмите «Проверить изменения»");
+    expect(alert.textContent).not.toContain("dry-run");
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    const check = screen.getByRole("button", { name: "Проверить изменения" });
+    expect((check as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(check);
+    await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(fetcher.mock.calls[2][0]).toBe("/api/inventory/decommissioned/enrichment");
+    expect(fetcher.mock.calls[2][1].method).toBe("GET");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("shows the actual source name and structured number when an identity conflicts", async () => {
     const conflict = { ...plan.rows[0], eligible: false, changed: false, reason: "identity_conflict", siteNumber: "2411/0390",
       sourceDetails: [{ kind: "ОС", name: "Ноутбук Lenovo IdeaPad №2411/00390", inventoryNumber: "2411/0390", barcode: null }] };

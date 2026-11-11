@@ -222,6 +222,49 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
   });
 
   it.each([
+    { scope: "current", status: "active" },
+    { scope: "decommissioned", status: "decommissioned" },
+    { scope: "decommissioned", status: "decommissioned_in_use" },
+  ] as const)("cannot revive a $status monitor with a shared system unit's owner or price in the $scope plan", async ({ scope, status }) => {
+    const fixture = await createFixture({ sharedNumberPeer: true, oneCOnly: true, sourceName: "Системный блок Dell №2411/00388" });
+    const responsibleId = randomUUID();
+    const responsibleName = "Иванов Иван Иванович";
+    await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,$4,'employee',now(),now())`,
+    [responsibleId, `shared-${responsibleId.slice(0, 8)}`, `${responsibleId}@example.test`, responsibleName]);
+    if (scope === "decommissioned") {
+      // The other member of this valid monitor/system-unit pair remains active.
+      await runtimePool.query(`update yu_inventory.items set archived_at=null,archived_by=null
+        where inventory_number='2411/00388' and id<>$1`, [fixture.itemId]);
+      await runtimePool.query(`update yu_inventory.items set status=$2::text::yu_inventory.item_status,
+        archived_at='2026-10-01T08:00:00Z',archived_by=$3,
+        decommissioned_usage_started_at=case when $2='decommissioned_in_use' then '2026-10-02T08:00:00Z'::timestamptz else null end,
+        decommissioned_usage_started_by=case when $2='decommissioned_in_use' then $3::uuid else null end
+        where id=$1`, [fixture.itemId, status, fixture.userId]);
+    }
+    await saveAssets([{ ...fixture.asset, initialCost: 50000, responsibleName }]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const before = await decommissionedState(fixture.itemId);
+    const integrationsBefore = await integrationState();
+    const plan = scope === "current"
+      ? await service.previewCurrent(fixture.actor)
+      : await service.previewDecommissioned(fixture.actor);
+    expect(plan.rows.find(row => row.itemId === fixture.itemId)).toMatchObject({
+      eligible: false, changed: false, reason: "shared_number_conflict", nextName: "Монитор", nextCode: null,
+      responsibility: { changed: false, nextUserId: null },
+      price: { changed: false, nextUnitPrice: "100.00" },
+    });
+    expect(plan.counts).toEqual({ ready: 0, unchanged: 0, skipped: 1 });
+    const result = scope === "current"
+      ? await service.applyCurrent(plan, fixture.actor)
+      : await service.applyDecommissioned(plan, fixture.actor);
+    expect(result).toMatchObject({ updated: 0, skipped: 1 });
+    expect(await decommissionedState(fixture.itemId)).toEqual(before);
+    expect(await integrationState()).toEqual(integrationsBefore);
+    await expectNoEnrichmentAudit();
+  });
+
+  it.each([
     { sourceName: "Монитор Dell №2411/00388", expectedName: "Монитор Dell №2411/00388", oneCOnly: false },
     { sourceName: "Монитор", expectedName: "Монитор", oneCOnly: true },
   ])("allows a compatible shared-number rename or code-only update: $sourceName", async ({ sourceName, expectedName, oneCOnly }) => {
@@ -490,6 +533,105 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
     expect((await service.apply(fixture.batchId, plan, fixture.actor)).updated).toBe(1);
   });
 
+  it.each([
+    { status: "decommissioned" as const, assigned: false },
+    { status: "decommissioned" as const, assigned: true },
+    { status: "decommissioned_in_use" as const, assigned: false },
+    { status: "decommissioned_in_use" as const, assigned: true },
+  ])("independently enriches $status cards and preserves an existing responsible: $assigned", async ({ status, assigned }) => {
+    const fixture = await createDecommissionedFixture({ status, assigned });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const before = await decommissionedState(fixture.itemId);
+    const integrationsBefore = await integrationState();
+    const periodsBefore = (await runtimePool.query(`select * from yu_inventory.responsibility_periods where item_id=$1 order by id`, [fixture.itemId])).rows;
+
+    const plan = await service.previewDecommissioned(fixture.actor);
+    expect(plan.runId).toBe("decommissioned-registry");
+    expect(plan.counts.ready).toBe(1);
+    expect(plan.rows.find(row => row.itemId === fixture.itemId)).toMatchObject({
+      nextName: SOURCE_NAME, nextCode: before.one_c_code, changed: true,
+      price: { nextUnitPrice: "185000.00", changed: true },
+      responsibility: assigned
+        ? { changed: false, nextUserId: fixture.userId }
+        : { changed: true, nextUserId: fixture.responsibleId },
+    });
+    expect(await decommissionedState(fixture.itemId)).toEqual(before);
+
+    const first = await service.applyDecommissioned(plan, fixture.actor);
+    expect(first.updated).toBe(1);
+    const after = await decommissionedState(fixture.itemId);
+    expect(after).toMatchObject({
+      ...before, name: SOURCE_NAME, unit_price: "185000.00", version: before.version + 1,
+      responsible_user_id: assigned ? fixture.userId : fixture.responsibleId,
+    });
+    expect(await integrationState()).toEqual(integrationsBefore);
+    const periodsAfter = (await runtimePool.query(`select * from yu_inventory.responsibility_periods where item_id=$1 order by id`, [fixture.itemId])).rows;
+    if (assigned) expect(periodsAfter).toEqual(periodsBefore);
+    else expect(periodsAfter).toHaveLength(1);
+
+    expect(await service.applyDecommissioned(plan, fixture.actor)).toEqual(first);
+    expect(await decommissionedState(fixture.itemId)).toEqual(after);
+    expect((await runtimePool.query(`select id from yu_inventory.audit_records where action='item.audit_enrichment' and subject_id=$1`, [fixture.itemId])).rowCount).toBe(1);
+    expect((await service.previewDecommissioned(fixture.actor)).counts.ready).toBe(0);
+    expect((await service.previewCurrent(fixture.actor)).rows).toHaveLength(0);
+  });
+
+  it("limits the independent decommissioned plan to general written-off cards", async () => {
+    const fixture = await createDecommissionedFixture();
+    const item = (await runtimePool.query(`select room_id from yu_inventory.items where id=$1`, [fixture.itemId])).rows[0];
+    const activeId = randomUUID(), itId = randomUUID();
+    await runtimePool.query(`insert into yu_inventory.items
+      (id,name,item_type,item_section,it_type,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,status,archived_at,archived_by,created_by,updated_by)
+      values($1,'Active card','electronics','general',null,1,100,$3,'official','2411/00389','2411/00389','active',null,null,$4,$4),
+        ($2,'IT card','camera','it','camera',1,100,$3,'official','2411/00390','2411/00390','decommissioned',now(),$4,$4,$4)`,
+    [activeId, itId, item.room_id, fixture.userId]);
+    await saveAssets([
+      { ...fixture.asset, externalId: randomUUID(), inventoryNumber: "2411/00389", name: "Новое имя №2411/00389", initialCost: 200000 },
+      { ...fixture.asset, externalId: randomUUID(), inventoryNumber: "2411/00390", name: "Новое имя №2411/00390", initialCost: 300000 },
+    ]);
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.previewDecommissioned(fixture.actor);
+    expect(plan.rows.map(row => row.itemId)).toEqual([fixture.itemId]);
+    const excludedBefore = [await itemState(activeId), await itemState(itId)];
+    expect((await service.applyDecommissioned(plan, fixture.actor)).updated).toBe(1);
+    expect([await itemState(activeId), await itemState(itId)]).toEqual(excludedBefore);
+  });
+
+  it.each(["card", "responsible"] as const)("atomically rejects a stale independent plan after a changed %s", async change => {
+    const first = await createDecommissionedFixture();
+    const second = await createDecommissionedFixture({ inventoryNumber: "2411/00389" });
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.previewDecommissioned(first.actor);
+    expect(plan.counts.ready).toBe(2);
+    if (change === "card") {
+      await runtimePool.query(`update yu_inventory.items set name='Ручное изменение',version=version+1 where id=$1`, [second.itemId]);
+    } else {
+      // Responsibility can change independently of the item's version.
+      await runtimePool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by)
+        values($1,$2,$3,'admin_override',$3)`, [randomUUID(), second.itemId, first.userId]);
+    }
+    const before = [await decommissionedState(first.itemId), await decommissionedState(second.itemId)];
+    await expect(service.applyDecommissioned(plan, first.actor)).rejects.toMatchObject({
+      kind: "conflict", publicCode: "inventory_audit_enrichment_stale",
+    });
+    expect([await decommissionedState(first.itemId), await decommissionedState(second.itemId)]).toEqual(before);
+    await expectNoEnrichmentAudit();
+  });
+
+  it("forbids nonadministrators and rechecks the actor before applying independent decommissioned changes", async () => {
+    const fixture = await createDecommissionedFixture();
+    const service = new InventoryAuditEnrichmentService(runtimePool);
+    const plan = await service.previewDecommissioned(fixture.actor);
+    const before = await decommissionedState(fixture.itemId);
+    const employee = { ...fixture.actor, role: "employee" as const };
+    await expect(service.previewDecommissioned(employee)).rejects.toMatchObject({ kind: "forbidden" });
+    await expect(service.applyDecommissioned(plan, employee)).rejects.toMatchObject({ kind: "forbidden" });
+    await runtimePool.query(`update yu_inventory.users set role='employee',version=version+1 where id=$1`, [fixture.userId]);
+    await expect(service.applyDecommissioned(plan, fixture.actor)).rejects.toMatchObject({ kind: "forbidden" });
+    expect(await decommissionedState(fixture.itemId)).toEqual(before);
+    await expectNoEnrichmentAudit();
+  });
+
   it("serializes simultaneous applications of the same reviewed plan and safely replays after settlement", async () => {
     const fixture = await createFixture();
     const service = new InventoryAuditEnrichmentService(runtimePool);
@@ -512,6 +654,50 @@ describe("inventory source enrichment and deletion against PostgreSQL", () => {
     expect(records.rows[0]?.count).toBe(1);
   });
 });
+
+async function createDecommissionedFixture(options: { status?: "decommissioned" | "decommissioned_in_use"; assigned?: boolean; inventoryNumber?: string } = {}) {
+  const fixture = await createFixture({ oneCOnly: true, inventoryNumber: options.inventoryNumber });
+  const responsibleId = randomUUID();
+  const responsibleName = `Сотрудник Сверки ${responsibleId}`;
+  await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
+    values($1,$2,$3,$4,'employee',now(),now())`, [responsibleId, `resp-${responsibleId.slice(0, 8)}`, `${responsibleId}@example.test`, responsibleName]);
+  const status = options.status ?? "decommissioned";
+  // A saved OS link must agree with its code, without borrowing the unrelated MP's code.
+  const sourceCode = options.assigned ? "LINKED-OS-CODE" : fixture.asset.code;
+  await runtimePool.query(`update yu_inventory.items set status=$2::text::yu_inventory.item_status,one_c_code=$4,
+    archived_at='2026-10-01T08:00:00Z',archived_by=$3,
+    decommissioned_usage_reason=case when $2='decommissioned_in_use' then 'Учебное использование' else null end,
+    decommissioned_usage_started_at=case when $2='decommissioned_in_use' then '2026-10-02T08:00:00Z'::timestamptz else null end,
+    decommissioned_usage_started_by=case when $2='decommissioned_in_use' then $3::uuid else null end
+    where id=$1`, [fixture.itemId, status, fixture.userId, options.assigned ? sourceCode : "LOCAL-CODE"]);
+  if (options.assigned) {
+    await runtimePool.query(`insert into yu_inventory.responsibility_periods(id,item_id,responsible_user_id,source,started_by)
+      values($1,$2,$3,'admin_override',$3)`, [randomUUID(), fixture.itemId, fixture.userId]);
+    await runtimePool.query(`insert into yu_inventory.item_one_c_links
+      (external_id,item_id,linked_by,link_method,last_batch_id,last_payload_hash)
+      select external_id,$2,$3,'manual',batch_id,payload_hash from yu_inventory.one_c_import_batch_rows where batch_id=$1`,
+    [fixture.batchId, fixture.itemId, fixture.userId]);
+    await runtimePool.query(`insert into yu_inventory.one_c_publication_runs(id,batch_id,idempotency_key,state,requested_by)
+      values($1,$2,$3,'pending',$4)`, [randomUUID(), fixture.batchId, randomUUID(), fixture.userId]);
+  }
+  const asset = { ...fixture.asset, code: sourceCode, initialCost: 185000, residualCost: 0, responsibleName, status: "Снято с учёта" };
+  await saveAssets([asset]);
+  return { ...fixture, asset, responsibleId };
+}
+
+async function decommissionedState(itemId: string) {
+  const result = await runtimePool.query(`select i.name,i.unit_price,i.one_c_code,i.inventory_number,i.inventory_number_key,i.inventory_number_kind,
+    i.quantity,i.room_id,i.item_section,i.status,i.archived_at,i.archived_by,i.decommissioned_usage_reason,
+    i.decommissioned_usage_comment,i.decommissioned_usage_started_at,i.decommissioned_usage_started_by,i.version,
+    (select responsible_user_id from yu_inventory.responsibility_periods where item_id=i.id and ended_at is null) as responsible_user_id
+    from yu_inventory.items i where i.id=$1`, [itemId]);
+  return result.rows[0];
+}
+
+async function integrationState() {
+  const tables = ["item_one_c_links", "one_c_publication_runs", "one_c_import_batch_rows", "one_c_fixed_asset_inbox", "barcode_registry"];
+  return Promise.all(tables.map(async table => (await runtimePool.query(`select * from yu_inventory.${table} order by 1`)).rows));
+}
 
 async function createFixture(options: { excelCode?: string; excelOnly?: boolean; oneCOnly?: boolean; duplicateOneC?: boolean; selectedBatchOnly?: boolean; divergentCurrentName?: boolean; divergentCurrentIdentity?: boolean; divergentSelectedIdentity?: boolean; sharedNumberPeer?: boolean; inventoryNumber?: string; sourceName?: string } = {}) {
   const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID(), itemId = randomUUID(), externalId = randomUUID();

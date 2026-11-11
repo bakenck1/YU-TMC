@@ -16,9 +16,9 @@ export function enrichmentMoney(value: unknown): string | null {
 }
 
 /** Live prices can use either independently identified register; residual values never become a purchase price. */
-export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, evidence: AuditMatch[], assets: Map<string, OneCFixedAsset>, items: InventoryAuditEnrichmentItem[], options: { independentSources?: boolean } = {}) {
+export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, evidence: AuditMatch[], assets: Map<string, OneCFixedAsset>, items: InventoryAuditEnrichmentItem[], options: { independentSources?: boolean; decommissionedOnly?: boolean } = {}) {
   if (options.independentSources) {
-    addIndependentPrices(plan, evidence, assets, items);
+    addIndependentPrices(plan, evidence, assets, items, options.decommissionedOnly);
     return;
   }
   const byItem = new Map(items.map(item => [item.id, item]));
@@ -76,8 +76,8 @@ export function addOneCPriceProposals(plan: InventoryAuditEnrichmentPlan, eviden
 }
 
 /** Missing OS cost must not hide an independently identified MP unit price. */
-function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: AuditMatch[], assets: Map<string, OneCFixedAsset>, items: InventoryAuditEnrichmentItem[]) {
-  const matching = { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true, priceOnly: true };
+function addIndependentPrices(plan: InventoryAuditEnrichmentPlan, evidence: AuditMatch[], assets: Map<string, OneCFixedAsset>, items: InventoryAuditEnrichmentItem[], decommissionedOnly = false) {
+  const matching = { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true, priceOnly: true, decommissionedOnly };
   const osEvidence = evidence.map(row => ({ ...row, excel: [] }));
   const mpEvidence = evidence.map(row => ({ ...row, oneC: [], excel: row.excel.filter(entry => entry.matchedBy?.length) }));
   const osPlan = buildInventoryAuditEnrichmentPlan(osEvidence, items, matching);

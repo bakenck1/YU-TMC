@@ -35,6 +35,22 @@ export class InventoryAuditEnrichmentService {
     return this.transaction(actor, false, (client) => this.currentPlan(client, false, false, true));
   }
 
+  previewDecommissioned(actor: OneCAdminActor) {
+    return this.transaction(actor, false, (client) => this.currentPlan(client, false, false, false, true));
+  }
+
+  applyDecommissioned(input: ApplyInput, actor: OneCAdminActor): Promise<ApplyResult> {
+    return this.transaction(actor, true, async (client) => {
+      const previous = await client.query(`select metadata->'result' as result from "yu_inventory"."audit_records"
+        where actor_id=$1 and action='item.audit_enrichment' and metadata->>'scope'='decommissioned_registry'
+          and metadata->>'planHash'=$2 and metadata->>'runId'=$3 limit 1`, [actor.userId, input.planHash, input.runId]);
+      if (previous.rows[0]) return previous.rows[0].result as ApplyResult;
+      const plan = await this.currentPlan(client, true, false, false, true);
+      if (plan.runId !== input.runId || plan.planHash !== input.planHash) throw stale();
+      return this.writePlan(client, plan, actor, null, true);
+    });
+  }
+
   previewMissingResponsibilities(actor: OneCAdminActor) {
     return this.transaction(actor, false, (client) => this.currentPlan(client, false, true));
   }
@@ -74,24 +90,28 @@ export class InventoryAuditEnrichmentService {
     });
   }
 
-  private async writePlan(client: PoolClient, plan: InventoryAuditEnrichmentPlan & { runId: string; planHash: string }, actor: OneCAdminActor, batchId: string | null): Promise<ApplyResult> {
+  private async writePlan(client: PoolClient, plan: InventoryAuditEnrichmentPlan & { runId: string; planHash: string }, actor: OneCAdminActor, batchId: string | null, decommissionedOnly = false): Promise<ApplyResult> {
       const result: ApplyResult = { updated: plan.counts.ready, unchanged: plan.counts.unchanged, skipped: plan.counts.skipped, planHash: plan.planHash };
       for (const row of plan.rows.filter((entry) => entry.eligible && entry.changed)) {
         const rename = row.nextName !== row.currentName;
         // A code-only change must not invoke the UPDATE OF name identity trigger.
-        const parameters: unknown[] = [row.itemId, row.itemVersion, row.nextCode, actor.userId];
-        const assignments = ["one_c_code=$3", "version=version+1", "updated_at=now()", "updated_by=$4"];
+        const parameters: unknown[] = [row.itemId, row.itemVersion, actor.userId];
+        const assignments = ["version=version+1", "updated_at=now()", "updated_by=$3"];
+        if (!decommissionedOnly) { parameters.push(row.nextCode); assignments.push(`one_c_code=$${parameters.length}`); }
         if (rename) { parameters.push(row.nextName); assignments.push(`name=$${parameters.length}`); }
         if (batchId === null && row.price?.changed) { parameters.push(row.price.nextUnitPrice); assignments.push(`unit_price=$${parameters.length}`); }
+        const lifecycle = decommissionedOnly
+          ? "item_section='general' and status in ('decommissioned','decommissioned_in_use')"
+          : `archived_at is null ${batchId === null ? "and status='active'" : "and item_section='general'"}`;
         const updated = await client.query(`update "yu_inventory"."items" set ${assignments.join(",")}
-          where id=$1 and version=$2 and archived_at is null ${batchId === null ? "and status='active'" : "and item_section='general'"} returning id`, parameters);
+          where id=$1 and version=$2 and ${lifecycle} returning id`, parameters);
         if (updated.rowCount !== 1) throw stale();
         if (batchId === null && row.responsibility?.changed) {
           const repository = createPostgresInventoryResponsibilityRepositories(client).responsibility;
           const state = await repository.findItemStateForUpdate(row.itemId);
           const targetId = row.responsibility.nextUserId;
           if (!state || state.responsibleUserId !== null || state.responsibilityPeriodId !== null || row.responsibility.currentUserId !== null || !targetId
-            || state.itemStatus === "decommissioned" || await repository.findPendingTransfer(row.itemId)) throw stale();
+            || (!decommissionedOnly && state.itemStatus === "decommissioned") || await repository.findPendingTransfer(row.itemId)) throw stale();
           const pendingTmc = await client.query(`select 1 from yu_inventory.tmc_transfer_request_items i
             join yu_inventory.tmc_transfer_requests r on r.id=i.request_id
             where i.item_id=$1 and i.result='pending' and r.status='pending' limit 1`, [row.itemId]);
@@ -105,7 +125,7 @@ export class InventoryAuditEnrichmentService {
           await repository.appendAudit({ id: randomUUID(), actorId: actor.userId, actorRole: actor.role,
             subjectKind: "responsibility", subjectId: row.itemId, subjectRevision: row.itemVersion + 1,
             action: "responsibility.admin_override", beforeValues: { responsibleUserId: state.responsibleUserId },
-            afterValues: { responsibleUserId: targetId, source: "admin_override", origin: plan.runId === "current-registry-responsibilities" ? "one_c_responsibility_backfill" : "one_c_current_enrichment" },
+            afterValues: { responsibleUserId: targetId, source: "admin_override", origin: decommissionedOnly ? "decommissioned_enrichment" : plan.runId === "current-registry-responsibilities" ? "one_c_responsibility_backfill" : "one_c_current_enrichment" },
             reason, isAdministrativeException: true, occurredAt });
         }
         await client.query(`insert into "yu_inventory"."audit_records"
@@ -115,7 +135,7 @@ export class InventoryAuditEnrichmentService {
           JSON.stringify({ name: row.currentName, oneCCode: row.currentCode, version: row.itemVersion, ...(row.price ? { unitPrice: row.price.currentUnitPrice } : {}), ...(row.responsibility ? { responsibleUserId: row.responsibility.currentUserId } : {}) }),
           JSON.stringify({ name: row.nextName, oneCCode: row.nextCode, version: row.itemVersion + 1, ...(row.price ? { unitPrice: row.price.nextUnitPrice } : {}), ...(row.responsibility ? { responsibleUserId: row.responsibility.nextUserId } : {}) }),
           JSON.stringify({ source: "inventory_audit_enrichment", batchId, runId: plan.runId, planHash: plan.planHash,
-            scope: batchId === null ? "current_registry" : "selected_batch",
+            scope: decommissionedOnly ? "decommissioned_registry" : batchId === null ? "current_registry" : "selected_batch",
             externalId: row.externalId, excelRowNumber: row.excelRowNumber,
             nameSource: row.nameSource, codeStatus: row.codeStatus, identityMethod: row.identityMethod,
             temporaryMatch: row.temporaryMatch, price: row.price, result })]);
@@ -124,7 +144,7 @@ export class InventoryAuditEnrichmentService {
   }
 
   /** One live comparison across all OS and MP, independent of batch analysis/history. */
-  private async currentPlan(client: PoolClient, lock = false, responsibilityOnly = false, temporaryOnly = false) {
+  private async currentPlan(client: PoolClient, lock = false, responsibilityOnly = false, temporaryOnly = false, decommissionedOnly = false) {
     const cards = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.item_section,i.archived_at,i.status,i.unit_price,i.quantity,
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id
         where p.item_id=i.id and p.ended_at is null) as responsible_name,
@@ -138,7 +158,9 @@ export class InventoryAuditEnrichmentService {
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links order by external_id`);
     const codes = new Map<string, string[]>();
     for (const link of links.rows) if (link.source_code) codes.set(link.item_id, [...(codes.get(link.item_id) ?? []), link.source_code]);
-    const currentCards = cards.rows.filter(row => row.archived_at == null && row.status === "active");
+    const currentCards = cards.rows.filter(row => decommissionedOnly
+      ? row.item_section === "general" && (row.status === "decommissioned" || row.status === "decommissioned_in_use")
+      : row.archived_at == null && row.status === "active");
     const audit = buildInventorySourceAudit(currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, inventoryNumberKind: row.inventory_number_kind,
       oneCCode: row.one_c_code, version: row.version, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
@@ -162,9 +184,9 @@ export class InventoryAuditEnrichmentService {
     const items: InventoryAuditEnrichmentItem[] = currentCards.map(row => ({
       id: row.id, name: row.name, inventoryNumber: row.inventory_number, officialBarcodes: row.barcodes, localBarcodes: row.local_barcodes,
       oneCCode: row.one_c_code, version: row.version, itemSection: row.item_section,
-      status: row.status, unitPrice: row.unit_price, quantity: row.quantity, responsibleName: row.responsible_name,
+      status: row.status, archivedAt: row.archived_at, unitPrice: row.unit_price, quantity: row.quantity, responsibleName: row.responsible_name,
     }));
-    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true });
+    const plan = buildInventoryAuditEnrichmentPlan(evidence, items, { allowDescriptionIdentity: true, includeIt: true, formattedNumbers: true, allowSourceCode: true, decommissionedOnly });
     await this.checkSharedNumbers(client, plan);
     const users = await client.query(`select id,full_name,role,is_active,deleted_at,version from yu_inventory.users order by id ${lock ? "for share" : ""}`);
     const periods = await client.query(`select p.id,p.item_id,p.responsible_user_id,u.full_name from yu_inventory.responsibility_periods p
@@ -183,7 +205,7 @@ export class InventoryAuditEnrichmentService {
     addOneCResponsibilityProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), (row.payload as OneCFixedAsset).responsibleName])),
       users.rows.map(row => ({ id: String(row.id), fullName: String(row.full_name), role: row.role, active: row.is_active, deleted: row.deleted_at != null })),
       currentCards.map(row => ({ itemId: String(row.id), userId: byPeriod.get(row.id)?.responsible_user_id ?? null,
-        name: byPeriod.get(row.id)?.full_name ?? null, pendingTransfer: pendingIds.has(row.id), unavailable: unavailable.has(row.id) })));
+        name: byPeriod.get(row.id)?.full_name ?? null, pendingTransfer: pendingIds.has(row.id), unavailable: !decommissionedOnly && unavailable.has(row.id) })));
     if (responsibilityOnly) {
       plan.counts = { ready: 0, unchanged: 0, skipped: 0 };
       for (const row of plan.rows) {
@@ -196,10 +218,21 @@ export class InventoryAuditEnrichmentService {
         else plan.counts.skipped++;
       }
     } else {
-      addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true });
+      addOneCPriceProposals(plan, evidence, new Map(registry.rows.map(row => [String(row.external_id), row.payload as OneCFixedAsset])), items, { independentSources: true, decommissionedOnly });
+    }
+    if (decommissionedOnly) {
+      // Use source codes to search, but copy only the explicitly requested fields.
+      plan.counts = { ready: 0, unchanged: 0, skipped: 0 };
+      for (const row of plan.rows) {
+        row.nextCode = row.currentCode;
+        row.changed = row.eligible && (row.nextName !== row.currentName || row.price?.changed === true || row.responsibility?.changed === true);
+        if (!row.eligible) plan.counts.skipped++;
+        else if (row.changed) { row.reason = "confirmed"; plan.counts.ready++; }
+        else { row.reason = "unchanged"; plan.counts.unchanged++; }
+      }
     }
     const scopedPlan = temporaryOnly ? temporaryReconciliationPlan(plan, audit.rows) : plan;
-    const runId = temporaryOnly ? "current-registry-temporary" : responsibilityOnly ? "current-registry-responsibilities" : "current-registry";
+    const runId = decommissionedOnly ? "decommissioned-registry" : temporaryOnly ? "current-registry-temporary" : responsibilityOnly ? "current-registry-responsibilities" : "current-registry";
     const planHash = createHash("sha256").update(JSON.stringify({
       scope: runId, algorithm: INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION,
       registry: registry.rows, materialRegistrySha256: materials.metadata.sha256,

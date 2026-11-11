@@ -60,10 +60,10 @@ export function addOneCResponsibilityProposals(plan: InventoryAuditEnrichmentPla
       ...(match?.excel ?? []).map(entry => entry.nomenclature)]
       .some(isChairName)) { proposal.status = "not_allowed"; continue; }
     // A source may safely identify the owner even when its name cannot be applied
-    // (too long, shared monitor/system number, or several unanimous source copies).
+    // (too long or several unanimous source copies).
     // Missing, changed and conflicting identities still cannot authorize an assignment.
     const responsibilityOnly = !row.eligible && !row.changed
-      && ["source_ambiguous", "source_reused", "name_invalid", "shared_number_conflict"].includes(row.reason);
+      && ["source_ambiguous", "source_reused", "name_invalid"].includes(row.reason);
     if ((!row.eligible && !responsibilityOnly) || !match || row.identityMethod === "name_owner") continue;
     // Revalidate each source independently. Name/owner fallback alone cannot assign an unowned card.
     const confirmed = (oneC: AuditMatch["oneC"], excel: AuditMatch["excel"]) => {
