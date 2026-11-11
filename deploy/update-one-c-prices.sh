@@ -17,7 +17,20 @@ if [[ -n "$(sudo -u yu-inventory git status --porcelain)" ]]; then
 fi
 
 echo '[2/6] Creating and checking the database backup'
-systemctl start yu-inventory-backup.service
+# git pull updates the repository, not the executable and sandbox installed in
+# /usr/local and /etc. Keep the helper, executable and unit from one release.
+install -d -o root -g root -m 0755 /usr/local/libexec /usr/local/sbin
+install -o root -g root -m 0644 deploy/backup-postgres-connection.mjs /usr/local/libexec/yu-inventory-backup-connection.mjs
+install -o root -g root -m 0750 deploy/backup-postgres.sh /usr/local/sbin/yu-inventory-backup
+install -o root -g root -m 0644 deploy/systemd/yu-inventory-backup.service /etc/systemd/system/yu-inventory-backup.service
+systemctl daemon-reload
+systemctl reset-failed yu-inventory-backup.service
+if ! systemctl start yu-inventory-backup.service; then
+  echo 'Database backup failed; web and push services have not been stopped.' >&2
+  systemctl status yu-inventory-backup.service --no-pager --full >&2 || true
+  journalctl -u yu-inventory-backup.service -n 30 --no-pager -o cat >&2 || true
+  exit 1
+fi
 test "$(systemctl show yu-inventory-backup.service -p Result --value)" = success
 test "$(systemctl show yu-inventory-backup.service -p ExecMainStatus --value)" = 0
 

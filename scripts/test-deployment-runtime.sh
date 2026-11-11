@@ -95,6 +95,16 @@ cat >"$fake_bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>/tmp/yu-inventory-deployment-test/systemctl.log
+if [[ "$*" == 'start yu-inventory-backup.service' && -e /tmp/yu-inventory-deployment-test/update-backup-fails ]]; then
+  readonly state_directory=/tmp/yu-inventory-deployment-test
+  cmp -s /opt/yu-inventory/current/deploy/systemd/yu-inventory-backup.service /etc/systemd/system/yu-inventory-backup.service
+  grep -Fx 'ReadWritePaths=/var/backups/yu-inventory /run/lock' /etc/systemd/system/yu-inventory-backup.service >/dev/null
+  cmp -s /opt/yu-inventory/current/deploy/backup-postgres.sh /usr/local/sbin/yu-inventory-backup
+  cmp -s /opt/yu-inventory/current/deploy/backup-postgres-connection.mjs /usr/local/libexec/yu-inventory-backup-connection.mjs
+  grep -Fx 'daemon-reload' "$state_directory/systemctl.log" >/dev/null
+  touch "$state_directory/updated-backup-runtime-checked"
+  exit 1
+fi
 EOF
 chmod 0755 "$fake_bin"/*
 export PATH="$fake_bin:$PATH"
@@ -159,6 +169,39 @@ backup_list_after="$(find /var/backups/yu-inventory -maxdepth 1 -type f -name '*
 [[ "$backup_list_before" == "$backup_list_after" ]] || fail "mismatch changed published backups"
 assert_no_temporary_files /var/backups/yu-inventory
 printf 'deployment-test\n' >"$test_root/deployment-id"
+
+# A release must replace an outdated installed sandbox before invoking backup.
+# A failed backup must print diagnostics and never reach the web stop command.
+mkdir -p /opt/yu-inventory/current /etc/systemd/system
+cp -R "$workspace_directory/deploy" /opt/yu-inventory/current/deploy
+printf '[Service]\nProtectSystem=strict\nReadWritePaths=/var/backups/yu-inventory\n' \
+  >/etc/systemd/system/yu-inventory-backup.service
+cat >"$fake_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == -u && "${2:-}" == yu-inventory && "${3:-}" == git ]] || exit 2
+case "${4:-}" in
+  log) printf 'test-commit\n' ;;
+  status) ;;
+  *) exit 2 ;;
+esac
+EOF
+cat >"$fake_bin/journalctl" <<'EOF'
+#!/usr/bin/env bash
+printf 'test-backup-failure-diagnostic\n'
+EOF
+chmod 0755 "$fake_bin/sudo" "$fake_bin/journalctl"
+touch "$test_root/update-backup-fails"
+: >"$test_root/systemctl.log"
+if bash "$workspace_directory/deploy/update-one-c-prices.sh" >"$test_root/update-backup-failure.log" 2>&1; then
+  fail "release continued after a failed backup"
+fi
+assert_file "$test_root/updated-backup-runtime-checked"
+grep -F 'test-backup-failure-diagnostic' "$test_root/update-backup-failure.log" >/dev/null
+if grep -E '^(stop|restart) yu-inventory( |$)' "$test_root/systemctl.log" >/dev/null; then
+  fail "release stopped the site after a failed backup"
+fi
+rm -f -- "$test_root/update-backup-fails"
 
 openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout "$test_root/root.key" \

@@ -68,6 +68,7 @@ jobs:
           bash -n deploy/enable-https.sh
           bash -n deploy/update-one-c-temporary.sh
           bash -n deploy/update-integration-api.sh
+          bash -n deploy/update-one-c-prices.sh
           sh -n scripts/test-backup-roundtrip.sh
           node --check deploy/backup-postgres-connection.mjs
       - name: Run isolated deployment smoke tests

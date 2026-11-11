@@ -104,6 +104,8 @@ sudo install -d -o root -g root -m 0755 /usr/local/libexec
 sudo install -o root -g root -m 0750 deploy/backup-postgres.sh /usr/local/sbin/yu-inventory-backup
 sudo install -o root -g root -m 0644 deploy/backup-postgres-connection.mjs \
   /usr/local/libexec/yu-inventory-backup-connection.mjs
+sudo install -o root -g root -m 0644 deploy/systemd/yu-inventory-backup.service /etc/systemd/system/yu-inventory-backup.service
+sudo systemctl daemon-reload
 sudo systemctl enable --now yu-inventory-backup.timer
 sudo systemctl start yu-inventory-backup.service
 ```
@@ -211,6 +213,12 @@ DATABASE_TARGET=production
 
 Рабочий сайт обновляется из `origin/master`. Старые ветки `codex/*` могут
 не содержать исправлений, уже объединённых в `master`.
+Скрипты `deploy/update-one-c-prices.sh` и `deploy/update-integration-api.sh`
+перед backup устанавливают актуальные исполняемый файл, helper и systemd-unit,
+затем выполняют `daemon-reload`. Один `git pull` не обновляет файлы в `/etc`
+и `/usr/local`. Старый unit с `ProtectSystem=strict`, разрешающий запись только
+в каталог дампов, не позволяет открыть `/run/lock/yu-inventory-backup.lock`.
+Актуальный unit разрешает запись также в `/run/lock`, сохраняя остальные ограничения.
 Для обновления выполните весь блок ниже.
 Он проверяет результат резервного копирования и чистоту рабочей копии до
 остановки сервисов. При ошибке выполнение прекращается; после остановки
