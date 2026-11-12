@@ -11,5 +11,6 @@ test("excludes the approved consumables and preserves equipment mentioning suppl
 
 test("retains reviewed exclusions after a fixed asset is renamed", () => {
   assert.equal(isOneCExcludedSource("Новая запись", "D895592F-EC33-11EA-9A99-DAF44A7F39D0"), true);
+  assert.equal(isOneCExcludedSource("Новая запись", "c426bcdd-e8bf-11e8-951e-002522bd9fc7"), true);
   assert.equal(isOneCExcludedSource("Компьютер", "00000000-0000-4000-8000-000000000001"), false);
 });

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { Pool } from "pg";
 import { readDatabaseConfig, type DatabaseConfig } from "@/lib/db/env";
 import { migrateDatabase } from "@/lib/db/migrations";
@@ -53,6 +54,21 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
+  it.runIf(Boolean(process.env.ONE_C_SCOPE_REVIEW_FILE))("checks JavaScript/PostgreSQL scope for every row of the supplied full export", async () => {
+    const records = JSON.parse(readFileSync(process.env.ONE_C_SCOPE_REVIEW_FILE!, "utf8")) as {source: string;name: string;id: string}[];
+    expect(records.length).toBeGreaterThan(0);
+    for (let offset = 0; offset < records.length; offset += 500) {
+      const chunk = records.slice(offset, offset + 500);
+      const rows = await pool.query(`select n,${oneCIncludedSourceSql("name", "external_id")} as included
+        from unnest($1::text[],$2::text[]) with ordinality as t(name,external_id,n)`,
+      [chunk.map(r => r.name), chunk.map(r => r.source === "OS" ? r.id : "")]);
+      for (const row of rows.rows) {
+        const record = chunk[Number(row.n) - 1];
+        expect(row.included, `${record.source}: ${record.name}`).toBe(!isOneCExcludedSource(record.name, record.source === "OS" ? record.id : undefined));
+      }
+    }
+  }, 120_000);
+
   it("uses the same consumable scope in PostgreSQL, analytics, registries, enrichment and Excel", async () => {
     const names = [...consumables, ...retainedEquipment];
     const parity = await pool.query(`select name, ${oneCConsumableSql("name")} as consumable, ${oneCIncludedSourceSql("name", "external_id")} as included from unnest($1::text[]) as t(name) cross join (values ('00000000-0000-4000-8000-000000000001')) as x(external_id)`, [names]);
@@ -66,7 +82,7 @@ describe("live materials API replaces Excel as audit input", () => {
     await new PostgresOneCFixedAssetRepository(pool).saveBatch([
       { ...original, name: "Степлер электрический", inventoryNumber: "1350/14444" },
       { ...original, externalId: randomUUID(), name: "Кабельный тестер", inventoryNumber: "1350/11111" },
-      { ...original, externalId: "d895592f-ec33-11ea-9a99-daf44a7f39d0", name: "После переименования", inventoryNumber: "1350/22222" },
+      { ...original, externalId: "c426bcdd-e8bf-11e8-951e-002522bd9fc7", name: "После переименования", inventoryNumber: "1350/22222" },
     ], metadata());
     await save([{ ...base, code: "CABLE", name: "Кабель HDMI" }, { ...base, code: "TESTER", name: "Кабельный тестер" }]);
     const snapshot = await getOneCAnalyticsSnapshot(pool);
@@ -84,6 +100,32 @@ describe("live materials API replaces Excel as audit input", () => {
       expect(JSON.stringify(row.values)).not.toContain("Степлер электрический");
       expect(JSON.stringify(row.values)).not.toContain("После переименования");
     }));
+  });
+
+  it("retains power supplies in both registries, cards, enrichment and Excel", async () => {
+    const f = await seed();
+    const name = "Блок питания Mean Well SDR-240-24";
+    await pool.query("update yu_inventory.items set name=$2 where id=$1", [f.itemId, name]);
+    const original = (await pool.query("select payload from yu_inventory.one_c_fixed_asset_inbox limit 1")).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([
+      { ...original, name, inventoryNumber: "1350/14444", initialCost: 150 },
+    ], metadata());
+    await save([{ ...base, code: "PSU", name: "Блоки питания 24 В на ДИН рейку", inventoryNumber: null }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.assets.total).toBe(1);
+    expect(snapshot.analytics.inventory.total).toBe(1);
+    expect(snapshot.materials.materialCount).toBe(1);
+    expect(snapshot.rows).toHaveLength(1);
+    expect((await getFixedAssetRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    const plan = await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor);
+    expect(plan.rows.some(row => row.itemId === f.itemId)).toBe(true);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await exportOneCAnalyticsExcel(snapshot) as never);
+    const values: string[] = [];
+    workbook.eachSheet(sheet => sheet.eachRow(row => values.push(JSON.stringify(row.values))));
+    expect(values.join("\n")).toContain(name);
+    expect((await pool.query("select count(*)::int as count from yu_inventory.items where id=$1", [f.itemId])).rows[0].count).toBe(1);
   });
 
   it("excludes the accounting library fund by confirmed name across totals, sources and cards", async () => {
