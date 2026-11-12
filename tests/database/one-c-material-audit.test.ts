@@ -32,6 +32,7 @@ import { OneCMaterialImportService } from "@/lib/application/services/one-c-mate
 import { isOneCConsumable, oneCConsumableSql } from "@/lib/one-c-consumables";
 import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integration-scope";
 import { consumables, retainedEquipment } from "../helpers/one-c-consumable-cases";
+import reviewedExclusions from "@/lib/data/one-c-reviewed-exclusions.json";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -54,17 +55,39 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
+  it("excludes all additionally approved identities in SQL and preserves source history", async () => {
+    const ids = ["00000000-0000-4000-8000-000000000001", ...reviewedExclusions.fixedAssetIds];
+    const codes = ["unreviewed", ...reviewedExclusions.materialCodes];
+    const assets = await pool.query(`select external_id,${oneCIncludedSourceSql("name", "external_id")} as included
+      from unnest($1::text[]) t(external_id) cross join (values ('Переименованная позиция')) n(name)`, [ids]);
+    expect(assets.rows.map(row => row.included)).toEqual(ids.map((_, i) => i === 0));
+    const materials = await pool.query(`select code,${oneCIncludedSourceSql("name", undefined, "code")} as included
+      from unnest($1::text[]) t(code) cross join (values ('Переименованная позиция')) n(name)`, [codes]);
+    expect(materials.rows.map(row => row.included)).toEqual(codes.map((_, i) => i === 0));
+    const f = await seed();
+    const code = reviewedExclusions.materialCodes[0];
+    await pool.query("update yu_inventory.items set one_c_code=$2 where id=$1", [f.itemId, code]);
+    await save([{ ...base, code, name: "Переименованная позиция" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.materials.materialCount).toBe(0);
+    expect(snapshot.analytics.inventory.total).toBe(0);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(0);
+    expect((await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor)).rows).toHaveLength(0);
+    expect((await pool.query("select count(*)::int as count from yu_inventory.items where id=$1", [f.itemId])).rows[0].count).toBe(1);
+    expect((await pool.query("select count(*)::int as count from yu_inventory.one_c_material_inbox")).rows[0].count).toBe(1);
+  });
+
   it.runIf(Boolean(process.env.ONE_C_SCOPE_REVIEW_FILE))("checks JavaScript/PostgreSQL scope for every row of the supplied full export", async () => {
-    const records = JSON.parse(readFileSync(process.env.ONE_C_SCOPE_REVIEW_FILE!, "utf8")) as {source: string;name: string;id: string}[];
+    const records = JSON.parse(readFileSync(process.env.ONE_C_SCOPE_REVIEW_FILE!, "utf8")) as {source: string;name: string;id: string;code:string}[];
     expect(records.length).toBeGreaterThan(0);
     for (let offset = 0; offset < records.length; offset += 500) {
       const chunk = records.slice(offset, offset + 500);
-      const rows = await pool.query(`select n,${oneCIncludedSourceSql("name", "external_id")} as included
-        from unnest($1::text[],$2::text[]) with ordinality as t(name,external_id,n)`,
-      [chunk.map(r => r.name), chunk.map(r => r.source === "OS" ? r.id : "")]);
+      const rows = await pool.query(`select n,${oneCIncludedSourceSql("name", "external_id", "material_code")} as included
+        from unnest($1::text[],$2::text[],$3::text[]) with ordinality as t(name,external_id,material_code,n)`,
+      [chunk.map(r => r.name), chunk.map(r => r.source === "OS" ? r.id : ""), chunk.map(r => r.source === "MP" ? r.code : "")]);
       for (const row of rows.rows) {
         const record = chunk[Number(row.n) - 1];
-        expect(row.included, `${record.source}: ${record.name}`).toBe(!isOneCExcludedSource(record.name, record.source === "OS" ? record.id : undefined));
+        expect(row.included, `${record.source}: ${record.name}`).toBe(!isOneCExcludedSource(record.name, record.source === "OS" ? record.id : undefined, record.source === "MP" ? record.code : undefined));
       }
     }
   }, 120_000);

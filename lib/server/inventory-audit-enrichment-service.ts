@@ -160,7 +160,7 @@ export class InventoryAuditEnrichmentService {
     const codes = new Map<string, string[]>();
     for (const link of links.rows) if (link.source_code) codes.set(link.item_id, [...(codes.get(link.item_id) ?? []), link.source_code]);
     const excludedLinkedItems = new Set(links.rows.filter(link => isOneCExcludedAsset(link.external_id)).map(link => link.item_id));
-    const currentCards = cards.rows.filter(row => !isOneCExcludedSource(row.name) && !excludedLinkedItems.has(row.id)).filter(row => decommissionedOnly
+    const currentCards = cards.rows.filter(row => !isOneCExcludedSource(row.name, null, row.one_c_code) && !excludedLinkedItems.has(row.id)).filter(row => decommissionedOnly
       ? row.item_section === "general" && (row.status === "decommissioned" || row.status === "decommissioned_in_use")
       : row.archived_at == null && row.status === "active");
     const audit = buildInventorySourceAudit(currentCards.map(row => ({

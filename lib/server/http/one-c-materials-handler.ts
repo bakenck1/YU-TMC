@@ -104,7 +104,7 @@ function validateUnitPrices(snapshot: OneCMaterialsSnapshot) {
   }[] = [];
   let total = 0;
   for (const [index, material] of snapshot.materials.entries()) {
-    if (isOneCExcludedSource(material.name)) continue;
+    if (isOneCExcludedSource(material.name, null, material.code)) continue;
     if (!(Number(material.quantity) > 0)) continue;
     const value = material.unitPrice;
     const reason = value == null ? "missing_unit_price"

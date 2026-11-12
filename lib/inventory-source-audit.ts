@@ -86,9 +86,9 @@ function nameScore(left: string, right: string): number {
 
 export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean; exactNames?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
   const excludedLinkedItems = new Set(links.filter(link => isOneCExcludedAsset(link.externalId)).map(link => link.itemId));
-  items = items.filter(item => !isOneCExcludedSource(item.name) && !excludedLinkedItems.has(item.id));
+  items = items.filter(item => !isOneCExcludedSource(item.name, null, item.oneCCode) && !excludedLinkedItems.has(item.id));
   oneCRows = oneCRows.filter(row => !isOneCExcludedSource(row.asset.name, row.externalId));
-  excelRows = excelRows.filter(row => !isOneCExcludedSource(row.nomenclature));
+  excelRows = excelRows.filter(row => !isOneCExcludedSource(row.nomenclature, null, row.oneCCode));
   const nameOwners = new Map<string, string[]>();
   const assetNames = new Map<string, Set<string>>();
   const materialNames = new Map<string, ExcelSourceRow[]>();

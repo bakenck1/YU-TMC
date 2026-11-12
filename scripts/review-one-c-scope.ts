@@ -42,9 +42,9 @@ for (const source of ["OS", "MP"] as const) {
 const identity = (r: Source) => r.source === "OS" ? r.id : r.code;
 const sourceId = (r: Source) => r.source === "OS" ? r.id : undefined;
 const book = (r: Source) => isOneCBook(r.name, sourceId(r));
-const reason = (r: Source) => book(r) ? "library" : oneCConsumableCategory(r.name) ?? "confirmed_consumable";
-const excluded = records.filter(r => isOneCExcludedSource(r.name, sourceId(r)));
-const remaining = records.filter(r => !isOneCExcludedSource(r.name, sourceId(r)));
+const reason = (r: Source) => book(r) ? "library" : oneCConsumableCategory(r.name) ?? "confirmed_review";
+const excluded = records.filter(r => isOneCExcludedSource(r.name, sourceId(r), r.source === "MP" ? r.code : undefined));
+const remaining = records.filter(r => !isOneCExcludedSource(r.name, sourceId(r), r.source === "MP" ? r.code : undefined));
 const scopeSummary = (rows: Source[]) => ({
   assets: new Set(rows.filter(r => r.source === "OS").map(identity)).size,
   materials: new Set(rows.filter(r => r.source === "MP").map(identity)).size,
@@ -52,7 +52,7 @@ const scopeSummary = (rows: Source[]) => ({
 });
 const materialsByCode = new Map<string, Source[]>();
 for (const r of records.filter(r => r.source === "MP")) materialsByCode.set(r.code, [...(materialsByCode.get(r.code) ?? []), r]);
-const mixedCodes = [...materialsByCode].filter(([, rows]) => new Set(rows.map(r => isOneCExcludedSource(r.name))).size > 1)
+const mixedCodes = [...materialsByCode].filter(([, rows]) => new Set(rows.map(r => isOneCExcludedSource(r.name, undefined, r.code))).size > 1)
   .map(([code, rows]) => ({ code, names: [...new Set(rows.map(r => r.name))] }));
 const categories = Object.fromEntries([...new Set(excluded.map(reason))].sort().map(key => [key, scopeSummary(excluded.filter(r => reason(r) === key))]));
 const summary = { sourceFile: path.basename(input), sourceSha256: createHash("sha256").update(bytes).digest("hex"),

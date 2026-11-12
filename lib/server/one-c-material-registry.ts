@@ -16,7 +16,7 @@ export async function readMaterialRegistry(db: Database = getDatabasePool()) {
     select id,received_at,source_snapshot_at from "yu_inventory"."one_c_material_import_batches"
     order by received_at desc,id desc limit 1
   ) select b.id as batch_id,b.received_at,b.source_snapshot_at,i.row_key,i.payload_hash,i.payload
-    from latest b left join "yu_inventory"."one_c_material_inbox" i on i.superseded_at is null and ${oneCIncludedSourceSql("i.payload->>'name'")}
+    from latest b left join "yu_inventory"."one_c_material_inbox" i on i.superseded_at is null and ${oneCIncludedSourceSql("i.payload->>'name'", undefined, "i.material_code")}
     order by i.row_key collate "C"`);
   const stored = result.rows.filter(row => row.row_key != null);
   const rows: ExcelSourceRow[] = [];
@@ -57,7 +57,7 @@ export async function getMaterialRegistryMetadata(db: Database = getDatabasePool
 
 export async function getMaterialRegistryPage(query: { page: number; pageSize: number; search?: string }, db: Database = getDatabasePool()) {
   const values: unknown[] = [];
-  const where = [oneCIncludedSourceSql("i.payload->>'name'"), "i.superseded_at is null", "(i.payload->>'quantity')::numeric > 0"];
+  const where = [oneCIncludedSourceSql("i.payload->>'name'", undefined, "i.material_code"), "i.superseded_at is null", "(i.payload->>'quantity')::numeric > 0"];
   if (query.search) {
     values.push(`%${query.search.replace(/[\\%_]/gu, character => `\\${character}`)}%`);
     where.push(`(i.material_code ilike $1 escape '\\' or i.material_external_id::text ilike $1 escape '\\'
