@@ -1,3 +1,5 @@
+import { isLibraryFundName, isLibraryFundAsset, libraryFundNameSql, libraryFundAssetSql } from "@/lib/one-c-library-fund";
+
 // The same name rule is used in memory and in paginated PostgreSQL registries.
 // Explicit Cyrillic boundaries also work in databases using the C locale.
 const letters = "a-zа-яёәіңғүұқөһ";
@@ -37,12 +39,20 @@ const protectedPattern = `(${equipmentPattern}|${componentsPattern}|${studentRec
 const book = new RegExp(bookPattern, "iu");
 const equipment = new RegExp(protectedPattern, "iu");
 
-export function isOneCBook(name: string): boolean {
-  return book.test(name) && !equipment.test(name);
+export function isOneCBook(name: string, externalId?: string | null): boolean {
+  return isLibraryFundAsset(externalId) || isLibraryFundName(name) || book.test(name) && !equipment.test(name);
 }
 
 /** nameExpression is a trusted SQL column/expression supplied by source code. */
-export function oneCNonBookSql(nameExpression: string): string {
+export function oneCNonBookSql(nameExpression: string, externalIdExpression?: string): string {
   const name = `lower(translate(coalesce(${nameExpression}, ''), 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯӘІҢҒҮҰҚӨҺ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяәіңғүұқөһ'))`;
-  return `(not (${name} ~ '${bookPattern}') or ${name} ~ '${protectedPattern}')`;
+  const identity = externalIdExpression ? `not (${libraryFundAssetSql(externalIdExpression)}) and ` : "";
+  return `(${identity}not (${libraryFundNameSql(nameExpression)}) and (not (${name} ~ '${bookPattern}') or ${name} ~ '${protectedPattern}'))`;
+}
+
+export function oneCInventoryNonBookSql(alias: string): string {
+  return `(${oneCNonBookSql(`${alias}.name`)} and not exists (
+    select 1 from yu_inventory.item_one_c_links library_link
+    where library_link.item_id=${alias}.id and ${libraryFundAssetSql("library_link.external_id")}
+  ))`;
 }

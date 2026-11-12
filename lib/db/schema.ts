@@ -65,6 +65,16 @@ import { PASSPORT_STATUSES, PASSPORT_REJECTION_REASONS } from "@/lib/contracts/r
  */
 export const inventorySchema = pgSchema("yu_inventory");
 
+export const oneCLibraryFundNamesTable = inventorySchema.table("one_c_library_fund_names", {
+  nameHash: varchar({ length: 64 }).primaryKey(),
+  sourceSha256: varchar({ length: 64 }).notNull(),
+});
+
+export const oneCLibraryFundAssetsTable = inventorySchema.table("one_c_library_fund_assets", {
+  externalId: varchar({ length: 36 }).primaryKey(),
+  sourceSha256: varchar({ length: 64 }).notNull(),
+});
+
 const transactionId = customType<{ data: string; driverData: string }>({
   dataType: () => "xid8",
 });

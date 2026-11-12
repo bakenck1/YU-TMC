@@ -24,6 +24,8 @@ import { createPostgresInventoryItemRepositories } from "@/lib/server/persistenc
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
 import { createOneCMaterialsPostHandler } from "@/lib/server/http/one-c-materials-handler";
 import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
+import libraryFund from "@/lib/data/one-c-library-fund.json";
+import { libraryFundNameHash, libraryFundNameKeySql } from "@/lib/one-c-library-fund";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { OneCMaterialImportService } from "@/lib/application/services/one-c-material-import-service";
 
@@ -47,6 +49,53 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("excludes the accounting library fund by confirmed name across totals, sources and cards", async () => {
+    const f = await seed();
+    const title = "Әминов Қазіргі қазақстан тарихы в кол-ве 150шт";
+    const alternate = `  ${title.toUpperCase().replaceAll(" ", "\u00a0")}  `;
+    await pool.query("update yu_inventory.items set name=$2 where id=$1", [f.itemId, title]);
+    const original = (await pool.query("select payload from yu_inventory.one_c_fixed_asset_inbox limit 1")).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([
+      { ...original, externalId: randomUUID(), name: alternate, inventoryNumber: "1350/14444" },
+      { ...original, externalId: randomUUID(), name: "Диск нового китайского учебника 1 серии", inventoryNumber: "1350/11111" },
+      { ...original, externalId: libraryFund.fixedAssetIds[0], name: "Позиция фонда после переименования", inventoryNumber: "1350/22222" },
+    ], metadata());
+    await save([{ ...base, code: "LIBRARY", name: title }, { ...base, code: "SHELF", name: "Стол для книг" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.assets.total).toBe(1);
+    expect(snapshot.analytics.inventory.total).toBe(0);
+    expect(snapshot.materials.materialCount).toBe(1);
+    expect(snapshot.rows).toHaveLength(0);
+    expect((await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor)).rows).toHaveLength(0);
+    expect((await getFixedAssetRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    const referenceAssets = (await pool.query("select external_id from yu_inventory.one_c_library_fund_assets order by external_id")).rows;
+    expect(referenceAssets.map(row => row.external_id)).toEqual(libraryFund.fixedAssetIds);
+    const stored = (await pool.query("select name_hash,source_sha256 from yu_inventory.one_c_library_fund_names order by name_hash")).rows;
+    expect(stored.map(row => row.name_hash)).toEqual(libraryFund.nameHashes);
+    expect(new Set(stored.map(row => row.source_sha256))).toEqual(new Set([libraryFund.sourceSha256]));
+    const names = [title, alternate, "Диск нового китайского учебника 1 серии", "Комплект полок для книг", "Аманшаева Майра Амирхановна", " Й\u00a0 İ \t АБВ "];
+    const parity = await pool.query(`select name,encode(sha256(convert_to(${libraryFundNameKeySql("name")}, 'UTF8')),'hex') as hash,${oneCNonBookSql("name")} as included from unnest($1::text[]) as t(name)`, [names]);
+    for (const row of parity.rows) {
+      expect(row.hash).toBe(libraryFundNameHash(row.name));
+      expect(row.included).toBe(!isOneCBook(row.name));
+    }
+    await expect(pool.query("insert into yu_inventory.one_c_library_fund_names values($1,$2)", ["0".repeat(64), "0".repeat(64)])).rejects.toMatchObject({ code: "42501" });
+    // A saved GUID link retains the exclusion when the local card is renamed as well.
+    await pool.query("update yu_inventory.items set name='Позиция после переименования' where id=$1", [f.itemId]);
+    const batch = (await pool.query("select id,version from yu_inventory.one_c_import_batches order by received_at desc limit 1")).rows[0];
+    await pool.query(`insert into yu_inventory.item_one_c_links(external_id,item_id,linked_by,link_method,last_batch_id,last_payload_hash)
+      select external_id,$2,$3,'manual',$4,payload_hash from yu_inventory.one_c_fixed_asset_inbox where external_id=$1`,
+    [libraryFund.fixedAssetIds[0], f.itemId, f.actor.userId, batch.id]);
+    expect((await getOneCAnalyticsSnapshot(pool)).analytics.inventory.total).toBe(0);
+    expect((await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor)).rows).toHaveLength(0);
+    const reconciliation = new OneCReconciliationService(pool);
+    await reconciliation.analyzeBatch(batch.id, { version: batch.version });
+    const audit = await reconciliation.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
+    expect(audit.run.inventory.stale).toBe(false);
+    expect(audit.data).toHaveLength(0);
+  });
 
   it("excludes books consistently from live totals, registries, exports and enrichment", async () => {
     const f = await seed();

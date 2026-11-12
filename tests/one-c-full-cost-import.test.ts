@@ -11,8 +11,8 @@ import type { OneCMaterialsSnapshot } from "../lib/contracts/one-c-materials";
 import { OneCMaterialImportService } from "../lib/application/services/one-c-material-import-service";
 import type { ExcelSourceRow } from "../lib/inventory-source-audit";
 
-const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
-const SECOND_GUID = "eba5b835-db3b-11f0-a26e-7cc25579bdd7";
+const GUID = "00000000-0000-4000-8000-000000000001";
+const SECOND_GUID = "00000000-0000-4000-8000-000000000002";
 const KEY = "full-cost-import-test";
 function row(guid: string, fields: string) {
   return `<FixedAsset><GUID>${guid}</GUID><Name>Моноблок</Name>${fields}</FixedAsset>`;

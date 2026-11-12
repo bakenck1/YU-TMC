@@ -14,6 +14,11 @@ import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-
 
 const number = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 const display = (value: number | null) => value === null ? "—" : number(value);
+const libraryScope = {
+  ru: "Без библиотечного фонда",
+  kk: "Кітапхана қорынсыз",
+  en: "Excluding library holdings",
+} as const;
 const tabs = [{ id: "overview", label: "Аналитика" }, { id: "assets", label: "Основные средства" }, { id: "materials", label: "Материальный предмет" }] as const;
 
 const copy = {
@@ -84,7 +89,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
       <section aria-label={c.composition} className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl bg-gradient-to-br from-slate-800 via-[#164e63] to-teal-700 p-6 text-white shadow-lg shadow-teal-900/10">
           <h2 className="text-sm font-medium text-blue-100">{c.activeTotal}</h2><p className="mt-4 text-4xl font-semibold tabular-nums">{display(total)}</p>
-          <p className="mt-2 text-sm text-blue-100">{total === null ? c.noTotal : c.totalHint}</p>
+          <p className="mt-2 text-sm text-blue-100">{total === null ? c.noTotal : `${c.totalHint} · ${libraryScope[language]}`}</p>
           <div className="mt-6 flex h-2 overflow-hidden rounded-full bg-white/15" aria-hidden="true">{total !== null && total > 0 ? <><div className="bg-blue-400" style={{ width: `${analytics.assets.total / total * 100}%` }} /><div className="bg-emerald-400" style={{ width: `${materials.materialCount / total * 100}%` }} /></> : null}</div>
           {total !== null ? <p className="mt-3 text-xs text-blue-100">{number(analytics.assets.total)} {c.assets} + {number(materials.materialCount)} МП = {number(total)}</p> : null}
         </div>

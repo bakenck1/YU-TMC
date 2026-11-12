@@ -93,7 +93,7 @@ function validateInitialCosts(assets: readonly OneCFixedAsset[]) {
   const issues: { row: number; externalId: string; code: string | null; field: "InitialCost"; reason: string }[] = [];
   let total = 0;
   for (const [index, asset] of assets.entries()) {
-    if (isOneCBook(asset.name)) continue;
+    if (isOneCBook(asset.name, asset.externalId)) continue;
     const value = asset.initialCost;
     const reason = value == null ? "missing_initial_cost"
       : !Number.isFinite(value) || value < 0 || !/^\d{1,12}(?:\.\d{1,2})?$/u.test(String(value))

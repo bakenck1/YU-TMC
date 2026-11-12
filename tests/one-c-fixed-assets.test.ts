@@ -13,7 +13,7 @@ import { observeHttpRequest } from "@/lib/server/observability";
 import { PostgresOneCFixedAssetRepository } from "@/lib/server/persistence/postgres/postgres-one-c-fixed-assets-repository";
 
 const API_KEY = "test-one-c-key";
-const GUID = "eba5b834-db3b-11f0-a26e-7cc25579bdd7";
+const GUID = "00000000-0000-4000-8000-000000000001";
 const XML = `<FixedAssets><FixedAsset><GUID>${GUID}</GUID><Code>000009352</Code><Name>Компьютер</Name><InitialCost>186990.00</InitialCost></FixedAsset></FixedAssets>`;
 
 describe("1C fixed assets HTTP boundary", () => {

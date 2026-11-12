@@ -96,6 +96,9 @@ export async function writeSchemaContract(
       `revoke update on table "yu_inventory"."audit_records" from ${runtimeRole}`,
     );
     await client.query(
+      `revoke insert, update on table "yu_inventory"."one_c_library_fund_names", "yu_inventory"."one_c_library_fund_assets" from ${runtimeRole}`,
+    );
+    await client.query(
       `revoke insert, update, delete on table "yu_inventory"."integration_events" from ${runtimeRole}`,
     );
     await client.query(

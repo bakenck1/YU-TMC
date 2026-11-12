@@ -167,6 +167,7 @@ describe("integration overview", () => {
     const composition = within(screen.getByRole("region", { name: "Состав 1С" }));
     expect(composition.getByText("9")).toBeTruthy();
     expect(composition.getByText("6 Основные средства + 3 МП = 9")).toBeTruthy();
+    expect(composition.getByText(/Без библиотечного фонда/)).toBeTruthy();
     expect(screen.queryByText("Основные средства и материальный предмет")).toBeNull();
     expect(screen.queryByText("Проверить совпадения")).toBeNull();
     expect(screen.queryByText("снято с учёта", { exact: false })).toBeNull();
