@@ -20,7 +20,17 @@ const equipmentPattern = head([
   "доск[а-яё]*|корзин[а-яё]*|держател[а-яё]*|диспенсер[а-яё]*|усилител[а-яё]*|распределител[а-яё]*|источник бесперебойного питания|ибп",
 ].join("|"));
 
+// These names identify supplies despite sharing a leading noun with equipment.
+// Match the qualified noun, so an electric cooker, tablet or marker board stays.
+const qualifiedSupplyPattern = head("плит[аы] (древес[а-яё-]*|мдф|лдсп|дсп)[а-яё -]*|планшет а[ ]?4|доск[аи] (разделочн[а-яё]*|для плавани[а-яё]*)");
+const qualifiedSupplies = new RegExp(qualifiedSupplyPattern, "iu");
+
 const rules = [
+  { category: "repair_materials", pattern: head("пленк[а-яё]*|плёнк[а-яё]*|лент[аы]|георешетк[а-яё]*|фиброволокно|сместь|смесь (гипсов[а-яё]*|шпатлевочн[а-яё]*)|резино-битумн[а-яё]* мастик[а-яё]*"), exception: anywhere("бегов[а-яё]*|тренаж[её]р[а-яё]*") },
+  { category: "ppe_medical", pattern: head("маск[а-яё]* сварочн[а-яё]*|маск[а-яё]* сварщик[а-яё]*|очк[а-яё]* защитн[а-яё]*|вкладыш беруши") },
+  { category: "lab_chemicals", pattern: head("мурексид[а-яё]*|дипиридил[а-яё0-9,-]*|антискалант[а-яё/]*|силигакел[а-яё]*") },
+  { category: "printer_supplies", pattern: head("ролик[а-яё]* заряда|контейнер[а-яё]* (для |д/)?отработанн[а-яё]* тонер[а-яё]*") },
+  { category: "thermostats", pattern: head("терморегулятор[а-яё]*|ат[ -]термотат[а-яё]*") },
   { category: "thermostats", pattern: anywhere("термостат[а-яё]*"), exception: head("сервер[а-яё]*|видеокамер[а-яё]*|терминал[а-яё]*|системн[а-яё]* блок[а-яё]*") },
   { category: "small_stationery", pattern: head("канцтовар[а-яё]*|канцелярск[а-яё]* товар[а-яё]*|индекс[а-яё]* в наборе|самоклеящ[а-яё]* блок[а-яё]*|этикет[а-яё]* лент[а-яё]*") },
   { category: "household", pattern: head("хоз[.]?товар[а-яё]*|белизн[а-яё]*|хозяйственн[а-яё]* товар[а-яё]*|санитарн[а-яё]* товар[а-яё]*") },
@@ -168,6 +178,7 @@ export type OneCConsumableCategory = typeof rules[number]["category"];
 
 export function oneCConsumableCategory(name: string): OneCConsumableCategory | null {
   const key = libraryFundNameKey(name);
+  if (qualifiedSupplies.test(key)) return "repair_materials";
   if (equipment.test(key)) return null;
   return compiled.find(rule => rule.matcher.test(key) && !rule.excluded?.test(key)
     && (!rule.requiredMatcher || rule.requiredMatcher.test(key)))?.category ?? null;
@@ -191,6 +202,6 @@ export function oneCConsumableSql(nameExpression: string): string {
         : `(?:${rule.pattern})`);
     groups.push(`${key} ~ '${matches.join("|")}'`);
   }
-  return `(select case when ${key} ~ '${equipmentPattern}' then false else (${groups.join(" or ")}) end
+  return `(select case when ${key} ~ '${qualifiedSupplyPattern}' then true when ${key} ~ '${equipmentPattern}' then false else (${groups.join(" or ")}) end
     from (select ${libraryFundNameKeySql(nameExpression)} as consumable_name offset 0) consumable_scope)`;
 }
