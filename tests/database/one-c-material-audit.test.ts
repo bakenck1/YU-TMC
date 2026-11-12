@@ -23,6 +23,7 @@ import { buildOneCReconciliationReport } from "@/lib/one-c-reconciliation-report
 import { createPostgresInventoryItemRepositories } from "@/lib/server/persistence/postgres/postgres-inventory-item-repositories";
 import { createOneCFixedAssetsPostHandler } from "@/lib/server/http/one-c-fixed-assets-handler";
 import { createOneCMaterialsPostHandler } from "@/lib/server/http/one-c-materials-handler";
+import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { OneCMaterialImportService } from "@/lib/application/services/one-c-material-import-service";
 
@@ -46,6 +47,36 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("excludes books consistently from live totals, registries, exports and enrichment", async () => {
+    const f = await seed();
+    await pool.query("update yu_inventory.items set name=$2 where id=$1", [f.itemId, "Книга от автора"]);
+    const original = (await pool.query("select payload from yu_inventory.one_c_fixed_asset_inbox limit 1")).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([
+      { ...original, externalId: randomUUID(), code: "BOOK", name: "Книги на общую сумму", inventoryNumber: "1350/14444" },
+      { ...original, externalId: randomUUID(), code: "SHELF", name: "Стеллаж для книг", inventoryNumber: "1350/77777" },
+    ], metadata());
+    await save([{ ...base, code: "BOOK-MP", name: "Книга почетных гостей" }, { ...base, code: "DESK", name: "Стол для книг" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.assets.total).toBe(2);
+    expect(snapshot.materials.materialCount).toBe(1);
+    expect(snapshot.analytics.inventory.total).toBe(0);
+    expect(snapshot.rows).toHaveLength(0);
+    expect((await getFixedAssetRegistryPage({ page: 1, pageSize: 50, scope: "all" }, pool)).total).toBe(2);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    expect((await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor)).rows).toHaveLength(0);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await exportOneCAnalyticsExcel(snapshot) as never);
+    workbook.eachSheet(sheet => sheet.eachRow(row => {
+      expect(JSON.stringify(row.values)).not.toContain("Книги на общую сумму");
+      expect(JSON.stringify(row.values)).not.toContain("Книга почетных гостей");
+    }));
+    // SQL and in-memory classification must agree, including Cyrillic boundaries.
+    const names = ["Книга", "Набор книг", "Учебники", "Книги", "КНИГИ", "Кітаптар", "Стол для книг", "Шкаф книжный", "Сканер для книг", "Книги на сумму", "книга SMD диодов", "книга резисторов"];
+    const result = await pool.query(`select name, ${oneCNonBookSql("name")} as included from unnest($1::text[]) as t(name)`, [names]);
+    for (const row of result.rows) expect(row.included).toBe(!isOneCBook(row.name));
+    expect((await pool.query("select count(*)::int as count from yu_inventory.one_c_fixed_asset_inbox")).rows[0].count).toBe(3);
+  });
 
   it.each(["OS", "MP"] as const)("imports full %s prices and accepts a later zero without erasing the card valuation", async source => {
     const f = await seed();

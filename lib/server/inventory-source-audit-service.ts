@@ -1,3 +1,4 @@
+import { oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -14,7 +15,7 @@ const SCHEMA = '"yu_inventory"';
 
 export async function createInventorySourceAudit(client: PoolClient, batchId: string, batchVersion: number, candidateRows: Raw[], linkRows: Raw[]) {
   const materials = await readMaterialRegistry(client);
-  const registry = await client.query(`select external_id,payload_hash,payload from ${SCHEMA}."one_c_fixed_asset_inbox" order by external_id`);
+  const registry = await client.query(`select external_id,payload_hash,payload from ${SCHEMA}."one_c_fixed_asset_inbox" where ${oneCNonBookSql("payload->>'name'")} order by external_id`);
   const batchRows = await client.query(`select external_id,payload_hash,payload,matched_item_id,review_state from ${SCHEMA}."one_c_import_batch_rows" where batch_id=$1 order by external_id`, [batchId]);
   if (!registry.rows.length && !batchRows.rows.length) throw new ApplicationError("unavailable", "one_c_registry_empty");
   const oneCRegistrySha256 = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");

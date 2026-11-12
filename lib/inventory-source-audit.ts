@@ -1,3 +1,4 @@
+import { isOneCBook } from "@/lib/one-c-book-scope";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { oneCSourceNameKey, oneCNameCanIdentify, oneCNameOwnerCanIdentify, selectOneCNameOwnerSource } from "@/lib/one-c-source-name";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
@@ -84,6 +85,9 @@ function nameScore(left: string, right: string): number {
 }
 
 export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean; exactNames?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
+  items = items.filter(item => !isOneCBook(item.name));
+  oneCRows = oneCRows.filter(row => !isOneCBook(row.asset.name));
+  excelRows = excelRows.filter(row => !isOneCBook(row.nomenclature));
   const nameOwners = new Map<string, string[]>();
   const assetNames = new Map<string, Set<string>>();
   const materialNames = new Map<string, ExcelSourceRow[]>();

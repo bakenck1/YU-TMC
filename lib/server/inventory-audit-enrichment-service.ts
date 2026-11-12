@@ -1,3 +1,4 @@
+import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -153,12 +154,12 @@ export class InventoryAuditEnrichmentService {
       coalesce((select array_agg(g.barcode_value order by g.barcode_value) from yu_inventory.local_item_groups g
         where g.item_id=i.id and g.status='active'),'{}') as local_barcodes
       from yu_inventory.items i order by i.id ${lock ? "for update of i" : ""}`);
-    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox order by external_id`);
+    const registry = await client.query(`select external_id,payload from yu_inventory.one_c_fixed_asset_inbox where ${oneCNonBookSql("payload->>'name'")} order by external_id`);
     const materials = await readMaterialRegistry(client);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links order by external_id`);
     const codes = new Map<string, string[]>();
     for (const link of links.rows) if (link.source_code) codes.set(link.item_id, [...(codes.get(link.item_id) ?? []), link.source_code]);
-    const currentCards = cards.rows.filter(row => decommissionedOnly
+    const currentCards = cards.rows.filter(row => !isOneCBook(row.name)).filter(row => decommissionedOnly
       ? row.item_section === "general" && (row.status === "decommissioned" || row.status === "decommissioned_in_use")
       : row.archived_at == null && row.status === "active");
     const audit = buildInventorySourceAudit(currentCards.map(row => ({
@@ -256,7 +257,7 @@ export class InventoryAuditEnrichmentService {
     const data = await exportInventorySourceAudit(client, batchId);
     const materials = await readMaterialRegistry(client);
     const materialSource = materials.metadata;
-    const registry = await client.query(`select external_id,payload_hash,payload from "yu_inventory"."one_c_fixed_asset_inbox" order by external_id`);
+    const registry = await client.query(`select external_id,payload_hash,payload from "yu_inventory"."one_c_fixed_asset_inbox" where ${oneCNonBookSql("payload->>'name'")} order by external_id`);
     const registryHash = createHash("sha256").update(registry.rows.map((row) => `${row.external_id}:${row.payload_hash}`).join("\n")).digest("hex");
     if (data.run.algorithm_version !== String(INVENTORY_SOURCE_AUDIT_ALGORITHM_VERSION)
       || data.run.inventory.stale || !data.run.material_source

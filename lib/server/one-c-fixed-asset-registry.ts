@@ -1,3 +1,4 @@
+import { oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
 
 import type { Pool, PoolClient } from "pg";
@@ -10,6 +11,7 @@ export async function getFixedAssetRegistryPage(
 ) {
   const values: unknown[] = [];
   const where = query.scope === "all" ? ["true"] : ["i.payload->>'status' = 'Принято к учёту'"];
+  where.push(oneCNonBookSql("i.payload->>'name'"));
   if (query.search) {
     values.push(`%${query.search.replace(/[\\%_]/gu, character => `\\${character}`)}%`);
     where.push(`(i.payload->>'name' ilike $1 escape '\\' or i.payload->>'code' ilike $1 escape '\\'

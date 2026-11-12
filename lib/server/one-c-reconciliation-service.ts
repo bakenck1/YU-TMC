@@ -1,3 +1,4 @@
+import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -79,7 +80,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const page = Math.max(1, Math.trunc(query.page));
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
     const values: unknown[] = ["Снято с учёта"];
-    const clauses = ["inbox.payload->>'status' = $1"];
+    const clauses = ["inbox.payload->>'status' = $1", oneCNonBookSql("inbox.payload->>'name'")];
     const search = query.search?.normalize("NFKC").trim();
     if (search) {
       values.push(`%${escapeLikePattern(search)}%`);
@@ -241,7 +242,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         const manualSelectionValid = Boolean(selectedCandidate && selectedReasons.length && versionMatches && linkOccupancyMatches);
         const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, index: identifierIndex, linkedItemId: manualSelectionValid ? selectedItemId : linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
         let mapped = workflowFor(analysis.result, analysis.identifiers.itemId);
-        if (decision.exclude === true) {
+        if (decision.exclude === true || isOneCBook(asset.name)) {
           mapped = { state: "excluded", action: "exclude", planAction: "exclude", bucket: "excluded" };
         } else if (mapped.action === "create" && decision.confirmCreate === true && decision.confirmConditionDefault === true) {
           mapped = { ...mapped, state: "approved" };
@@ -408,6 +409,10 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     await client.query("begin");
     try {
       const asset = row.payload as OneCFixedAsset; const decision = (row.decision ?? {}) as Row;
+      if (isOneCBook(asset.name)) {
+        await client.query("commit");
+        return "skipped";
+      }
       let itemId = stringOrNull(row.matched_item_id);
       let outcome: "created" | "linked" | "updated" | "skipped" = "skipped";
       if (row.proposed_action === "create") {
