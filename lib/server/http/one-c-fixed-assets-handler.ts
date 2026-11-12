@@ -1,5 +1,5 @@
 import "server-only";
-import { isOneCBook } from "@/lib/one-c-book-scope";
+import { isOneCExcludedSource } from "@/lib/one-c-integration-scope";
 
 import { createHash, randomUUID } from "node:crypto";
 import type { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
@@ -93,7 +93,7 @@ function validateInitialCosts(assets: readonly OneCFixedAsset[]) {
   const issues: { row: number; externalId: string; code: string | null; field: "InitialCost"; reason: string }[] = [];
   let total = 0;
   for (const [index, asset] of assets.entries()) {
-    if (isOneCBook(asset.name, asset.externalId)) continue;
+    if (isOneCExcludedSource(asset.name, asset.externalId)) continue;
     const value = asset.initialCost;
     const reason = value == null ? "missing_initial_cost"
       : !Number.isFinite(value) || value < 0 || !/^\d{1,12}(?:\.\d{1,2})?$/u.test(String(value))

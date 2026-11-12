@@ -1,5 +1,4 @@
-import { isOneCBook } from "@/lib/one-c-book-scope";
-import { isLibraryFundAsset } from "@/lib/one-c-library-fund";
+import { isOneCExcludedSource, isOneCExcludedAsset } from "@/lib/one-c-integration-scope";
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { oneCSourceNameKey, oneCNameCanIdentify, oneCNameOwnerCanIdentify, selectOneCNameOwnerSource } from "@/lib/one-c-source-name";
 import { exactMaterialCode } from "@/lib/one-c-material-code";
@@ -86,10 +85,10 @@ function nameScore(left: string, right: string): number {
 }
 
 export function buildInventorySourceAudit(items: AuditItem[], oneCRows: AuditOneCRow[], excelRows: ExcelSourceRow[], links: { externalId: string; itemId: string }[], options: { descriptionBarcodes?: boolean; formattedNumbers?: boolean; exactNames?: boolean } = {}): { rows: AuditMatch[]; counts: AuditCounts } {
-  const excludedLinkedItems = new Set(links.filter(link => isLibraryFundAsset(link.externalId)).map(link => link.itemId));
-  items = items.filter(item => !isOneCBook(item.name) && !excludedLinkedItems.has(item.id));
-  oneCRows = oneCRows.filter(row => !isOneCBook(row.asset.name, row.externalId));
-  excelRows = excelRows.filter(row => !isOneCBook(row.nomenclature));
+  const excludedLinkedItems = new Set(links.filter(link => isOneCExcludedAsset(link.externalId)).map(link => link.itemId));
+  items = items.filter(item => !isOneCExcludedSource(item.name) && !excludedLinkedItems.has(item.id));
+  oneCRows = oneCRows.filter(row => !isOneCExcludedSource(row.asset.name, row.externalId));
+  excelRows = excelRows.filter(row => !isOneCExcludedSource(row.nomenclature));
   const nameOwners = new Map<string, string[]>();
   const assetNames = new Map<string, Set<string>>();
   const materialNames = new Map<string, ExcelSourceRow[]>();

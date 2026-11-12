@@ -227,3 +227,13 @@ test("excluded books without prices do not reject priced equipment in the same e
   assert.equal((await materials.send(materialRow("PRINTER", "<Quantity>1</Quantity>"))).status, 422);
   assert.equal((await assets.send(row(SECOND_GUID, ""))).status, 422);
 });
+
+test("excluded consumables without prices do not block priced equipment imports", async () => {
+  const assets = boundary();
+  const supply = row(GUID, "").replace("Моноблок", "Степлер электрический");
+  assert.equal((await assets.send(supply + row(SECOND_GUID, "<InitialCost>100</InitialCost>"))).status, 200);
+  const materials = materialsBoundary();
+  const cable = materialRow("CABLE", "<Quantity>50</Quantity>").replace("МФУ", "Кабель ВВГ 3х2,5");
+  assert.equal((await materials.send(cable + materialRow("PRINTER", "<Quantity>1</Quantity><UnitPrice>100</UnitPrice>"))).status, 200);
+  assert.equal((await materials.send(materialRow("PRINTER", "<Quantity>1</Quantity>"))).status, 422);
+});

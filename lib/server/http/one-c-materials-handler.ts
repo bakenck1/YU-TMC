@@ -1,5 +1,5 @@
 import "server-only";
-import { isOneCBook } from "@/lib/one-c-book-scope";
+import { isOneCExcludedSource } from "@/lib/one-c-integration-scope";
 
 import { createHash, randomUUID } from "node:crypto";
 import type { OneCMaterialsSnapshot, OneCMaterialsImportMetadata, OneCMaterialsImportResult } from "@/lib/contracts/one-c-materials";
@@ -104,7 +104,7 @@ function validateUnitPrices(snapshot: OneCMaterialsSnapshot) {
   }[] = [];
   let total = 0;
   for (const [index, material] of snapshot.materials.entries()) {
-    if (isOneCBook(material.name)) continue;
+    if (isOneCExcludedSource(material.name)) continue;
     if (!(Number(material.quantity) > 0)) continue;
     const value = material.unitPrice;
     const reason = value == null ? "missing_unit_price"

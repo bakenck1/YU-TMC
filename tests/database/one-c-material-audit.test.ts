@@ -28,6 +28,9 @@ import libraryFund from "@/lib/data/one-c-library-fund.json";
 import { libraryFundNameHash, libraryFundNameKeySql } from "@/lib/one-c-library-fund";
 import { OneCFixedAssetImportService } from "@/lib/application/services/one-c-fixed-asset-import-service";
 import { OneCMaterialImportService } from "@/lib/application/services/one-c-material-import-service";
+import { isOneCConsumable, oneCConsumableSql } from "@/lib/one-c-consumables";
+import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integration-scope";
+import { consumables, retainedEquipment } from "../helpers/one-c-consumable-cases";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -49,6 +52,39 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("uses the same consumable scope in PostgreSQL, analytics, registries, enrichment and Excel", async () => {
+    const names = [...consumables, ...retainedEquipment];
+    const parity = await pool.query(`select name, ${oneCConsumableSql("name")} as consumable, ${oneCIncludedSourceSql("name", "external_id")} as included from unnest($1::text[]) as t(name) cross join (values ('00000000-0000-4000-8000-000000000001')) as x(external_id)`, [names]);
+    for (const row of parity.rows) {
+      expect(row.consumable, row.name).toBe(isOneCConsumable(row.name));
+      expect(row.included, row.name).toBe(!isOneCExcludedSource(row.name));
+    }
+    const f = await seed();
+    await pool.query("update yu_inventory.items set name='Кабель HDMI' where id=$1", [f.itemId]);
+    const original = (await pool.query("select payload from yu_inventory.one_c_fixed_asset_inbox limit 1")).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([
+      { ...original, name: "Степлер электрический", inventoryNumber: "1350/14444" },
+      { ...original, externalId: randomUUID(), name: "Кабельный тестер", inventoryNumber: "1350/11111" },
+      { ...original, externalId: "d895592f-ec33-11ea-9a99-daf44a7f39d0", name: "После переименования", inventoryNumber: "1350/22222" },
+    ], metadata());
+    await save([{ ...base, code: "CABLE", name: "Кабель HDMI" }, { ...base, code: "TESTER", name: "Кабельный тестер" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.assets.total).toBe(1);
+    expect(snapshot.analytics.inventory.total).toBe(0);
+    expect(snapshot.materials.materialCount).toBe(1);
+    expect(snapshot.rows).toHaveLength(0);
+    expect((await new InventoryAuditEnrichmentService(pool).previewCurrent(f.actor)).rows).toHaveLength(0);
+    expect((await getFixedAssetRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await exportOneCAnalyticsExcel(snapshot) as never);
+    workbook.eachSheet(sheet => sheet.eachRow(row => {
+      expect(JSON.stringify(row.values)).not.toContain("Кабель HDMI");
+      expect(JSON.stringify(row.values)).not.toContain("Степлер электрический");
+      expect(JSON.stringify(row.values)).not.toContain("После переименования");
+    }));
+  });
 
   it("excludes the accounting library fund by confirmed name across totals, sources and cards", async () => {
     const f = await seed();

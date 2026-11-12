@@ -1,4 +1,4 @@
-import { isOneCBook, oneCInventoryNonBookSql } from "@/lib/one-c-book-scope";
+import { isOneCExcludedSource, oneCIncludedInventorySql } from "@/lib/one-c-integration-scope";
 import "server-only";
 import type { Pool, PoolClient } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
@@ -29,7 +29,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       (select u.full_name from yu_inventory.responsibility_periods p join yu_inventory.users u on u.id=p.responsible_user_id where p.item_id=i.id and p.ended_at is null) as responsible_name,
       coalesce((select array_agg(original_value) from yu_inventory.barcode_registry where item_id=i.id and kind='official'),'{}') as official_barcodes,
       coalesce((select array_agg(barcode_value) from yu_inventory.local_item_groups where item_id=i.id and status='active'),'{}') as local_barcodes
-      from yu_inventory.items i where i.archived_at is null and i.status = 'active' and ${oneCInventoryNonBookSql('i')} order by i.id`);
+      from yu_inventory.items i where i.archived_at is null and i.status = 'active' and ${oneCIncludedInventorySql('i')} order by i.id`);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links`);
     const clock = await client.query("select transaction_timestamp() as calculated_at");
     if (!transactionClient) await client.query("commit");
@@ -42,7 +42,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       localBarcodes: row.local_barcodes, sourceCodes: codes.get(row.id) ?? [], responsibleName: row.responsible_name,
     }));
     const registryAssets = assets.rows.map(row => ({ externalId: String(row.external_id), asset: row.payload as OneCFixedAsset, origins: ["current_registry" as const] }))
-      .filter(row => !isOneCBook(row.asset.name, row.externalId));
+      .filter(row => !isOneCExcludedSource(row.asset.name, row.externalId));
     const sourceAssets = registryAssets.filter(row => row.asset.status === "Принято к учёту");
     const materialRecords = materials.records.filter(row => Number(row.material.quantity) > 0);
     const activeMaterials = {

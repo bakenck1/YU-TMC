@@ -64,12 +64,12 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     )).resolves.toMatchObject({ rows: [{ exists: true }] });
   });
 
-  it("finishes a legacy publication containing an approved book exactly once", async () => {
+  it.each(["Книги за ноябрь", "Степлер электрический"])("finishes a legacy publication containing excluded %s exactly once", async name => {
     const userId = randomUUID();
     await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
       values($1,$2,$3,'Book review admin','admin',now(),now())`, [userId, `book-${userId.slice(0, 8)}`, `${userId}@example.test`]);
     const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
-    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name: "Книги за ноябрь" }], {
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name }], {
       sourceSha256, requestId: randomUUID(), sourceFilename: "legacy-books.xml",
     });
     const batchId = (await runtimePool.query(`select id from yu_inventory.one_c_import_batches where source_sha256=$1`, [sourceSha256])).rows[0].id;
@@ -86,7 +86,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     expect(await service.processNextPublication()).toBe(false);
   });
 
-  it("keeps a new audit fresh with local book cards and excludes a book source matching a nonbook card", async () => {
+  it.each(["Книга от автора", "Кабель HDMI"])("keeps a new audit fresh with excluded %s and clears its matched item", async excludedName => {
     const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID();
     await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
       values($1,$2,$3,'Scoped review admin','admin',now(),now())`, [userId, `book-${userId.slice(0, 8)}`, `${userId}@example.test`]);
@@ -95,12 +95,12 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await runtimePool.query(`insert into yu_inventory.rooms(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
       values($1::uuid,$2,'101',$1::text,1,$3,$3)`, [roomId, buildingId, userId]);
     const number = `BOOK-${randomUUID().slice(0, 8)}`;
-    for (const [name, inventoryNumber] of [["Книга от автора", `${number}-local`], ["Стол для книг", number]]) {
+    for (const [name, inventoryNumber] of [[excludedName, `${number}-local`], ["Стол для книг", number]]) {
       await runtimePool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
         values($1,$2,1,100,$3,'official',$4::text,lower($4::text),$5,$5)`, [randomUUID(), name, roomId, inventoryNumber, userId]);
     }
     const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
-    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name: "Книги на общую сумму", inventoryNumber: number }], {
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name: excludedName, inventoryNumber: number }], {
       sourceSha256, requestId: randomUUID(), sourceFilename: "book-scope.xml",
     });
     const batch = (await runtimePool.query(`select id,version from yu_inventory.one_c_import_batches where source_sha256=$1`, [sourceSha256])).rows[0];
@@ -110,7 +110,7 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     const audit = await service.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
     expect(audit.run.inventory).toMatchObject({ stale: false, added: 0, changed: 0, removed: 0 });
     expect(audit.run.inventory.currentTotal).toBe(auditTotal(audit.run.counts));
-    expect(audit.data.some(row => row.itemName === "Книга от автора")).toBe(false);
+    expect(audit.data.some(row => row.itemName === excludedName)).toBe(false);
     const stored = (await runtimePool.query(`select review_state,matched_item_id from yu_inventory.one_c_import_batch_rows where batch_id=$1`, [batch.id])).rows[0];
     expect(stored).toMatchObject({ review_state: "excluded", matched_item_id: null });
   });

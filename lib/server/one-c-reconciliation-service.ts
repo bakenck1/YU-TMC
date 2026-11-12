@@ -1,4 +1,4 @@
-import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
+import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integration-scope";
 import "server-only";
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -80,7 +80,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     const page = Math.max(1, Math.trunc(query.page));
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
     const values: unknown[] = ["Снято с учёта"];
-    const clauses = ["inbox.payload->>'status' = $1", oneCNonBookSql("inbox.payload->>'name'", "inbox.external_id")];
+    const clauses = ["inbox.payload->>'status' = $1", oneCIncludedSourceSql("inbox.payload->>'name'", "inbox.external_id")];
     const search = query.search?.normalize("NFKC").trim();
     if (search) {
       values.push(`%${escapeLikePattern(search)}%`);
@@ -242,7 +242,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         const manualSelectionValid = Boolean(selectedCandidate && selectedReasons.length && versionMatches && linkOccupancyMatches);
         const analysis = analyzeOneCFixedAsset(asset, { items: itemCandidates, index: identifierIndex, linkedItemId: manualSelectionValid ? selectedItemId : linkMap.get(asset.externalId), selectedRoomId: stringOrNull(decision.roomId), selectedItemType: stringOrNull(decision.itemType), zeroResidualValueConfirmed: decision.confirmZeroResidual === true, emptyResponsibleConfirmed: decision.confirmUnassigned === true });
         let mapped = workflowFor(analysis.result, analysis.identifiers.itemId);
-        if (decision.exclude === true || isOneCBook(asset.name, asset.externalId)) {
+        if (decision.exclude === true || isOneCExcludedSource(asset.name, asset.externalId)) {
           mapped = { state: "excluded", action: "exclude", planAction: "exclude", bucket: "excluded" };
         } else if (mapped.action === "create" && decision.confirmCreate === true && decision.confirmConditionDefault === true) {
           mapped = { ...mapped, state: "approved" };
@@ -253,7 +253,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         } else if (mapped.action === "link" && decision.confirmLink === true) {
           mapped = { ...mapped, state: "approved" };
         }
-        const matchedItemId = isOneCBook(asset.name, asset.externalId) ? null : manualSelectionValid ? selectedItemId
+        const matchedItemId = isOneCExcludedSource(asset.name, asset.externalId) ? null : manualSelectionValid ? selectedItemId
           : analysis.identifiers.matchedBy.length ? analysis.identifiers.itemId : null;
         const existingOwner = matchedItemId ? itemLinkMap.get(matchedItemId) : undefined;
         if (existingOwner && existingOwner !== asset.externalId) {
@@ -409,7 +409,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     await client.query("begin");
     try {
       const asset = row.payload as OneCFixedAsset; const decision = (row.decision ?? {}) as Row;
-      if (isOneCBook(asset.name, asset.externalId)) {
+      if (isOneCExcludedSource(asset.name, asset.externalId)) {
         await client.query(`update "yu_inventory"."one_c_import_batch_rows"
           set review_state='excluded',proposed_action='exclude',matched_item_id=null
           where batch_id=$1 and external_id=$2`, [batchId, asset.externalId]);

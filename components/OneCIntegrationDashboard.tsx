@@ -15,9 +15,9 @@ import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-
 const number = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 const display = (value: number | null) => value === null ? "—" : number(value);
 const libraryScope = {
-  ru: "Без библиотечного фонда",
-  kk: "Кітапхана қорынсыз",
-  en: "Excluding library holdings",
+  ru: "Без библиотечного фонда и расходников",
+  kk: "Кітапхана қоры мен шығыс материалдарынсыз",
+  en: "Excluding library holdings and consumables",
 } as const;
 const tabs = [{ id: "overview", label: "Аналитика" }, { id: "assets", label: "Основные средства" }, { id: "materials", label: "Материальный предмет" }] as const;
 
