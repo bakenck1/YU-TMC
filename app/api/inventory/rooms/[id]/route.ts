@@ -78,6 +78,7 @@ function parseUpdateRoom(value: unknown): UpdateRoomInput {
     throw invalidRequest();
   }
   return {
+    ...(input.apartment !== undefined ? { apartment: input.apartment as UpdateRoomInput["apartment"] } : {}),
     designation: input.designation,
     floorNumber: input.floorNumber,
     floorLabel: input.floorLabel as string | null | undefined,

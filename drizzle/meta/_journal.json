@@ -421,6 +421,13 @@
       "when": 1793964424885,
       "tag": "20261106112704_integration-record-revision",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794476771871,
+      "tag": "20261112094611_apartment-locations",
+      "breakpoints": true
     }
   ]
 }

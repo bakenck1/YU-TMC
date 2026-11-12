@@ -712,6 +712,7 @@ export const roomsTable = inventorySchema.table(
       }),
     designation: varchar({ length: 80 }).notNull(),
     designationKey: text().notNull(),
+    apartment: jsonb().$type<import("@/lib/contracts/inventory-locations").ApartmentAddress>(),
     floorNumber: integer().notNull(),
     floorLabel: varchar({ length: 40 }),
     primaryResponsibleId: uuid().references(() => usersTable.id, {

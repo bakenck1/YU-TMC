@@ -1,3 +1,5 @@
+import type { ApartmentAddress } from "@/lib/contracts/inventory-locations";
+
 export interface BuildingRecord {
   id: string;
   name: string;
@@ -61,6 +63,7 @@ export interface AppendLocationAuditRecord {
 }
 
 export interface RoomRecord {
+  apartment?: ApartmentAddress | null;
   id: string;
   buildingId: string;
   designation: string;
@@ -78,6 +81,7 @@ export interface RoomRecord {
 }
 
 export interface InsertRoomRecord {
+  apartment?: ApartmentAddress | null;
   id: string;
   buildingId: string;
   designation: string;

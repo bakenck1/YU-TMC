@@ -1,3 +1,15 @@
+export interface ApartmentAddress {
+  microdistrict: string;
+  house: string;
+  entrance: string;
+  number: string;
+}
+
+export interface CreateApartmentInput {
+  apartment: ApartmentAddress;
+  floorNumber: number;
+}
+
 export interface BuildingDto {
   id: string;
   name: string;
@@ -26,6 +38,7 @@ export interface ArchiveLocationInput {
 }
 
 export interface RoomDto {
+  apartment?: ApartmentAddress | null;
   id: string;
   buildingId: string;
   designation: string;
@@ -41,6 +54,7 @@ export interface RoomDto {
 }
 
 export interface CreateRoomInput {
+  apartment?: ApartmentAddress | null;
   designation: string;
   floorNumber: number;
   floorLabel?: string | null;

@@ -1,8 +1,10 @@
 import type { AppLanguage } from "./app-settings";
+import { apartmentRu, apartmentKk, apartmentEn } from "./apartment-translations";
 import { passportRu, passportKk, passportEn } from "./room-passport-translations";
 import { roomBookingRu, roomBookingKk, roomBookingEn } from "./room-booking-translations";
 
 const ru = {
+  ...apartmentRu,
   "nav.mobileItems": "ТМЦ",
   "nav.mobileScan": "Сканер",
   "nav.mobilePassports": "Паспорта",
@@ -1217,6 +1219,7 @@ export type TranslationKey = keyof typeof ru;
 export type TranslationParams = Record<string, string | number>;
 
 const kk: Record<TranslationKey, string> = {
+  ...apartmentKk,
   ...ru,
   "nav.oneC": "1С интеграциясы",
   "nav.mobileItems": "ТМҚ",
@@ -1967,6 +1970,7 @@ const kk: Record<TranslationKey, string> = {
 };
 
 const en: Record<TranslationKey, string> = {
+  ...apartmentEn,
   ...ru,
   "nav.oneC": "1C integration",
   "nav.mobileItems": "Items",

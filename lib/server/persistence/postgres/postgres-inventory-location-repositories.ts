@@ -47,6 +47,7 @@ interface BuildingRow extends QueryResultRow {
 }
 
 interface RoomRow extends QueryResultRow {
+  apartment: RoomRecord["apartment"];
   id: string;
   building_id: string;
   designation: string;
@@ -295,8 +296,8 @@ class PostgresInventoryLocationRepository
       `insert into ${ROOMS} as room
          (id, building_id, designation, designation_key, floor_number,
           floor_label, primary_responsible_id, access_mode, created_by, updated_by,
-          created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $10)
+          created_at, updated_at, apartment)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $10, $11::jsonb)
        returning room.*, ''::text as qr_code,
          (select responsible.full_name
             from ${USERS} responsible
@@ -313,6 +314,7 @@ class PostgresInventoryLocationRepository
         input.accessMode,
         input.actorId,
         input.occurredAt,
+        input.apartment ? JSON.stringify(input.apartment) : null,
       ],
     );
     return mapRequiredRoom(result.rows[0]);
@@ -327,6 +329,7 @@ class PostgresInventoryLocationRepository
            floor_label = $5,
            primary_responsible_id = $6,
            access_mode = coalesce($7::varchar, room.access_mode),
+           apartment = $11::jsonb,
            updated_by = $8,
            updated_at = $9,
            version = version + 1
@@ -347,6 +350,7 @@ class PostgresInventoryLocationRepository
         input.actorId,
         input.occurredAt,
         input.expectedVersion,
+        input.apartment ? JSON.stringify(input.apartment) : null,
       ],
     );
     return result.rows[0] ? mapRoom(result.rows[0]) : null;
@@ -454,7 +458,7 @@ function mapBuilding(row: BuildingRow): BuildingRecord {
 
 function roomSelect(whereClause: string, limitClause = "") {
   return `
-    select r.id, r.building_id, r.designation, r.designation_key,
+    select r.id, r.building_id, r.designation, r.designation_key, r.apartment,
            r.floor_number, r.floor_label, r.access_mode, r.status, r.version,
            r.created_at, r.updated_at,
            coalesce(q.original_value, '') as qr_code,
@@ -477,6 +481,7 @@ function mapRequiredRoom(row: RoomRow | undefined): RoomRecord {
 
 function mapRoom(row: RoomRow): RoomRecord {
   return {
+    apartment: row.apartment ?? null,
     id: row.id,
     buildingId: row.building_id,
     designation: row.designation,

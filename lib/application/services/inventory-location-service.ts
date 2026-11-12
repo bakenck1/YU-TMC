@@ -1,8 +1,11 @@
 
 import { sortInventoryRoomsForSelection } from "@/lib/inventory-room-floors";
+import { APARTMENTS_BUILDING_NAME, apartmentDesignation, isApartmentsBuilding, normalizeApartmentAddress } from "@/lib/apartment-locations";
 import { isEmployeeRole } from "@/lib/contracts/users";
 import type {
   BuildingDto,
+  ApartmentAddress,
+  CreateApartmentInput,
   CreateBuildingInput,
   CreateRoomInput,
   RoomDto,
@@ -95,6 +98,27 @@ export class InventoryLocationService {
       );
       return toBuildingDto({ ...building, qrCode });
     });
+  }
+
+  /** The collection and its first apartment either both persist or both roll back. */
+  async createApartment(input: CreateApartmentInput, actor: AuthorizationActor): Promise<{ building: BuildingDto; room: RoomDto }> {
+    requirePermission(actor, "inventory.building.create");
+    requirePermission(actor, "inventory.room.create");
+    const values = normalizeRoomInput({ ...input, designation: "apartment" }, "open");
+    if (!values.apartment) throw new ApplicationError("validation", "invalid_apartment_address");
+    return this.unitOfWork.transaction(async ({ locations }) => {
+      let building = (await locations.listBuildings()).find(value => isApartmentsBuilding(value.name));
+      if (!building) {
+        const created = await this.createBuilding({ name: APARTMENTS_BUILDING_NAME, address: "Актау" }, actor);
+        building = (await locations.findBuildingById(created.id))!;
+      }
+      const room = await this.createRoom(building.id, {
+        designation: values.designation, floorNumber: values.floorNumber, apartment: values.apartment,
+      }, actor);
+      const updated = await locations.findBuildingById(building.id);
+      if (!updated) throw new ApplicationError("not_found", "building_not_found");
+      return { building: toBuildingDto(updated), room };
+    }, { isolation: "serializable", maxAttempts: 3 });
   }
 
   async updateBuilding(
@@ -236,6 +260,7 @@ export class InventoryLocationService {
       if (!building || building.status !== "active") {
         throw new ApplicationError("not_found", "building_not_found");
       }
+      assertApartmentBuilding(building.name, values.apartment);
       await assertRoomDesignationAvailable(locations, buildingId, values.designationKey);
       const room = await locations.insertRoom({
         id: roomId,
@@ -261,6 +286,7 @@ export class InventoryLocationService {
             buildingId,
             designation: room.designation,
             floorNumber: room.floorNumber,
+            apartment: room.apartment ?? null,
             primaryResponsibleId: room.primaryResponsibleId,
             accessMode: room.accessMode,
             qrIdentifierId: qrId,
@@ -292,6 +318,11 @@ export class InventoryLocationService {
       }
       if (current.status !== "active") throw versionConflict();
       const values = normalizeRoomInput(input, current.accessMode);
+      if (values.apartment || current.apartment) {
+        const building = await locations.findBuildingByIdForUpdate(current.buildingId);
+        if (!building || building.status !== "active") throw new ApplicationError("not_found", "building_not_found");
+        assertApartmentBuilding(building.name, values.apartment);
+      }
       if (values.designationKey !== roomDesignationKey(current.designation)) {
         // Serialize room renames with creations in the same building.
         await locations.findBuildingByIdForUpdate(current.buildingId);
@@ -321,6 +352,7 @@ export class InventoryLocationService {
             designation: current.designation,
             floorNumber: current.floorNumber,
             floorLabel: current.floorLabel,
+            apartment: current.apartment ?? null,
             primaryResponsibleId: current.primaryResponsibleId,
             accessMode: current.accessMode,
           },
@@ -328,6 +360,7 @@ export class InventoryLocationService {
             designation: updated.designation,
             floorNumber: updated.floorNumber,
             floorLabel: updated.floorLabel,
+            apartment: updated.apartment ?? null,
             primaryResponsibleId: updated.primaryResponsibleId,
             accessMode: updated.accessMode,
           },
@@ -495,14 +528,20 @@ function normalizeRequiredText(
 }
 
 function normalizeRoomInput(input: {
+  apartment?: unknown;
   designation: unknown;
   floorNumber: unknown;
   floorLabel?: unknown;
   primaryResponsibleId?: unknown;
   accessMode?: unknown;
 }, fallbackAccessMode: "open" | "closed") {
+  let apartment: ApartmentAddress | null = null;
+  if (input.apartment !== undefined && input.apartment !== null) {
+    try { apartment = normalizeApartmentAddress(input.apartment); }
+    catch { throw new ApplicationError("validation", "invalid_apartment_address"); }
+  }
   const designation = normalizeRequiredText(
-    input.designation,
+    apartment ? apartmentDesignation(apartment) : input.designation,
     80,
     "invalid_room_designation",
   );
@@ -530,6 +569,7 @@ function normalizeRoomInput(input: {
     primaryResponsibleId = input.primaryResponsibleId;
   }
   return {
+    apartment,
     designation,
     designationKey: roomDesignationKey(designation),
     floorNumber: input.floorNumber,
@@ -546,6 +586,12 @@ function normalizeAccessMode(value: unknown): "open" | "closed" {
     throw new ApplicationError("validation", "invalid_room_access_mode");
   }
   return value;
+}
+
+function assertApartmentBuilding(name: string, apartment: ApartmentAddress | null) {
+  if (isApartmentsBuilding(name) !== Boolean(apartment)) {
+    throw new ApplicationError("validation", "invalid_apartment_address");
+  }
 }
 
 function comparisonKey(value: string) {
@@ -649,6 +695,7 @@ function toBuildingDto(record: BuildingRecord): BuildingDto {
 
 function toRoomDto(record: RoomRecord): RoomDto {
   return {
+    ...(record.apartment ? { apartment: record.apartment } : {}),
     id: record.id,
     buildingId: record.buildingId,
     designation: record.designation,

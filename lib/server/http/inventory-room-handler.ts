@@ -65,6 +65,7 @@ function parseCreateRoom(value: unknown): CreateRoomInput {
     throw invalidRequest();
   }
   const result: CreateRoomInput = {
+    ...(input.apartment !== undefined ? { apartment: input.apartment as CreateRoomInput["apartment"] } : {}),
     designation: input.designation,
     floorNumber: input.floorNumber,
     floorLabel: input.floorLabel as string | null | undefined,

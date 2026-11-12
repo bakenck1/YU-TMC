@@ -1,0 +1,1 @@
+ALTER TABLE "yu_inventory"."rooms" ADD COLUMN "apartment" jsonb;

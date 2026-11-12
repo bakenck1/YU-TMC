@@ -41,6 +41,70 @@ describe("PostgreSQL room duplicate prevention", () => {
     if (migrationConfig) await resetSchemas(migrationConfig);
   });
 
+  it("atomically creates one apartment collection when two first apartments arrive together", async () => {
+    const service = createService();
+    const results = await Promise.all([1,2].map(number => service.createApartment({
+      apartment: { microdistrict: "32", house: "12", entrance: "1", number: String(number) }, floorNumber: 0,
+    }, actor)));
+    expect(new Set(results.map(r=>r.building.id)).size).toBe(1);
+    expect(results[0].room.apartment?.microdistrict).toBe("32");
+    const rooms = await service.listRooms(results[0].building.id, actor);
+    expect(rooms).toHaveLength(2);
+    expect(rooms.every(room=>room.floorNumber===0 && room.qrCode && room.apartment)).toBe(true);
+    expect((await database.query("select count(*)::int as count from yu_inventory.buildings where name='Квартиры' and status='active'")).rows[0].count).toBe(1);
+  });
+
+  it("rejects apartment duplicates across entrance and floor changes, permits different houses, and persists edits", async () => {
+    const service = createService();
+    const apartment = { microdistrict: "032", house: "012", entrance: "2", number: "01" };
+    await expect(service.createApartment({ apartment, floorNumber: 3 }, actor)).rejects.toMatchObject({ publicCode: "room_already_exists" });
+    const created = await service.createApartment({ apartment: { ...apartment, house: "13" }, floorNumber: 4 }, actor);
+    expect(created.room.apartment).toEqual({ microdistrict: "32", house: "13", entrance: "2", number: "1" });
+    const updated = await service.updateRoom(created.room.id, { designation: "ignored", apartment: { ...created.room.apartment!, microdistrict: "11" }, floorNumber: 5, version: created.room.version }, actor);
+    expect((await service.findRoom(updated.id, actor)).apartment?.microdistrict).toBe("11");
+    expect(updated.designation).toBe("мкр 11, дом 13, кв. 1");
+    await expect(service.updateRoom(updated.id, { designation: "ignored", apartment: created.room.apartment, floorNumber: 4, version: 1 }, actor)).rejects.toMatchObject({ publicCode: "version_conflict" });
+    await service.archiveRoom(updated.id, updated.version, actor);
+    expect((await service.listRooms(created.building.id, actor)).some(r=>r.id===updated.id)).toBe(false);
+    await service.createApartment({ apartment: updated.apartment!, floorNumber: 5 }, actor);
+  });
+
+  it("rolls back a newly created collection when creating its apartment fails", async () => {
+    const service = createService();
+    const existing = (await service.listBuildings(actor)).find(b=>b.name==="Квартиры")!;
+    // Hide the existing collection only within this transaction to exercise first creation.
+    const uow = new PostgresUnitOfWork(() => runtimeDatabase, source => {
+      const repositories = createPostgresInventoryLocationRepositories(source);
+      const originalList = repositories.locations.listBuildings.bind(repositories.locations);
+      repositories.locations.listBuildings = async () => (await originalList()).filter(b=>b.id!==existing.id);
+      repositories.locations.insertRoom = async () => { throw new Error("simulated_room_write_failure"); };
+      return repositories;
+    });
+    const failing = new InventoryLocationService(uow, { now: () => new Date() }, { create: randomUUID }, { create: () => randomBytes(16) });
+    await expect(failing.createApartment({ apartment: { microdistrict: "1", house: "1", entrance: "1", number: "1" }, floorNumber: 1 }, actor)).rejects.toThrow("simulated_room_write_failure");
+    expect((await database.query("select count(*)::int as count from yu_inventory.buildings where name='Квартиры'")).rows[0].count).toBe(1);
+  });
+
+  it("serializes duplicate apartment submissions and rejects apartment data on campus buildings", async () => {
+    const service = createService();
+    const input = { apartment: { microdistrict: "10", house: "9", entrance: "1", number: "9" }, floorNumber: 1 };
+    expectOneSuccessAndOneDuplicate(await Promise.allSettled([
+      service.createApartment(input, actor), service.createApartment(input, actor),
+    ]));
+    const campus = await service.createBuilding({ name: randomUUID(), address: "Campus" }, actor);
+    await expect(service.createRoom(campus.id, { ...input, designation: "ignored" }, actor)).rejects.toMatchObject({ publicCode: "invalid_apartment_address" });
+    const apartments = (await service.listBuildings(actor)).find(b=>b.name==="Квартиры")!;
+    await expect(service.createRoom(apartments.id, { designation: "101", floorNumber: 1 }, actor)).rejects.toMatchObject({ publicCode: "invalid_apartment_address" });
+  });
+
+  it("rejects malformed apartments and unauthorized actors before writing", async () => {
+    const service = createService();
+    const input = { apartment: { microdistrict: "32", house: "12", entrance: "", number: "4" }, floorNumber: 1 };
+    await expect(service.createApartment(input, actor)).rejects.toMatchObject({ publicCode: "invalid_apartment_address" });
+    await expect(service.createApartment({ ...input, apartment: { ...input.apartment, entrance: "1" }, floorNumber: 201 }, actor)).rejects.toMatchObject({ publicCode: "invalid_room_floor" });
+    await expect(service.createApartment(input, { ...actor, role: "employee" })).rejects.toMatchObject({ publicCode: "forbidden" });
+  });
+
   it("recognizes an existing cabinet even with an old designation key", async () => {
     const service = createService();
     const building = await service.createBuilding({ name: randomUUID(), address: "Campus" }, actor);

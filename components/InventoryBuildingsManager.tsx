@@ -22,6 +22,7 @@ import type {
 } from "@/lib/contracts/inventory-locations";
 import type { UserRole } from "@/lib/contracts/users";
 import { findCampusBuildingPreset } from "@/lib/campus-directory";
+import { groupApartmentsByMicrodistrict, isApartmentsBuilding } from "@/lib/apartment-locations";
 import { hasPermission } from "@/lib/security/permissions";
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import InventoryItemCreateForm from "@/components/InventoryItemCreateForm";
@@ -178,6 +179,16 @@ export default function InventoryBuildingsManager({
     setRoomEditor({ building, room: null });
   }
 
+  function saveApartment(building: BuildingDto, room: RoomDto) {
+    setBuildings(current => current.some(value => value.id === building.id)
+      ? current.map(value => value.id === building.id ? building : value)
+      : [...current, building].sort((a,b) => a.name.localeCompare(b.name)));
+    setEditing(null);
+    saveRoom(room);
+    // Existing apartments must join the newly saved one before grouping.
+    if (!rooms[building.id]) void loadRooms(building.id);
+  }
+
   async function loadRooms(buildingId: string) {
     if (rooms[buildingId] || roomsLoading === buildingId) return;
     setRoomsLoading(buildingId);
@@ -233,6 +244,7 @@ export default function InventoryBuildingsManager({
     setOpenBuildingIds((current) => new Set(current).add(room.buildingId));
     setExpandedRoomGroups((current) => {
       const next = new Set(current).add(`floor-${room.buildingId}-${room.floorNumber}`);
+      if (room.apartment) next.add(`microdistrict-${room.buildingId}-${room.apartment.microdistrict}`);
       const building = buildings.find((value) => value.id === room.buildingId);
       const wingCode = findCampusBuildingPreset(building?.name ?? "")?.id === "engineering-faculty"
         ? engineeringFacultyWingFromDesignation(room.designation)
@@ -300,6 +312,24 @@ export default function InventoryBuildingsManager({
     }
   }
 
+  function renderApartments(building: BuildingDto) {
+    const { groups, ungrouped } = groupApartmentsByMicrodistrict(rooms[building.id] ?? []);
+    return <>
+      {groups.map(group => {
+        const key = `microdistrict-${building.id}-${group.microdistrict}`;
+        return <details key={key} open={expandedRoomGroups.has(key)} className="group overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+          <summary onClick={event => { event.preventDefault(); toggleRoomGroup(key); }}
+            className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-center gap-2"><Layers3 className="h-4 w-4 shrink-0 text-emerald-600" /><span className="truncate">{t("apartments.microdistrictGroup", { name: group.microdistrict })}</span></span>
+            <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-zinc-500">{t("apartments.count")}: {group.rooms.length}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" /></span>
+          </summary>
+          <div className="space-y-2 border-t border-zinc-200 bg-white p-2">{group.rooms.map(room => renderRoom(building, room))}</div>
+        </details>;
+      })}
+      {ungrouped.map(room => renderRoom(building, room))}
+    </>;
+  }
+
   function renderRoom(building: BuildingDto, room: RoomDto) {
     return (
       <div
@@ -313,12 +343,13 @@ export default function InventoryBuildingsManager({
             <DoorOpen className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-zinc-800">
+            <p className={`${room.apartment ? "break-words" : "truncate"} text-sm font-semibold text-zinc-800`}>
               {room.designation}
             </p>
             <p className="mt-0.5 text-xs text-zinc-500">
               {t("items.filterFloor")}: {room.floorNumber}
             </p>
+            {room.apartment ? <p className="mt-0.5 text-xs text-zinc-500">{t("apartments.entranceValue", { value: room.apartment.entrance })}</p> : null}
           </div>
           <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${room.accessMode === "closed" ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>
             {t(room.accessMode === "closed" ? "room.accessClosedOption" : "room.accessOpen")}
@@ -500,7 +531,7 @@ export default function InventoryBuildingsManager({
                   </span>
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-zinc-900">
-                      {translateCampusBuilding(language, building.name)}
+                      {isApartmentsBuilding(building.name) ? t("apartments.title") : translateCampusBuilding(language, building.name)}
                     </h3>
                     <p className="mt-1 flex items-start gap-1.5 text-sm text-zinc-500">
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
@@ -521,7 +552,7 @@ export default function InventoryBuildingsManager({
                   <DoorOpen className="h-4 w-4" />
                   {roomsLoading === building.id
                     ? "…"
-                    : `${t("inventory.roomsCount")}: ${
+                    : `${t(isApartmentsBuilding(building.name) ? "apartments.count" : "inventory.roomsCount")}: ${
                         rooms[building.id]?.length ?? building.roomCount
                       }`}
                   <ChevronDown
@@ -544,7 +575,7 @@ export default function InventoryBuildingsManager({
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-accent-light px-3 text-xs font-semibold text-accent-dark hover:bg-emerald-100"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    {t("inventory.addRoom")}
+                    {t(isApartmentsBuilding(building.name) ? "apartments.add" : "inventory.addRoom")}
                   </button>
                 ) : null}
                 {canEdit ? (
@@ -565,7 +596,7 @@ export default function InventoryBuildingsManager({
                   id={`building-floors-${building.id}`}
                   className="mt-3 space-y-2"
                 >
-                  {buildingRoomFloors(building).map((floor) => (
+                  {isApartmentsBuilding(building.name) ? renderApartments(building) : buildingRoomFloors(building).map((floor) => (
                     <details
                       key={floor.floorNumber}
                       open={expandedRoomGroups.has(`floor-${building.id}-${floor.floorNumber}`)}
@@ -593,7 +624,7 @@ export default function InventoryBuildingsManager({
                   ))}
                   {!rooms[building.id].length ? (
                     <p className="px-1 text-xs text-zinc-400">
-                      {t("inventory.noRooms")}
+                      {t(isApartmentsBuilding(building.name) ? "apartments.empty" : "inventory.noRooms")}
                     </p>
                   ) : null}
                 </div>
@@ -602,10 +633,10 @@ export default function InventoryBuildingsManager({
               <dl className="mt-5 grid gap-3 border-t border-black/5 pt-4 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                    {t("inventory.roomsCount")}
+                    {t(isApartmentsBuilding(building.name) ? "apartments.count" : "inventory.roomsCount")}
                   </dt>
                   <dd className="mt-1 font-semibold text-zinc-700">
-                    {building.roomCount}
+                    {rooms[building.id]?.length ?? building.roomCount}
                   </dd>
                 </div>
                 <div className="min-w-0">
@@ -646,6 +677,7 @@ export default function InventoryBuildingsManager({
           existingBuildingNames={buildings.map((building) => building.name)}
           onClose={() => setEditing(null)}
           onSave={saveBuilding}
+          onApartmentSave={saveApartment}
         />
       ) : null}
       {roomEditor ? (
