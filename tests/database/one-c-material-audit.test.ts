@@ -73,6 +73,9 @@ describe("live materials API replaces Excel as audit input", () => {
     }));
     // SQL and in-memory classification must agree, including Cyrillic boundaries.
     const names = ["Книга", "Набор книг", "Учебники", "Книги", "КНИГИ", "Кітаптар", "Стол для книг", "Шкаф книжный", "Сканер для книг", "Книги на сумму", "книга SMD диодов", "книга резисторов"];
+    names.push("Книга Мергалимова А.К., Теплотехническое оборудование, 2025", "Книга по электронике: резисторы и диоды", "Учебная литература", "учебн.лит-ра от автора", "Биология, оқулық", "Русская литература, хрестоматия", "учебно-методическое пособие", "учебное пособ", "Тумба для книг", "Напольная подставка для книг", "МЕТАЛЛИЧЕСКИЙ ШКАФ ДЛЯ КНИГ");
+    names.push("Каб.русс.языка и литературы", "уч.пособия автор", "Уч. пособие", "Методическое пособие", "Оқу қуралы", "ұжымдық монограф");
+    names.push("Компьютер для книг", "Ноутбук для книг", "Монитор для книг", "Планшет для чтения книг", "Теплотехническое оборудование: учебное пособие");
     const result = await pool.query(`select name, ${oneCNonBookSql("name")} as included from unnest($1::text[]) as t(name)`, [names]);
     for (const row of result.rows) expect(row.included).toBe(!isOneCBook(row.name));
     expect((await pool.query("select count(*)::int as count from yu_inventory.one_c_fixed_asset_inbox")).rows[0].count).toBe(3);

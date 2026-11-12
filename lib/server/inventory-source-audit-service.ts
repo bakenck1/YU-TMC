@@ -1,4 +1,4 @@
-import { oneCNonBookSql } from "@/lib/one-c-book-scope";
+import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -40,6 +40,7 @@ export async function createInventorySourceAudit(client: PoolClient, batchId: st
   if (counts.total !== counts.oneCOnly + counts.excelOnly + counts.both + counts.missing) throw new Error("inventory_audit_count_mismatch");
   const byItemId = new Map(rows.map((row) => [row.itemId, row]));
   for (const batchRow of batchRows.rows) {
+    if (isOneCBook((batchRow.payload as OneCFixedAsset).name)) continue;
     const matchedItemId = nullable(batchRow.matched_item_id);
     if (!matchedItemId || !byItemId.has(matchedItemId)) continue;
     if (!byItemId.get(matchedItemId)!.oneC.some((match) => match.externalId === batchRow.external_id && match.origins.includes("selected_batch"))) {
@@ -114,7 +115,7 @@ async function latestRun(db: Db, batchId: string) {
         coalesce(br.barcodes,'[]'::jsonb) as barcodes
       from ${SCHEMA}."items" i
       left join (select item_id,jsonb_agg(barcode) as barcodes from live_barcodes group by item_id) br on br.item_id=i.id
-      where i.archived_at is null
+      where i.archived_at is null and ${oneCNonBookSql("i.name")}
     ) select count(*)::int as current_total,
       count(*) filter(where l.status='active')::int as current_active,
       coalesce(sum(l.quantity),0)::float8 as current_quantity,

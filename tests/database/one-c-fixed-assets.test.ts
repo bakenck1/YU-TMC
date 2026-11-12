@@ -1,4 +1,4 @@
-import { auditCount, auditTotal } from "../helpers/audit-total";
+﻿import { auditCount, auditTotal } from "../helpers/audit-total";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -62,6 +62,57 @@ describe("PostgreSQL 1C fixed-asset inbox", () => {
     await expect(migrationPool.query<{ exists: boolean }>(
       `select exists(select 1 from pg_constraint where conname = 'one_c_fixed_asset_inbox_payload_hash_check') as exists`,
     )).resolves.toMatchObject({ rows: [{ exists: true }] });
+  });
+
+  it("finishes a legacy publication containing an approved book exactly once", async () => {
+    const userId = randomUUID();
+    await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Book review admin','admin',now(),now())`, [userId, `book-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name: "Книги за ноябрь" }], {
+      sourceSha256, requestId: randomUUID(), sourceFilename: "legacy-books.xml",
+    });
+    const batchId = (await runtimePool.query(`select id from yu_inventory.one_c_import_batches where source_sha256=$1`, [sourceSha256])).rows[0].id;
+    await runtimePool.query(`update yu_inventory.one_c_import_batch_rows set review_state='approved',proposed_action='create' where batch_id=$1`, [batchId]);
+    const runId = randomUUID();
+    await runtimePool.query(`insert into yu_inventory.one_c_publication_runs(id,batch_id,idempotency_key,state,requested_by)
+      values($1,$2,$3,'pending',$4)`, [runId, batchId, randomUUID(), userId]);
+    const service = new OneCReconciliationService(runtimePool);
+    expect(await service.processNextPublication()).toBe(true);
+    expect((await runtimePool.query(`select state,skipped_items from yu_inventory.one_c_publication_runs where id=$1`, [runId])).rows[0])
+      .toMatchObject({ state: "completed", skipped_items: 1 });
+    expect((await runtimePool.query(`select review_state,proposed_action from yu_inventory.one_c_import_batch_rows where batch_id=$1`, [batchId])).rows[0])
+      .toMatchObject({ review_state: "excluded", proposed_action: "exclude" });
+    expect(await service.processNextPublication()).toBe(false);
+  });
+
+  it("keeps a new audit fresh with local book cards and excludes a book source matching a nonbook card", async () => {
+    const userId = randomUUID(), buildingId = randomUUID(), roomId = randomUUID();
+    await runtimePool.query(`insert into yu_inventory.users(id,code,email,full_name,role,created_at,updated_at)
+      values($1,$2,$3,'Scoped review admin','admin',now(),now())`, [userId, `book-${userId.slice(0, 8)}`, `${userId}@example.test`]);
+    await runtimePool.query(`insert into yu_inventory.buildings(id,name,name_key,address,address_key,created_by,updated_by)
+      values($1::uuid,'Book test building',$1::text,'Book test address',$1::text,$2,$2)`, [buildingId, userId]);
+    await runtimePool.query(`insert into yu_inventory.rooms(id,building_id,designation,designation_key,floor_number,created_by,updated_by)
+      values($1::uuid,$2,'101',$1::text,1,$3,$3)`, [roomId, buildingId, userId]);
+    const number = `BOOK-${randomUUID().slice(0, 8)}`;
+    for (const [name, inventoryNumber] of [["Книга от автора", `${number}-local`], ["Стол для книг", number]]) {
+      await runtimePool.query(`insert into yu_inventory.items(id,name,quantity,unit_price,room_id,inventory_number_kind,inventory_number,inventory_number_key,created_by,updated_by)
+        values($1,$2,1,100,$3,'official',$4::text,lower($4::text),$5,$5)`, [randomUUID(), name, roomId, inventoryNumber, userId]);
+    }
+    const sourceSha256 = randomUUID().replaceAll("-", "").padEnd(64, "0");
+    await new PostgresOneCFixedAssetRepository(runtimePool).saveBatch([{ ...asset, name: "Книги на общую сумму", inventoryNumber: number }], {
+      sourceSha256, requestId: randomUUID(), sourceFilename: "book-scope.xml",
+    });
+    const batch = (await runtimePool.query(`select id,version from yu_inventory.one_c_import_batches where source_sha256=$1`, [sourceSha256])).rows[0];
+    const service = new OneCReconciliationService(runtimePool);
+    const plan = await service.analyzeBatch(batch.id, { version: batch.version });
+    expect(plan.exclude).toBe(1);
+    const audit = await service.getInventoryAuditPage(batch.id, { page: 1, pageSize: 50 });
+    expect(audit.run.inventory).toMatchObject({ stale: false, added: 0, changed: 0, removed: 0 });
+    expect(audit.run.inventory.currentTotal).toBe(auditTotal(audit.run.counts));
+    expect(audit.data.some(row => row.itemName === "Книга от автора")).toBe(false);
+    const stored = (await runtimePool.query(`select review_state,matched_item_id from yu_inventory.one_c_import_batch_rows where batch_id=$1`, [batch.id])).rows[0];
+    expect(stored).toMatchObject({ review_state: "excluded", matched_item_id: null });
   });
 
   it("stores an uploaded XLS privately, selects it for dry-run, and reuses identical bytes", async () => {

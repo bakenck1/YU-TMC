@@ -1,6 +1,6 @@
 import { isOneCBook, oneCNonBookSql } from "@/lib/one-c-book-scope";
 import "server-only";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { getDatabasePool } from "@/lib/db/client";
 import { buildInventorySourceAudit, type AuditItem } from "@/lib/inventory-source-audit";
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
@@ -18,11 +18,11 @@ export async function getOneCAnalytics(pool: Pick<Pool, "connect"> = getDatabase
 }
 
 /** Export, matched lists and dashboard reconcile only active, nonarchived Inventory cards. */
-export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = getDatabasePool()) {
-  const client = await pool.connect();
+export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = getDatabasePool(), transactionClient?: PoolClient) {
+  const client = transactionClient ?? await pool.connect();
   try {
     // Counts and matching describe the same database state, even during an import.
-    await client.query("begin isolation level repeatable read read only");
+    if (!transactionClient) await client.query("begin isolation level repeatable read read only");
     const assets = await client.query(`select external_id,payload,last_seen_at,received_at from yu_inventory.one_c_fixed_asset_inbox order by external_id`);
     const materials = await readMaterialRegistry(client);
     const items = await client.query(`select i.id,i.name,i.inventory_number,i.inventory_number_kind,i.one_c_code,i.version,i.status,i.quantity,i.unit_price,i.item_section,
@@ -32,7 +32,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       from yu_inventory.items i where i.archived_at is null and i.status = 'active' and ${oneCNonBookSql('i.name')} order by i.id`);
     const links = await client.query(`select external_id,item_id,source_code from yu_inventory.item_one_c_links`);
     const clock = await client.query("select transaction_timestamp() as calculated_at");
-    await client.query("commit");
+    if (!transactionClient) await client.query("commit");
 
     const codes = new Map<string, string[]>();
     for (const link of links.rows) if (link.source_code) codes.set(link.item_id, [...(codes.get(link.item_id) ?? []), link.source_code]);
@@ -70,7 +70,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       inventory,
     };
   } catch (error) {
-    await client.query("rollback").catch(() => undefined);
+    if (!transactionClient) await client.query("rollback").catch(() => undefined);
     throw error;
-  } finally { client.release(); }
+  } finally { if (!transactionClient) client.release(); }
 }

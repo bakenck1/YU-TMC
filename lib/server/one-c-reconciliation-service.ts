@@ -253,7 +253,7 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
         } else if (mapped.action === "link" && decision.confirmLink === true) {
           mapped = { ...mapped, state: "approved" };
         }
-        const matchedItemId = manualSelectionValid ? selectedItemId
+        const matchedItemId = isOneCBook(asset.name) ? null : manualSelectionValid ? selectedItemId
           : analysis.identifiers.matchedBy.length ? analysis.identifiers.itemId : null;
         const existingOwner = matchedItemId ? itemLinkMap.get(matchedItemId) : undefined;
         if (existingOwner && existingOwner !== asset.externalId) {
@@ -410,6 +410,9 @@ export class OneCReconciliationService implements OneCReconciliationAdminService
     try {
       const asset = row.payload as OneCFixedAsset; const decision = (row.decision ?? {}) as Row;
       if (isOneCBook(asset.name)) {
+        await client.query(`update "yu_inventory"."one_c_import_batch_rows"
+          set review_state='excluded',proposed_action='exclude',matched_item_id=null
+          where batch_id=$1 and external_id=$2`, [batchId, asset.externalId]);
         await client.query("commit");
         return "skipped";
       }

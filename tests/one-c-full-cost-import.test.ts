@@ -216,3 +216,14 @@ test("zero prices are accepted for fixed assets and positive material balances",
   assert.equal((await materials.send(materialRow("zero", "<Quantity>1</Quantity><UnitPrice>0</UnitPrice>") + materialRow("priced", "<Quantity>1</Quantity><UnitPrice>100</UnitPrice>"))).status, 200);
   assert.deepEqual(materials.snapshots[0].materials.map(material => material.unitPrice), ["0", "100"]);
 });
+
+test("excluded books without prices do not reject priced equipment in the same export", async () => {
+  const assets = boundary();
+  const book = row(GUID, "").replace("Моноблок", "Книга по оборудованию");
+  assert.equal((await assets.send(book + row(SECOND_GUID, "<InitialCost>100</InitialCost>"))).status, 200);
+  const materials = materialsBoundary();
+  const bookMaterial = materialRow("BOOK", "<Quantity>1</Quantity>").replace("МФУ", "Учебная литература");
+  assert.equal((await materials.send(bookMaterial + materialRow("PRINTER", "<Quantity>1</Quantity><UnitPrice>100</UnitPrice>"))).status, 200);
+  assert.equal((await materials.send(materialRow("PRINTER", "<Quantity>1</Quantity>"))).status, 422);
+  assert.equal((await assets.send(row(SECOND_GUID, ""))).status, 422);
+});
