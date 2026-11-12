@@ -34,6 +34,7 @@ import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integra
 import { consumables, retainedEquipment } from "../helpers/one-c-consumable-cases";
 import reviewedExclusions from "@/lib/data/one-c-reviewed-exclusions.json";
 import { oneCSecondaryExclusionCategory, oneCSecondaryExcludedSql } from "@/lib/one-c-secondary-scope";
+import { excludedProperties, retainedPropertyEquipment } from "../helpers/one-c-property-cases";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -55,6 +56,14 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("uses identical multilingual property rules in JavaScript and PostgreSQL for new identities", async () => {
+    const names = [...excludedProperties, ...retainedPropertyEquipment];
+    const rows = await pool.query(`select n,${oneCIncludedSourceSql("name")} as included
+      from unnest($1::text[]) with ordinality t(name,n) order by n`, [names]);
+    expect(rows.rows.map(row => row.included)).toEqual(names.map((_, i) => i >= excludedProperties.length));
+    expect(rows.rows.map(row => row.included)).toEqual(names.map(name => !isOneCExcludedSource(name)));
+  });
 
   it("applies the extended scope to new identities and preserves equipment names mentioning excluded subjects", async () => {
     const names = ["ПСД по зданию библиотеки", "Земельный участок", "2-х этажная пристройка уч. корпус",

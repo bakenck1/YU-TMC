@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isOneCExcludedSource } from "../lib/one-c-integration-scope";
 import { oneCSecondaryExclusionCategory } from "../lib/one-c-secondary-scope";
+import { excludedProperties, retainedPropertyEquipment } from "./helpers/one-c-property-cases";
+
+test("recognizes property subjects in Russian, Kazakh and English without excluding their equipment", () => {
+  for (const name of excludedProperties) {
+    assert.equal(oneCSecondaryExclusionCategory(name), "real_estate", name);
+    assert.equal(isOneCExcludedSource(name, null, "new-code"), true, name);
+  }
+  for (const name of retainedPropertyEquipment) {
+    assert.equal(oneCSecondaryExclusionCategory(name), null, name);
+    assert.equal(isOneCExcludedSource(name, null, "new-code"), false, name);
+  }
+});
 
 test("excludes the requested subjects and new records of the same groups", () => {
   for (const name of [
