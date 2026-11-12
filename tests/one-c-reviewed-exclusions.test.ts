@@ -5,9 +5,9 @@ import components from "./helpers/one-c-retained-components.json";
 import { isOneCExcludedSource, isOneCExcludedAsset } from "../lib/one-c-integration-scope";
 
 test("keeps all reviewed exclusions effective even after renaming", () => {
-  assert.equal(reviewed.reviewedPositions, 1109);
-  assert.equal(reviewed.fixedAssetIds.length + reviewed.materialCodes.length, 1109);
-  assert.deepEqual(reviewed.batches.map(batch => [batch.list, batch.positions]), [["N", 318], ["P", 476], ["Q-consumables", 315]]);
+  assert.equal(reviewed.reviewedPositions, 1405);
+  assert.equal(reviewed.fixedAssetIds.length + reviewed.materialCodes.length, 1405);
+  assert.deepEqual(reviewed.batches.map(batch => [batch.list, batch.positions]), [["N", 318], ["P", 476], ["Q-consumables", 315], ["E-extended-scope", 296]]);
   assert.equal(reviewed.batches.reduce((sum, batch) => sum + batch.fixedAssets, 0), reviewed.fixedAssetIds.length);
   assert.equal(reviewed.batches.reduce((sum, batch) => sum + batch.materials, 0), reviewed.materialCodes.length);
   assert.equal(new Set(reviewed.nameHashes).size, reviewed.nameHashes.length);

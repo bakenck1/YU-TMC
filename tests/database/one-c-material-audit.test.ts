@@ -33,6 +33,7 @@ import { isOneCConsumable, oneCConsumableSql } from "@/lib/one-c-consumables";
 import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integration-scope";
 import { consumables, retainedEquipment } from "../helpers/one-c-consumable-cases";
 import reviewedExclusions from "@/lib/data/one-c-reviewed-exclusions.json";
+import { oneCSecondaryExclusionCategory, oneCSecondaryExcludedSql } from "@/lib/one-c-secondary-scope";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -54,6 +55,21 @@ describe("live materials API replaces Excel as audit input", () => {
     await owner.query('truncate "yu_inventory"."users", "yu_inventory"."one_c_import_batches", "yu_inventory"."one_c_fixed_asset_inbox", "yu_inventory"."one_c_material_import_batches", "yu_inventory"."one_c_material_inbox", "yu_inventory"."material_snapshots" cascade');
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
+
+  it("applies the extended scope to new identities and preserves equipment names mentioning excluded subjects", async () => {
+    const names = ["ПСД по зданию библиотеки", "Земельный участок", "2-х этажная пристройка уч. корпус",
+      "Светодиодный накладной светильник", "ВЕШАЛКА\u00a0металлическая", "Универсальный счетчик",
+      "Опорная плита в чемодане", "Барометрическая формула высоты", "Si-фотодетектор с усилителем", "Ху-манипулятор",
+      "Прибор для демонстрации теплопроводности", "Модель структуры ДНК",
+      "Пищеварительный тракт", "Кровеносные и дыхательные системы", "Скелет человека на штативе",
+      "Штатив лабораторный комбинированный", "Базовая установка системы Кобра 3", "Сервер в здании библиотеки",
+      "Блок питания светильника", "Сетевой коммутатор общежития", "Дополнительные программные модели симулятора K-Sim Engine",
+      "Коллекция АРТ волна ФГ-120 (один стол 4 стулья)", "Модуль оптический SFP"];
+    const rows = await pool.query(`select n,${oneCSecondaryExcludedSql("name")} as excluded
+      from unnest($1::text[]) with ordinality t(name,n) order by n`, [names]);
+    expect(rows.rows.map(row => row.excluded)).toEqual(names.map(name => oneCSecondaryExclusionCategory(name) !== null));
+    expect(rows.rows.map(row => row.excluded)).toEqual(names.map((_, i) => i < 17));
+  });
 
   it("excludes all additionally approved identities in SQL and preserves source history", async () => {
     const ids = ["00000000-0000-4000-8000-000000000001", ...reviewedExclusions.fixedAssetIds];

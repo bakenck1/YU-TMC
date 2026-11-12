@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { isOneCBook } from "../lib/one-c-book-scope";
 import { isOneCExcludedSource } from "../lib/one-c-integration-scope";
 import { oneCConsumableCategory } from "../lib/one-c-consumables";
+import { oneCSecondaryExclusionCategory } from "../lib/one-c-secondary-scope";
 
 type Source = { source: "OS" | "MP"; row: number; name: string; code: string; quantity: number; unit: string; id: string; account: string };
 const [input, destination] = process.argv.slice(2);
@@ -42,7 +43,7 @@ for (const source of ["OS", "MP"] as const) {
 const identity = (r: Source) => r.source === "OS" ? r.id : r.code;
 const sourceId = (r: Source) => r.source === "OS" ? r.id : undefined;
 const book = (r: Source) => isOneCBook(r.name, sourceId(r));
-const reason = (r: Source) => book(r) ? "library" : oneCConsumableCategory(r.name) ?? "confirmed_review";
+const reason = (r: Source) => book(r) ? "library" : oneCConsumableCategory(r.name) ?? oneCSecondaryExclusionCategory(r.name) ?? "confirmed_review";
 const excluded = records.filter(r => isOneCExcludedSource(r.name, sourceId(r), r.source === "MP" ? r.code : undefined));
 const remaining = records.filter(r => !isOneCExcludedSource(r.name, sourceId(r), r.source === "MP" ? r.code : undefined));
 const scopeSummary = (rows: Source[]) => ({
