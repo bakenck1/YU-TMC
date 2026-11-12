@@ -52,6 +52,19 @@ describe("reviewed 1C nomenclature code confirmation", () => {
     expect((await pool.query("select one_c_code from yu_inventory.items where id=$1", [f.itemId])).rows[0].one_c_code).toBe("NEW");
   });
 
+  it("shows every balance of a normalized code and invalidates a changed hidden balance", async () => {
+    const f = await seed();
+    const first = { ...material, code: "ＡＢＣ" };
+    const second = { ...hiddenBalance, code: "ABC" };
+    await save([first, second], "2026-11-12T12:00:00Z");
+    const [card] = getOneCPossibleMatches(await getOneCAnalyticsSnapshot(pool));
+    const candidate = card.candidates.find(entry => entry.code === "ABC");
+    expect(candidate?.balances).toHaveLength(2);
+    const review = { ...input(card), code: "ABC" };
+    await save([first, { ...second, unitPrice: "777" }], "2026-11-13T12:00:00Z");
+    await expect(confirmOneCPossibleMatch(review, f.actor, pool)).rejects.toMatchObject({ publicCode: "one_c_possible_stale" });
+  });
+
   it("rejects a review after an imported price or owner changes", async () => {
     const f = await seed();
     const [card] = getOneCPossibleMatches(await getOneCAnalyticsSnapshot(pool));

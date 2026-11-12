@@ -7,6 +7,7 @@ import { ApplicationError } from "@/lib/domain/application-error";
 import type { OneCAdminActor } from "@/lib/server/http/one-c-reconciliation-admin-handler";
 import { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 import { classifyOneCAudit } from "@/lib/one-c-analytics";
+import { exactMaterialCode } from "@/lib/one-c-material-code";
 
 type Snapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
 export type PossibleBalance = {
@@ -26,10 +27,11 @@ export function getOneCPossibleMatches(snapshot: Snapshot): PossibleCard[] {
   const items = new Map(snapshot.inventory.map(item => [item.id, item]));
   const balancesByCode = new Map<string, PossibleBalance[]>();
   const add = (code: string | null | undefined, balance: PossibleBalance) => {
-    if (!code?.trim()) return;
-    const balances = balancesByCode.get(code) ?? [];
+    const key = exactMaterialCode(code);
+    if (!key) return;
+    const balances = balancesByCode.get(key) ?? [];
     balances.push(balance);
-    balancesByCode.set(code, balances);
+    balancesByCode.set(key, balances);
   };
   for (const entry of snapshot.registryAssets ?? snapshot.assets) add(entry.asset.code, {
     source: "OS", sourceId: entry.externalId, name: entry.asset.name, number: entry.asset.inventoryNumber,
@@ -41,13 +43,13 @@ export function getOneCPossibleMatches(snapshot: Snapshot): PossibleCard[] {
   });
   return snapshot.rows.filter(row => presence.get(row.itemId)?.category === "possible").map(row => {
     const codes = [...new Set([...row.oneC.map(entry => entry.code), ...row.excel.map(entry => entry.oneCCode)]
-      .filter((code): code is string => Boolean(code?.trim())))].sort();
+      .map(exactMaterialCode).filter((code): code is string => code !== null))].sort();
     const candidates = codes.map(code => ({ code, balances: [...(balancesByCode.get(code) ?? [])]
       .sort((a, b) => a.source.localeCompare(b.source) || a.sourceId.localeCompare(b.sourceId)) }));
     const itemSection = items.get(row.itemId)?.itemSection ?? "general";
     const sources = {
-      assets: (snapshot.registryAssets ?? snapshot.assets).filter(entry => codes.includes(entry.asset.code ?? "")),
-      materials: snapshot.materialRecords.filter(entry => codes.includes(entry.material.code)),
+      assets: (snapshot.registryAssets ?? snapshot.assets).filter(entry => codes.includes(exactMaterialCode(entry.asset.code) ?? "")),
+      materials: snapshot.materialRecords.filter(entry => codes.includes(exactMaterialCode(entry.material.code) ?? "")),
     };
     const reviewHash = createHash("sha256").update(JSON.stringify({ row, candidates, itemSection, sources })).digest("hex");
     return { id: row.itemId, name: row.itemName, inventoryNumber: row.siteNumber,
