@@ -121,10 +121,8 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
         </section>
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-900">{c.attention}</h2>
           <Attention title={c.temporaryUnmatched} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
-          <Attention title={c.assetsNoMatch} value={hasAssets ? coverage?.assets.withoutCandidate ?? null : null}
-            detail={hasAssets && coverage ? `${c.sourceAssetsShort}: ${number(coverage.assets.withCandidate)} ${c.sourceLinkedCount} + ${number(coverage.assets.withoutCandidate)} ${c.sourceUnlinkedCount} = ${number(coverage.assets.total)}` : undefined} />
-          <Attention title={c.materialsNoMatch} value={hasMaterials ? coverage?.materials.withoutCandidate ?? null : null}
-            detail={hasMaterials && coverage ? `${c.sourceMaterialsShort}: ${number(coverage.materials.withCandidate)} ${c.sourceLinkedCount} + ${number(coverage.materials.withoutCandidate)} ${c.sourceUnlinkedCount} = ${number(coverage.materials.total)}` : undefined} />
+          <Attention title={c.assetsNoMatch} value={hasAssets ? coverage?.assets.withoutCandidate ?? null : null} />
+          <Attention title={c.materialsNoMatch} value={hasMaterials ? coverage?.materials.withoutCandidate ?? null : null} />
         </section>
       </div>
 
