@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { summarizeOneCSourceCoverage } from "../lib/one-c-source-coverage";
 import type { AuditMatch } from "../lib/inventory-source-audit";
+import { summarizeOneCAudit } from "../lib/one-c-analytics";
 
 const row: AuditMatch = {
   itemId: "card", itemName: "Стол", siteNumber: "1", siteBarcodes: [], numberKind: "official", itemVersion: 1,
@@ -10,6 +11,23 @@ const row: AuditMatch = {
   excel: [{ sourceKey: "m1-owner-a", sourceKind: "materials_api", oneCCode: "001", rowNumber: 1, inventoryNumber: "1-2", nomenclature: "Стол", endingBalance: "3", matchedBy: ["number_suffix"] }],
 };
 const record = (key: string, code: string, quantity = "1") => ({ key, material: { code, quantity } });
+
+test("multiple cards can share a source identity without inventing additional source positions", () => {
+  // Synthetic many-to-one links illustrate the screenshot totals, not a production data extract.
+  const rows: AuditMatch[] = [
+    ...Array.from({ length: 1235 }, (_, i) => ({ ...row, itemId: `os-card-${i}`, excel: [], oneC: [{ ...row.oneC[0], externalId: `os-${i % 968}`, inventoryNumber: "1" }] })),
+    ...Array.from({ length: 943 }, (_, i) => ({ ...row, itemId: `mp-card-${i}`, oneC: [], excel: [{ ...row.excel[0], sourceKey: `mp-${i % 636}`, oneCCode: `code-${i % 636}`, explicitInventoryNumber: "1" }] })),
+  ];
+  const ids = Array.from({ length: 2456 }, (_, i) => `os-${i}`);
+  const records = Array.from({ length: 4564 }, (_, i) => record(`mp-${i}`, `code-${i}`));
+  const cards = summarizeOneCAudit(rows, ids, records.map(entry => entry.key));
+  const positions = summarizeOneCSourceCoverage(rows, ids, records);
+  assert.equal(cards.fixedAssets, 1235);
+  assert.equal(cards.materials, 943);
+  assert.deepEqual(positions.assets, { total: 2456, withCandidate: 968, withoutCandidate: 1488 });
+  assert.equal(positions.materials.withCandidate, 636);
+  assert.equal(positions.materials.withoutCandidate, 3928);
+});
 
 test("reverse reconciliation counts GUIDs and material codes once, while retaining balance row counts", () => {
   const summary = summarizeOneCSourceCoverage([row, { ...row, itemId: "second-card" }], ["os-1", "os-1", "os-2"], [

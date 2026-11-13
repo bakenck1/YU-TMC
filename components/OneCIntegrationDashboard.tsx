@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, Download, RefreshCw } from "lucide-react";
 import OneCFixedAssetRegistryPanel from "@/components/OneCFixedAssetRegistryPanel";
 import MaterialRegistryPanel from "@/components/MaterialRegistryPanel";
-import OneCMatchedCards from "@/components/OneCMatchedCards";
+
 import OneCPossibleMatches from "@/components/OneCPossibleMatches";
 import { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichment";
 import { useAppSettings } from "@/components/AppSettingsProvider";
@@ -16,7 +16,7 @@ import { oneCDashboardCopy } from "@/lib/one-c-dashboard-copy";
 const number = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 const display = (value: number | null) => value === null ? "—" : number(value);
 const libraryScope = {
-  ru: "С учётом согласованных исключений",
+  ru: "Без библиотечного фонда и расходников",
   kk: "Келісілген ерекшеліктерді ескере отырып",
   en: "With agreed exclusions applied",
 } as const;
@@ -46,15 +46,6 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const hasMaterials = materials.batchId !== null;
   const hasSources = hasAssets || hasMaterials;
   const complete = hasAssets && hasMaterials;
-  const sourceRows = [
-    { label: c.sourceAssets, available: hasAssets, values: coverage?.assets },
-    { label: c.sourceMaterials, available: hasMaterials, values: coverage?.materials },
-  ];
-  const sourceColumns = [
-    { label: c.sourceTotal, key: "total" },
-    { label: c.sourceLinked, key: "withCandidate" },
-    { label: c.sourceUnlinked, key: "withoutCandidate" },
-  ] as const;
   // One position is an OS GUID or a material code, never a balance row or quantity.
   const total = complete ? analytics.assets.total + materials.materialCount : null;
   const found = counts.fixedAssets + counts.materials + counts.both;
@@ -101,22 +92,20 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
       <section aria-label={c.composition} className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl bg-gradient-to-br from-slate-800 via-[#164e63] to-teal-700 p-6 text-white shadow-lg shadow-teal-900/10">
           <h2 className="text-sm font-medium text-blue-100">{c.activeTotal}</h2><p className="mt-4 text-4xl font-semibold tabular-nums">{display(total)}</p>
-          <p className="mt-2 text-sm text-blue-100">{total === null ? c.noTotal : `${c.totalHint} · ${libraryScope[language]}`}</p>
+          <p className="mt-2 text-sm text-blue-100">{total === null ? c.noTotal : `${c.totalHint} • ${libraryScope[language]}`}</p>
           <div className="mt-6 flex h-2 overflow-hidden rounded-full bg-white/15" aria-hidden="true">{total !== null && total > 0 ? <><div className="bg-blue-400" style={{ width: `${analytics.assets.total / total * 100}%` }} /><div className="bg-emerald-400" style={{ width: `${materials.materialCount / total * 100}%` }} /></> : null}</div>
-          {total !== null ? <p className="mt-3 text-xs text-blue-100">{number(analytics.assets.total)} {c.assets} + {number(materials.materialCount)} МП = {number(total)}</p> : null}
+          {total !== null ? <p className="mt-3 text-xs text-blue-100">{number(analytics.assets.total)} {c.assets} + {number(materials.materialCount)} {language === "ru" ? "материальные предметы" : c.materials} = {number(total)}</p> : null}
         </div>
         <SourceCard title={c.assets} subtitle={language === "ru" ? "ОС" : c.assetsSubtitle} value={hasAssets ? analytics.assets.total : null} kind="assets" onClick={() => setTab("assets")}>{hasAssets ? null : c.noData}</SourceCard>
         <SourceCard title={c.materials} subtitle="МП" value={hasMaterials ? materials.materialCount : null} kind="materials" onClick={() => setTab("materials")}>{hasMaterials ? null : c.noData}</SourceCard>
       </section>
-      <p className="text-sm leading-6 text-slate-600">{c.compositionHint}</p>
       <section aria-label={c.ourDatabase} className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-900">{c.ourDatabase}</h2><span className="text-xs text-slate-500">{number(analytics.inventory.active)} {c.activeCards}</span></div>
-        <p className="mb-5 text-sm leading-6 text-slate-500">{c.inventoryHint}</p>
-        <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-6">
+        <div className={`grid grid-cols-2 gap-5 lg:grid-cols-3 ${hasSources && counts.possible > 0 ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
           <Metric label={c.cards} value={analytics.inventory.total} />
           <Metric label={c.units} value={analytics.inventory.quantity} />
           <Metric label={c.found} value={hasSources ? found : null} result="matched" />
-          <Metric label={c.checkNumber} value={hasSources ? counts.possible : null} />
+          {hasSources && counts.possible > 0 ? <Metric label={c.checkNumber} value={counts.possible} /> : null}
           <Metric label={c.missing} value={hasSources ? counts.missing : null} result="missing" />
           <Metric label={c.temporary} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
         </div>
@@ -127,7 +116,6 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           {hasSources ? <>
             <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
             <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
-            <p className="mt-4 border-t border-slate-200 pt-4 text-sm font-medium text-slate-700">{c.partition}: {number(counts.total)}</p>
             {!complete ? <p className="mt-3 text-xs text-slate-500">{c.partial}</p> : null}
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{c.noReconciliation}</div>}
         </section>
@@ -137,33 +125,12 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           <Attention title={c.materialsNoMatch} value={hasMaterials ? coverage?.materials.withoutCandidate ?? null : null} />
         </section>
       </div>
-      <section aria-label={c.sourceReview} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-slate-900">{c.sourceReview}</h2>
-        <p className="text-sm leading-6 text-slate-600">{c.sourceHint}</p>
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs text-slate-500"><tr><th scope="col" className="py-3 pr-4">{c.sourceSection}</th>{sourceColumns.map(column => <th key={column.key} scope="col" className="px-3 py-3 text-right">{column.label}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100">{sourceRows.map(row => <tr key={row.label}><th scope="row" className="py-4 pr-4 font-medium text-slate-700">{row.label}</th>{sourceColumns.map(column => <td key={column.key} className="px-3 py-4 text-right font-semibold tabular-nums text-slate-900">{display(row.available ? row.values?.[column.key] ?? null : null)}</td>)}</tr>)}</tbody>
-          </table>
-        </div>
-        <div className="grid gap-3 sm:hidden">{sourceRows.map(row => <div key={row.label} className="rounded-xl border border-slate-200 p-4">
-          <h3 className="text-sm font-medium text-slate-700">{row.label}</h3>
-          <dl className="mt-4 space-y-3 text-sm">{sourceColumns.map(column => <div key={column.key} className="flex items-start justify-between gap-3"><dt className="text-slate-500">{column.label}</dt><dd className="font-semibold tabular-nums text-slate-900">{display(row.available ? row.values?.[column.key] ?? null : null)}</dd></div>)}</dl>
-        </div>)}</div>
-        <p className="text-xs leading-5 text-slate-500">{c.candidateHint}</p>
-        <p className="rounded-xl bg-sky-50 p-4 text-sm leading-6 text-slate-700">{c.sourceWarning}</p>
-        <details className="rounded-xl border border-slate-200 p-4">
-          <summary className="cursor-pointer text-sm font-medium text-slate-700">{c.balanceDetail}</summary>
-          <p className="mt-3 text-sm leading-6 text-slate-600">{c.balanceHint}</p>
-          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-slate-500">{c.balanceRows}</dt><dd className="mt-1 font-semibold tabular-nums">{display(hasMaterials ? coverage?.materials.balanceRows ?? null : null)}</dd></div><div><dt className="text-slate-500">{c.balanceUnlinked}</dt><dd className="mt-1 font-semibold tabular-nums">{display(hasMaterials ? coverage?.materials.balanceRowsWithoutCandidate ?? null : null)}</dd></div></dl>
-        </details>
-        <button type="button" disabled={exporting} onClick={() => void downloadExcel()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download aria-hidden="true" className="h-4 w-4" />{exporting ? c.downloading : c.reviewDownload}</button>
-      </section>
+
     </div> : null}
     {tab === "overview" && counts.possible > 0 ? <OneCPossibleMatches /> : null}
     {tab !== "overview" ? <InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /> : null}
     {tab === "assets" ? <OneCFixedAssetRegistryPanel key={analytics.calculatedAt} /> : null}
-    {tab === "materials" ? <><OneCMatchedCards group="materials" revision={analytics.calculatedAt} /><MaterialRegistryPanel key={materials.sha256} source={materials} /></> : null}
+    {tab === "materials" ? <MaterialRegistryPanel key={materials.sha256} source={materials} /> : null}
   </div>;
 }
 
