@@ -5,6 +5,7 @@ import type { AuditMatch } from "@/lib/inventory-source-audit";
 import { classifyOneCAudit, oneCAuditDisplayCategory } from "@/lib/one-c-analytics";
 import { isTemporaryOneCCard } from "@/lib/one-c-material-code";
 import { getOneCMatchedCards } from "@/lib/one-c-matched-cards";
+import { summarizeOneCSourceCoverage } from "@/lib/one-c-source-coverage";
 import type { getOneCAnalyticsSnapshot } from "@/lib/server/one-c-analytics-service";
 
 type FullSnapshot = Awaited<ReturnType<typeof getOneCAnalyticsSnapshot>>;
@@ -45,7 +46,7 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   const summary = `Активные позиции 1С: ${complete ? data.analytics.assets.total + data.materials.materialCount : "нет полного итога"} = Основные средства ${hasAssets ? data.analytics.assets.total : "нет данных"} + МП ${hasMaterials ? data.materials.materialCount : "нет данных"} · Наша база: ${data.analytics.inventory.total} карточек (${data.analytics.inventory.active} активных), ${data.analytics.inventory.quantity} единиц`;
   const availability = !hasSources ? "Нет данных основных средств и МП для сверки. Карточки не объявлены ненайденными."
     : !complete ? `Сверка только по ${hasAssets ? "Основные средства" : "МП"}; ${hasAssets ? "МП" : "Основные средства"}: нет данных. Ненайденные — в доступном разделе.`
-      : "Для сверки взяты все статусы основных средств и все карточки нашей базы, кроме архива. Временные есть на отдельном листе и могут также быть в «Совпадениях 1С».";
+      : "Для сверки взяты активные неархивные карточки нашей базы и все включённые статусы основных средств. Применены согласованные исключения. Временные есть на отдельном листе и могут также быть в «Совпадениях 1С».";
 
   function sheet(name: string, title: string, detail: string, headers: string[], widths: number[]) {
     const result = workbook.addWorksheet(name, { views: [{ state: "frozen", xSplit: 3, ySplit: 5 }], properties: { defaultRowHeight: 30 } });
@@ -140,9 +141,12 @@ export async function exportOneCAnalyticsExcel(data: Snapshot): Promise<Uint8Arr
   // A weak candidate also prevents calling a source record wholly absent.
   const seenAssets = new Set(data.rows.flatMap(row => row.oneC.map(entry => entry.externalId)));
   const seenMaterials = new Set(data.rows.flatMap(row => row.excel.flatMap(entry => entry.sourceKey ? [entry.sourceKey] : [])));
+  const codesWithCandidate = new Set(data.materialRecords.filter(row => Number(row.material.quantity) > 0 && seenMaterials.has(row.key)).map(row => row.material.code));
+  const coverage = summarizeOneCSourceCoverage(data.rows, data.assets.map(row => row.externalId), data.materialRecords);
   const absentAssets = hasAssets ? data.assets.filter(row => !seenAssets.has(row.externalId)) : [];
-  const absentMaterials = hasMaterials ? data.materialRecords.filter(row => !seenMaterials.has(row.key)) : [];
-  const toAdd = sheet("Добавить в базу", "Есть в 1С — нет в нашей базе", `${absentAssets.length} Основные средства · ${absentMaterials.length} строк остатков МП. Без кандидата среди неархивных карточек. Проверьте перед добавлением; строки МП могут повторяться по складам и ответственным.`,
+  // Codes with a candidate on any balance row stay on the full MP sheet for owner/quantity review.
+  const absentMaterials = hasMaterials ? data.materialRecords.filter(row => Number(row.material.quantity) > 0 && !codesWithCandidate.has(row.material.code)) : [];
+  const toAdd = sheet("Позиции 1С для проверки", "Позиции 1С без кандидата среди активных карточек", `Объектов ОС: ${absentAssets.length} · Уникальных кодов МП: ${hasMaterials ? coverage.materials.withoutCandidate : 0} · Строк остатков этих кодов: ${absentMaterials.length}. Отсутствие кандидата не подтверждает недостачу и не означает необходимость создать карточку. Код МП включён, если ни одна строка его остатков не имеет кандидата. Остатки кодов с кандидатом проверяйте на листе «МП».`,
     ["Ответственный", "Цена за единицу, KZT", "Наименование", "Код 1С", "Инвентарный номер", "Штрихкод", "Раздел 1С", "Количество", "Единица", "Расположение / склад", "Счёт", "Статус", "Первоначальная стоимость основных средств, KZT", "Остаточная стоимость основных средств, KZT", "GUID 1С", "Ключ строки 1С", "№"],
     [36, 25, 55, 20, 25, 25, 16, 16, 14, 35, 18, 25, 28, 28, 38, 45, 8]);
   absentAssets.forEach(({ externalId, asset }) => toAdd.addRow([

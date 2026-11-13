@@ -3,6 +3,7 @@ import { extractExcelInventoryReferences, extractFormattedInventoryReferences, e
 import { parseCode39ScanInput } from "@/lib/domain/code39";
 import { exactMaterialCode, isTemporaryOneCCard } from "@/lib/one-c-material-code";
 import { oneCNameOwnerCanIdentify } from "@/lib/one-c-source-name";
+import type { OneCSourceCoverage } from "@/lib/one-c-source-coverage";
 
 export type OneCAuditPresence = {
   fixedAssets: boolean;
@@ -82,5 +83,7 @@ export type OneCAnalytics = {
   /** Stock totals are active; presence is checked across all OS records and active, nonarchived cards. */
   assets: { total: number; active: number; retired: number; other: number; receivedAt: string | null };
   inventory: { total: number; active: number; quantity: number };
+  /** Source GUIDs and distinct material codes; never summed with Inventory card counts. */
+  sourceCoverage?: OneCSourceCoverage;
   reconciliation: Omit<ReturnType<typeof summarizeOneCAudit>, "temporaryUnmatched" | "temporaryFound" | "temporaryPossible"> & { temporaryUnmatched?: number; temporaryFound?: number; temporaryPossible?: number };
 };

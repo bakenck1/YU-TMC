@@ -18,6 +18,46 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("separates source positions from local cards and keeps balance rows in an explanation", () => {
+    render(<OneCIntegrationDashboard analytics={{ ...analytics, sourceCoverage: {
+      assets: { total: 6, withCandidate: 3, withoutCandidate: 3 },
+      materials: { total: 3, withCandidate: 1, withoutCandidate: 2, balanceRows: 40, balanceRowsWithoutCandidate: 37 },
+    }, reconciliation: { ...analytics.reconciliation, materialBalancesWithoutCandidate: 37 } }} materials={{ ...materials, batchId: "mp", materialCount: 3, positiveRows: 40 }} />);
+    const review = within(screen.getByRole("region", { name: "Позиции 1С для проверки" }));
+    const mp = review.getByRole("row", { name: /МП · уникальные коды/ });
+    expect(within(mp).getAllByRole("cell").map(cell => cell.textContent)).toEqual(["3", "1", "2"]);
+    const os = review.getByRole("row", { name: /Основные средства · объекты/ });
+    expect(within(os).getAllByRole("cell").map(cell => cell.textContent)).toEqual(["6", "3", "3"]);
+    expect(review.getByText("37").closest("details")?.open).toBe(false);
+    expect(review.getByText(/Отсутствие кандидата само по себе не подтверждает недостачу/)).toBeTruthy();
+    expect(screen.queryByText("МП без совпадения в нашей базе")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Требует внимания" }).parentElement!.textContent).not.toContain("37");
+    const attention = within(screen.getByRole("heading", { name: "Требует внимания" }).parentElement!);
+    expect(attention.getByRole("heading", { name: "Основные средства без совпадения в нашей базе" }).parentElement!.textContent).toContain("3");
+    expect(attention.getByRole("heading", { name: "Материальный предмет без совпадения в нашей базе" }).parentElement!.textContent).toContain("2");
+    expect(attention.queryByText("На учёте")).toBeNull();
+    expect(attention.queryByText("Строки остатков с наличием")).toBeNull();
+  });
+  it("includes possible matches in the chart so all categories account for every active card", () => {
+    render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows.map(row => Number(row.lastElementChild?.textContent)).reduce((sum, value) => sum + value, 0)).toBe(analytics.reconciliation.total);
+    expect(rows.find(row => row.textContent === "Возможные совпадения1")).toBeTruthy();
+    expect(screen.getByText("Всего карточек в сверке: 5")).toBeTruthy();
+  });
+  it("never substitutes a balance row count for an unknown distinct material count", () => {
+    render(<OneCIntegrationDashboard analytics={analytics} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
+    const mp = within(screen.getByRole("region", { name: "Позиции 1С для проверки" })).getByRole("row", { name: /МП · уникальные коды/ });
+    expect(within(mp).getAllByRole("cell").map(cell => cell.textContent)).toEqual(["—", "—", "—"]);
+  });
+  it("shows unavailable sources as unknown even if stale source coverage was supplied", () => {
+    render(<OneCIntegrationDashboard analytics={{ ...analytics, assets: { ...analytics.assets, receivedAt: null }, sourceCoverage: {
+      assets: { total: 6, withCandidate: 3, withoutCandidate: 3 },
+      materials: { total: 3, withCandidate: 1, withoutCandidate: 2, balanceRows: 40, balanceRowsWithoutCandidate: 37 },
+    } }} materials={materials} />);
+    const review = within(screen.getByRole("region", { name: "Позиции 1С для проверки" }));
+    expect(review.getAllByRole("cell").every(cell => cell.textContent === "—")).toBe(true);
+  });
   it("shows matched temporary cards directly inside the materials tab alongside the original registry", async () => {
     const fetcher = vi.fn(async (input: string) => new Response(JSON.stringify({ data: input.includes("/analytics/matched") ? [{ id: "female", group: "materials", name: "Манекен женский", inventoryNumber: "TMP-2026-TEST", oneCCode: "00000012626", sourceCodes: ["00000012626"], responsibleName: "Сотрудник", oneCUnitPrice: "29000.00", currentUnitPrice: "29000.00", source: "Основные средства" }] : [], total: input.includes("/analytics/matched") ? 1 : 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetcher);
@@ -46,8 +86,8 @@ describe("integration overview", () => {
   });
   it("shows only the unmatched temporary count with no breakdown or total", () => {
     render(<OneCIntegrationDashboard analytics={{...analytics, inventory:{total:2566, active:2559,quantity:6050}, reconciliation:{...analytics.reconciliation,total:2566,fixedAssets:1116,materials:573,both:0,possible:0,missing:135,temporary:946,temporaryFound:204,temporaryPossible:0,temporaryUnmatched:742}}} materials={materials} />);
-    const metric = screen.getByRole("heading", {name:"Всего временных номеров без совпадения"}).parentElement!;
-    expect(metric.textContent).toBe("Всего временных номеров без совпадения742");
+    const metric = screen.getByRole("heading", {name:"Временные карточки без совпадения"}).parentElement!;
+    expect(metric.textContent).toBe("Временные карточки без совпадения742");
     expect(screen.queryByText("946")).toBeNull();
     expect(screen.queryByText(/Из них найдено в 1С:/)).toBeNull();
     expect(screen.queryByText(/Найденные карточки с временным номером уже учтены/)).toBeNull();
@@ -57,11 +97,11 @@ describe("integration overview", () => {
   });
   it("shows temporary candidates separately and does not call them found", () => {
     render(<OneCIntegrationDashboard analytics={{...analytics,reconciliation:{...analytics.reconciliation,temporary:3,temporaryFound:1,temporaryPossible:1,temporaryUnmatched:1}}} materials={materials} />);
-    expect(screen.getByRole("heading", {name:"Всего временных номеров без совпадения"}).parentElement!.textContent).toBe("Всего временных номеров без совпадения1");
+    expect(screen.getByRole("heading", {name:"Временные карточки без совпадения"}).parentElement!.textContent).toBe("Временные карточки без совпадения1");
   });
   it.each([
-    ["kk", "Сәйкестігі жоқ уақытша нөмірлердің жалпы саны"],
-    ["en", "Total unmatched temporary numbers"],
+    ["kk", "Сәйкестігі жоқ уақытша карточкалар"],
+    ["en", "Unmatched temporary cards"],
   ] as const)("localizes the unmatched temporary metric in %s", (language, text) => {
     appLanguage.value = language;
     render(<OneCIntegrationDashboard analytics={{...analytics,reconciliation:{...analytics.reconciliation,temporary:2,temporaryFound:1,temporaryPossible:0,temporaryUnmatched:1}}} materials={materials} />);
@@ -167,7 +207,7 @@ describe("integration overview", () => {
     const composition = within(screen.getByRole("region", { name: "Состав 1С" }));
     expect(composition.getByText("9")).toBeTruthy();
     expect(composition.getByText("6 Основные средства + 3 МП = 9")).toBeTruthy();
-    expect(composition.getByText(/Без библиотечного фонда/)).toBeTruthy();
+    expect(composition.getByText(/С учётом согласованных исключений/)).toBeTruthy();
     expect(screen.queryByText("Основные средства и материальный предмет")).toBeNull();
     expect(screen.queryByText("Проверить совпадения")).toBeNull();
     expect(screen.queryByText("снято с учёта", { exact: false })).toBeNull();

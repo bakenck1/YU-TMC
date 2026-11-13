@@ -803,25 +803,30 @@ describe("live materials API replaces Excel as audit input", () => {
     expect(first.materials).toMatchObject({ materialCount: 1, rowCount: 2, positiveRows: 2 });
     expect(first.analytics.inventory).toEqual({ total: 1, active: 1, quantity: 1 });
     expect(first.analytics.reconciliation).toMatchObject({ total: 1, materials: 1, missing: 0, assetsWithoutCandidate: 1, materialBalancesWithoutCandidate: 0 });
+    expect(first.analytics.sourceCoverage).toEqual({
+      assets: { total: 1, withCandidate: 0, withoutCandidate: 1 },
+      materials: { total: 1, withCandidate: 1, withoutCandidate: 0, balanceRows: 2, balanceRowsWithoutCandidate: 0 },
+    });
     const snapshot = await getOneCAnalyticsSnapshot(pool);
     const workbook = new Workbook();
     const bytes = await exportOneCAnalyticsExcel(snapshot);
     await workbook.xlsx.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
-    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["Основные средства", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Добавить в базу"]);
+    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["Основные средства", "МП", "Совпадения 1С", "Временные", "Не найдено в 1С", "Позиции 1С для проверки"]);
     expect(workbook.getWorksheet("МП")!.rowCount).toBe(8);
     expect(workbookCell(workbook.getWorksheet("Совпадения 1С")!, "ID карточки").value).toBe(f.itemId);
     expect(workbook.getWorksheet("Совпадения 1С")!.rowCount).toBe(6);
-    expect(workbook.getWorksheet("Добавить в базу")!.rowCount).toBe(6);
-    expect(workbookCell(workbook.getWorksheet("Добавить в базу")!, "Код 1С").value).toBe("OTHER");
+    expect(workbook.getWorksheet("Позиции 1С для проверки")!.rowCount).toBe(6);
+    expect(workbookCell(workbook.getWorksheet("Позиции 1С для проверки")!, "Код 1С").value).toBe("OTHER");
     expect((await pool.query('select count(*)::int as count from yu_inventory.inventory_source_audit_runs')).rows[0].count).toBe(0);
     await pool.query('update yu_inventory.items set archived_at=now(), archived_by=created_by where id=$1', [f.itemId]);
     const second = await getOneCAnalytics(pool);
     expect(second.analytics.inventory.total).toBe(0);
     expect(second.analytics.reconciliation.materialBalancesWithoutCandidate).toBe(2);
+    expect(second.analytics.sourceCoverage?.materials).toEqual({ total: 1, withCandidate: 0, withoutCandidate: 1, balanceRows: 2, balanceRowsWithoutCandidate: 2 });
     const afterArchive = new Workbook();
     const afterArchiveBytes = await exportOneCAnalyticsExcel(await getOneCAnalyticsSnapshot(pool));
     await afterArchive.xlsx.load(afterArchiveBytes.buffer.slice(afterArchiveBytes.byteOffset, afterArchiveBytes.byteOffset + afterArchiveBytes.byteLength) as ArrayBuffer);
-    expect(afterArchive.getWorksheet("Добавить в базу")!.rowCount).toBe(8);
+    expect(afterArchive.getWorksheet("Позиции 1С для проверки")!.rowCount).toBe(8);
   });
 
   it("reconciles only active Inventory cards against all OS records", async () => {

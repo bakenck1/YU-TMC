@@ -6,6 +6,7 @@ import { buildInventorySourceAudit, type AuditItem } from "@/lib/inventory-sourc
 import type { OneCFixedAsset } from "@/lib/contracts/one-c-fixed-assets";
 import { summarizeOneCAudit, type OneCAnalytics } from "@/lib/one-c-analytics";
 import { readMaterialRegistry } from "@/lib/server/one-c-material-registry";
+import { summarizeOneCSourceCoverage } from "@/lib/one-c-source-coverage";
 
 type AnalyticsInventoryItem = {
   id: string; quantity: number; status: string; oneCCode: string | null;
@@ -57,6 +58,7 @@ export async function getOneCAnalyticsSnapshot(pool: Pick<Pool, "connect"> = get
       assets: { total: sourceAssets.length, active: sourceAssets.length, retired: 0, other: 0, receivedAt: dates.length ? new Date(dates.reduce((a, b) => Math.max(a, b))).toISOString() : null },
       inventory: { total: items.rows.length, active: items.rows.filter(row => row.status === "active").length, quantity: items.rows.reduce((sum, row) => sum + Number(row.quantity), 0) },
       reconciliation: summarizeOneCAudit(audit.rows, sourceAssets.map(row => row.externalId), materials.rows.map(row => row.sourceKey!)),
+      sourceCoverage: summarizeOneCSourceCoverage(audit.rows, sourceAssets.map(row => row.externalId), materialRecords),
     };
     const inventory: AnalyticsInventoryItem[] = items.rows.map(row => ({
       id: String(row.id), quantity: Number(row.quantity), status: String(row.status),

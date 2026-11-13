@@ -11,13 +11,14 @@ import { InventoryCurrentEnrichment } from "@/components/InventoryAuditEnrichmen
 import { useAppSettings } from "@/components/AppSettingsProvider";
 import type { OneCAnalytics } from "@/lib/one-c-analytics";
 import type { MaterialRegistryMetadata } from "@/lib/contracts/inventory-source-audit";
+import { oneCDashboardCopy } from "@/lib/one-c-dashboard-copy";
 
 const number = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 const display = (value: number | null) => value === null ? "—" : number(value);
 const libraryScope = {
-  ru: "Без библиотечного фонда и расходников",
-  kk: "Кітапхана қоры мен шығыс материалдарынсыз",
-  en: "Excluding library holdings and consumables",
+  ru: "С учётом согласованных исключений",
+  kk: "Келісілген ерекшеліктерді ескере отырып",
+  en: "With agreed exclusions applied",
 } as const;
 const tabs = [{ id: "overview", label: "Аналитика" }, { id: "assets", label: "Основные средства" }, { id: "materials", label: "Материальный предмет" }] as const;
 
@@ -38,12 +39,22 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const [exportError, setExportError] = useState("");
   const router = useRouter();
   const { language } = useAppSettings();
-  const c = copy[language];
+  const c = { ...copy[language], ...oneCDashboardCopy[language] };
   const counts = analytics.reconciliation;
+  const coverage = analytics.sourceCoverage;
   const hasAssets = analytics.assets.receivedAt !== null;
   const hasMaterials = materials.batchId !== null;
   const hasSources = hasAssets || hasMaterials;
   const complete = hasAssets && hasMaterials;
+  const sourceRows = [
+    { label: c.sourceAssets, available: hasAssets, values: coverage?.assets },
+    { label: c.sourceMaterials, available: hasMaterials, values: coverage?.materials },
+  ];
+  const sourceColumns = [
+    { label: c.sourceTotal, key: "total" },
+    { label: c.sourceLinked, key: "withCandidate" },
+    { label: c.sourceUnlinked, key: "withoutCandidate" },
+  ] as const;
   // One position is an OS GUID or a material code, never a balance row or quantity.
   const total = complete ? analytics.assets.total + materials.materialCount : null;
   const found = counts.fixedAssets + counts.materials + counts.both;
@@ -52,6 +63,7 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const categories = [
     { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600" },
     { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500" },
+    { label: c.checkNumber, value: counts.possible, color: "bg-amber-400" },
     { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
     { label: c.missing, value: counts.missing, color: "bg-slate-300" },
   ].filter(entry => entry.value > 0);
@@ -93,19 +105,18 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           <div className="mt-6 flex h-2 overflow-hidden rounded-full bg-white/15" aria-hidden="true">{total !== null && total > 0 ? <><div className="bg-blue-400" style={{ width: `${analytics.assets.total / total * 100}%` }} /><div className="bg-emerald-400" style={{ width: `${materials.materialCount / total * 100}%` }} /></> : null}</div>
           {total !== null ? <p className="mt-3 text-xs text-blue-100">{number(analytics.assets.total)} {c.assets} + {number(materials.materialCount)} МП = {number(total)}</p> : null}
         </div>
-        <SourceCard title={c.assets} subtitle={c.assetsSubtitle} value={hasAssets ? analytics.assets.total : null} kind="assets" onClick={() => setTab("assets")}>
-          {hasAssets ? c.onBooks : c.noData}
-        </SourceCard>
-        <SourceCard title={c.materials} subtitle="МП" value={hasMaterials ? materials.materialCount : null} kind="materials" onClick={() => setTab("materials")}>
-          {hasMaterials ? `${number(materials.positiveRows)} ${c.positiveRows}` : c.noData}
-        </SourceCard>
+        <SourceCard title={c.assets} subtitle={language === "ru" ? "ОС" : c.assetsSubtitle} value={hasAssets ? analytics.assets.total : null} kind="assets" onClick={() => setTab("assets")}>{hasAssets ? null : c.noData}</SourceCard>
+        <SourceCard title={c.materials} subtitle="МП" value={hasMaterials ? materials.materialCount : null} kind="materials" onClick={() => setTab("materials")}>{hasMaterials ? null : c.noData}</SourceCard>
       </section>
+      <p className="text-sm leading-6 text-slate-600">{c.compositionHint}</p>
       <section aria-label={c.ourDatabase} className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-900">{c.ourDatabase}</h2><span className="text-xs text-slate-500">{number(analytics.inventory.active)} {c.activeCards}</span></div>
-        <div className="grid grid-cols-2 gap-5 lg:grid-cols-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold text-slate-900">{c.ourDatabase}</h2><span className="text-xs text-slate-500">{number(analytics.inventory.active)} {c.activeCards}</span></div>
+        <p className="mb-5 text-sm leading-6 text-slate-500">{c.inventoryHint}</p>
+        <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-6">
           <Metric label={c.cards} value={analytics.inventory.total} />
           <Metric label={c.units} value={analytics.inventory.quantity} />
           <Metric label={c.found} value={hasSources ? found : null} result="matched" />
+          <Metric label={c.checkNumber} value={hasSources ? counts.possible : null} />
           <Metric label={c.missing} value={hasSources ? counts.missing : null} result="missing" />
           <Metric label={c.temporary} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
         </div>
@@ -116,15 +127,38 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
           {hasSources ? <>
             <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
             <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
+            <p className="mt-4 border-t border-slate-200 pt-4 text-sm font-medium text-slate-700">{c.partition}: {number(counts.total)}</p>
             {!complete ? <p className="mt-3 text-xs text-slate-500">{c.partial}</p> : null}
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{c.noReconciliation}</div>}
         </section>
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-900">{c.attention}</h2>
           <Attention title={c.temporaryUnmatched} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
-          <Attention title={c.assetsNoMatch} value={hasAssets ? counts.assetsWithoutCandidate : null} detail={c.onBooks} />
-          <Attention title={c.materialsNoMatch} value={hasMaterials ? counts.materialBalancesWithoutCandidate : null} detail={c.positiveBalances} />
+          <Attention title={c.assetsNoMatch} value={hasAssets ? coverage?.assets.withoutCandidate ?? null : null} />
+          <Attention title={c.materialsNoMatch} value={hasMaterials ? coverage?.materials.withoutCandidate ?? null : null} />
         </section>
       </div>
+      <section aria-label={c.sourceReview} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold text-slate-900">{c.sourceReview}</h2>
+        <p className="text-sm leading-6 text-slate-600">{c.sourceHint}</p>
+        <div className="hidden overflow-x-auto sm:block">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 text-xs text-slate-500"><tr><th scope="col" className="py-3 pr-4">{c.sourceSection}</th>{sourceColumns.map(column => <th key={column.key} scope="col" className="px-3 py-3 text-right">{column.label}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100">{sourceRows.map(row => <tr key={row.label}><th scope="row" className="py-4 pr-4 font-medium text-slate-700">{row.label}</th>{sourceColumns.map(column => <td key={column.key} className="px-3 py-4 text-right font-semibold tabular-nums text-slate-900">{display(row.available ? row.values?.[column.key] ?? null : null)}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+        <div className="grid gap-3 sm:hidden">{sourceRows.map(row => <div key={row.label} className="rounded-xl border border-slate-200 p-4">
+          <h3 className="text-sm font-medium text-slate-700">{row.label}</h3>
+          <dl className="mt-4 space-y-3 text-sm">{sourceColumns.map(column => <div key={column.key} className="flex items-start justify-between gap-3"><dt className="text-slate-500">{column.label}</dt><dd className="font-semibold tabular-nums text-slate-900">{display(row.available ? row.values?.[column.key] ?? null : null)}</dd></div>)}</dl>
+        </div>)}</div>
+        <p className="text-xs leading-5 text-slate-500">{c.candidateHint}</p>
+        <p className="rounded-xl bg-sky-50 p-4 text-sm leading-6 text-slate-700">{c.sourceWarning}</p>
+        <details className="rounded-xl border border-slate-200 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">{c.balanceDetail}</summary>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{c.balanceHint}</p>
+          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-slate-500">{c.balanceRows}</dt><dd className="mt-1 font-semibold tabular-nums">{display(hasMaterials ? coverage?.materials.balanceRows ?? null : null)}</dd></div><div><dt className="text-slate-500">{c.balanceUnlinked}</dt><dd className="mt-1 font-semibold tabular-nums">{display(hasMaterials ? coverage?.materials.balanceRowsWithoutCandidate ?? null : null)}</dd></div></dl>
+        </details>
+        <button type="button" disabled={exporting} onClick={() => void downloadExcel()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download aria-hidden="true" className="h-4 w-4" />{exporting ? c.downloading : c.reviewDownload}</button>
+      </section>
     </div> : null}
     {tab === "overview" && counts.possible > 0 ? <OneCPossibleMatches /> : null}
     {tab !== "overview" ? <InventoryCurrentEnrichment blocked={refreshing} onApplied={() => startRefresh(() => router.refresh())} /> : null}
@@ -133,13 +167,13 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   </div>;
 }
 
-export function SourceCard({ title, subtitle, value, kind, onClick, children }: { title: string; subtitle: string; value: number | null; kind: "assets" | "materials"; onClick: () => void; children: React.ReactNode }) {
+export function SourceCard({ title, subtitle, value, kind, onClick, children }: { title: string; subtitle: string; value: number | null; kind: "assets" | "materials"; onClick: () => void; children?: React.ReactNode }) {
   const color = kind === "assets" ? "bg-blue-600" : "bg-emerald-500";
-  return <button type="button" onClick={onClick} className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/70 p-6 text-left shadow-sm shadow-slate-200/30 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md"><div className="flex items-start justify-between gap-2"><div><span aria-hidden="true" className={`mb-3 block h-1 w-8 rounded-full ${color}`} /><h2 className="text-base font-semibold text-slate-900">{title}</h2><p className="mt-1 text-xs text-slate-500">{subtitle}</p></div><ArrowUpRight aria-hidden="true" className="h-4 w-4 text-slate-400" /></div><p className="mt-4 text-4xl font-semibold tabular-nums text-slate-900">{display(value)}</p><p className="mt-3 text-xs leading-5 text-slate-500">{children}</p></button>;
+  return <button type="button" onClick={onClick} className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/70 p-6 text-left shadow-sm shadow-slate-200/30 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md"><div className="flex items-start justify-between gap-2"><div><span aria-hidden="true" className={`mb-3 block h-1 w-8 rounded-full ${color}`} /><h2 className="text-base font-semibold text-slate-900">{title}</h2><p className="mt-1 text-xs text-slate-500">{subtitle}</p></div><ArrowUpRight aria-hidden="true" className="h-4 w-4 text-slate-400" /></div><p className="mt-4 text-4xl font-semibold tabular-nums text-slate-900">{display(value)}</p>{children ? <p className="mt-3 text-xs leading-5 text-slate-500">{children}</p> : null}</button>;
 }
 export function Metric({ label, value, result = "neutral" }: { label: string; value: number | null; result?: "neutral" | "matched" | "missing" }) {
   const color = result === "matched" ? "text-emerald-700" : result === "missing" ? "text-amber-700" : "text-slate-900";
-  return <div><h3 className="text-xs text-slate-500">{label}</h3><p className={`mt-2 text-3xl font-semibold tabular-nums ${color}`}>{display(value)}</p></div>;
+  return <div><h3 className="min-h-8 text-xs text-slate-500">{label}</h3><p className={`mt-2 text-3xl font-semibold tabular-nums ${color}`}>{display(value)}</p></div>;
 }
 export function Attention({ title, value, detail }: { title: string; value: number | null; detail?: string }) {
   return <div className="rounded-xl bg-slate-50 p-4"><div className="flex items-start justify-between gap-3"><h3 className="text-sm font-medium text-slate-700">{title}</h3><span className="shrink-0 text-lg font-semibold tabular-nums text-slate-900">{display(value)}</span></div>{detail ? <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p> : null}</div>;
