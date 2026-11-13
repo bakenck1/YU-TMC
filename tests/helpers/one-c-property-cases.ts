@@ -1,4 +1,4 @@
-export const excludedProperties = [
+export const includedProperties = [
   "Квартира 30-168-27", "2-комнатная квартира №12", "3-х комнатная квартира 29-31-5",
   "Двухкомнатная квартира", "Зем. уч. 32 мкр", "Зем уч 12", "Участок земли 0,12 га",
   "ПӘТЕР №12", "Қызметтік пәтер 14-36-115", "2 бөлмелі пәтер", "3-бөлмелі пәтер",
@@ -9,6 +9,8 @@ export const excludedProperties = [
   "Flat 12", "Flat No. 12", "Land plot 0.12 ha", "LAND PARCEL No. 15", "Land", "Two-bedroom apartment 12", "Studio apartment 12",
   "Plot of land at campus", "Parcel of land", "Residential building 2", "Dormitory 1",
   "Kvartira 12", "Zher uchaskesi 32", "Zemelnyi uchastok 32",
+  "ПСД по зданию библиотеки", "ПСД автономной котельной", "Проектно-сметная документация",
+  "Project cost estimate documentation", "Жобалық-сметалық құжаттама",
 ];
 export const retainedPropertyEquipment = [
   "Сервер в квартире №12", "Видеокамера для земельного участка", "Прихожая для квартиры", "Квартирный маршрутизатор",

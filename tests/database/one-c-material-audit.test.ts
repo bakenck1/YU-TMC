@@ -34,7 +34,8 @@ import { isOneCExcludedSource, oneCIncludedSourceSql } from "@/lib/one-c-integra
 import { consumables, retainedEquipment } from "../helpers/one-c-consumable-cases";
 import reviewedExclusions from "@/lib/data/one-c-reviewed-exclusions.json";
 import { oneCSecondaryExclusionCategory, oneCSecondaryExcludedSql } from "@/lib/one-c-secondary-scope";
-import { excludedProperties, retainedPropertyEquipment } from "../helpers/one-c-property-cases";
+import { includedProperties, retainedPropertyEquipment } from "../helpers/one-c-property-cases";
+import restoredScope from "../helpers/one-c-restored-scope.json";
 
 let config: DatabaseConfig, owner: Pool, pool: Pool;
 const base: OneCMaterial = {
@@ -57,11 +58,19 @@ describe("live materials API replaces Excel as audit input", () => {
   });
   afterAll(async () => { await pool?.end(); await owner?.end(); await reset(); });
 
-  it("uses identical multilingual property rules in JavaScript and PostgreSQL for new identities", async () => {
-    const names = [...excludedProperties, ...retainedPropertyEquipment];
+  it("restores all selected source identities in PostgreSQL, including former pinned exclusions", async () => {
+    const rows = await pool.query(`select n,${oneCIncludedSourceSql("name", "external_id", "material_code")} as included
+      from unnest($1::text[],$2::text[],$3::text[]) with ordinality t(name,external_id,material_code,n) order by n`,
+    [restoredScope.map(r => r.name), restoredScope.map(r => r.source === "OS" ? r.id : ""), restoredScope.map(r => r.source === "MP" ? r.code : "")]);
+    expect(rows.rows).toHaveLength(227);
+    expect(rows.rows.every(row => row.included)).toBe(true);
+  });
+
+  it("includes multilingual property and design-document subjects consistently in JavaScript and PostgreSQL", async () => {
+    const names = [...includedProperties, ...retainedPropertyEquipment];
     const rows = await pool.query(`select n,${oneCIncludedSourceSql("name")} as included
       from unnest($1::text[]) with ordinality t(name,n) order by n`, [names]);
-    expect(rows.rows.map(row => row.included)).toEqual(names.map((_, i) => i >= excludedProperties.length));
+    expect(rows.rows.map(row => row.included)).toEqual(names.map(() => true));
     expect(rows.rows.map(row => row.included)).toEqual(names.map(name => !isOneCExcludedSource(name)));
   });
 
@@ -77,7 +86,7 @@ describe("live materials API replaces Excel as audit input", () => {
     const rows = await pool.query(`select n,${oneCSecondaryExcludedSql("name")} as excluded
       from unnest($1::text[]) with ordinality t(name,n) order by n`, [names]);
     expect(rows.rows.map(row => row.excluded)).toEqual(names.map(name => oneCSecondaryExclusionCategory(name) !== null));
-    expect(rows.rows.map(row => row.excluded)).toEqual(names.map((_, i) => i < 17));
+    expect(rows.rows.map(row => row.excluded)).toEqual(names.map((_, i) => i >= 3 && i <= 16));
   });
 
   it("excludes all additionally approved identities in SQL and preserves source history", async () => {
@@ -148,6 +157,26 @@ describe("live materials API replaces Excel as audit input", () => {
       expect(JSON.stringify(row.values)).not.toContain("Степлер электрический");
       expect(JSON.stringify(row.values)).not.toContain("После переименования");
     }));
+  });
+
+  it("shows restored documents, land and laboratory glassware in registry totals and Excel", async () => {
+    await seed();
+    const original = (await pool.query("select payload from yu_inventory.one_c_fixed_asset_inbox limit 1")).rows[0].payload as OneCFixedAsset;
+    await new PostgresOneCFixedAssetRepository(pool).saveBatch([
+      { ...original, name: "ПСД нового учебного корпуса", initialCost: 150 },
+      { ...original, externalId: randomUUID(), code: "RESTORED-LAND", inventoryNumber: "RESTORED-LAND", name: "Жер учаскесі 32 мкр", initialCost: 150 },
+    ], metadata());
+    await save([{ ...base, code: "RESTORED-LAB", name: "Стакан п/п на 100 мл от 13.02.26" }]);
+    const snapshot = await getOneCAnalyticsSnapshot(pool);
+    expect(snapshot.analytics.assets.total).toBe(2);
+    expect(snapshot.materials.materialCount).toBe(1);
+    expect((await getFixedAssetRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(2);
+    expect((await getMaterialRegistryPage({ page: 1, pageSize: 50 }, pool)).total).toBe(1);
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await exportOneCAnalyticsExcel(snapshot) as never);
+    const values: string[] = [];
+    workbook.eachSheet(sheet => sheet.eachRow(row => values.push(JSON.stringify(row.values))));
+    for (const name of ["ПСД нового учебного корпуса", "Жер учаскесі 32 мкр", "Стакан п/п на 100 мл от 13.02.26"]) expect(values.join("\n")).toContain(name);
   });
 
   it("retains power supplies in both registries, cards, enrichment and Excel", async () => {

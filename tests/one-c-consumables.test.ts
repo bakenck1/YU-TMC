@@ -7,6 +7,9 @@ import { consumables, retainedEquipment } from "./helpers/one-c-consumable-cases
 test("excludes the approved consumables and preserves equipment mentioning supplies", () => {
   for (const name of consumables) assert.equal(isOneCConsumable(name), true, name);
   for (const name of retainedEquipment) assert.equal(isOneCConsumable(name), false, name);
+  for (const name of ["Колба мерная", "Пипетка градуированная", "Стаканчик для взвешивания", "Лабораторная посуда", "Химическая посуда ОХТ №1350/16056 от 04.11.24"]) {
+    assert.equal(isOneCExcludedSource(name, null, "new-code"), false, name);
+  }
 });
 
 test("retains reviewed exclusions after a fixed asset is renamed", () => {

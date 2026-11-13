@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isOneCExcludedSource } from "../lib/one-c-integration-scope";
 import { oneCSecondaryExclusionCategory } from "../lib/one-c-secondary-scope";
-import { excludedProperties, retainedPropertyEquipment } from "./helpers/one-c-property-cases";
+import { includedProperties, retainedPropertyEquipment } from "./helpers/one-c-property-cases";
 
-test("recognizes property subjects in Russian, Kazakh and English without excluding their equipment", () => {
-  for (const name of excludedProperties) {
-    assert.equal(oneCSecondaryExclusionCategory(name), "real_estate", name);
-    assert.equal(isOneCExcludedSource(name, null, "new-code"), true, name);
+test("includes property and design-document subjects in Russian, Kazakh and English", () => {
+  for (const name of includedProperties) {
+    assert.equal(oneCSecondaryExclusionCategory(name), null, name);
+    assert.equal(isOneCExcludedSource(name, null, "new-code"), false, name);
   }
   for (const name of retainedPropertyEquipment) {
     assert.equal(oneCSecondaryExclusionCategory(name), null, name);
@@ -15,10 +15,8 @@ test("recognizes property subjects in Russian, Kazakh and English without exclud
   }
 });
 
-test("excludes the requested subjects and new records of the same groups", () => {
+test("keeps the remaining approved secondary exclusion groups active", () => {
   for (const name of [
-    "ПСД по зданию библиотеки 32 мкр", "ПСД автономной котельной от 25.07.11",
-    "Земельный участок для эксплуатации инженерных сетей", "Здание учебного корпуса", "2-х этажная пристройка уч. корпус",
     "Опорная плита в чемодане", "Универсальный счетчик", "Барометрическая формула высоты",
     "Si-фотодетектор с усилителем 12.12.11", "Ху-манипулятор", "Вешалка металлическая напольная 10 крючков от 11.07.25",
     "Светильник от 03.04.2023", "СВЕТОДИОДНЫЙ\u00a0накладной светильник", "Модель структуры ДНК", "Прибор для демонстрации теплопроводности",
