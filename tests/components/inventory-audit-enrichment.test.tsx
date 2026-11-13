@@ -22,6 +22,58 @@ const props = { batchId, runId, blocked: false, onApplied: vi.fn() };
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); appLanguage.value = "ru"; });
 
 describe("reviewing and applying confirmed inventory codes", () => {
+  it.each([
+    [502, "text/html", "<!DOCTYPE html><h1>Bad Gateway</h1>", "Сервер временно недоступен"],
+    [504, "text/html", "<!DOCTYPE html><h1>Gateway Timeout</h1>", "Сервер временно недоступен"],
+    [200, "text/html", "<!DOCTYPE html><h1>Login</h1>", "Сервер вернул некорректный ответ"],
+    [200, "application/json", "{broken", "Сервер вернул некорректный ответ"],
+    [200, "application/json", "null", "Сервер вернул некорректный ответ"],
+    [401, "text/html", "<!DOCTYPE html>", "Сессия истекла"],
+    [403, "text/html", "<!DOCTYPE html>", "Недостаточно прав"],
+  ])("handles non-JSON and invalid responses (%s %s) and lets the user retry", async (status, type, body, message) => {
+    const currentPlan = { ...plan, runId: "current-registry" };
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(body, { status, headers: { "content-type": type } }))
+      .mockResolvedValueOnce(reply({ plan: currentPlan }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryCurrentEnrichment onApplied={props.onApplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(message);
+    expect(alert.textContent).not.toMatch(/Unexpected token|DOCTYPE|SyntaxError/);
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(fetcher.mock.calls.every(([, options]) => options.method === "GET")).toBe(true);
+  });
+  it("discards an old preview after an HTML failure and never offers its changes for applying", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply({ plan: { ...plan, runId: "current-registry" } }))
+      .mockResolvedValueOnce(new Response("<!DOCTYPE html>", { status: 502, headers: { "content-type": "text/html" } })));
+    render(<InventoryCurrentEnrichment onApplied={props.onApplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    await screen.findByRole("button", { name: "Применить 1 обновлений" });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: /Применить/ })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+  it("retains the reviewed hash after an HTML apply failure and recovers through an explicit replay", async () => {
+    const currentPlan = { ...plan, runId: "current-registry" };
+    const fetcher = vi.fn().mockResolvedValueOnce(reply({ plan: currentPlan }))
+      .mockResolvedValueOnce(new Response("<!DOCTYPE html>", { status: 502, headers: { "content-type": "text/html" } }))
+      .mockResolvedValueOnce(reply({ result: { updated: 1, unchanged: 0, skipped: 1 } }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<InventoryCurrentEnrichment onApplied={props.onApplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить изменения" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Применить 1 обновлений" }));
+    await screen.findByRole("alert");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(props.onApplied).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить результат обновления" }));
+    await screen.findByRole("status");
+    expect(fetcher.mock.calls[2][1].body).toBe(fetcher.mock.calls[1][1].body);
+    expect(props.onApplied).toHaveBeenCalledOnce();
+  });
   it("reviews and applies only temporary cards and resets the plan when the scope changes", async () => {
     const temporaryPlan = { ...plan, runId: "current-registry-temporary", rows: [
       { ...plan.rows[0], temporaryMatch: { found: true, category: "materials" } },

@@ -23,6 +23,11 @@ const decommissionedCopy = {
 } as const;
 
 const blockedMessage = "Для проверки обновлений нужна актуальная сводка. Дождитесь завершения операции и при необходимости запустите сверку заново.";
+const requestErrors = {
+  ru: { session: "Сессия истекла. Войдите на сайт заново и повторите проверку.", unavailable: "Сервер временно недоступен. Повторите проверку через минуту.", invalid: "Сервер вернул некорректный ответ. Повторите проверку; если ошибка сохраняется, сообщите администратору." },
+  kk: { session: "Сессия аяқталды. Сайтқа қайта кіріп, тексеруді қайталаңыз.", unavailable: "Сервер уақытша қолжетімсіз. Бір минуттан кейін қайталаңыз.", invalid: "Сервер жарамсыз жауап қайтарды. Тексеруді қайталаңыз; қате сақталса, әкімшіге хабарлаңыз." },
+  en: { session: "Your session expired. Sign in again and repeat the review.", unavailable: "The server is temporarily unavailable. Try again in a minute.", invalid: "The server returned an invalid response. Retry the review; if it persists, contact the administrator." },
+} as const;
 
 export function EnrichmentDescription({ currentRegistry = false, decommissioned = false }: { currentRegistry?: boolean; decommissioned?: boolean }) {
   const { language } = useAppSettings();
@@ -80,8 +85,18 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
         method: apply ? "POST" : "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal,
         ...(apply ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ runId: reviewedPlan!.runId, planHash: reviewedPlan!.planHash }) } : {}),
       });
-      const body = await response.json();
       if (current !== generation.current) return;
+      // Authentication and gateway errors can be HTML, including a followed login redirect.
+      // Never parse these as JSON or keep an old plan available after a failed preview.
+      if (response.status === 401 || response.status === 403 || response.redirected) {
+        definitiveFailure = true; setPlan(null); setUncertain(false);
+        throw new Error(response.status === 403 ? c.permission : requestErrors[language].session);
+      }
+      if (response.status >= 500) throw new Error(requestErrors[language].unavailable);
+      if (!response.headers.get("content-type")?.includes("application/json")) throw new Error(requestErrors[language].invalid);
+      const body = await response.json().catch(() => { throw new Error(requestErrors[language].invalid); });
+      if (current !== generation.current) return;
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(requestErrors[language].invalid);
       if (!response.ok) {
         if (response.status === 409) {
           definitiveFailure = true; setPlan(null); setUncertain(false);
@@ -89,23 +104,24 @@ export function EnrichmentReview({ batchId, runId, blocked, currentRegistry = fa
             ? decommissioned ? decommissionedCopy[language].sharedConflict : "Обновление отменено: название нарушает правило общего номера для монитора и системного блока. Проверьте карточки с одинаковым номером и запустите dry-run заново."
             : currentRegistry ? c.stale : "Сверка или карточки изменились. Запустите dry-run заново и проверьте изменения.");
         }
-        if (response.status === 401 || response.status === 403) { definitiveFailure = true; setPlan(null); setUncertain(false); throw new Error(c.permission); }
         throw new Error(c.resultError);
       }
       if (apply) {
-        if (!body.result || !Number.isSafeInteger(body.result.updated)) throw new Error(c.resultError);
+        if (!body.result || ![body.result.updated, body.result.unchanged, body.result.skipped].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error(c.resultError);
         setMessage(`${c.updated}: ${body.result.updated}. ${c.unchanged}: ${body.result.unchanged}. ${c.skipped}: ${body.result.skipped}.${currentRegistry ? "" : " Запустите dry-run заново для обновлённой сводки."}`);
         setPlan(null); setUncertain(false); onApplied();
       } else {
-        if (body.plan?.runId !== runId || !/^[a-f0-9]{64}$/u.test(body.plan?.planHash ?? "") || !Array.isArray(body.plan?.rows)) throw new Error("Сверка изменилась. Обновите её и повторите проверку.");
+        if (body.plan?.runId !== runId || !/^[a-f0-9]{64}$/u.test(body.plan?.planHash ?? "") || !Array.isArray(body.plan?.rows)
+          || ![body.plan.counts?.ready, body.plan.counts?.unchanged, body.plan.counts?.skipped].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error(requestErrors[language].invalid);
         setPlan(body.plan);
         setRowFilter(body.plan.counts.ready > 0 ? "ready" : body.plan.counts.skipped > 0 ? "skipped" : "unchanged");
         setUncertain(false);
       }
     } catch (failure) {
       if (current !== generation.current || controller.signal.aborted) return;
+      if (!apply) setPlan(null);
       if (apply && !definitiveFailure) setUncertain(true);
-      setError(failure instanceof Error ? failure.message : c.resultError);
+      setError(failure instanceof TypeError ? requestErrors[language].unavailable : failure instanceof Error ? failure.message : c.resultError);
     } finally { if (current === generation.current) setBusy(false); }
   }
 
