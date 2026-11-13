@@ -36,9 +36,29 @@ describe("integration overview", () => {
     expect(screen.getByText("найдено")).toBeTruthy();
     expect(screen.queryByText("22,8%")).toBeNull();
     const attention = within(screen.getByRole("heading", { name: "Требует внимания" }).parentElement!);
+    expect(attention.getByText("ОС: 968 связанных + 1 488 без совпадения = 2 456")).toBeTruthy();
+    expect(attention.getByText("МП: 636 связанных + 3 928 без совпадения = 4 564")).toBeTruthy();
     expect(attention.getByRole("heading", { name: "Основные средства без совпадения в нашей базе" }).parentElement!.textContent?.replaceAll(/\s/g, "")).toContain("1488");
     expect(attention.getByRole("heading", { name: "Материальный предмет без совпадения в нашей базе" }).parentElement!.textContent?.replaceAll(/\s/g, "")).toContain("3928");
     expect(within(screen.getByRole("region", { name: "Наша база" })).getByText("2 178")).toBeTruthy();
+  });
+  it("updates the source equations from refreshed coverage without changing the card chart", () => {
+    const before: OneCAnalytics = { ...analytics, sourceCoverage: {
+      assets: { total: 6, withCandidate: 2, withoutCandidate: 4 },
+      materials: { total: 3, withCandidate: 1, withoutCandidate: 2, balanceRows: 7, balanceRowsWithoutCandidate: 5 },
+    } };
+    const metadata = { ...materials, batchId: "mp", materialCount: 3 };
+    const view = render(<OneCIntegrationDashboard analytics={before} materials={metadata} />);
+    expect(screen.getByText("ОС: 2 связанных + 4 без совпадения = 6")).toBeTruthy();
+    expect(screen.getByText("МП: 1 связанных + 2 без совпадения = 3")).toBeTruthy();
+    view.rerender(<OneCIntegrationDashboard analytics={{ ...before, sourceCoverage: {
+      assets: { total: 6, withCandidate: 3, withoutCandidate: 3 },
+      materials: { total: 3, withCandidate: 2, withoutCandidate: 1, balanceRows: 7, balanceRowsWithoutCandidate: 2 },
+    } }} materials={metadata} />);
+    expect(screen.queryByText("ОС: 2 связанных + 4 без совпадения = 6")).toBeNull();
+    expect(screen.getByText("ОС: 3 связанных + 3 без совпадения = 6")).toBeTruthy();
+    expect(screen.getByText("МП: 2 связанных + 1 без совпадения = 3")).toBeTruthy();
+    expect(screen.getByText("60%")).toBeTruthy();
   });
   it("uses the requested compact labels and removes the marked explanations and zero candidates", () => {
     render(<OneCIntegrationDashboard analytics={{ ...analytics, reconciliation: { ...analytics.reconciliation, possible: 0 } }} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
@@ -77,6 +97,7 @@ describe("integration overview", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
     const mp = screen.getByRole("heading", { name: "Материальный предмет без совпадения в нашей базе" }).parentElement!;
     expect(within(mp).getByText("—")).toBeTruthy();
+    expect(screen.queryByText(/связанных \+/)).toBeNull();
   });
   it("shows unavailable sources as unknown even if stale source coverage was supplied", () => {
     render(<OneCIntegrationDashboard analytics={{ ...analytics, assets: { ...analytics.assets, receivedAt: null }, sourceCoverage: {
@@ -85,6 +106,7 @@ describe("integration overview", () => {
     } }} materials={materials} />);
     const review = within(screen.getByRole("heading", { name: "Требует внимания" }).parentElement!);
     expect(review.getAllByText("—")).toHaveLength(3);
+    expect(review.queryByText(/связанных \+/)).toBeNull();
   });
   it("shows only the material registry and does not request the removed matched-card panel", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 50 }), { headers: { "content-type": "application/json" } }));

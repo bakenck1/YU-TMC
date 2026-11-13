@@ -1,6 +1,7 @@
 /** Explanations distinguish local cards, source positions and balance rows. */
 export const oneCDashboardCopy = {
   ru: {
+    sourceAssetsShort: "ОС", sourceMaterialsShort: "МП", sourceLinkedCount: "связанных", sourceUnlinkedCount: "без совпадения",
     activeTotal: "Всего активных в 1С", totalHint: "Основные средства на учёте + материальные предметы с наличием",
     compositionHint: "Одна позиция — объект основных средств или код МП. Количество единиц имущества считается отдельно.",
     assetUnit: "Объектов на учёте · один объект считается один раз", materialUnit: "Уникальных кодов МП с положительным остатком",
@@ -22,6 +23,7 @@ export const oneCDashboardCopy = {
     reviewDownload: "Скачать списки для проверки", downloadTitle: "6 листов: основные средства, МП, найденные, временные, ненайденные, позиции 1С для проверки",
   },
   kk: {
+    sourceAssetsShort: "НҚ", sourceMaterialsShort: "МЗ", sourceLinkedCount: "байланысқан", sourceUnlinkedCount: "сәйкестіксіз",
     activeTotal: "1С тізілімдеріндегі позициялар", totalHint: "Негізгі құралдар объектілері + оң қалдығы бар бірегей материал кодтары",
     compositionHint: "Бір позиция — негізгі құрал объектісі немесе материал коды. Мүлік бірліктері бөлек саналады.",
     assetUnit: "Есептегі объектілер · әр объект бір рет саналады", materialUnit: "Оң қалдығы бар бірегей материал кодтары",
@@ -43,6 +45,7 @@ export const oneCDashboardCopy = {
     reviewDownload: "Тексеру тізімдерін жүктеу", downloadTitle: "6 парақ: негізгі құралдар, материалдар, табылғандар, уақытша, табылмағандар, тексерілетін 1С позициялары",
   },
   en: {
+    sourceAssetsShort: "FA", sourceMaterialsShort: "Materials", sourceLinkedCount: "linked", sourceUnlinkedCount: "unmatched",
     activeTotal: "Positions in 1C registers", totalHint: "Fixed asset objects + distinct material codes with positive stock",
     compositionHint: "One position is a fixed asset object or a material code. Physical quantities are counted separately.",
     assetUnit: "Objects on the books · each object counted once", materialUnit: "Distinct material codes with positive stock",
