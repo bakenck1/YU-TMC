@@ -49,15 +49,16 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   // One position is an OS GUID or a material code, never a balance row or quantity.
   const total = complete ? analytics.assets.total + materials.materialCount : null;
   const found = counts.fixedAssets + counts.materials + counts.both;
-  const percent = counts.total ? found / counts.total * 100 : 0;
-  // Presence in both registers is displayed under materials and counted once.
-  const categories = [
-    { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600" },
-    { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500" },
-    { label: c.checkNumber, value: counts.possible, color: "bg-amber-400" },
-    { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
-    { label: c.missing, value: counts.missing, color: "bg-slate-300" },
-  ].filter(entry => entry.value > 0);
+  // Compare source identities in both directions. Inventory cards remain in "Our database".
+  const sourceRows = [
+    { label: c.assets, available: hasAssets, values: coverage?.assets, color: "bg-blue-600" },
+    { label: c.materials, available: hasMaterials, values: coverage?.materials, color: "bg-emerald-500" },
+  ];
+  const availableRows = sourceRows.filter(row => row.available);
+  const canReconcileSources = availableRows.length > 0 && availableRows.every(row => row.values !== undefined);
+  const sourceTotal = availableRows.reduce((sum, row) => sum + (row.values?.total ?? 0), 0);
+  const sourceLinked = availableRows.reduce((sum, row) => sum + (row.values?.withCandidate ?? 0), 0);
+  const percent = sourceTotal ? sourceLinked / sourceTotal * 100 : 0;
   async function downloadExcel() {
     setExporting(true);
     setExportError("");
@@ -112,10 +113,15 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
       </section>
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">{c.reconciliation}</h2><p className="mt-1 text-xs text-slate-500">{c.scope}</p></div><div className="text-right"><p className="text-2xl font-semibold text-emerald-700">{hasSources ? `${number(percent)}%` : "—"}</p><p className="text-xs text-slate-500">{c.foundShort}</p></div></div>
-          {hasSources ? <>
-            <div className="my-6 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">{categories.map(entry => <div key={entry.label} className={entry.color} style={{ width: `${counts.total ? entry.value / counts.total * 100 : 0}%` }} />)}</div>
-            <ul className="divide-y divide-slate-100">{categories.map(entry => <li key={entry.label} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${entry.color}`} />{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{number(entry.value)}</span></li>)}</ul>
+          <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">{c.reconciliation}</h2><p className="mt-1 text-xs text-slate-500">{c.sourceScope}</p></div><div className="text-right"><p className="text-2xl font-semibold text-emerald-700">{canReconcileSources ? `${number(percent)}%` : "—"}</p><p className="text-xs text-slate-500">{c.sourceLinkedLabel}</p></div></div>
+          {canReconcileSources ? <>
+            <ul className="mt-4 divide-y divide-slate-100">{sourceRows.map(entry => <li key={entry.label} className="py-4 text-sm">
+              <div className="flex items-start justify-between gap-3"><span>{entry.label}</span><span className="font-semibold tabular-nums text-slate-900">{display(entry.available ? entry.values?.withCandidate ?? null : null)}</span></div>
+              {entry.available && entry.values ? <>
+                <div className="my-3 h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden="true"><div className={entry.color + " h-full"} style={{ width: `${entry.values.total ? entry.values.withCandidate / entry.values.total * 100 : 0}%` }} /></div>
+                <p className="text-xs leading-5 text-slate-500">{c.sourceLinkedLabel}: {number(entry.values.withCandidate)} + {c.sourceUnlinkedLabel}: {number(entry.values.withoutCandidate)} = {number(entry.values.total)}</p>
+              </> : null}
+            </li>)}</ul>
             {!complete ? <p className="mt-3 text-xs text-slate-500">{c.partial}</p> : null}
           </> : <div role="status" className="my-6 rounded-xl bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{c.noReconciliation}</div>}
         </section>

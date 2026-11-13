@@ -11,6 +11,7 @@ const analytics: OneCAnalytics = {
   calculatedAt: "2026-10-22T05:00:00Z",
   assets: { total: 6, active: 6, retired: 0, other: 0, receivedAt: "2026-09-21T10:53:00Z" },
   inventory: { total: 5, active: 5, quantity: 8 },
+  sourceCoverage: { assets: { total: 6, withCandidate: 2, withoutCandidate: 4 }, materials: { total: 3, withCandidate: 1, withoutCandidate: 2, balanceRows: 7, balanceRowsWithoutCandidate: 5 } },
   reconciliation: { total: 5, fixedAssets: 1, materials: 1, both: 1, possible: 1, missing: 1, temporary: 2, assetsWithoutCandidate: 3, materialBalancesWithoutCandidate: 2 },
 };
 const materials: MaterialRegistryMetadata = { kind: "materials_api", batchId: null, receivedAt: null, snapshotAt: null, sha256: "empty", rowCount: 0, materialCount: 0, positiveRows: 0, nonPositiveRows: 0 };
@@ -18,12 +19,27 @@ const batches = { data: [], page: 1, pageSize: 50, total: 0 };
 afterEach(() => { vi.unstubAllGlobals(); appLanguage.value = "ru"; });
 
 describe("integration overview", () => {
+  it("reconciles the screenshot source totals without subtracting inventory cards", () => {
+    render(<OneCIntegrationDashboard analytics={{ ...analytics,
+      assets: { ...analytics.assets, total: 2456, active: 2456 },
+      reconciliation: { ...analytics.reconciliation, fixedAssets: 1235, materials: 943, both: 0 },
+      sourceCoverage: {
+        assets: { total: 2456, withCandidate: 968, withoutCandidate: 1488 },
+        materials: { total: 4564, withCandidate: 636, withoutCandidate: 3928, balanceRows: 5401, balanceRowsWithoutCandidate: 4415 },
+      },
+    }} materials={{ ...materials, batchId: "mp", materialCount: 4564 }} />);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0].textContent?.replaceAll(/\s/g, "")).toContain("968+Безсовпадения:1488=2456");
+    expect(rows[1].textContent?.replaceAll(/\s/g, "")).toContain("636+Безсовпадения:3928=4564");
+    expect(screen.getByText("22,8%")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Наша база" })).getByText("2 178")).toBeTruthy();
+  });
   it("uses the requested compact labels and removes the marked explanations and zero candidates", () => {
     render(<OneCIntegrationDashboard analytics={{ ...analytics, reconciliation: { ...analytics.reconciliation, possible: 0 } }} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
     for (const label of ["Всего активных в 1С", "Карточки", "Найдено в 1С", "Не найдено в 1С"]) {
       expect(screen.getByRole("heading", { name: label })).toBeTruthy();
     }
-    expect(screen.getByText("найдено")).toBeTruthy();
+    expect(screen.getByText("Есть связь или вариант")).toBeTruthy();
     expect(screen.queryByText("Возможные совпадения")).toBeNull();
     expect(screen.queryByText(/Всего карточек в сверке/)).toBeNull();
     expect(screen.queryByText(/Одна позиция —/)).toBeNull();
@@ -44,15 +60,17 @@ describe("integration overview", () => {
     expect(attention.queryByText("На учёте")).toBeNull();
     expect(attention.queryByText("Строки остатков с наличием")).toBeNull();
   });
-  it("includes possible matches in the chart so all categories account for every active card", () => {
+  it("uses source identities in the reconciliation chart and retains card counts in our database", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     const rows = screen.getAllByRole("listitem");
-    expect(rows.map(row => Number(row.lastElementChild?.textContent)).reduce((sum, value) => sum + value, 0)).toBe(analytics.reconciliation.total);
-    expect(rows.find(row => row.textContent === "Возможные совпадения1")).toBeTruthy();
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain("Есть связь или вариант: 2 + Без совпадения: 4 = 6");
+    expect(screen.getByText("33,3%")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Наша база" })).getByRole("heading", { name: "Найдено в 1С" }).parentElement!.textContent).toContain("3");
     expect(screen.queryByText("Всего карточек в сверке: 5")).toBeNull();
   });
   it("never substitutes a balance row count for an unknown distinct material count", () => {
-    render(<OneCIntegrationDashboard analytics={analytics} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
+    render(<OneCIntegrationDashboard analytics={{ ...analytics, sourceCoverage: undefined }} materials={{ ...materials, batchId: "mp", materialCount: 3 }} />);
     const mp = screen.getByRole("heading", { name: "Материальный предмет без совпадения в нашей базе" }).parentElement!;
     expect(within(mp).getByText("—")).toBeTruthy();
   });
@@ -121,8 +139,8 @@ describe("integration overview", () => {
     render(<OneCIntegrationDashboard analytics={analytics} materials={materials} />);
     expect(screen.queryByText("Найдено в Основные средства и МП")).toBeNull();
     const materialsRow = screen.getAllByText("Материальный предмет").map(element => element.closest("li")).find(Boolean);
-    expect(materialsRow?.textContent).toBe("Материальный предмет2");
-    expect(screen.getByText("60%")).toBeTruthy();
+    expect(materialsRow?.textContent).toBe("Материальный предмет—");
+    expect(screen.getByText("33,3%")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Наша база" })).getByText("3")).toBeTruthy();
   });
   it("renders the 1C overview in Kazakh and English", () => {
