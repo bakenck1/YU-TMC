@@ -41,19 +41,24 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
   const { language } = useAppSettings();
   const c = { ...copy[language], ...oneCDashboardCopy[language] };
   const counts = analytics.reconciliation;
-  const coverage = analytics.sourceCoverage;
   const hasAssets = analytics.assets.receivedAt !== null;
   const hasMaterials = materials.batchId !== null;
   const hasSources = hasAssets || hasMaterials;
   const complete = hasAssets && hasMaterials;
   // One position is an OS GUID or a material code, never a balance row or quantity.
   const total = complete ? analytics.assets.total + materials.materialCount : null;
-  const found = counts.fixedAssets + counts.materials + counts.both;
+  const foundAssets = counts.fixedAssets;
+  const foundMaterials = counts.materials + counts.both;
+  const found = foundAssets + foundMaterials;
+  // Use the same totals and displayed groups, rather than distinct source candidates.
+  // Several cards can refer to one source position, so a remainder cannot go below zero.
+  const unmatchedAssets = hasAssets ? Math.max(0, analytics.assets.total - foundAssets) : null;
+  const unmatchedMaterials = hasMaterials ? Math.max(0, materials.materialCount - foundMaterials) : null;
   const percent = counts.total ? found / counts.total * 100 : 0;
   // Presence in both registers is displayed under materials and counted once.
   const categories = [
-    { label: c.assets, value: counts.fixedAssets, color: "bg-blue-600" },
-    { label: c.materials, value: counts.materials + counts.both, color: "bg-emerald-500" },
+    { label: c.assets, value: foundAssets, color: "bg-blue-600" },
+    { label: c.materials, value: foundMaterials, color: "bg-emerald-500" },
     { label: c.checkNumber, value: counts.possible, color: "bg-amber-400" },
     { label: c.temporaryUnmatched, value: counts.temporaryUnmatched ?? 0, color: "bg-indigo-300" },
     { label: c.missing, value: counts.missing, color: "bg-slate-300" },
@@ -121,8 +126,8 @@ export default function OneCIntegrationDashboard({ analytics, materials, localEn
         </section>
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold text-slate-900">{c.attention}</h2>
           <Attention title={c.temporaryUnmatched} value={hasSources ? counts.temporaryUnmatched ?? null : null} />
-          <Attention title={c.assetsNoMatch} value={hasAssets ? coverage?.assets.withoutCandidate ?? null : null} />
-          <Attention title={c.materialsNoMatch} value={hasMaterials ? coverage?.materials.withoutCandidate ?? null : null} />
+          <Attention title={c.assetsNoMatch} value={unmatchedAssets} />
+          <Attention title={c.materialsNoMatch} value={unmatchedMaterials} />
         </section>
       </div>
 

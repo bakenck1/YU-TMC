@@ -5,6 +5,7 @@
     "incremental": false
   },
   "include": [
+    "../../next-env.d.ts",
     "../../components/PushNotificationControl.tsx",
     "../../components/TmcItemQrFlow.tsx",
     "../../components/TmcTransferRequestCard.tsx",
